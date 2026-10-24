@@ -47,6 +47,3 @@ desktop.ini
 .vscode/
 *.swp
 *~
-
-# Local Claude working notes (not shared)
-claude/
