@@ -47,7 +47,7 @@ SwiftDrop balances the operational simplicity of a **Go Modular Monolith** with 
 
 <div align="center">
 
-![SwiftDrop Architecture Blueprint](docs/intial/swiftdrop.png)
+![SwiftDrop Architecture Blueprint](docs/intial/Swiftdrop.png)
 
 *Figure 1.1: SwiftDrop Full System Architecture, Component Topology & Service Boundaries.*
 
