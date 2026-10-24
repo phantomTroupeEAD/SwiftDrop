@@ -1,0 +1,49 @@
+# Member 4 merchants slice — local stack. Start with ./scripts/up.sh (creates .env and dev keys first).
+name: m4-merchants
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: swiftdrop
+      POSTGRES_PASSWORD: swiftdrop_dev        # local only; matches docs/operations/environment-variables.md
+      POSTGRES_DB: swiftdrop_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swiftdrop -d swiftdrop_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports: ["127.0.0.1:55432:5432"]           # for psql debugging only; never public
+
+  migrate:
+    image: migrate/migrate:v4.17.1
+    volumes: ["./core-api/migrations:/migrations:ro"]
+    command: ["-path=/migrations", "-database=postgres://swiftdrop:swiftdrop_dev@postgres:5432/swiftdrop_db?sslmode=disable", "up"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  seed:
+    build: ./core-api
+    image: m4-core-api:local
+    entrypoint: ["/app/seed"]
+    env_file: .env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    image: m4-core-api:local
+    env_file: .env
+    volumes: ["./.dev/jwt_public.pem:/run/keys/jwt_public.pem:ro"]
+    ports: ["127.0.0.1:8084:8080"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+    depends_on:
+      seed: { condition: service_completed_successfully }
+
+  # Local webhook receiver. Its private Docker IP is only accepted because
+  # WEBHOOK_ALLOWED_PRIVATE_HOSTS=webhook-sink and APP_ENV=local (config refuses this elsewhere).
+  webhook-sink:
+    image: busybox:1.36
+    command: ["sh", "-c", "mkdir -p /www && httpd -f -v -p 8089 -h /www"]

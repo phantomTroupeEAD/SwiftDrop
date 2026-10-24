@@ -1,0 +1,8 @@
+# ./scripts/shutdown-demo.sh
+== before: {"database":"UP","status":"READY"}
+== during drain: HTTP 503 {"status":"DRAINING"}
+== after drain: container exited Exited (0) 3 seconds ago
+== shutdown log lines:
+   api-1  | {"time":"2026-10-24T13:33:58.515266905Z","level":"INFO","msg":"shutdown started","service":"core-api","module":"merchants","drain_seconds":2}
+   api-1  | {"time":"2026-10-24T13:34:00.516776465Z","level":"INFO","msg":"shutdown complete","service":"core-api","module":"merchants"}
+== restarted: {"database":"UP","status":"READY"}

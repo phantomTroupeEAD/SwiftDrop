@@ -1,0 +1,20 @@
+# go vet + go test -race -count=1 -cover ./... (golang:1.22-bookworm)
+go: downloading github.com/jackc/pgx/v5 v5.7.1
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading golang.org/x/text v0.18.0
+go: downloading golang.org/x/crypto v0.27.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading golang.org/x/sync v0.8.0
+	swiftdrop.local/m4/core-api/internal/platform/obs		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/internal/platform/db		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/internal/platform/web		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/internal/merchants/infrastructure		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/internal/merchants/application		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/cmd/seed		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/cmd/devtoken		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/cmd/api		coverage: 0.0% of statements
+	swiftdrop.local/m4/core-api/internal/merchants/transport		coverage: 0.0% of statements
+ok  	swiftdrop.local/m4/core-api/internal/merchants/domain	1.047s	coverage: 95.1% of statements
+ok  	swiftdrop.local/m4/core-api/internal/platform/auth	1.583s	coverage: 63.6% of statements
+ok  	swiftdrop.local/m4/core-api/internal/platform/config	1.029s	coverage: 83.8% of statements
