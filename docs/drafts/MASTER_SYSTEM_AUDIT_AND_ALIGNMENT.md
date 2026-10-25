@@ -89,6 +89,10 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Standardize on `/health/live`, `/health/ready`, and `/metrics`.
 3. **Container Packaging:** In `doc-08`, Member 8 builds two separate images (`swiftdrop/outbox-relay:latest` and `swiftdrop/event-worker:latest`) under `USER 65532:65532`.
    - *Fix:* Build a single multi-binary image `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>` running as `USER 10001:10001` (Rule A3 & K18).
+4. **Deduplication Ledger Primary Key Type:** In `doc-05` Section 1 ERD, `processed_events` defines `varchar event_id PK`, whereas in `doc-04` and `outbox_events` the ID is typed as `UUID`.
+   - *Fix:* Standardize `processed_events.event_id UUID NOT NULL` to match `outbox_events.id`.
+5. **Local Absolute File Links:** Documentation headers in `doc-01` through `doc-08` contain personal Windows file URLs (`file:///c:/Users/kesha/...`).
+   - *Fix:* Replace with repository-relative Markdown links.
 
 ### 2.6 Member 03 Contradictions
 1. **Delivery Zone Key Inconsistency (`zone_code` vs `zone_id`):** In `doc-01`, `doc-04`, and `doc-05`, Member 3 defines foreign key `zone_code REFERENCES delivery_zones(code)`. In Member 7's canonical schema (`000002_create_delivery_zones.up.sql`), the primary key is `id VARCHAR(32)`.
