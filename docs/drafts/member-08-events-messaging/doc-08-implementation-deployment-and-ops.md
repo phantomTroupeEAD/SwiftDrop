@@ -79,45 +79,60 @@ Create local environment files from this template (`services/messaging/.env`):
 # SwiftDrop Messaging Subsystem Configuration
 # ==============================================================================
 
-# Global Runtime
-APP_ENV=local                             # local | development | staging | production
+# Global Runtime Environment
+APP_ENV=local                             # local | staging | production
 LOG_LEVEL=info                            # debug | info | warn | error
 
-# PostgreSQL Authoritative Database
-DATABASE_URL=postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable
-DB_MAX_OPEN_CONNS=15                      # Total pool size (5 relay, 10 worker)
-DB_MAX_IDLE_CONNS=5                       # Idle connections kept alive
+# PostgreSQL Database Connections (Per-Role Least-Privilege Credentials)
+# Relay Daemon (swiftdrop_relay role: outbox_events access only)
+RELAY_DATABASE_URL=postgres://swiftdrop_relay:relay_secret_pass@localhost:5432/swiftdrop_db?sslmode=disable
+RELAY_DB_MAX_OPEN_CONNS=5
+RELAY_DB_MAX_IDLE_CONNS=2
+
+# Worker Daemon (swiftdrop_worker role: processed_events, deliveries, targets view)
+WORKER_DATABASE_URL=postgres://swiftdrop_worker:worker_secret_pass@localhost:5432/swiftdrop_db?sslmode=disable
+WORKER_DB_MAX_OPEN_CONNS=10
+WORKER_DB_MAX_IDLE_CONNS=5
+
+# Reconciler Daemon (swiftdrop_reconciler role: audit, reset expired leases, retention purge)
+RECONCILER_DATABASE_URL=postgres://swiftdrop_reconciler:reconcile_secret_pass@localhost:5432/swiftdrop_db?sslmode=disable
+RECONCILER_DB_MAX_OPEN_CONNS=2
+RECONCILER_DB_MAX_IDLE_CONNS=1
 
 # RabbitMQ Message Broker
-RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-RABBITMQ_RECONNECT_BACKOFF_SECONDS=2      # Initial retry delay on connection loss
-RABBITMQ_PREFETCH_COUNT=10                # Unacknowledged messages per worker pod
+RABBITMQ_URL=amqp://swiftdrop:app_secret_pass@localhost:5672/   # in-cluster: amqp://swiftdrop:<pw>@rabbitmq.swiftdrop.svc.cluster.local:5672/ (Agreement A5)
+RABBITMQ_RECONNECT_BACKOFF_SECONDS=2      # Initial retry backoff on connection loss
+RABBITMQ_PREFETCH_COUNT=20                # AMQP prefetch buffer per consumer pod
 
 # Outbox Relay Daemon Parameters
-OUTBOX_POLL_INTERVAL_MS=500               # Scan frequency for pending rows (ms)
-OUTBOX_BATCH_SIZE=50                      # Maximum events fetched per batch
-OUTBOX_STALE_SECONDS=300                  # Age threshold (5m) before warning on pending rows
+OUTBOX_POLL_INTERVAL_MS=500               # Frequency of SKIP LOCKED batch polls (ms)
+OUTBOX_BATCH_SIZE=50                      # Batch limit per poll tick
+OUTBOX_STALE_SECONDS=300                  # Alert threshold (5m) for unconfirmed pending events
 
 # Event Worker Parameters
-WORKER_CONCURRENCY=10                     # Number of parallel consumer goroutines
-WEBHOOK_HTTP_TIMEOUT_SECONDS=5            # Strict socket timeout for merchant HTTP calls
-WEBHOOK_MAX_RETRIES=5                     # Bounded retry budget before routing to DLQ
+WORKER_CONCURRENCY=10                     # Goroutine worker pool capacity
+WEBHOOK_HTTP_TIMEOUT_SECONDS=5            # Strict socket timeout for outbound HTTP POSTs
+WEBHOOK_RETRY_SCHEDULE=0s,30s,2m,10m,30m  # Explicit 5-attempt retry intervals
+WEBHOOK_ALLOW_PRIVATE_HOSTS=false         # Prohibit private/loopback IPs (true strictly in local dev test)
 
-# Real SMTP Email Server Configuration (MANDATORY: NO FAKE / DEMO SINKS)
-SMTP_HOST=smtp.mailtrap.io                # Real SMTP server hostname (or SendGrid/SES)
-SMTP_PORT=587                             # 587 (STARTTLS) or 465 (Direct TLS)
-SMTP_USERNAME=your_smtp_username_here     # Real SMTP auth user (Secret)
-SMTP_PASSWORD=your_smtp_password_here     # Real SMTP auth password (Secret)
+# Real SMTP Email Server Configuration (MANDATORY: NO MOCK CODE PATHS)
+# In local/CI: uses Mailpit container on localhost:1025 with SMTP_SECURITY=none
+# In staging/prod: uses provider on port 587/465 with SMTP_SECURITY=starttls|tls
+SMTP_HOST=localhost                       # "mailpit" in Docker Compose; SMTP provider in prod
+SMTP_PORT=1025                            # 1025 (local Mailpit), 587 (STARTTLS), 465 (implicit TLS)
+SMTP_SECURITY=none                        # "none" (local Mailpit only), "starttls", or "tls"
+SMTP_USERNAME=""                          # SMTP auth username (empty for local Mailpit)
+SMTP_PASSWORD=""                          # SMTP auth password / API token (Secret)
 SMTP_FROM_EMAIL=notifications@swiftdrop.io
 SMTP_FROM_NAME="SwiftDrop Deliveries"
-SMTP_TLS_ENABLED=true                     # Enforce TLS certificate validation
+SMTP_DIAL_TIMEOUT_SECONDS=5
 
-# Operational Probe Server Ports (Agreement A1)
-RELAY_HTTP_PORT=8082                      # Health/metrics port for Relay pod (internal only)
-WORKER_HTTP_PORT=8083                     # Health/metrics port for Worker pod (internal only)
+# Operational Health & Metrics Probe Server Ports (Agreement A1/A2)
+PROBE_PORT=8082                           # 8082 for relay; 8083 for worker
 
-# Merchant Webhook Security (Member 04 & 09 Agreement A5)
-# 32-byte hexadecimal key for AES-256-GCM webhook secret decryption (Secret: integrations-secrets)
+# Webhook Secret Encryption Key (Member 04 & 09 Agreement A5)
+# 32-byte (64 hex chars) key for AES-256-GCM webhook secret decryption (Secret: integrations-secrets, shared with core-api).
+# Used for secret_key_version = 1; key rotation naming to be agreed with Member 04/09.
 WEBHOOK_SECRET_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ```
 
@@ -129,33 +144,34 @@ WEBHOOK_SECRET_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef01
 Ensure the following tools are running locally:
 - Go `1.22+` (`go version`)
 - Docker & Docker Compose (`docker compose version`)
-- PostgreSQL 16+ & RabbitMQ 3.12+ (launched via Compose)
+- PostgreSQL 16+, RabbitMQ 3.12+, and Mailpit (launched via Compose)
 
 ### 4.2 Step-by-Step Developer Workflow
 
 #### Step 1: Start Infrastructure Containers
 From repository root:
 ```bash
-docker compose up -d postgres rabbitmq
+docker compose up -d postgres rabbitmq mailpit
 ```
 *Verify containers are healthy:*
 ```bash
 docker compose ps
 # PostgreSQL: localhost:5432
 # RabbitMQ AMQP: localhost:5672 | Management UI: http://localhost:15672 (guest/guest)
+# Mailpit SMTP: localhost:1025 | Web UI: http://localhost:8025
 ```
 
 #### Step 2: Apply Database Migrations
-Apply sequential database migrations:
+Apply sequential database migrations (including Member 08 migrations `000008` and `000009`):
 ```bash
-migrate -path core-api/migrations -database "postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable" up
+migrate -path core-api/migrations -database "postgres://swiftdrop_migrator:secret@localhost:5432/swiftdrop_db?sslmode=disable" up
 ```
 
 #### Step 3: Run the Outbox Relay Daemon
 In Terminal 1:
 ```bash
 cd services/messaging
-go run cmd/relay/main.go
+PROBE_PORT=8082 DATABASE_URL=$RELAY_DATABASE_URL go run cmd/relay/main.go
 # Outputs structured JSON: {"level":"INFO","msg":"Outbox Relay started. Polling every 500ms"}
 ```
 
@@ -163,7 +179,7 @@ go run cmd/relay/main.go
 In Terminal 2:
 ```bash
 cd services/messaging
-go run cmd/worker/main.go
+PROBE_PORT=8083 DATABASE_URL=$WORKER_DATABASE_URL go run cmd/worker/main.go
 # Outputs structured JSON: {"level":"INFO","msg":"Event Worker consumer pool started. Concurrency: 10"}
 ```
 
@@ -188,12 +204,12 @@ Daemons are packaged into a single hardened, non-root multi-binary image adherin
 # ------------------------------------------------------------------------------
 # Build Stage
 # ------------------------------------------------------------------------------
-FROM golang:1.23-alpine AS builder
+FROM golang:1.23.2-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-cache ca-certificates git
+RUN apk add --no-cache ca-certificates tzdata
 
 # Cache Go modules
 COPY go.mod go.sum ./
@@ -202,10 +218,10 @@ RUN go mod download
 # Copy source tree
 COPY . .
 
-# Compile all three statically linked binary entrypoints
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/relay ./cmd/relay && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/worker ./cmd/worker && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/reconcile ./cmd/reconcile
+# Compile all three statically linked binary entrypoints with optimizations
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/relay ./cmd/relay && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/worker ./cmd/worker && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/reconcile ./cmd/reconcile
 
 # ------------------------------------------------------------------------------
 # Production Hardened Runtime Image
@@ -222,8 +238,11 @@ COPY --from=builder /bin/relay /usr/local/bin/relay
 COPY --from=builder /bin/worker /usr/local/bin/worker
 COPY --from=builder /bin/reconcile /usr/local/bin/reconcile
 
-# Run as non-root user
+# Drop all privileges and run as non-root user
 USER 10001:10001
+
+# Operational probe ports (Relay: 8082, Worker: 8083)
+EXPOSE 8082 8083
 
 # Default entrypoint (overridden per Kubernetes Deployment)
 ENTRYPOINT ["/usr/local/bin/worker"]
@@ -266,16 +285,36 @@ spec:
     metadata:
       labels:
         app: outbox-relay
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: swiftdrop-relay-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: outbox-relay
           image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
           command: ["/usr/local/bin/relay"]
+          ports:
+            - containerPort: 8082
+              name: http-probes
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - configMapRef:
                 name: messaging-config
             - secretRef:
-                name: postgres-secrets
+                name: outbox-relay-secrets # Dedicated credentials for swiftdrop_relay role
             - secretRef:
                 name: rabbitmq-secrets
           resources:
@@ -285,6 +324,13 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8082
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
           livenessProbe:
             httpGet:
               path: /health/live
@@ -322,16 +368,36 @@ spec:
     metadata:
       labels:
         app: event-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: swiftdrop-worker-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: event-worker
           image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
           command: ["/usr/local/bin/worker"]
+          ports:
+            - containerPort: 8083
+              name: http-probes
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - configMapRef:
                 name: messaging-config
             - secretRef:
-                name: postgres-secrets
+                name: event-worker-secrets # Dedicated credentials for swiftdrop_worker role
             - secretRef:
                 name: rabbitmq-secrets
             - secretRef:
@@ -343,6 +409,13 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8083
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
           livenessProbe:
             httpGet:
               path: /health/live
@@ -356,7 +429,19 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
 ---
-# KEDA Autoscaler based on Queue Length
+# KEDA TriggerAuthentication for RabbitMQ
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq-auth
+  namespace: swiftdrop
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: rabbitmq-secrets
+      key: RABBITMQ_URL
+---
+# KEDA Autoscaler based on Queue Length (Bounded to 1-3 replicas to prevent pool exhaustion)
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -368,7 +453,7 @@ spec:
     kind: Deployment
     name: event-worker
   minReplicaCount: 1
-  maxReplicaCount: 5
+  maxReplicaCount: 3 # Hard limit to prevent PostgreSQL connection saturation
   pollingInterval: 15
   cooldownPeriod: 30
   triggers:
@@ -385,7 +470,7 @@ spec:
         protocol: amqp
         queueName: q.webhooks.dispatcher
         mode: QueueLength
-        value: "10" # Scales up when webhook dispatcher queue backlog exceeds 10 messages (Agreement C7)
+        value: "10" # Scales up when webhook dispatcher queue backlog exceeds 10 messages
       authenticationRef:
         name: keda-rabbitmq-auth
 ```
@@ -393,16 +478,16 @@ spec:
 ---
 
 ### 6.3 Scheduled Reconciliation CronJob (`deploy/kubernetes/reconciliation-cronjob.yml`)
-Periodically audits for stuck outbox events (>5m) and overdue webhook retries (Member 09 Agreement C10):
+Periodically audits for stuck outbox events (>5m), resets expired in-progress leases, and executes retention purges:
 
 ```yaml
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: reconciliation-worker
+  name: swiftdrop-outbox-reconciler
   namespace: swiftdrop
 spec:
-  schedule: "*/10 * * * *" # Runs every 10 minutes (Agreement C10)
+  schedule: "*/10 * * * *" # Runs every 10 minutes
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
@@ -411,17 +496,28 @@ spec:
       backoffLimit: 2
       template:
         spec:
+          serviceAccountName: swiftdrop-reconciler-sa
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
           containers:
             - name: reconciler
               image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
               command: ["/usr/local/bin/reconcile"]
               args: ["--stale-threshold=5m", "--batch-size=50"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
               envFrom:
                 - configMapRef:
                     name: messaging-config
                 - secretRef:
-                    name: postgres-secrets
+                    name: outbox-reconciler-secrets # Dedicated credentials for swiftdrop_reconciler role
                 - secretRef:
                     name: rabbitmq-secrets
               resources:
@@ -432,6 +528,7 @@ spec:
                   cpu: 250m
                   memory: 128Mi
 ```
+*Note:* The reconciler binary also supports manual dead-letter queue replay via the CLI flag `--replay-dlq`.
 
 ---
 
@@ -442,14 +539,16 @@ Both daemons expose Prometheus counters and histograms:
 
 | Metric Name | Type | Description |
 | :--- | :--- | :--- |
-| `swiftdrop_outbox_pending_events` | Gauge | Current number of unconfirmed pending rows in `outbox_events` (Agreement K19). |
+| `swiftdrop_outbox_pending_events` | Gauge | Current count of unconfirmed pending rows in `outbox_events`. |
+| `swiftdrop_outbox_oldest_pending_age_seconds` | Gauge | Age in seconds of the oldest unconfirmed row with `status = 'PENDING'`. |
 | `swiftdrop_outbox_publish_duration_seconds` | Histogram | Latency distribution of RabbitMQ publisher confirms. |
-| `swiftdrop_outbox_publish_failures_total` | Counter | Total number of failed AMQP publish attempts. |
-| `swiftdrop_smtp_deliveries_total` | Counter | Total real SMTP emails dispatched (labeled by `status=SENT|FAILED`). |
+| `swiftdrop_outbox_publish_failures_total` | Counter | Total count of failed AMQP publish attempts. |
+| `swiftdrop_smtp_deliveries_total` | Counter | Total real SMTP emails dispatched (labeled by `status=SUCCESS|FAILED`). |
 | `swiftdrop_smtp_latency_seconds` | Histogram | Latency distribution of TLS SMTP handshakes and data transmission. |
 | `swiftdrop_webhook_delivery_attempts_total` | Counter | Total outbound webhook attempts (labeled by `http_status` & `status`). |
 | `swiftdrop_webhook_ssrf_blocked_total` | Counter | Total outbound webhooks aborted due to SSRF blacklist detection. |
-| `swiftdrop_dlq_messages_routed_total` | Counter | Total poison messages escalated to `swiftdrop.dlq`. |
+| `swiftdrop_dlq_depth` | Gauge | Current number of unacknowledged poison messages in `swiftdrop.dlq`. |
+| `swiftdrop_retention_purged_rows_total` | Counter | Total rows purged by retention jobs (labeled by `table_name`). |
 
 ### 7.2 Core Alerting Rules
 - **OutboxBacklogHigh:** `swiftdrop_outbox_pending_events > 100` for 5m. (Indicates Outbox Relay is stuck or broker is unreachable).

@@ -23,7 +23,7 @@ The Messaging & Event-Driven subsystem operates as the asynchronous backbone of 
 | **Real SMTP Mail Server** | External Network Service | Worker initiates TLS/STARTTLS TCP handshake on port 587/465. | Receives, authenticates, and routes transactional emails to recipient inboxes. |
 | **Webhook Dispatcher Consumer** | Background Worker Goroutine | Receives message from `q.webhooks.dispatcher`. | Resolves DNS with SSRF guard, computes HMAC-SHA256 signature, dispatches HTTP POST, and manages retries. |
 | **Merchant Webhook Endpoint** | External HTTP Service | Worker sends authenticated HTTPS POST request. | Validates signature and timestamp; returns `2xx OK` or error. |
-| **Reconciliation Engine / CronJob** | Scheduled CLI Command | Kubernetes CronJob triggers (every 5m) or manual operator execution. | Detects stale outbox rows (>5m) and overdue webhook retries; repairs state without bypassing relay. |
+| **Reconciliation Engine / CronJob** | Scheduled CLI Command | Kubernetes CronJob triggers every 10m (`*/10`) or manual operator execution. | Audits stuck outbox rows (>5m), re-arms expired delivery leases, audits operational data consistency (FR-REC-003), and executes batched retention. Never publishes to broker. |
 
 ---
 
@@ -35,35 +35,41 @@ The Messaging & Event-Driven subsystem operates as the asynchronous backbone of 
 stateDiagram-v2
     [*] --> PENDING: Atomic INSERT in Core API Use Case Tx
     
-    PENDING --> PENDING: Publish Failure / Network Timeout (retry_count++)
-    PENDING --> PUBLISHED: RabbitMQ Publisher Confirm ACK Received
-    PENDING --> FAILED: Exhausted retries or schema error (manual audit)
+    PENDING --> PENDING: Transient Publish Failure (attempt_count++, next_attempt_at set)
+    PENDING --> PUBLISHED: RabbitMQ Publisher Confirm ACK Received (published_at set)
+    PENDING --> FAILED: Exhausted retries (attempt_count >= 5; operational alert)
     
     PUBLISHED --> [*]: Purged by Retention Job after 7 days
+    FAILED --> PENDING: Operator investigation & manual re-arm
 ```
 
-- **`PENDING`:** Event successfully committed in the database alongside the domain aggregate change. Eligible for Relay polling.
-- **`PUBLISHED`:** Broker explicitly acknowledged durable receipt. Message is now safely inside RabbitMQ.
-- **`FAILED`:** Unrecoverable serialization or broker rejection. Flagged for operational triage.
+- **`PENDING`:** Event committed in PostgreSQL alongside domain aggregate mutation. Poller selects rows where `status = 'PENDING'` and `next_attempt_at <= NOW()`.
+- **`PUBLISHED`:** RabbitMQ broker confirmed persistent message receipt. Message safely routed to destination queues.
+- **`FAILED`:** Unrecoverable serialization error or broker rejection exceeding 5 attempts. Flagged for operational triage.
 
 ---
 
-### 2.2 Webhook Delivery Attempt Lifecycle (`webhook_deliveries.status`)
+### 2.2 Webhook Delivery Lifecycle (`webhook_deliveries.status`)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: Event Worker consumes event & matches active endpoint
+    [*] --> PENDING: Fan-out creates delivery task for matching endpoint
     
-    PENDING --> SUCCESS: Merchant endpoint responds 2xx within 5s
-    PENDING --> RETRYING: 4xx/5xx/Timeout & attempt_count < 5 (Backoff applied)
-    RETRYING --> PENDING: next_attempt_at elapsed
+    PENDING --> IN_PROGRESS: Worker/Poller claims task (lease_expires_at = now + 60s)
+    IN_PROGRESS --> SUCCESS: 2xx response within 5s (delivered_at set; attempt log appended)
+    IN_PROGRESS --> PENDING: Retryable 408/429/5xx/timeout & attempt < 5 (next_attempt_at set; attempt log appended)
+    IN_PROGRESS --> FAILED: Non-retryable 4xx/3xx/SSRF blocked OR attempt >= 5 (attempt log appended)
+    IN_PROGRESS --> PENDING: Worker crash / lease expired (Reconciler resets lease)
     
-    RETRYING --> FAILED: attempt_count == 5 exhausted
-    FAILED --> DLQ: Routed to swiftdrop.dlq (Endpoint degraded)
-    
-    SUCCESS --> [*]
-    DLQ --> [*]
+    SUCCESS --> [*]: Retention purge after 30 days
+    FAILED --> [*]: Retention purge after 30 days
 ```
+
+- **`PENDING`:** Awaiting dispatch or scheduled retry. Selected by worker poller when `next_attempt_at <= NOW()`.
+- **`IN_PROGRESS`:** Leased by active worker goroutine (`lease_expires_at` prevents concurrent dispatch by multiple pods).
+- **`SUCCESS`:** Terminal success. HTTP 2xx received from merchant server.
+- **`FAILED`:** Terminal failure. Non-retryable error (e.g. 404, 3xx redirect, SSRF blocked) or 5 attempts exhausted.
+- **Append-Only Child Record:** Each HTTP attempt creates a row in `webhook_delivery_attempts` (FR-MER-011).
 
 ---
 
@@ -71,17 +77,16 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: Consumer claims event for email delivery
+    [*] --> PENDING: Delivery task created for customer email
     
-    PENDING --> SENT: Real SMTP server returns 250 OK (Message ID captured)
-    PENDING --> RETRYING: SMTP 4xx (Temporary failure / rate limit)
-    RETRYING --> PENDING: Exponential backoff elapsed
+    PENDING --> IN_PROGRESS: Worker claims task (lease_expires_at = now + 60s)
+    IN_PROGRESS --> SUCCESS: SMTP 250 OK (provider_message_id set; delivered_at set)
+    IN_PROGRESS --> PENDING: SMTP 4xx temporary failure / timeout & attempt < 5 (next_attempt_at set)
+    IN_PROGRESS --> FAILED: SMTP 5xx permanent failure OR attempt >= 5
+    IN_PROGRESS --> PENDING: Worker crash / lease expired (Reconciler resets lease)
     
-    PENDING --> FAILED: SMTP 5xx (Permanent failure e.g. 550 User Unknown)
-    RETRYING --> FAILED: Max attempts exceeded
-    
-    SENT --> [*]
-    FAILED --> [*]
+    SUCCESS --> [*]: Retention purge after 30 days
+    FAILED --> [*]: Retention purge after 30 days
 ```
 
 ---
@@ -139,32 +144,38 @@ sequenceDiagram
     participant Broker as RabbitMQ Topic Exchange (swiftdrop.events.topic)
 
     loop Every 500ms
-        Relay->>DB: BEGIN Transaction
-        Relay->>DB: SELECT id, aggregate_type, aggregate_id, event_type, payload, correlation_id<br/>FROM outbox_events WHERE status = 'PENDING'<br/>ORDER BY created_at ASC LIMIT 50<br/>FOR UPDATE SKIP LOCKED;
+        Relay->>DB: Claim pending batch (SELECT ... FOR UPDATE SKIP LOCKED)
+        Note over Relay,DB: status = 'PENDING' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())<br/>ORDER BY created_at ASC LIMIT 50
         
         alt No pending rows
-            Relay->>DB: COMMIT (Sleep 500ms)
+            Relay->>DB: Commit short read transaction (Sleep 500ms)
         else Rows claimed (batch <= 50)
             loop For each claimed event
-                Relay->>Broker: Publish AMQP message (DeliveryMode=2, Persistent)<br/>RoutingKey: {aggregate_type}.{action}.v{version}<br/>Headers: X-Correlation-ID, X-Event-ID
-                Broker-->>Relay: Publisher Confirm (ACK)
-                Relay->>DB: UPDATE outbox_events<br/>SET status = 'PUBLISHED', published_at = NOW()<br/>WHERE id = $1
+                Relay->>Broker: Publish AMQP message (DeliveryMode=2, Persistent)<br/>RoutingKey = event_type (e.g. parcel.delivered.v1)<br/>Headers: X-Request-ID, X-Event-ID
+                
+                alt Broker ACK (Publisher Confirm Success)
+                    Broker-->>Relay: Publisher Confirm (ACK)
+                    Relay->>DB: Short Tx: UPDATE outbox_events SET status = 'PUBLISHED', published_at = NOW()<br/>WHERE id = $1
+                else Broker NACK or Timeout (5.0s)
+                    Broker-->>Relay: NACK or Timeout
+                    Relay->>DB: Short Tx: UPDATE outbox_events SET attempt_count = attempt_count + 1,<br/>last_error = $err, next_attempt_at = NOW() + delay,<br/>status = CASE WHEN attempt_count + 1 >= 5 THEN 'FAILED' ELSE 'PENDING' END<br/>WHERE id = $1
+                end
             end
-            Relay->>DB: COMMIT Transaction
         end
     end
 ```
 
 #### Failure Handling & Resilience Rules
-- **Broker Unreachable / Down:** The Relay catches connection failure, does not mark rows as `PUBLISHED`, rolls back the transaction, backs off exponentially (1s, 2s, 4s, max 30s), and reconnects. Pending rows remain safely in PostgreSQL.
-- **Publisher Confirm NACK or Timeout (5.0s):** If RabbitMQ rejects a message or fails to confirm within 5 seconds, the relay increments `retry_count`, logs `last_error`, and aborts the batch. Unconfirmed rows are retried on the next iteration.
-- **Relay Crash During Batch:** If the relay crashes after publishing to RabbitMQ but before executing `COMMIT` on PostgreSQL, the row remains `PENDING`. Upon restart, the relay will re-publish the message. This guarantees **at-least-once delivery**; downstream consumers are required to be idempotent.
+- **Broker Unreachable / Down:** The Relay catches connection failure, does not mark rows as `PUBLISHED`, backs off exponentially (1s, 2s, 4s, max 30s), and reconnects. Pending rows remain safely in PostgreSQL.
+- **Publisher Confirm NACK or Timeout (5.0s):** If RabbitMQ rejects a message or fails to confirm within 5 seconds, the relay increments `attempt_count`, logs `last_error`, and updates `next_attempt_at` in an independent single-row transaction. If `attempt_count >= 5`, the status is transitioned to `FAILED` and an operational alert is emitted.
+- **Per-Row Transaction Isolation:** The relay does NOT hold a single database transaction across 50 broker confirms. Each confirmed message commits its `PUBLISHED` status immediately, eliminating batch rollback risks.
+- **Relay Crash During Batch:** If the relay crashes after publishing to RabbitMQ but before persisting `PUBLISHED`, the row remains `PENDING`. Upon restart, the relay will re-publish the message. This guarantees **at-least-once delivery with idempotent effects**; downstream consumers are strictly idempotent.
 
 ---
 
 ### Flow 3: Real SMTP Customer Email Notification Delivery
 
-This flow fulfills the requirement to use a **real SMTP mail server from day one** with no fake, mock, or demo sinks.
+This flow fulfills the requirement to use a **real SMTP mail server** (with Mailpit in local/CI environments) with zero fake or mock code paths.
 
 ```mermaid
 sequenceDiagram
@@ -172,58 +183,51 @@ sequenceDiagram
     participant Broker as RabbitMQ (q.notifications.worker)
     participant Worker as Notification Worker Goroutine
     participant DB as PostgreSQL
-    participant SMTP as Real SMTP Server (Port 587 STARTTLS)
+    participant SMTP as Real SMTP Server (TLS 587/465)
 
     Broker->>Worker: Deliver AMQP Message (parcel.delivered.v1)
-    
     activate Worker
-    Worker->>DB: INSERT INTO processed_events (event_id, consumer_name, processed_at)<br/>VALUES ($1, 'notification_worker', NOW())<br/>ON CONFLICT (event_id, consumer_name) DO NOTHING;
     
-    alt Event Already Processed (Conflict / RowsAffected == 0)
+    Worker->>DB: Claim delivery task (status = 'IN_PROGRESS', lease_expires_at = NOW() + 60s)
+    
+    alt Task Already Completed (status == SUCCESS or FAILED)
         Worker-->>Broker: AMQP Ack (Duplicate ignored safely)
-    else Fresh Event (RowsAffected == 1)
-        Worker->>DB: Query recipient details (customer email, recipient name)
+    else Task Leased Successfully
+        Worker->>Worker: Extract recipient contact directly from event payload (notify block)
         Worker->>Worker: Render responsive HTML & Plaintext Email Templates
         
-        Worker->>SMTP: Connect TCP (SMTP_HOST:SMTP_PORT) [Timeout: 10s]
-        SMTP-->>Worker: 220 Service Ready
-        Worker->>SMTP: EHLO swiftdrop.io
-        SMTP-->>Worker: 250-STARTTLS ...
-        Worker->>SMTP: STARTTLS
-        Worker->>SMTP: TLS Handshake & Certificate Verification
-        Worker->>SMTP: AUTH LOGIN / PLAIN (SMTP_USERNAME, SMTP_PASSWORD)
-        SMTP-->>Worker: 235 Authentication successful
-        Worker->>SMTP: MAIL FROM: <notifications@swiftdrop.io>
-        SMTP-->>Worker: 250 OK
-        Worker->>SMTP: RCPT TO: <recipient@example.com>
-        SMTP-->>Worker: 250 OK
-        Worker->>SMTP: DATA (MIME Multipart Headers, Body)
-        SMTP-->>Worker: 250 OK (Message Queued / Provider ID: <msg_12345>)
+        Note over Worker,SMTP: Full SMTP Session with Context Deadline (15s)
+        Worker->>SMTP: Connect TCP & Handshake (TLS/STARTTLS)
+        Worker->>SMTP: AUTH & Envelope (MAIL FROM, RCPT TO)
+        Worker->>SMTP: DATA (RFC 2822 Multipart/Alternative MIME)
         
         alt SMTP Returns 250 OK
-            Worker->>DB: INSERT INTO notification_deliveries<br/>(id, event_id, recipient, channel, status, provider_message_id, sent_at)<br/>VALUES ($1, $2, $3, 'EMAIL', 'SENT', 'msg_12345', NOW());
+            SMTP-->>Worker: 250 OK (Queued, Message-ID: <msg_uuid@swiftdrop.io>)
+            Worker->>DB: Single Tx: UPDATE notification_deliveries SET status = 'SUCCESS',<br/>provider_message_id = $mid, delivered_at = NOW()<br/>INSERT INTO processed_events (consumer_name, event_id) VALUES (...)
             Worker-->>Broker: AMQP Ack
-        else SMTP Returns 4xx (Temporary Failure / Rate Limited)
-            Worker->>DB: INSERT INTO notification_deliveries (status: RETRYING, error: $err)
-            Worker-->>Broker: AMQP Nack (requeue=true with backoff delay)
-        else SMTP Returns 5xx (Permanent Failure / Mailbox Not Found)
-            Worker->>DB: INSERT INTO notification_deliveries (status: FAILED, error: $err)
-            Worker-->>Broker: AMQP Ack (Poison email address discarded)
+        else SMTP Returns 4xx (Temporary Rate Limit / Greylisting)
+            SMTP-->>Worker: 421 / 450 Temporary Failure
+            Worker->>DB: UPDATE notification_deliveries SET status = 'PENDING',<br/>attempt_count = attempt_count + 1, next_attempt_at = NOW() + delay,<br/>lease_expires_at = NULL, last_error = $err
+            Worker-->>Broker: AMQP Ack (Scheduled for DB-driven poller retry)
+        else SMTP Returns 5xx (Permanent Mailbox Failure)
+            SMTP-->>Worker: 550 User Unknown
+            Worker->>DB: UPDATE notification_deliveries SET status = 'FAILED', last_error = $err<br/>INSERT INTO processed_events (consumer_name, event_id) VALUES (...)
+            Worker-->>Broker: AMQP Ack (Terminal failure logged)
         end
     end
     deactivate Worker
 ```
 
 #### Real SMTP Technical Specifications
-- **Connection Security:** Mandatory TLS v1.2+ or STARTTLS. Plain unencrypted connections are rejected unless `APP_ENV=local`.
-- **Dialer Timeout:** Strict 10-second connection timeout, 5-second command timeout.
-- **Template Rendering:** Templates use standard Go `html/template` and `text/template` with XSS-safe escaping.
+- **Single TLS Policy:** Configured via `SMTP_SECURITY=starttls|tls|none` (`none` permitted strictly when `APP_ENV=local` with Mailpit). Fails closed if encryption cannot be established.
+- **Context Deadline:** Entire SMTP session runs under a 15-second transaction context deadline.
+- **Message-ID Generation:** SwiftDrop generates an RFC 2822 compliant `Message-ID` (`<uuid@swiftdrop.io>`) and persists it as `provider_message_id`.
 
 ---
 
 ### Flow 4: Merchant Webhook Dispatcher & SSRF Defense
 
-Outbound webhooks allow merchant ERPs/e-commerce platforms to receive real-time updates. Because URLs are merchant-configured, this flow enforces cryptographic integrity and rigorous zero-trust networking.
+Outbound webhooks allow merchant systems to receive real-time updates. Because destination URLs are merchant-configured, this flow enforces cryptographic signing and zero-trust SSRF defense.
 
 ```mermaid
 sequenceDiagram
@@ -234,52 +238,47 @@ sequenceDiagram
     participant DNS as System DNS Resolver
     actor MerchantWH as Merchant Webhook Server (HTTPS)
 
-    Broker->>Worker: Deliver AMQP Message (parcel.picked_up.v1)
+    Broker->>Worker: Deliver AMQP Message (parcel.delivered.v1)
     activate Worker
-    Worker->>DB: Deduplicate in processed_events (event_id, 'webhook_dispatcher')
     
-    alt Duplicate Message
-        Worker-->>Broker: AMQP Ack
-    else Fresh Message
-        Worker->>DB: SELECT endpoint_id, url, secret_ciphertext, secret_key_version<br/>FROM merchant_webhook_targets_view<br/>WHERE merchant_id = $1 AND $2 = ANY(subscribed_event_types)
-        
-        alt No active subscription
-            Worker-->>Broker: AMQP Ack (Nothing to send)
-        else Active Endpoint Found (URL, SecretCiphertext)
-            Worker->>Worker: DecryptSecret(secret_ciphertext, WEBHOOK_SECRET_ENCRYPTION_KEY)<br/>via AES-256-GCM (nonce || ciphertext || tag)
-            Worker->>Worker: Generate Timestamp: t = UnixNow()
-            Worker->>Worker: Build Signature: HMAC-SHA256(plaintext_secret, t + "." + raw_body)
-            Worker->>Worker: Set Header X-SwiftDrop-Signature: t={t},v1={hash}
+    Worker->>DB: Query active endpoints from view: merchant_webhook_targets<br/>WHERE merchant_id = $1 AND $2 = ANY(subscribed_event_types)
+    
+    alt No matching endpoint
+        Worker-->>Broker: AMQP Ack (Nothing to dispatch)
+    else Matching Endpoints Found
+        loop For each endpoint
+            Worker->>DB: Claim delivery row (status = 'IN_PROGRESS', lease_expires_at = NOW() + 60s)<br/>ON CONFLICT (endpoint_id, event_id)
             
-            Note over Worker,DNS: SSRF & DNS Rebinding Defense (SafeDialContext)
-            Worker->>DNS: Resolve Hostname (Single Lookup)
-            DNS-->>Worker: Resolved IP List [198.51.100.25]
-            Worker->>Worker: Check IP against Blacklisted CIDRs<br/>(Reject 127.0.0.0/8, 10.0.0.0/8, 169.254.0.0/16, etc.)
-            
-            alt IP in Blacklisted CIDR
-                Worker->>DB: INSERT INTO webhook_deliveries (status: FAILED, error: "SSRF Blocked")
-                Worker-->>Broker: AMQP Ack (Do not retry malicious URL)
-            else IP is Public & Allowed
-                Worker->>MerchantWH: Direct TCP Dial to 198.51.100.25:443 (TLS SNI: merchant.com)<br/>POST /webhooks/swiftdrop (Timeout: 5s, Redirects: Disabled)
+            alt Already SUCCESS or Terminal FAILED
+                Note over Worker: Skip (Idempotent ignore)
+            else Claimed
+                Worker->>Worker: Decrypt secret from secret_ciphertext using local key ring
+                Worker->>Worker: Generate fresh timestamp (t = UnixNow()) & HMAC-SHA256 signature
+                Worker->>Worker: Set headers: X-SwiftDrop-Signature, X-SwiftDrop-Timestamp,<br/>X-SwiftDrop-Delivery-ID, X-SwiftDrop-Event-ID, User-Agent
                 
-                alt Merchant Returns 2xx OK
-                    MerchantWH-->>Worker: 200 OK
-                    Worker->>DB: INSERT INTO webhook_deliveries<br/>(status: SUCCESS, status_code: 200, delivered_at: NOW())
-                    Worker-->>Broker: AMQP Ack
-                else Merchant Returns 5xx or Timeout
-                    MerchantWH-->>Worker: 503 Service Unavailable
-                    Worker->>DB: Record Delivery Attempt (attempt_count++, next_attempt_at)
-                    Worker->>Worker: Calculate Exponential Backoff with Jitter
+                Note over Worker,DNS: SSRF Guard: SafeDialContext
+                Worker->>DNS: Resolve Hostname (net.DefaultResolver.LookupIP)
+                
+                alt IP in Blocked CIDR (Loopback, RFC 1918, CGNAT, Metadata, etc.)
+                    Worker->>DB: Append attempt log (error_class = 'SSRF_BLOCKED')<br/>UPDATE webhook_deliveries SET status = 'FAILED'
+                    Worker->>DB: Record processed_events
+                else IP Allowed (Public Routable IP)
+                    Worker->>MerchantWH: HTTPS POST payload (Timeout: 5s, Redirects: Disabled)
                     
-                    alt attempt_count < 5
-                        Worker-->>Broker: Requeue with delay / Schedule retry
-                    else attempt_count == 5 (Exhausted)
-                        Worker->>Broker: Route to swiftdrop.dlq
-                        Worker-->>Broker: AMQP Ack
+                    alt 2xx Success
+                        MerchantWH-->>Worker: 200 OK
+                        Worker->>DB: Append attempt log (status_code = 200)<br/>UPDATE webhook_deliveries SET status = 'SUCCESS', delivered_at = NOW()<br/>INSERT INTO processed_events (consumer_name, event_id)
+                    else 408 / 429 / 5xx / Timeout (Retryable)
+                        MerchantWH-->>Worker: 503 Service Unavailable / Timeout
+                        Worker->>DB: Append attempt log (status_code = 503, next_attempt_at)<br/>UPDATE webhook_deliveries SET status = CASE WHEN attempt_count + 1 >= 5 THEN 'FAILED' ELSE 'PENDING' END,<br/>attempt_count = attempt_count + 1, next_attempt_at = NOW() + delay,<br/>lease_expires_at = NULL
+                    else 3xx Redirect or 4xx Client Error (Terminal)
+                        MerchantWH-->>Worker: 302 Redirect / 404 Not Found
+                        Worker->>DB: Append attempt log (error_class = 'NON_RETRYABLE_HTTP')<br/>UPDATE webhook_deliveries SET status = 'FAILED'<br/>INSERT INTO processed_events (consumer_name, event_id)
                     end
                 end
             end
         end
+        Worker-->>Broker: AMQP Ack
     end
     deactivate Worker
 ```
@@ -288,117 +287,115 @@ sequenceDiagram
 
 ## 4. SSRF Defense: `SafeDialContext` Algorithm & Activity Diagram
 
-To satisfy **SRS SEC-010** and mitigate DNS Rebinding (TOCTOU attacks), the worker does NOT use standard `http.DefaultClient`. It uses a custom transport where DNS is resolved once, verified against blacklists, and dialed directly:
+To satisfy **SRS SEC-010** and prevent Server-Side Request Forgery and DNS Rebinding:
 
 ```mermaid
 flowchart TD
     Start(["Start HTTP Request"]) --> ParseURL["Parse Destination URL"]
-    ParseURL --> CheckScheme{"Scheme == HTTPS?"}
+    ParseURL --> CheckScheme{"Scheme == HTTPS?<br/>(HTTP allowed only if APP_ENV=local)"}
     
-    CheckScheme -- No (and not local) --> BlockScheme["ABORT: Non-HTTPS URL Prohibited"]
-    CheckScheme -- Yes --> SplitHost["Extract Host and Port"]
+    CheckScheme -- No --> BlockScheme["ABORT: Non-HTTPS URL Prohibited"]
+    CheckScheme -- Yes --> SplitHost["Extract Host and Port (Default 443)"]
     
     SplitHost --> ResolveDNS["net.DefaultResolver.LookupIP(host)"]
-    ResolveDNS --> DNSCheck{"DNS Resolution Successful?"}
-    DNSCheck -- No --> DNSFail["ABORT: DNS Resolution Error"]
+    ResolveDNS --> DNSCheck{"All resolved IPs public?"}
     
-    DNSCheck -- Yes --> LoopIPs["Iterate through resolved IP addresses"]
-    LoopIPs --> CheckCIDR{"Is IP in Blacklisted CIDRs?<br/>- 0.0.0.0/8<br/>- 127.0.0.0/8 (Loopback)<br/>- 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16<br/>- 169.254.0.0/16 (Link-Local / Metadata)<br/>- ::1/128, fe80::/10, fc00::/7"}
+    DNSCheck -- Any IP Blocked --> BlockSSRF["SECURITY ALERT: SSRF Blocked<br/>(Loopback, RFC1918, CGNAT, Metadata, Multicast, IPv6-mapped)"]
+    DNSCheck -- All IPs Public --> DirectDial["Dial resolved IP directly<br/>Preserve Host header & SNI"]
     
-    CheckCIDR -- Yes (Private/Local) --> BlockSSRF["SECURITY ALERT: SSRF Attempt Blocked<br/>Log Target IP & Abort"]
-    CheckCIDR -- No (Public IP) --> SelectIP["Select first validated public IP"]
-    
-    SelectIP --> DirectDial["Dial target IP directly: JoinHostPort(ip, port)<br/>Preserve Host header & TLS SNI for certificate check"]
-    DirectDial --> SetTimeout["Enforce strict 5.0s socket timeout"]
-    SetTimeout --> DisableRedirects["Disable automatic redirects (HTTP 3xx aborts)"]
-    DisableRedirects --> Transmit["Transmit HTTP POST Payload"]
-    Transmit --> End(["Receive Response"])
+    DirectDial --> SetTimeout["Enforce timeouts (5s dial, 5s response header)"]
+    SetTimeout --> DisableRedirects["Disable redirects: http.ErrUseLastResponse"]
+    DisableRedirects --> Transmit["Transmit Signed POST Request"]
+    Transmit --> End(["Capture Status & Sanitized Snippet (max 500 B)"])
 ```
 
 ---
 
 ## 5. Consumer Idempotency & Deduplication Logic
 
-RabbitMQ guarantees **at-least-once** delivery. Network interruptions, worker crashes, or delayed ACKs may cause duplicate message delivery. 
+RabbitMQ guarantees **at-least-once** delivery. Network interruptions, worker restarts, or delayed acks will produce duplicate deliveries.
 
-### The Deduplication Table Invariant
-All consumers share the authoritative deduplication table:
-```sql
-CREATE TABLE IF NOT EXISTS processed_events (
-    consumer_name VARCHAR(64) NOT NULL,
-    event_id UUID NOT NULL,
-    processed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY (consumer_name, event_id)
-);
-```
-
-### Deduplication Decision Flow
-1. Upon message receipt, the worker extracts `envelope.EventID`.
-2. The worker attempts an atomic `INSERT`:
+### Leased Delivery Claim Flow
+Rather than inserting into `processed_events` before executing side effects (which risked losing messages if external calls failed), consumers use **Database-Driven Leased Claims**:
+1. Upon receiving an event, the worker checks the delivery table (`webhook_deliveries` or `notification_deliveries`).
+2. The worker atomically transitions the row from `PENDING` to `IN_PROGRESS` with a 60-second lease:
    ```sql
-   INSERT INTO processed_events (event_id, consumer_name, processed_at)
-   VALUES ($1, $2, NOW())
-   ON CONFLICT (event_id, consumer_name) DO NOTHING;
+   UPDATE webhook_deliveries
+   SET status = 'IN_PROGRESS', lease_expires_at = NOW() + INTERVAL '60 seconds'
+   WHERE endpoint_id = $1 AND event_id = $2
+     AND (status = 'PENDING' OR (status = 'IN_PROGRESS' AND lease_expires_at < NOW()))
+   RETURNING id, attempt_count;
    ```
-3. **If `RowsAffected == 0` (Duplicate):**
-   - The event was already executed by this consumer.
-   - Immediately send AMQP `Ack`.
-   - Log at `DEBUG` level: `"Duplicate event ignored"`.
-   - **Do not** re-send email.
-   - **Do not** re-call merchant webhook.
-4. **If `RowsAffected == 1` (Fresh):**
-   - Execute side effects (SMTP email or webhook).
-   - If side effect permanently fails or succeeds, acknowledge AMQP message.
-   - If transient failure occurs, delete the row from `processed_events` before NACKing, allowing the retried message to be re-evaluated.
+3. If the row is already `SUCCESS` or terminal `FAILED`, the message is an idempotent duplicate; the worker immediately ACKs the AMQP message and returns.
+4. If an external failure occurs, `attempt_count` is incremented, `next_attempt_at` is set per the fixed retry schedule, and `status` returns to `PENDING` with `lease_expires_at = NULL`.
+5. Only upon **terminal outcome** (`SUCCESS` or terminal `FAILED`) is the deduplication record inserted into `processed_events`:
+   ```sql
+   INSERT INTO processed_events (consumer_name, event_id, processed_at)
+   VALUES ($1, $2, NOW())
+   ON CONFLICT (consumer_name, event_id) DO NOTHING;
+   ```
 
 ---
 
-## 6. Bounded Exponential Backoff & Retry Formula
+## 6. Fixed Retry Schedule & Error Classification Matrix
 
-For transient external failures (merchant server 500, network reset, SMTP 421 rate limit), the retry scheduler calculates delay using **Exponential Backoff with Full Jitter**:
+For transient external failures, retries follow a **deterministic 5-attempt schedule** (1 initial attempt + 4 retries) with bounded jitter:
 
-$$\text{Delay}(n) = \min\left(\text{MaxDelay}, \text{BaseDelay} \times 2^{n-1}\right) \pm \text{Jitter}$$
-
-### Webhook Retry Schedule
-| Attempt Number ($n$) | Base Delay | Random Jitter Range | Cumulative Elapsed Window | Action on Failure |
+### Webhook & Notification Retry Schedule
+| Attempt ($n$) | Base Delay | Random Jitter Range | Cumulative Elapsed Window | Action on Failure |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | Immediate | $0\text{s}$ | $0\text{s}$ | Initial dispatch attempt |
-| **2** | $30\text{s}$ | $\pm 5\text{s}$ | $\sim 30\text{s}$ | First retry |
-| **3** | $120\text{s}$ ($2\text{m}$) | $\pm 15\text{s}$ | $\sim 2\text{m } 30\text{s}$ | Second retry |
-| **4** | $600\text{s}$ ($10\text{m}$) | $\pm 60\text{s}$ | $\sim 12\text{m } 30\text{s}$ | Third retry |
-| **5** | $1800\text{s}$ ($30\text{m}$) | $\pm 180\text{s}$ | $\sim 42\text{m } 30\text{s}$ | Final retry attempt |
-| **Exhaustion** | Permanent | N/A | $\sim 45\text{m}$ | Route to `swiftdrop.dlq`; flag endpoint |
+| **1** | Immediate | $0\text{s}$ | $0\text{s}$ | Initial dispatch attempt on AMQP message receipt |
+| **2** | $30\text{s}$ | $\pm 5\text{s}$ | $\sim 30\text{s}$ | 1st retry (poller claims when `next_attempt_at <= NOW()`) |
+| **3** | $120\text{s}$ ($2\text{m}$) | $\pm 15\text{s}$ | $\sim 2\text{m } 30\text{s}$ | 2nd retry |
+| **4** | $600\text{s}$ ($10\text{m}$) | $\pm 60\text{s}$ | $\sim 12\text{m } 30\text{s}$ | 3rd retry |
+| **5** | $1800\text{s}$ ($30\text{m}$) | $\pm 180\text{s}$ | $\sim 42\text{m } 30\text{s}$ | 4th retry (final attempt) |
+| **Exhaustion** | Permanent | N/A | $\sim 42\text{m } 30\text{s}$ | Status transitions to `FAILED`; recorded in attempt log; alert emitted |
+
+### Webhook HTTP Status Code Retry Matrix
+| Outcome / Status Code | Classification | Policy | Delivery Status | System Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **200 - 299** | Success | Complete | `SUCCESS` | Persist response code & `delivered_at`; append attempt log; record `processed_events`; AMQP Ack. |
+| **408 Request Timeout** | Client Timeout | Retryable | `PENDING` | Increment `attempt_count`; set `next_attempt_at`; append attempt log; AMQP Ack. |
+| **429 Too Many Requests**| Rate Limited | Retryable | `PENDING` | Respect backoff; set `next_attempt_at`; append attempt log; AMQP Ack. |
+| **500 - 599** | Server Error | Retryable | `PENDING` | Increment `attempt_count`; set `next_attempt_at`; append attempt log; AMQP Ack. |
+| **TCP Dial / TLS Timeout**| Network Failure | Retryable | `PENDING` | Increment `attempt_count`; set `next_attempt_at`; append attempt log; AMQP Ack. |
+| **301, 302, 307, 308** | HTTP Redirect | Terminal Failure | `FAILED` | Disallowed under SSRF security policy (`http.ErrUseLastResponse`); append attempt log; record `processed_events`; AMQP Ack. |
+| **400, 401, 403, 404, 410, 422**| Client Error | Terminal Failure | `FAILED` | Misconfigured URL or revoked auth; no retry; append attempt log; record `processed_events`; AMQP Ack. |
+| **SSRF Destination Block**| Security Block | Terminal Failure | `FAILED` | Destination resolves to private or metadata IP; abort immediately; log security alert; record `processed_events`. |
 
 ---
 
 ## 7. Operational Flow: Scheduled Reconciliation & Self-Healing
 
-The reconciliation job runs periodically to ensure no events remain stuck indefinitely due to system reboots, database failovers, or broker outages.
+The reconciliation command (`cmd/reconcile`) runs every 10 minutes via Kubernetes CronJob `swiftdrop-outbox-reconciler` or manually by operators.
 
 ```mermaid
 flowchart TD
-    CronStart(["CronJob Ticker (Every 5 Minutes)"]) --> QueryStaleOutbox["Query outbox_events WHERE status = 'PENDING'<br/>AND created_at < NOW() - INTERVAL '5 minutes'"]
+    CronStart(["CronJob Trigger (Every 10 Minutes)"]) --> AuditOutbox["Audit outbox_events WHERE status = 'PENDING'<br/>AND created_at < NOW() - INTERVAL '5 minutes'"]
     
-    QueryStaleOutbox --> StaleCount{"Stale count > 0?"}
-    StaleCount -- Yes --> LogStale["Log Warning: Detected stuck outbox events"]
-    LogStale --> CheckBroker{"Is RabbitMQ Broker reachable?"}
+    AuditOutbox --> StaleCount{"Stale count > 0?"}
+    StaleCount -- Yes --> LogStale["Log Warning & Emit Metric: Stuck Outbox Records<br/>(Check Outbox Relay Liveness)"]
+    StaleCount -- No --> CheckLeases["Audit delivery rows WHERE status = 'IN_PROGRESS'<br/>AND lease_expires_at < NOW()"]
     
-    CheckBroker -- Yes --> ResetOutbox["UPDATE outbox_events SET attempt_count = 0, last_error = NULL<br/>WHERE status = 'PENDING' AND created_at < NOW() - INTERVAL '5 minutes'"]
-    ResetOutbox --> RelayNotified["Outbox Relay claims rows on next tick"]
-    CheckBroker -- No --> RaiseBrokerAlert["Raise Critical Incident Alert: RabbitMQ Unreachable"]
+    LogStale --> CheckLeases
+    CheckLeases --> ExpiredLeases{"Expired leases > 0?"}
+    ExpiredLeases -- Yes --> ResetLeases["Reset expired leases to status = 'PENDING'<br/>(Re-arms delivery tasks for worker poller pickup)"]
+    ExpiredLeases -- No --> AuditConsistency["Check operational consistency (FR-REC-003)<br/>Verify parcel status history alignment"]
     
-    StaleCount -- No --> CheckRetries["Query webhook_deliveries WHERE status = 'PENDING'<br/>AND next_attempt_at <= NOW()<br/>AND attempt_count < 5"]
-    
-    CheckRetries --> OverdueCount{"Overdue retries > 0?"}
-    OverdueCount -- Yes --> TriggerRetryWorker["Re-publish eligible webhook delivery tasks to worker"]
-    OverdueCount -- No --> AuditDLQ["Check message depth of swiftdrop.dlq"]
-    
-    TriggerRetryWorker --> AuditDLQ
-    AuditDLQ --> DLQCount{"DLQ Depth > 0?"}
-    DLQCount -- Yes --> LogDLQAlert["Emit Prometheus Metric & Warning Log: DLQ Has Unresolved Poison Messages"]
-    DLQCount -- No --> SuccessFinish(["Reconciliation Finished Cleanly"])
+    ResetLeases --> AuditConsistency
+    AuditConsistency --> CheckDLQ["Query RabbitMQ API: Depth of swiftdrop.dlq"]
+    CheckDLQ --> DLQCount{"DLQ Depth > 0?"}
+    DLQCount -- Yes --> LogDLQAlert["Emit Prometheus Metric & Warning Log: DLQ Depth > 0"]
+    DLQCount -- No --> SuccessFinish(["Reconciliation Run Complete"])
     LogDLQAlert --> SuccessFinish
 ```
+
+#### Reconciler Operating Rules
+1. **Never Publish to RabbitMQ:** In strict adherence to **SRS FR-REC-005**, the reconciliation job re-arms database state only (`status = 'PENDING'`). It never directly publishes events to RabbitMQ.
+2. **Never Reset Counters Blindly:** The reconciler never sets `attempt_count = 0` on stale rows. Unbounded counter resets would cause infinite retry loops on poison records.
+3. **Batch Bounded Execution:** All audit and update queries are bounded by `--batch-size 100` (FR-REC-004).
+4. **Audit Logging:** Every state modification is written to `audit_logs` with `actor_id = 'system/reconciler'`, timestamp, request ID, and reason (SEC-015).
+5. **Operator DLQ Replay Mode:** Includes `--replay-dlq` CLI mode to inspect poison messages and safely re-queue them via the outbox ingestion path under operator supervision.
 
 ---
 
@@ -417,8 +414,8 @@ flowchart TD
 - **System Defense:** When a replacement Relay pod boots, the rows in `outbox_events` are still `PENDING`. The new pod claims them and publishes them to RabbitMQ a second time. The downstream `NotificationWorker` and `WebhookWorker` receive the duplicates, but their `processed_events` atomic check absorbs the duplicates with zero duplicate emails or HTTP calls.
 
 ### Edge Case 4: Merchant Signature Verification Clock Skew
-- **Scenario:** SwiftDrop server time is `12:00:00`. Merchant server clock is slightly ahead at `12:05:30`.
-- **System Defense:** Per contract [webhook-security.md §2.3](../../contracts/webhook-security.md), the signature header includes `t={timestamp}`. The receiver verifies $| \text{CurrentTime} - t | \le 300\text{ seconds}$. A 5-minute absolute difference window accommodates acceptable NTP drift while defeating replay attacks.
+- **Scenario:** SwiftDrop server time is `12:00:00`. Merchant server clock is slightly ahead at `12:03:30`.
+- **System Defense:** Per contract [webhook-security.md §2.3](../../contracts/webhook-security.md), the signature header includes `t={timestamp}`. The receiver verifies $| \text{CurrentTime} - t | \le 300\text{ seconds}$. A drift of $210\text{ seconds}$ is within the 5-minute absolute difference window and is accepted. If drift exceeds $300\text{ seconds}$ (e.g. merchant clock at `12:05:30`, drift $= 330\text{s}$), the request is safely rejected to prevent replay attacks.
 
 ---
 

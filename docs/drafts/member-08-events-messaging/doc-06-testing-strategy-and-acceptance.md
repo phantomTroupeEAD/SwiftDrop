@@ -47,21 +47,32 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
 | :--- | :--- | :--- | :--- |
 | **FR-EVT-001** | Atomic outbox event insertion in same transaction as business mutation. | `TestOutboxWriter_AtomicRollbackAndCommit` | Integration (Postgres) |
 | **FR-EVT-002** | Outbox Relay publishes with persistent delivery mode to RabbitMQ. | `TestOutboxRelay_PublishesPersistentMessage` | Integration (RabbitMQ) |
-| **FR-EVT-003** | Status updated to `PUBLISHED` only after RabbitMQ Publisher Confirm. | `TestOutboxRelay_PublisherConfirms_StatusUpdated` | Integration (AMQP) |
-| **FR-EVT-004** | Unique event ID, aggregate ID, ISO-8601 UTC timestamp, correlation ID. | `TestEventEnvelope_FieldValidationAndSerialization` | Unit |
-| **FR-EVT-005** | Event Worker creates notification and webhook delivery records. | `TestEventWorker_ConsumesAndDispatches` | Integration |
+| **FR-EVT-003** | Status updated to `PUBLISHED` only after RabbitMQ Publisher Confirm; retry or investigation on failure. | `TestOutboxRelay_PublisherConfirms_StatusUpdated` | Integration (AMQP) |
+| **FR-EVT-004** | Stable unique event ID, event type, schema version, occurrence timestamp, aggregate reference. | `TestEventEnvelope_FieldValidationAndSerialization` | Unit |
+| **FR-EVT-005** | Event Worker consumes status events and creates delivery tasks. | `TestEventWorker_ConsumesAndDispatches` | Integration |
 | **FR-EVT-006** | Consumers are idempotent; duplicate messages produce no duplicate side effects. | `TestConsumerIdempotency_DuplicateDeliveryIgnored` | Integration / Unit |
-| **FR-EVT-007** | Bounded exponential backoff with jitter; routes to DLQ after 5 attempts. | `TestWebhookWorker_RetryBackoffAndDLQExhaustion` | Integration / E2E |
-| **FR-EVT-008** | Real SMTP email notification delivery with TLS/STARTTLS. | `TestSMTPNotifier_RealTLSDelivery` | Integration (Real SMTP) |
-| **FR-EVT-009** | Operational metrics for outbox age, backlog, DLQ depth, and failures. | `TestMetrics_ExposesOperationalCounters` | Unit / HTTP |
+| **FR-EVT-007** | Transient failures retried with bounded backoff and jitter; poison routed to DLQ. | `TestWebhookWorker_RetryBackoffAndDLQExhaustion` | Integration / E2E |
+| **FR-EVT-008** | Notification channel: real SMTP integration (with Mailpit test sink). | `TestSMTPNotifier_RealTLSDelivery` | Integration (Real SMTP) |
+| **FR-EVT-009** | Operational metrics for outbox age, backlog, consumer failures, DLQ depth. | `TestMetrics_ExposesOperationalCounters` | Unit / HTTP |
+| **FR-EVT-010** | At-least-once delivery with idempotent effects (no false exactly-once claim). | `TestPipeline_AtLeastOnceWithIdempotentEffects` | Integration / E2E |
 | **FR-REC-001** | Reconciliation identifies outbox records stuck in `PENDING` > 5 minutes. | `TestReconciler_DetectsStaleOutboxEvents` | Integration |
-| **FR-REC-002** | Reconciliation reschedules overdue webhook retries without bypassing relay. | `TestReconciler_ReschedulesOverdueWebhookRetries` | Integration |
-| **SEC-010** | SSRF prevention: blocks loopback, private IPs, cloud metadata, redirects. | `TestSafeDialContext_BlocksSSRFAndRedirects` | Security / Unit |
-| **SEC-011** | HMAC-SHA256 signature verification with 300-second anti-replay window. | `TestWebhookSigner_HMACCalculationAndVerification` | Contract / Unit |
-| **SEC-012** | AES-256-GCM decryption of merchant webhook secrets with tamper detection. | `TestWebhookDecrypt_ValidAndTamperedCiphertext` | Security / Unit |
-| **OPS-001** | Kubernetes health endpoints (`/health/live`, `/health/ready`, `/metrics`). | `TestHealthEndpoints_LivenessAndReadiness` | Operational / HTTP |
-| **AT-010** | Assignment Acceptance Test 010: Duplicate RabbitMQ delivery handling. | `TestE2E_DuplicateDeliveryProducesSingleSideEffect` | E2E |
-| **AT-012** | Assignment Acceptance Test 012: Merchant receives signed webhook with retry. | `TestE2E_MerchantWebhookDeliveryWithSimulatedRetry` | E2E |
+| **FR-REC-002** | Reconciliation reschedules overdue webhook/notification retries safely. | `TestReconciler_ReschedulesOverdueWebhookRetries` | Integration |
+| **FR-REC-003** | Reconciliation detects inconsistencies in M8-owned data (outbox, deliveries, leases). Parcel history/assignment checks are pending DEC-04. | `TestReconciler_DetectsDataInconsistencies` | Integration |
+| **FR-REC-004** | Reconciliation actions are idempotent, batch-bounded, logged, measurable, auditable. | `TestReconciler_IdempotentBatchBoundedExecution` | Integration / Audit |
+| **FR-REC-005** | Reconciliation does not bypass normal outbox publication flow. | `TestReconciler_PreservesOutboxPublicationFlow` | Integration |
+| **FR-MER-008** | Merchant webhook registration URL validation and secret management policy. | `TestWebhookConfig_URLValidationAndSecretPolicy` | Unit / Security |
+| **FR-MER-009** | Asynchronous worker pipeline delivers configured webhook events after status changes. | `TestWebhookWorker_DeliversSubscribedEvents` | Integration |
+| **FR-MER-010** | Webhook requests include event ID, type, schema version, timestamp, parcel ref, HMAC signature. | `TestWebhookSigner_HMACCalculationAndVerification` | Contract / Unit |
+| **FR-MER-011** | Records delivery attempts, HTTP outcomes, attempt times, next retry, final state. | `TestWebhookWorker_RecordsDetailedAttemptHistory` | Integration (Postgres) |
+| **SEC-010** | SSRF prevention: blocks loopback, private IPs, link-local, cloud metadata, redirects, DNS rebinding. | `TestSafeDialContext_BlocksSSRFAndRedirects` | Security / Unit |
+| **SEC-011** | Webhook signature verification and 300-second timestamp/replay protection. | `TestWebhookSigner_AntiReplayTimestampWindow` | Contract / Unit |
+| **SEC-015** | Audit logging for administrative actions and state changes; bounded retention. | `TestReconciler_AuditLogAndRetention` | Integration / Audit |
+| **NFR-PERF-002** | Status update visible to tracking within 5s under normal load. | `TestTrackingLatency_UnderFiveSeconds` | Performance / Integration |
+| **NFR-PERF-003** | Committed outbox event published to RabbitMQ within 5s under normal load. | `TestOutboxRelay_PublishLatencyUnderFiveSeconds` | Performance / Integration |
+| **AT-009** | Outbox Relay durability: published only after broker confirmation; recovers after restart. | `TestE2E_OutboxRelayDurabilityAndBrokerRecovery` | E2E |
+| **AT-010** | Duplicate RabbitMQ delivery handling produces single side effect. | `TestE2E_DuplicateDeliveryProducesSingleSideEffect` | E2E |
+| **AT-012** | Merchant receives signed webhook with retry after transient failure. | `TestE2E_MerchantWebhookDeliveryWithSimulatedRetry` | E2E |
+| **AT-016** | Kubernetes readiness/liveness probes and reconciliation CronJob demonstration. | `TestHealthEndpoints_LivenessAndReadiness` | Operational / E2E |
 
 ---
 
@@ -80,23 +91,23 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
   - Serializing with empty `event_id` or `event_type` returns a domain validation error.
 
 #### TC-UNIT-02: Exponential Backoff with Jitter Calculation
-- **Component:** `services/messaging/internal/webhook/backoff.go`
-- **Goal:** Verify delay calculations for attempts 1 through 5.
+- **Component:** `services/messaging/internal/webhook/backoff- **Goal:** Verify delay calculations for attempts 1 through 5 (0s, 30s, 2m, 10m, 30m).
 - **Assertions:**
-  - Attempt 1: Delay == 0s.
-  - Attempt 2: $25\text{s} \le \text{Delay} \le 35\text{s}$ (30s $\pm$ 5s).
-  - Attempt 3: $105\text{s} \le \text{Delay} \le 135\text{s}$ (120s $\pm$ 15s).
-  - Attempt 4: $540\text{s} \le \text{Delay} \le 660\text{s}$ (600s $\pm$ 60s).
-  - Attempt 5: $1620\text{s} \le \text{Delay} \le 1980\text{s}$ (1800s $\pm$ 180s).
-  - Attempt 6: Returns `ErrMaxRetriesExceeded`.
+  - Attempt 1: Delay == 0s (immediate first dispatch).
+  - Attempt 2: $27\text{s} \le \text{Delay} \le 33\text{s}$ (30s $\pm$ 10% jitter).
+  - Attempt 3: $108\text{s} \le \text{Delay} \le 132\text{s}$ (120s $\pm$ 10% jitter).
+  - Attempt 4: $540\text{s} \le \text{Delay} \le 660\text{s}$ (600s $\pm$ 10% jitter).
+  - Attempt 5: $1620\text{s} \le \text{Delay} \le 1980\text{s}$ (1800s $\pm$ 10% jitter).
+  - Attempt 6: Returns `ErrMaxRetriesExceeded` (transitions delivery to terminal `FAILED`).
 
 #### TC-UNIT-03: HMAC-SHA256 Webhook Signer & Anti-Replay
 - **Component:** `services/messaging/internal/webhook/signer.go`
-- **Goal:** Validate signature creation and 5-minute replay window defense.
+- **Goal:** Validate signature creation, multi-key rotation, and 5-minute replay window defense.
 - **Assertions:**
   - Generates header `X-SwiftDrop-Signature: t={timestamp},v1={hash}`.
-  - Verification succeeds with identical secret and body.
+  - Verification succeeds with identical secret and body using constant-time comparison.
   - Verification fails if body is altered by even one character.
+  - Verification succeeds when signing secret rotation produces multiple `v1=` tokens (`t=...,v1=sig_old,v1=sig_new`) and receiver checks against either key.
   - Verification fails if timestamp is older than 300 seconds ($t < \text{Now} - 300\text{s}$) or in the future ($t > \text{Now} + 300\text{s}$).
 
 #### TC-UNIT-04: Responsive HTML Email Template Rendering
@@ -105,48 +116,84 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
 - **Assertions:**
   - Parcel milestone templates render recipient name, tracking number, and status clearly.
   - HTML tags in parcel notes are automatically escaped by Go `html/template`.
+  - Both text and HTML MIME parts are generated with matching delivery milestone metadata.
 
-#### TC-UNIT-05: AES-256-GCM Webhook Secret Decryption
+#### TC-UNIT-05: AES-256-GCM Webhook Secret Decryption with AAD
 - **Component:** `services/messaging/internal/webhook/decrypt.go`
-- **Goal:** Verify accurate plaintext recovery of merchant secrets encrypted by Member 04.
+- **Goal:** Verify accurate plaintext recovery of merchant secrets encrypted by Member 04, enforcing AAD binding.
 - **Assertions:**
-  - Standard AES-256-GCM ciphertext (`nonce || ciphertext || tag`) decrypts to expected plaintext secret.
-  - Truncated ciphertext (< 28 bytes) returns descriptive error `ciphertext too short`.
-  - Ciphertext with modified tag or data bytes returns authentication error `cipher: message authentication failed`.
+  - Standard AES-256-GCM ciphertext (`nonce || ciphertext || tag`) with correct `endpoint_id` as AAD decrypts to expected plaintext secret.
+  - Truncated ciphertext (< 28 bytes) returns descriptive error `ErrInvalidCiphertext` ("ciphertext payload is invalid or truncated").
+  - Decryption with mismatched AAD (`endpoint_id`) fails authentication (`cipher: message authentication failed`).
+  - Ciphertext with modified tag or data bytes returns authentication error.
   - Wrong 32-byte encryption key fails authentication check.
+
+#### TC-UNIT-06: SMTP CRLF Header Injection Defense
+- **Component:** `services/messaging/internal/notifier/smtp.go`
+- **Goal:** Verify that carriage returns and line feeds in subject, recipient, or sender display names are stripped.
+- **Assertions:**
+  - Subject containing `Update\r\nBcc: victim@spam.org` is sanitized to `UpdateBcc: victim@spam.org`.
+  - Recipient email address containing `victim@spam.org\r\n` fails `mail.ParseAddress()` validation.
+  - Non-ASCII characters in email subject are properly encoded via RFC 2047 Q-encoding (`=?utf-8?q?...?=`).
+
+#### TC-UNIT-07: Webhook Response Snippet Truncation & Sanitization
+- **Component:** `services/messaging/internal/webhook/dispatcher.go`
+- **Goal:** Verify that external merchant responses are capped to 512 bytes with non-UTF-8 and NUL characters stripped before database persistence.
+- **Assertions:**
+  - A 10 MB error payload returned by a merchant server is truncated to exactly 512 bytes in `webhook_deliveries.response_body_snippet` and `webhook_delivery_attempts.response_body_snippet`.
+  - Binary garbage containing NUL (`0x00`) bytes and invalid UTF-8 sequences is sanitized to valid UTF-8 strings before persistence.
+
+#### TC-UNIT-08: Monotonic Aggregate Version Guard
+- **Component:** `services/messaging/internal/consumer/order_guard.go`
+- **Goal:** Enforce that out-of-order events for the same aggregate are detected and rejected.
+- **Assertions:**
+  - An event with `aggregate_version = 2` arriving after `aggregate_version = 3` for the same `aggregate_id` is detected as out-of-order, logged with warning, and acknowledged without overwriting newer state.
+
+#### TC-UNIT-09: Missing Email Template Skip-Ack Semantics
+- **Component:** `services/messaging/internal/notifier/handler.go`
+- **Goal:** Verify that events without customer email templates are skipped cleanly.
+- **Assertions:**
+  - Receiving `parcel.assigned.v1` or `parcel.picked_up.v1` logs `DEBUG: skipping notification for event_type`, skips SMTP dialogue, and calls AMQP `Ack()`.
+  - Zero rows are inserted into `notification_deliveries`.
 
 ---
 
 ### 3.2 Security & SSRF Defense Testing Suite
 
-#### TC-SEC-01: Prohibited CIDR Blocklist Enforcement
-- **Component:** `services/messaging/internal/webhook/client.go` (`SafeDialContext`)
-- **Goal:** Verify that any outbound HTTP request to private or cloud metadata IPs is aborted immediately before socket creation.
+#### TC-SEC-01: Prohibited CIDR Blocklist & Multi-IP Resolution Enforcement
+- **Component:** `services/messaging/internal/webhook/transport.go` (`SafeDialContext`)
+- **Goal:** Verify that any outbound HTTP request to private, loopback, cloud metadata, or reserved IPs is aborted immediately before socket creation.
 - **Test Scenarios:**
   ```go
   var blockedTargets = []string{
       "http://127.0.0.1:8080/test",         // IPv4 Loopback
       "http://localhost:5432/test",         // Localhost hostname
-      "http://169.254.169.254/latest/meta", // AWS/GCP Metadata
-      "http://10.0.0.5:8080/internal",      // RFC 1918 Private Class A
-      "http://172.16.1.10:8080/internal",   // RFC 1918 Private Class B (Docker Bridge)
-      "http://192.168.1.1:8080/internal",   // RFC 1918 Private Class C (LAN)
+      "http://0.0.0.0:8080/test",           // Current network
+      "http://169.254.169.254/latest/meta", // Cloud Metadata
+      "http://10.0.0.5:8080/internal",      // RFC 1918 Class A
+      "http://172.16.1.10:8080/internal",   // RFC 1918 Class B
+      "http://192.168.1.1:8080/internal",   // RFC 1918 Class C
+      "http://100.64.0.1:8080/cgnat",       // Carrier-Grade NAT (RFC 6598)
+      "http://255.255.255.255:8080/test",   // Broadcast
       "http://[::1]:8080/test",             // IPv6 Loopback
       "http://[fe80::1]:8080/test",         // IPv6 Link-Local
+      "http://[fc00::1]:8080/test",         // IPv6 Unique Local Address
+      "http://[::ffff:127.0.0.1]:8080/t",   // IPv4-mapped IPv6
   }
   ```
 - **Assertions:**
-  - Every URL in `blockedTargets` returns `ErrBlockedDestinationIP` or `SSRF violation`.
+  - Every URL in `blockedTargets` returns `ErrBlockedDestinationIP`.
   - Zero network packets leave the machine towards the target IP.
+  - Multi-IP Rule: A hostname resolving to `[192.168.1.50, 93.184.216.34]` is rejected immediately because at least one resolved IP is in a blocked CIDR.
 
 #### TC-SEC-02: Open Redirect SSRF Bypass Defense
-- **Component:** `services/messaging/internal/webhook/client.go`
-- **Goal:** Verify that when a merchant server returns an HTTP 301/302 redirect pointing to an internal IP, the worker does NOT follow it.
+- **Component:** `services/messaging/internal/webhook/transport.go`
+- **Goal:** Verify that when a merchant server returns an HTTP 301, 302, 307, or 308 redirect, the worker does NOT follow it.
 - **Setup:** A mock public HTTP test server returns `302 Found` with `Location: http://169.254.169.254/`.
 - **Assertions:**
-  - The HTTP client's `CheckRedirect` interceptor immediately halts execution.
-  - The delivery is logged as `FAILED` (HTTP 302 not followed).
-  - No request is ever issued to `169.254.169.254`.
+  - The HTTP client's `CheckRedirect` interceptor returns `http.ErrUseLastResponse`.
+  - The HTTP 302 response is returned to caller, logged as `SECURITY_REDIRECT_BLOCKED`, and marked as terminal `status = 'FAILED'`.
+  - Zero requests are ever issued to `169.254.169.254`.
 
 ---
 
@@ -170,45 +217,94 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
   5. Query `SELECT status FROM outbox_events WHERE id = $1`.
   - **Assertion:** Count == 1, `status = 'PENDING'`.
 
-#### TC-INT-02: Outbox Relay Publisher Confirms & State Transition
+#### TC-INT-02: Outbox Relay Publisher Confirms & NACK Rollback
 - **Target:** `services/messaging/internal/outbox/relay.go`
-- **Goal:** Verify that the Relay polls pending rows, publishes to RabbitMQ, and updates DB status to `PUBLISHED` only after broker confirmation.
+- **Goal:** Verify that the Relay polls pending rows, publishes to RabbitMQ, and updates DB status to `PUBLISHED` individually after broker confirmation.
 - **Execution:**
   1. Seed 3 rows in `outbox_events` with `status = 'PENDING'`.
-  2. Run one iteration of Outbox Relay poller.
-  3. Inspect RabbitMQ queue `q.notifications.worker`.
-  4. Query `outbox_events`.
+  2. Run Outbox Relay poller with publisher confirms enabled.
+  3. Simulate broker NACK on message 2.
 - **Assertions:**
-  - All 3 messages arrive on RabbitMQ topic exchange.
-  - `status` in `outbox_events` becomes `'PUBLISHED'`.
-  - `published_at` is NOT NULL and within 2 seconds of current time.
+  - Messages 1 and 3 arrive on RabbitMQ topic exchange and transition to `status = 'PUBLISHED'`.
+  - Message 2 remains `status = 'PENDING'` with incremented `attempt_count = 1`.
+  - Zero rows are lost or double-committed.
 
-#### TC-INT-03: Real SMTP Email Delivery Integration Test
-- **Target:** `services/messaging/internal/notifier/sender.go`
-- **Goal:** Verify that the real SMTP mailer connects to a configured real SMTP server, negotiates TLS/STARTTLS, authenticates, and captures the provider message ID.
+#### TC-INT-03: Real SMTP Email Delivery Integration Test (Mailpit)
+- **Target:** `services/messaging/internal/notifier/smtp.go`
+- **Goal:** Verify that the real SMTP mailer connects to a configured real SMTP server, negotiates protocol, and captures the provider message ID.
 - **Execution:**
-  1. Configure `SMTP_HOST`, `SMTP_PORT=587`, `SMTP_USERNAME`, `SMTP_PASSWORD` pointing to Mailtrap or dedicated test SMTP relay.
-  2. Invoke `SMTPSender.Send(ctx, EmailMessage{ To: "test@swiftdrop.io", Subject: "POD Confirmation", ... })`.
+  1. Point `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURITY=none` to local Mailpit container.
+  2. Invoke `RealSMTPNotifier.SendMilestoneEmail(ctx, "customer@example.com", "Delivery Confirmation", "text", "<html>")`.
 - **Assertions:**
-  - Real TCP connection established on port 587.
-  - STARTTLS handshake succeeds.
-  - Provider returns `250 OK`.
+  - Real TCP connection established on port 1025.
+  - Message transmitted via RFC 5321 dialogue.
+  - Mailpit returns `250 OK`.
   - `provider_message_id` is captured and persisted to `notification_deliveries`.
-  - `status` is set to `'SENT'`.
+  - `status` is set to `'SUCCESS'`.
 
-#### TC-INT-04: Consumer Idempotency & Deduplication
+#### TC-INT-04: Consumer Idempotency & 10-Duplicate Replay Test (AT-010)
 - **Target:** `services/messaging/internal/idempotency/store.go`
 - **Goal:** Prove that duplicate RabbitMQ messages for the same event produce zero duplicate emails or webhook calls.
 - **Execution:**
-  1. Deliver message `evt_01HXYZ` to `q.notifications.worker`.
-  2. Worker processes message, sends real SMTP email, records in `processed_events`.
-  3. Re-deliver identical message `evt_01HXYZ` to the same queue.
-  4. Worker receives duplicate message.
+  1. Deliver message `0192e4a1-8d2b-7abc-8def-0123456789ab` to `q.notifications.worker`.
+  2. Worker processes message, delivers email via Mailpit, records in `processed_events`.
+  3. Re-deliver identical message 10 consecutive times to the same queue.
 - **Assertions:**
-  - Worker detects conflict on `(event_id, consumer_name)`.
+  - Worker detects conflict on `(event_id, consumer_name)` on every redelivery.
   - Worker immediately issues AMQP `Ack`.
   - Total records in `notification_deliveries` remains exactly 1.
-  - Zero duplicate emails are transmitted.
+  - Exactly 1 email is delivered to Mailpit.
+
+#### TC-INT-05: Concurrent SKIP LOCKED Outbox Polling Test
+- **Target:** `services/messaging/internal/outbox/poller.go`
+- **Goal:** Prove that multiple concurrent database sessions querying with `FOR UPDATE SKIP LOCKED` claim disjoint sets of pending events without deadlocks or row contention.
+- **Execution:**
+  1. Seed 100 rows in `outbox_events` (`status = 'PENDING'`).
+  2. Spawn 4 concurrent poller goroutines, each requesting `batch_size = 25`.
+- **Assertions:**
+  - Each poller receives exactly 25 distinct rows.
+  - Zero rows are claimed by more than one poller.
+  - Total rows claimed across all 4 pollers equals 100.
+  - Zero database deadlocks occur.
+
+#### TC-INT-06: Kubernetes Operational Health & Readiness Probes
+- **Component:** `services/messaging/internal/health/server.go`
+- **Goal:** Validate compliance with Member 09 Agreement A2, K17, and SRS §6.2.
+- **Assertions:**
+  - `GET /health/live`: Returns `200 OK` `{"status":"UP"}` immediately without querying database.
+  - `GET /health/ready`: Returns `200 OK` `{"status":"READY","database":"UP","broker":"UP"}` when PostgreSQL and RabbitMQ are healthy.
+  - `GET /health/ready` (Simulated DB Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"db_unreachable"}`.
+  - `GET /health/ready` (Simulated Broker Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"broker_disconnected"}`.
+  - `GET /metrics`: Returns `200 OK` with valid Prometheus text format containing `swiftdrop_outbox_pending_events` and `swiftdrop_outbox_oldest_pending_age_seconds`.
+
+#### TC-INT-07: Sequential Database Migrations Up/Down Test
+- **Target:** `000008_create_outbox_events` and `000009_create_worker_dedup_and_webhooks`
+- **Goal:** Verify that migrations apply cleanly, roll down cleanly, and re-apply cleanly without orphaned constraints.
+- **Execution:**
+  1. Execute `migrate up`.
+  2. Execute `migrate down 2`.
+  3. Execute `migrate up`.
+- **Assertions:**
+  - All 5 tables (`outbox_events`, `processed_events`, `webhook_deliveries`, `webhook_delivery_attempts`, `notification_deliveries`) are created, dropped, and recreated without error.
+
+#### TC-INT-08: Database Least-Privilege Role Separation Test
+- **Target:** PostgreSQL roles `swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_reconciler`
+- **Goal:** Verify database grant isolation.
+- **Assertions:**
+  - `swiftdrop_relay` connection attempting `SELECT * FROM parcels` returns `permission denied for table parcels`.
+  - `swiftdrop_relay` connection attempting `SELECT * FROM webhook_deliveries` returns permission denied.
+  - `swiftdrop_worker` connection attempting `UPDATE outbox_events` returns permission denied.
+
+#### TC-INT-09: Bounded Retention Purge Test
+- **Target:** `services/messaging/internal/reconcile/retention.go`
+- **Goal:** Verify that retention queries delete rows in bounded batches ($\le 500$ rows) without long-held table locks.
+- **Execution:**
+  1. Seed 1,500 expired rows in `outbox_events` (`status = 'PUBLISHED'`, `created_at = NOW() - 10d`).
+  2. Run retention purge iteration.
+- **Assertions:**
+  - Purge executes in 3 sequential batches of $\le 500$ rows.
+  - All 1,500 expired rows are deleted.
+  - `swiftdrop_retention_purged_rows_total` increments by 1,500.
 
 ---
 
@@ -227,37 +323,62 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
   - All 10 pending outbox events are published to RabbitMQ once the broker recovers.
   - All 10 rows transition to `status = 'PUBLISHED'`.
 
-#### TC-E2E-02: Webhook Endpoint 500 Outage & DLQ Routing
+#### TC-E2E-02: Webhook Endpoint 500 Outage & DB-Driven Retry
 - **Scenario:** A merchant server continuously returns `500 Internal Server Error`.
 - **Execution:**
-  1. Trigger webhook dispatch for the merchant.
-  2. Worker executes attempts 1 through 5 according to the backoff schedule.
+  1. Trigger webhook dispatch for the merchant endpoint.
+  2. Worker executes attempts 1 through 5 according to the retry schedule (0s, 30s, 2m, 10m, 30m).
   3. Attempt 5 fails.
 - **Assertions:**
-  - 5 delivery attempts are recorded in `webhook_deliveries`.
-  - After attempt 5, the message is routed to `swiftdrop.dlq`.
-  - Message in `swiftdrop.dlq` retains original payload, failure headers, and correlation ID.
-  - Merchant endpoint is flagged as `DEGRADED`.
+  - Exactly 5 attempt rows are appended to `webhook_delivery_attempts`.
+  - After attempt 5, `webhook_deliveries.status` transitions to `'FAILED'`.
+  - The AMQP message was acknowledged upon initial scheduling; RabbitMQ queues remain at depth 0 (zero CPU-pinning NACK loops).
 
 #### TC-E2E-03: Reconciliation CronJob Execution
-- **Scenario:** An outbox row has been in `PENDING` for 10 minutes due to a temporary network drop during publisher confirmation.
+- **Scenario:** An outbox row has been in `PENDING` for 10 minutes due to an unhandled publisher confirmation edge case.
 - **Execution:**
   1. Seed row with `status = 'PENDING'`, `attempt_count = 5`, `created_at = NOW() - 10m`.
-  2. Execute `services/messaging/cmd/reconcile`.
+  2. Seed row in `webhook_deliveries` with `status = 'IN_PROGRESS'`, `lease_expires_at = NOW() - 2m`.
+  3. Execute `services/messaging/cmd/reconcile`.
 - **Assertions:**
-  - Reconciler logs detection of stale outbox event.
-  - Reconciler resets `attempt_count = 0` and `last_error = NULL`.
+  - Reconciler logs detection of stale outbox event and alerts.
+  - Reconciler resets `next_attempt_at = NOW()`.
+  - Reconciler resets expired delivery lease to `status = 'PENDING'`, `lease_expires_at = NULL`.
   - On the next tick, Outbox Relay successfully publishes the row.
 
-#### TC-INT-06: Kubernetes Operational Health & Readiness Probes
-- **Component:** `services/messaging/internal/health/server.go`
-- **Goal:** Validate compliance with Member 09 Agreement A2, K17, and SRS §6.2.
+#### TC-E2E-04: Poison AMQP Pill Message & DLQ Dead-Lettering
+- **Scenario:** An unparseable binary message or schema-violating payload is published to `swiftdrop.events.topic`.
+- **Execution:**
+  1. Publish malformed JSON bytes to `swiftdrop.events.topic` with routing key `parcel.booked.v1`.
+  2. Event Worker receives message, fails JSON unmarshaling.
 - **Assertions:**
-  - `GET /health/live`: Returns `200 OK` `{"status":"UP"}` immediately without querying database.
-  - `GET /health/ready`: Returns `200 OK` `{"status":"READY"}` when PostgreSQL and RabbitMQ are healthy.
-  - `GET /health/ready` (Simulated DB Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"db_unreachable"}`.
-  - `GET /health/ready` (Simulated Broker Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"broker_disconnected"}`.
-  - `GET /metrics`: Returns `200 OK` with valid Prometheus metrics text format containing `swiftdrop_outbox_pending_events`.
+  - Worker logs error with correlation ID.
+  - Worker rejects message via `Nack(requeue=false)`.
+  - RabbitMQ routes message via `swiftdrop.dlq.exchange` to `swiftdrop.dlq`.
+  - Message in `swiftdrop.dlq` retains original byte payload and `x-death` headers.
+
+#### TC-E2E-05: Relay Crash Mid-Batch & Worker Deduplication
+- **Scenario:** The Outbox Relay process is killed immediately after publishing AMQP messages but before updating PostgreSQL.
+- **Execution:**
+  1. Relay publishes batch of 5 events to RabbitMQ.
+  2. Kill Relay process (`kill -9`).
+  3. Workers consume the 5 events, process side effects, and write `processed_events`.
+  4. Restart Outbox Relay. Relay re-reads rows from PostgreSQL (still `PENDING`) and re-publishes them.
+- **Assertions:**
+  - Workers detect duplicate `event_id` in `processed_events`.
+  - Workers acknowledge duplicate AMQP messages without re-sending emails or re-calling webhooks.
+  - Exactly 5 deliveries occur.
+
+#### TC-E2E-06: Graceful Shutdown Lifecycle
+- **Scenario:** Kubernetes issues `SIGTERM` to worker pod while an email delivery is in-flight.
+- **Execution:**
+  1. Worker begins 3-second SMTP STARTTLS delivery.
+  2. Send `SIGTERM` to worker process.
+- **Assertions:**
+  - Worker immediately switches `/health/ready` to `503 Service Unavailable`.
+  - In-flight SMTP email completes and is recorded in `notification_deliveries`.
+  - AMQP channel is closed cleanly.
+  - Worker process exits with code 0 within grace period (30s).
 
 ---
 
@@ -269,7 +390,7 @@ To maintain test reliability while eliminating fragile external dependencies dur
 | :--- | :--- | :--- | :--- |
 | **PostgreSQL 16+** | In-memory SQLite / sqlmock (prohibited for tx tests) | Real local Docker PostgreSQL or Testcontainers | Ephemeral Docker PostgreSQL container |
 | **RabbitMQ 3.12+** | Fake AMQP Channel in-memory | Real local Docker RabbitMQ | Ephemeral Docker RabbitMQ container |
-| **Real SMTP Server** | In-memory loopback listener (`net.Listen("tcp", "127.0.0.1:0")`) | Real Mailtrap SMTP or dedicated test SMTP relay | Real Mailtrap SMTP credentials in GitHub Secrets |
+| **Real SMTP Server** | In-memory loopback listener (`net.Listen("tcp", "127.0.0.1:0")`) | Real Mailpit container (`localhost:1025`, `SMTP_SECURITY=none`) | Real Mailpit container in CI pipeline |
 | **Merchant HTTP Webhook** | In-process `httptest.Server` | In-process `httptest.Server` with TLS | `httptest.Server` simulating 200, 500, timeouts, and SSRF redirects |
 
 ---

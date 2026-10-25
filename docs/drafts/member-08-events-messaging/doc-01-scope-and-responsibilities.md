@@ -145,7 +145,7 @@ flowchart LR
 ### 3.1 Upstream Dependencies (Inputs Required)
 - **Domain Event Definitions (Members 02, 03, 04):** Event names, schema payloads, and triggering conditions for parcel booking, dispatch, delivery confirmation, failure, and merchant orders.
 - **Shared DB Transaction Convention (`*sql.Tx`):** Modular Monolith use cases must pass the active database transaction into the `OutboxWriter`.
-- **Merchant Webhook Configuration (Member 04):** Authoritative database read contract via `merchant_webhook_targets_view` (providing `endpoint_id`, `url`, `secret_ciphertext bytea`, `secret_key_version`, and `subscribed_event_types`).
+- **Merchant Webhook Configuration (Member 04):** Authoritative database read contract via `merchant_webhook_targets` view (providing `endpoint_id`, `merchant_id`, `url`, `secret_ciphertext bytea`, `secret_key_version`, and `subscribed_event_types`).
 - **Cluster Broker & Secret Provisioning (Member 09):** RabbitMQ cluster connectivity parameters (`RABBITMQ_URL`) and Kubernetes secret references for SMTP credentials and the webhook symmetric decryption key (`WEBHOOK_SECRET_ENCRYPTION_KEY` in `integrations-secrets`).
 
 ### 3.2 Downstream Dependencies (Outputs Provided)
@@ -173,8 +173,8 @@ In strict compliance with the **10-Member Capability Ownership Matrix** ([databa
 | `notification_deliveries` | Event Worker | Event Worker notification pipeline | Authoritative log of real SMTP email attempts, provider message IDs, and errors. |
 | `webhook_deliveries` | Event Worker | Event Worker webhook dispatcher | Authoritative audit history of outbound HTTP webhook attempts, status codes, and latencies. |
 
-### 4.3 Read-Only Table Access
-- `webhook_endpoints`: Owned by Member 04 (`internal/merchants`). Member 08 reads active endpoint URLs and signing secrets to deliver webhooks. Member 08 **never** inserts or modifies rows in this table.
+### 4.3 Read-Only Table & View Access
+- `merchant_webhook_targets`: Secure database view owned by Member 04 (`internal/merchants`). Member 08 queries this view to read active target URLs, signing secrets, and subscribed event patterns. Member 08 **never** inserts, modifies, or queries raw merchant tables directly.
 
 ---
 
@@ -188,8 +188,8 @@ Every AI agent and developer touching this module must respect the following non
 4. **Strict Relay Singleton:** The Outbox Relay process must ALWAYS run as a strict singleton (`replicas: 1`). Horizontal scaling without distributed leader election is strictly prohibited to prevent database row-lock contention.
 5. **Mandatory Consumer Idempotency:** Because RabbitMQ provides at-least-once delivery, every consumer MUST check and record `processed_events` before executing side effects. Duplicate events must be acknowledged and discarded without re-sending emails or re-calling webhooks.
 6. **Non-Blocking Transactions:** No database transaction may ever be held open while waiting for external network calls (SMTP connections or HTTP merchant webhooks).
-7. **Strict SSRF Immunity:** The outbound webhook client MUST resolve destination hostnames once, validate that the IP does NOT fall within blacklisted CIDRs (private, loopback, link-local, cloud metadata), and dial the validated IP directly without following HTTP redirects.
-8. **Real SMTP Notifications:** Transactional milestone notifications must be dispatched through a real, configured SMTP mail server using TLS/STARTTLS authentication. No fake/mock sinks or console-only drops are permitted in the delivery pipeline.
+7. **Strict SSRF Immunity:** The outbound webhook client MUST resolve destination hostnames once, validate that the IP does NOT fall within blacklisted CIDRs (private, loopback, link-local, cloud metadata, CGNAT, broadcast, IPv6 unique local), and dial the validated IP directly without following HTTP redirects.
+8. **Real SMTP Notifications:** Transactional milestone notifications must be dispatched through a real, configured SMTP mail server using TLS/STARTTLS authentication (or Mailpit in local/CI environments). No fake/mock sinks or console-only drops are permitted in the delivery pipeline.
 9. **State Purity in Reconciliation:** The reconciliation engine must NEVER invent synthetic parcel statuses or bypass the outbox pipeline. It only un-stalls or reschedules genuine events.
 
 ---
@@ -200,12 +200,12 @@ Every AI agent and developer touching this module must respect the following non
 - **Application Use Cases:** Call `OutboxWriter.Write(ctx, tx, events...)` to stage one or more domain events within an active transaction.
 - **Module Consumers:** Import `EventEnvelope[T]` and the event catalog constants to construct strongly typed payloads.
 - **Member 05 (Tracking API):** Subscribe to `swiftdrop.events.topic` queues in RabbitMQ to project real-time updates to SSE clients.
-- **Member 04 (Merchants):** Query `webhook_deliveries` to display delivery history and HTTP response status codes on the merchant dashboard.
-- **Member 09 (DevOps):** Execute `services/messaging/cmd/reconcile` on a scheduled Kubernetes `CronJob` and scrape `/metrics` and `/readyz` probes.
+- **Member 04 (Merchants):** Query `webhook_deliveries` and `webhook_delivery_attempts` to display delivery history and HTTP response status codes on the merchant dashboard.
+- **Member 09 (DevOps):** Execute `services/messaging/cmd/reconcile` on a scheduled Kubernetes `CronJob` (`swiftdrop-outbox-reconciler`) and scrape `/metrics` and `/health/ready` probes.
 
 ### Strictly Prohibited Requests
 - Other modules may **NOT** call Member 08 to synchronously send an email or webhook during an HTTP request.
-- Other modules may **NOT** insert directly into `notification_deliveries`, `webhook_deliveries`, or `processed_events`.
+- Other modules may **NOT** insert directly into `notification_deliveries`, `webhook_deliveries`, `webhook_delivery_attempts`, or `processed_events`.
 - Other modules may **NOT** publish raw messages directly to `swiftdrop.events.topic` bypassing the outbox relay.
 
 ---
@@ -243,38 +243,43 @@ SwiftDrop Repository
         └── member-08-events-messaging/   # Member 08 8-document specifications
 ```
 
-### 7.2 Database Tables
+### 7.2 Database Tables & Views
 - `outbox_events` (Full write/read ownership)
 - `processed_events` (Full write/read ownership)
 - `notification_deliveries` (Full write/read ownership)
 - `webhook_deliveries` (Full write/read ownership)
-- `webhook_endpoints` (Read-only consumer access; owned by Member 04)
+- `webhook_delivery_attempts` (Full write/read ownership; child audit log)
+- `merchant_webhook_targets` (Read-only consumer access; view owned by Member 04)
 
 ### 7.3 RabbitMQ Topology
 - **Exchange:** `swiftdrop.events.topic` (Topic, Durable)
+- **Dead-Letter Exchange (DLX):** `swiftdrop.dlq.exchange` (Direct, Durable)
 - **Queues:**
-  - `q.notifications.worker` (Durable, bound to `parcel.*.v1`)
-  - `q.webhooks.dispatcher` (Durable, bound to `parcel.*.v1`)
-  - `q.tracking.updates` (Durable, declared for Member 05)
-  - `swiftdrop.dlq` (Durable dead-letter queue)
+  - `q.notifications.worker` (Durable, bound to `parcel.#`)
+  - `q.webhooks.dispatcher` (Durable, bound to `parcel.#`, `courier.#`, `merchant.#`)
+  - `q.tracking.updates` (Durable, declared for Member 05, bound to `parcel.#`, `courier.#`)
+  - `swiftdrop.dlq` (Durable dead-letter queue, 30-day message TTL)
 
 ### 7.4 Configuration & Environment Variables
 | Variable Name | Description | Default / Example Value | Secret? |
 | :--- | :--- | :--- | :--- |
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://swiftdrop:swiftdrop_dev@postgres:5432/swiftdrop_db?sslmode=disable` | Yes |
-| `RABBITMQ_URL` | RabbitMQ AMQP connection URI | `amqp://guest:guest@rabbitmq:5672/` | Yes |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://swiftdrop_relay:secret@postgres:5432/swiftdrop_db?sslmode=disable` | Yes |
+| `RABBITMQ_URL` | RabbitMQ AMQP connection URI | `amqp://swiftdrop:secret@rabbitmq.swiftdrop.svc.cluster.local:5672/` | Yes |
 | `OUTBOX_POLL_INTERVAL_MS` | Polling frequency for pending outbox events | `500` | No |
 | `OUTBOX_BATCH_SIZE` | Max rows processed per relay iteration | `50` | No |
 | `OUTBOX_STALE_SECONDS` | Age before unconfirmed outbox events trigger warnings | `300` | No |
 | `WORKER_CONCURRENCY` | Goroutine worker pool size per consumer pod | `10` | No |
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS`| Socket timeout for outbound merchant HTTP POSTs | `5` | No |
-| `SMTP_HOST` | Real SMTP server hostname | `smtp.mailtrap.io` (or production provider) | No |
-| `SMTP_PORT` | SMTP port (STARTTLS: 587, TLS: 465) | `587` | No |
+| `WEBHOOK_RETRY_SCHEDULE` | Delivery retry intervals (1 initial + 4 retries) | `0s,30s,2m,10m,30m` | No |
+| `WEBHOOK_ALLOW_PRIVATE_HOSTS` | Allow private RFC1918 IPs (local dev only) | `false` | No |
+| `SMTP_HOST` | Real SMTP server hostname | `mailpit` (local/CI) or provider (staging/prod) | No |
+| `SMTP_PORT` | SMTP port (STARTTLS: 587, TLS: 465, Plain: 1025) | `587` | No |
+| `SMTP_SECURITY` | TLS negotiation mode (`starttls`, `tls`, `none`) | `starttls` (`none` local Mailpit only) | No |
 | `SMTP_USERNAME` | SMTP authentication username | `smtp_user_123` | Yes |
 | `SMTP_PASSWORD` | SMTP authentication password / API token | `smtp_secret_pass` | Yes |
 | `SMTP_FROM_EMAIL` | Authoritative system sender address | `notifications@swiftdrop.io` | No |
 | `SMTP_FROM_NAME` | Sender display name | `SwiftDrop Deliveries` | No |
-| `SMTP_TLS_ENABLED` | Enforce TLS/STARTTLS handshake | `true` | No |
+| `PROBE_PORT` | Health and metrics HTTP port | `8082` (relay), `8083` (worker) | No |
 
 ---
 
@@ -283,12 +288,13 @@ SwiftDrop Repository
 ### 8.1 Assumptions
 1. **PostgreSQL Relational Guarantee:** PostgreSQL is configured with `READ COMMITTED` isolation level and supports `SKIP LOCKED` (PostgreSQL 12+; project baseline is 16+).
 2. **RabbitMQ Topic Routing:** RabbitMQ 3.12+ is deployed with publisher confirms enabled and cluster storage persistence.
-3. **Real SMTP Server Availability:** Valid SMTP credentials with STARTTLS on port 587 or TLS on port 465 are supplied via environment variables in all development, staging, and production environments.
+3. **Real SMTP Server Availability:** Valid SMTP credentials with STARTTLS on port 587 or TLS on port 465 are supplied via environment variables in staging and production. Local and CI environments run Mailpit as a real SMTP server.
 4. **Merchant HTTPS Baseline:** In staging/production, merchant webhook URLs must use valid `https://` schemas. Plain `http://` is allowed strictly under `APP_ENV=local`.
 
-### 8.2 Unresolved Decisions for Team Coordination
-1. **Payload Hydration vs Self-Contained Events:** Currently, event payloads emitted by Member 02 and Member 03 contain core tracking and actor identifiers. If notifications require recipient emails not present in the payload, the Event Worker will perform a read-only lookup against `parcels` and `parcel_addresses`. The team will finalize whether all recipient data is embedded directly in the event payload to make consumer goroutines fully autonomous.
-2. **KEDA Scaling Metric for Workers:** Member 09 has configured KEDA to scale `event-worker` when RabbitMQ backlog exceeds 10 messages. We must benchmark whether worker pods should scale on queue depth or message processing rate.
+### 8.2 Resolved Decisions & Change Requests
+1. **Payload Self-Containment (RESOLVED):** Event payloads emitted by Member 02 and Member 03 contain core tracking identifiers plus a minimal `notify` block (`recipient_name`, `recipient_email`) for customer notifications and `merchant_id` for webhook routing. The Event Worker performs ZERO queries against `parcels` or `parcel_addresses`, maintaining clean DDD boundary isolation. Formal change request filed with Member 02 in `CHANGE_REQUESTS.md`.
+2. **Single-Path Real SMTP (RESOLVED):** The codebase maintains a single, un-mocked SMTP delivery path using Go standard library `net/smtp`. Local development and CI use Mailpit container as a real SMTP listener. This constitutes a documented design deviation from SRS FR-EVT-008's mock option, filed for group sign-off.
+3. **KEDA Scaling Metric for Workers:** Member 09 has configured KEDA to scale `event-worker` (1 to 3 replicas) using `q.webhooks.dispatcher` and `q.notifications.worker` backlog threshold (>10 messages).
 
 ### 8.3 Out-of-Scope Work
 - **SMS Gateway Integrations:** Real telecom SMS integrations (Twilio, Infobip) are deferred in favor of full real SMTP email delivery; the email adapter is the primary real notification channel.

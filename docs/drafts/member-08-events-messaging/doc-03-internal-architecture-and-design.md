@@ -37,7 +37,8 @@ graph TB
         PG_IDM[("processed_events")]
         PG_NOTIF[("notification_deliveries")]
         PG_WH[("webhook_deliveries")]
-        PG_ENDP[("webhook_endpoints<br/>(Owned by M4)")]
+        PG_WHA[("webhook_delivery_attempts")]
+        PG_VIEW[("merchant_webhook_targets<br/>(Secure DB View)")]
     end
 
     REPO -->|"Atomic INSERT (Same Tx)"| PG_OB
@@ -50,52 +51,61 @@ graph TB
 
         subgraph "Broker Infrastructure"
             RMQ_EX{{"Exchange: swiftdrop.events.topic"}}
+            Q_TRACK[["Queue: q.tracking.updates<br/>(Owned by M5)"]]
             Q_NOTIF[["Queue: q.notifications.worker"]]
             Q_WH[["Queue: q.webhooks.dispatcher"]]
+            DLX_EX{{"DLX: swiftdrop.dlq.exchange"}}
             Q_DLQ[["Queue: swiftdrop.dlq"]]
         end
 
         subgraph "cmd/worker (Autoscaled via KEDA)"
             WKR_IDM["Idempotency Filter<br/>(processed_events)"]
-            WKR_SMTP["Real SMTP Mailer<br/>(TLS 587 Handshake)"]
+            WKR_SMTP["Real SMTP Mailer<br/>(STARTTLS 587 Handshake)"]
             WKR_WH["Webhook Dispatcher<br/>(SafeDialContext + HMAC)"]
-            WKR_RETRY["Retry Scheduler<br/>(Exponential Backoff + Jitter)"]
+            WKR_RETRY["DB Retry Poller<br/>(next_attempt_at + Leased Claims)"]
         end
 
-        subgraph "cmd/reconcile (CronJob / CLI)"
-            REC_JOB["Reconciliation Engine<br/>(Auditor & Healer)"]
+        subgraph "cmd/reconciler (CronJob / CLI)"
+            REC_JOB["Reconciliation Engine<br/>(Auditor & Reconciler)"]
         end
     end
 
     subgraph "External Ecosystem"
-        REAL_SMTP["Real SMTP Server<br/>(e.g. Mailtrap / SES / SendGrid)"]
+        REAL_SMTP["Real SMTP Server<br/>(Mailpit in local/CI; SES/SendGrid in prod)"]
         MERCHANT_SRV["Merchant HTTPS Server<br/>(External Webhook URL)"]
     end
 
-    REL_POLL -->|"Batch SELECT"| PG_OB
-    REL_PUB -->|"Persistent AMQP"| RMQ_EX
+    REL_POLL -->|"Batch SELECT (SKIP LOCKED)"| PG_OB
+    REL_PUB -->|"Persistent AMQP (DeliveryMode 2)"| RMQ_EX
     REL_PUB -->|"On ACK: UPDATE published_at"| PG_OB
 
-    RMQ_EX -->|"parcel.*.v1"| Q_NOTIF
-    RMQ_EX -->|"parcel.*.v1"| Q_WH
+    RMQ_EX -->|"parcel.#, courier.#"| Q_TRACK
+    RMQ_EX -->|"parcel.#"| Q_NOTIF
+    RMQ_EX -->|"parcel.#, courier.#"| Q_WH
 
     Q_NOTIF --> WKR_IDM
     Q_WH --> WKR_IDM
 
-    WKR_IDM -->|"Check & Record"| PG_IDM
+    WKR_IDM -->|"Check & Record (Terminal)"| PG_IDM
     WKR_IDM --> WKR_SMTP
     WKR_IDM --> WKR_WH
+    WKR_IDM -->|"Poison Message (Nack false)"| DLX_EX
+    DLX_EX --> Q_DLQ
 
     WKR_SMTP -->|"Deliver TLS Email"| REAL_SMTP
     WKR_SMTP -->|"Log Delivery Status"| PG_NOTIF
 
-    WKR_WH -->|"Read URLs & Secrets"| PG_ENDP
+    WKR_WH -->|"Read targets & secrets"| PG_VIEW
     WKR_WH -->|"SSRF Dial & POST"| MERCHANT_SRV
-    WKR_WH -->|"Log Delivery Attempts"| PG_WH
-    WKR_WH -->|"Exhausted (>5 attempts)"| Q_DLQ
+    WKR_WH -->|"Record Attempt Log"| PG_WHA
+    WKR_WH -->|"Update Status & Lease"| PG_WH
+    WKR_RETRY -->|"Poll Due Retries"| PG_WH
+    WKR_RETRY -->|"Poll Due Retries"| PG_NOTIF
 
-    REC_JOB -->|"Audit Stuck Pending Rows"| PG_OB
-    REC_JOB -->|"Audit Overdue Retries"| PG_WH
+    REC_JOB -->|"Audit Stuck Pending Rows (>5m)"| PG_OB
+    REC_JOB -->|"Audit & Reset Expired Leases"| PG_WH
+    REC_JOB -->|"Audit Overdue Notifications"| PG_NOTIF
+    REC_JOB -.->|"Optional Manual Replay (--replay-dlq)"| Q_DLQ
 ```
 
 ---
@@ -180,15 +190,17 @@ import "time"
 
 // EventEnvelope provides a strongly-typed wrapper for all domain events.
 type EventEnvelope[T any] struct {
-    EventID       string    `json:"event_id"`
-    EventType     string    `json:"event_type"`
-    AggregateType string    `json:"aggregate_type"`
-    AggregateID   string    `json:"aggregate_id"`
-    Version       int       `json:"version"`
-    Timestamp     time.Time `json:"timestamp"`
-    CorrelationID string    `json:"correlation_id"`
-    Producer      string    `json:"producer"`
-    Payload       T         `json:"payload"`
+    EventID          string    `json:"event_id"`
+    EventType        string    `json:"event_type"`
+    AggregateType    string    `json:"aggregate_type"`
+    AggregateID      string    `json:"aggregate_id"`
+    AggregateVersion int       `json:"aggregate_version,omitempty"` // Domain aggregate mutation version
+    Version          int       `json:"version"`                     // Schema version (matches event-contracts.md)
+    Timestamp        time.Time `json:"timestamp"`                   // Event emission timestamp (RFC 3339)
+    OccurredAt       time.Time `json:"occurred_at,omitempty"`       // Business occurrence timestamp
+    CorrelationID    string    `json:"correlation_id"`
+    Producer         string    `json:"producer"`
+    Payload          T         `json:"payload"`
 }
 ```
 
@@ -201,6 +213,7 @@ package events
 import (
     "context"
     "database/sql"
+    "time"
 )
 
 // OutboxWriter enables application use cases to persist events within an active transaction.
@@ -216,7 +229,11 @@ type AnyEnvelope interface {
     GetEventType() string
     GetAggregateType() string
     GetAggregateID() string
+    GetAggregateVersion() int
+    GetSchemaVersion() int
+    GetOccurredAt() time.Time
     GetCorrelationID() string
+    GetProducer() string
     SerializePayload() ([]byte, error)
 }
 ```
@@ -380,7 +397,7 @@ Although messaging is primarily an infrastructure capability, DDD principles gov
 | **Domain Event** | `EventEnvelope[T]` | Represents an immutable, historical business fact (`ParcelBooked`, `CourierAssigned`, `DeliveryConfirmed`). Carries `occurred_at` and `version`. |
 | **Aggregate Root (Reference)** | `aggregate_type` + `aggregate_id` | Identifies the consistency boundary in the Core API that generated the event (e.g. `aggregate_type: "parcel"`). |
 | **Value Object** | `CorrelationID`, `EventID`, `RoutingKey` | Immutable identity and tracing primitives with strict validation rules (UUIDv7 format, dot-separated namespacing). |
-| **Entity** | `WebhookDelivery`, `NotificationDelivery` | State-bearing persistence models possessing distinct lifecycle stages (`PENDING` $\to$ `SENT` / `FAILED`, retry counts). |
+| **Entity** | `WebhookDelivery`, `NotificationDelivery` | State-bearing persistence models possessing distinct lifecycle stages (`PENDING` $\to$ `IN_PROGRESS` $\to$ `SUCCESS` / `FAILED`, retry counts). |
 | **Domain Service** | `SSRFGuardService`, `SignatureService` | Stateless domain algorithms encapsulating security policy: CIDR blacklist evaluation and HMAC-SHA256 digest creation. |
 | **Repository** | `OutboxRepository`, `IdempotencyRepository`, `DeliveryRepository` | Encapsulates SQL persistence and isolation semantics away from business logic. |
 
@@ -435,15 +452,18 @@ To pass `.golangci.yml` `depguard` automated checks:
 - **Problem:** Couriers and customers need real email notifications, but low-level SMTP protocol code should not clutter consumer handlers.
 - **Justification:** Encapsulating the SMTP connection, STARTTLS negotiation, authentication, and MIME formatting behind the `SMTPSender` interface allows robust testing while delivering real emails in production.
 
+### 7. Event Ordering & Monotonic Aggregate Version Guard
+- **Problem:** RabbitMQ does not guarantee total ordering across multiple competing consumers or retried deliveries. Furthermore, PostgreSQL `created_at = CURRENT_TIMESTAMP` represents transaction start time rather than commit order, meaning a long-running transaction might commit with an earlier timestamp after a short transaction commits.
+- **Justification:** Per **SRS §5.4**, every event envelope carries `aggregate_version` (incremented monotonically by the domain aggregate root). Downstream consumers verify `aggregate_version` against local projection state, discarding or reconciling out-of-order stale events.
+
 ---
 
 ## 7. Transaction Boundaries & Consistency Requirements
 
 | Component | Database Transaction Scope | Isolation Level | Consistency Guarantee |
 | :--- | :--- | :--- | :--- |
-| **Monolith Outbox Writer** | Shares active use case transaction (`*sql.Tx`). Encompasses entity mutation + outbox row insertion. | `READ COMMITTED` | **Strong Immediate Consistency:** The outbox row exists if and only if the domain change commits. |
-| **Outbox Relay Poller** | Autonomous transaction per batch: `SELECT ... FOR UPDATE SKIP LOCKED` $\to$ publish $\to$ `UPDATE published_at`. | `READ COMMITTED` | **At-Least-Once Delivery:** If Relay crashes mid-batch, rows remain `PENDING` and are re-published upon restart. |
-| **Consumer Idempotency** | Atomic single-row `INSERT ... ON CONFLICT DO NOTHING`. | `READ COMMITTED` | **Strict Deduplication:** Primary key conflict guarantees a message is executed at most once per consumer. |
+| **Outbox Relay Poller** | Short read transaction for batch claim (`SKIP LOCKED`), followed by dedicated single-row commit upon publisher confirm: `UPDATE outbox_events SET status = 'PUBLISHED'`. | `READ COMMITTED` | **At-Least-Once Delivery:** Publisher confirms commit individually; unconfirmed or NACKed rows remain `PENDING` for retry without mass batch rollback. |
+| **Consumer Idempotency** | Claim task with lease in delivery table (`IN_PROGRESS`); write `processed_events` upon terminal outcome (`SUCCESS` or `FAILED`). | `READ COMMITTED` | **At-Least-Once Delivery with Idempotent Effects (SRS FR-EVT-010):** Duplicate AMQP redeliveries are absorbed idempotently via lease claims and terminal deduplication tracking. |
 | **External Calls (SMTP / Webhook)** | **ZERO DATABASE TRANSACTION OPEN.** External network calls must occur entirely outside active database transactions. | N/A | **Fault Isolation:** Slow SMTP relays or dead merchant servers cannot hold PostgreSQL locks or exhaust the DB pool. |
 
 ---
@@ -475,7 +495,7 @@ To pass `.golangci.yml` `depguard` automated checks:
 ## 9. Scaling & Performance Considerations
 
 ### 9.1 Outbox Relay Scalability
-- **Singleton Constraint:** Per [AGENTS.md](../../../AGENTS.md), the Outbox Relay MUST run with `replicas: 1`. Horizontal scaling of the poller without distributed leader election is strictly prohibited.
+- **Singleton Constraint:** Per ADR-002 and the deployment architecture, the Outbox Relay runs with `replicas: 1` as a dedicated single-instance daemon. (While `SKIP LOCKED` prevents row locking contention, a single replica ensures deterministic FIFO batch ordering without distributed coordinator overhead).
 - **Throughput Profile:** 
   - Batch size: 50 rows.
   - Polling interval: 500ms.
@@ -490,14 +510,15 @@ To pass `.golangci.yml` `depguard` automated checks:
   This partial index ensures that even as `outbox_events` grows to tens of millions of rows, polling queries execute via an index scan touching only uncommitted rows ($< 1\text{ ms}$ query latency).
 
 ### 9.2 Event Worker Scalability (KEDA Autoscaling)
-- **Stateless Consumer:** The Event Worker is completely stateless and scales horizontally from 1 to 5 pods via **KEDA (Kubernetes Event-driven Autoscaling)** based on RabbitMQ queue depth (`q.notifications.worker` and `q.webhooks.dispatcher` backlog > 10).
+- **Stateless Consumer:** The Event Worker is completely stateless and scales horizontally from 1 to 3 pods via **KEDA (Kubernetes Event-driven Autoscaling)** based on RabbitMQ queue depth (`q.notifications.worker` and `q.webhooks.dispatcher` backlog > 10). The 3-pod upper limit protects PostgreSQL from connection pool exhaustion.
 - **Concurrency per Pod:** Each worker pod runs a configurable pool of goroutines (`WORKER_CONCURRENCY=10` by default).
-- **AMQP Prefetch Count:** Workers set `Channel.Qos(prefetchCount = 10, prefetchSize = 0, global = false)` to prevent a single pod from starving others.
+- **AMQP Prefetch Count:** Workers set `Channel.Qos(prefetchCount = 20, prefetchSize = 0, global = false)` to prevent message starvation across pods.
 
 ### 9.3 Database Connection Pool Management
 - Daemons use bounded connection pools to prevent exhausting PostgreSQL `max_connections`:
   - `Relay`: `max_open = 5`, `max_idle = 2`
   - `Worker`: `max_open = 10`, `max_idle = 5`
+  - `Reconciler`: `max_open = 2`, `max_idle = 1`
 
 ### 9.4 Container Packaging, Multi-Binary Standard & Security
 - **Single Multi-Binary Container:** Per Member 09 Agreement A3, all messaging daemons share a single production container image: `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`.

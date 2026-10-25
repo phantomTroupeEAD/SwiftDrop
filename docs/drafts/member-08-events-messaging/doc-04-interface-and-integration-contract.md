@@ -18,7 +18,7 @@ Member 08 coordinates all asynchronous messaging across the system. This integra
 | :--- | :--- | :--- | :--- | :--- |
 | **Member 02 (Parcels & Pricing)** | In-Process Go Method Call | Inbound $\to$ Member 08 | `events.OutboxWriter.Write(ctx, tx, ...)` | Atomic enlistment in `*sql.Tx`; non-blocking. |
 | **Member 03 (Dispatch & Delivery)** | In-Process Go Method Call | Inbound $\to$ Member 08 | `events.OutboxWriter.Write(ctx, tx, ...)` | Atomic enlistment in `*sql.Tx`; non-blocking. |
-| **Member 04 (Merchants)** | In-Process Go Method Call & DB | Bi-Directional | `OutboxWriter` + Read-only query on `merchant_webhook_targets_view` | Member 04 owns webhook registration & AES-GCM encryption; Member 08 decrypts at send time. |
+| **Member 04 (Merchants)** | In-Process Go Method Call & DB | Bi-Directional | `OutboxWriter` + Read-only query on `merchant_webhook_targets` | Member 04 owns webhook registration & AES-GCM encryption; Member 08 decrypts at send time. |
 | **PostgreSQL 16+ Database** | PostgreSQL Wire Protocol (TCP) | Bi-Directional | Tables: `outbox_events`, `processed_events`, `deliveries` | Atomicity, row-level locks via `SKIP LOCKED`. |
 | **RabbitMQ 3.12+ Message Broker** | AMQP 0-9-1 (TCP 5672) | Bi-Directional | Exchange: `swiftdrop.events.topic` | Persistent delivery mode 2, Publisher Confirms, Manual Acks. |
 | **Member 05 (Tracking API)** | AMQP 0-9-1 (via Broker) | Outbound $\to$ Member 05 | Queue: `q.tracking.updates` | Real-time milestone projection; at-least-once. |
@@ -136,103 +136,281 @@ All messages published to the RabbitMQ topic exchange `swiftdrop.events.topic` a
 
 ### 3.2 Canonical Event Catalog & Payload Specifications
 
+In accordance with [event-contracts.md §2](../../contracts/event-contracts.md) and DDD aggregate ownership:
+- **Zero Cross-Module DB Queries:** The Event Worker never queries `parcels` or `parcel_addresses` directly. All data required for notification dispatch (`recipient_name`, `recipient_email`) and webhook routing (`merchant_id`) travels inside the event payload.
+- **Privacy & PII Stripping:** The `notify` block contains customer contact info used strictly by `cmd/worker` for email generation. When dispatching external merchant webhooks, the `notify` block is stripped.
+- **Sanitized Fields:** Private notes, courier phone numbers, and raw storage URLs (`s3://...`) are never included in event payloads.
+
+---
+
 #### 1. `parcel.booked.v1`
 - **Producer:** `core-api/internal/parcels` (Member 02)
 - **Routing Key:** `parcel.booked.v1`
 - **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "sender_id": "usr_01HXYZ1234567890",
-  "merchant_id": "mrc_01HABC9876543210",
-  "recipient_name": "Kasun Perera",
-  "recipient_email": "kasun.perera@example.lk",
-  "recipient_phone": "+94771234567",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "sender_id": "0192e4a1-1111-7abc-8def-0123456789ab",
+  "status": "CREATED",
   "service_level": "EXPRESS",
   "weight_kg": 2.50,
   "fee_cents": 85000,
   "currency": "LKR",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  },
   "created_at": "2026-10-21T10:00:00Z"
 }
 ```
 
+---
+
 #### 2. `parcel.assigned.v1`
 - **Producer:** `core-api/internal/dispatch` (Member 03)
 - **Routing Key:** `parcel.assigned.v1`
-- **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Target Queues:** `q.notifications.worker` *(skipped/acked — no customer template)*, `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "courier_id": "usr_courier_456",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "ASSIGNED",
+  "courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
   "courier_name": "Nuwan Silva",
-  "courier_phone": "+94719876543",
-  "assigned_by": "usr_disp_789",
+  "assigned_by": "0192e4a1-3333-7abc-8def-0123456789ab",
   "assigned_at": "2026-10-21T10:30:00Z"
 }
 ```
 
+---
+
 #### 3. `parcel.picked_up.v1`
 - **Producer:** `core-api/internal/parcels` (Member 02)
 - **Routing Key:** `parcel.picked_up.v1`
-- **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Target Queues:** `q.notifications.worker` *(skipped/acked — no customer template)*, `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "courier_id": "usr_courier_456",
-  "hub_id": "HUB_COLOMBO_SOUTH",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "PICKED_UP",
+  "courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
+  "hub_id": "0192e4a1-4444-7abc-8def-0123456789ab",
   "picked_up_at": "2026-10-21T11:00:00Z"
 }
 ```
 
-#### 4. `parcel.out_for_delivery.v1`
+---
+
+#### 4. `parcel.in_transit.v1`
+- **Producer:** `core-api/internal/dispatch` (Member 03)
+- **Routing Key:** `parcel.in_transit.v1`
+- **Target Queues:** `q.notifications.worker` *(skipped/acked)*, `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
+```json
+{
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
+  "tracking_number": "SD-20261021-99812",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "IN_TRANSIT",
+  "current_hub_id": "0192e4a1-4444-7abc-8def-0123456789ab",
+  "next_hub_id": "0192e4a1-6666-7abc-8def-0123456789ab",
+  "departed_at": "2026-10-21T12:00:00Z"
+}
+```
+
+---
+
+#### 5. `parcel.out_for_delivery.v1`
 - **Producer:** `core-api/internal/dispatch` (Member 03)
 - **Routing Key:** `parcel.out_for_delivery.v1`
 - **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "courier_id": "usr_courier_456",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "OUT_FOR_DELIVERY",
+  "courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
+  "courier_name": "Nuwan Silva",
   "estimated_delivery_window_start": "2026-10-21T14:00:00Z",
-  "estimated_delivery_window_end": "2026-10-21T16:00:00Z"
+  "estimated_delivery_window_end": "2026-10-21T16:00:00Z",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  }
 }
 ```
 
-#### 5. `parcel.delivered.v1`
+---
+
+#### 6. `parcel.delivered.v1`
 - **Producer:** `core-api/internal/parcels` (Member 02)
 - **Routing Key:** `parcel.delivered.v1`
 - **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "courier_id": "usr_courier_456",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "DELIVERED",
+  "courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
   "proof_type": "PHOTO",
-  "proof_attachment_url": "s3://swiftdrop-pod-attachments/2026/10/21/prf_99812.jpg",
-  "delivered_at": "2026-10-21T15:24:10Z"
+  "proof_id": "0192e4a1-7777-7abc-8def-0123456789ab",
+  "delivered_at": "2026-10-21T15:24:10Z",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  }
 }
 ```
 
-#### 6. `parcel.delivery_failed.v1`
+---
+
+#### 7. `parcel.delivery_failed.v1`
 - **Producer:** `core-api/internal/delivery` (Member 03)
 - **Routing Key:** `parcel.delivery_failed.v1`
 - **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
-- **Payload Example:**
+- **Payload Schema & Example:**
 ```json
 {
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
   "tracking_number": "SD-20261021-99812",
-  "courier_id": "usr_courier_456",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "ATTEMPT_FAILED",
+  "courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
   "attempt_number": 1,
   "max_attempts": 3,
   "reason_code": "RECIPIENT_UNAVAILABLE",
-  "notes": "Doorbell unanswered; recipient phone reached voicemail.",
-  "next_reattempt_date": "2026-10-22T09:00:00Z",
-  "attempted_at": "2026-10-21T15:45:00Z"
+  "attempted_at": "2026-10-21T15:45:00Z",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  }
 }
 ```
+
+---
+
+#### 8. `parcel.returned.v1`
+- **Producer:** `core-api/internal/parcels` (Member 02)
+- **Routing Key:** `parcel.returned.v1`
+- **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
+```json
+{
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
+  "tracking_number": "SD-20261021-99812",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "RETURNED",
+  "returned_to_hub_id": "0192e4a1-4444-7abc-8def-0123456789ab",
+  "return_reason": "MAX_ATTEMPTS_EXCEEDED",
+  "returned_at": "2026-10-22T11:00:00Z",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  }
+}
+```
+
+---
+
+#### 9. `parcel.cancelled.v1`
+- **Producer:** `core-api/internal/parcels` (Member 02)
+- **Routing Key:** `parcel.cancelled.v1`
+- **Target Queues:** `q.notifications.worker`, `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
+```json
+{
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
+  "tracking_number": "SD-20261021-99812",
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "status": "CANCELLED",
+  "cancelled_by": "0192e4a1-1111-7abc-8def-0123456789ab",
+  "cancellation_reason": "SENDER_REQUEST",
+  "cancelled_at": "2026-10-21T10:15:00Z",
+  "notify": {
+    "recipient_name": "Kasun Perera",
+    "recipient_email": "kasun.perera@example.lk"
+  }
+}
+```
+
+---
+
+#### 10. `courier.unassigned.v1`
+- **Producer:** `core-api/internal/dispatch` (Member 03)
+- **Routing Key:** `courier.unassigned.v1`
+- **Target Queues:** `q.webhooks.dispatcher`, `q.tracking.updates`
+- **Payload Schema & Example:**
+```json
+{
+  "parcel_id": "0192e4a1-0001-7abc-8def-0123456789ab",
+  "tracking_number": "SD-20261021-99812",
+  "previous_courier_id": "0192e4a1-2222-7abc-8def-0123456789ab",
+  "reason": "COURIER_UNAVAILABLE",
+  "unassigned_at": "2026-10-21T11:30:00Z"
+}
+```
+
+---
+
+#### 11. `merchant.status_changed.v1` / `merchant.approved.v1` *(Pending Owner Approval)*
+- **Producer:** `core-api/internal/merchants` (Member 04)
+- **Routing Key:** `merchant.status_changed.v1`
+- **Target Queues:** `q.webhooks.dispatcher`
+- **Payload Schema & Example:**
+```json
+{
+  "merchant_id": "0192e4a1-5555-7abc-8def-0123456789ab",
+  "previous_status": "PENDING_VERIFICATION",
+  "new_status": "ACTIVE",
+  "changed_by": "0192e4a1-8888-7abc-8def-0123456789ab",
+  "changed_at": "2026-10-21T09:00:00Z"
+}
+```
+
+---
+
+### 3.3 Obsolete / Disallowed Event Clarifications
+- **`merchant.webhook_dispatch.v1` (REJECTED):** Early architecture notes proposed a separate `merchant.webhook_dispatch.v1` event. This is formally rejected. Member 08 consumes native domain events (`parcel.#`, `courier.#`, `merchant.#`) directly from `swiftdrop.events.topic` via `q.webhooks.dispatcher` and translates them into outbound HTTP requests. Webhook dispatching is an internal transport mechanism of Member 08, not a public domain event.
+
+---
+
+### 3.4 Envelope to Webhook Body Transformation
+Before dispatching to a merchant's HTTP endpoint, `cmd/worker` translates the internal AMQP `EventEnvelope[T]` into a standardized, privacy-sanitized merchant webhook payload:
+
+```go
+type MerchantWebhookBody struct {
+    EventID        string          `json:"event_id"`        // Envelope EventID
+    EventType      string          `json:"event_type"`      // e.g. "parcel.delivered.v1"
+    SchemaVersion  int             `json:"schema_version"`  // Envelope SchemaVersion (e.g. 1)
+    OccurredAt     time.Time       `json:"occurred_at"`     // Envelope OccurredAt
+    ParcelID       string          `json:"parcel_id"`       // Extracted from payload
+    TrackingNumber string          `json:"tracking_number"`  // Extracted from payload
+    ParcelVersion  int             `json:"parcel_version"`  // Envelope AggregateVersion
+    Status         string          `json:"status"`          // Domain status string
+    Payload        json.RawMessage `json:"payload"`         // Sanitized payload (PII / notify stripped)
+}
+```
+
+---
+
+### 3.5 Consumer Queue Bindings & Skip-Ack Semantics
+
+| Queue Name | Routing Key Binding | Consumer Behavior |
+| :--- | :--- | :--- |
+| `q.notifications.worker` | `parcel.#` | Evaluates if event has customer email template (`booked`, `out_for_delivery`, `delivered`, `delivery_failed`, `returned`, `cancelled`). If template exists, formats and delivers email via real SMTP. If no template exists (`assigned`, `picked_up`, `in_transit`), logs `DEBUG: skipping notification for event_type` and immediately calls `Ack()`. |
+| `q.webhooks.dispatcher` | `parcel.#`, `courier.#`, `merchant.#` | Looks up active endpoints for `merchant_id` from `merchant_webhook_targets`. If endpoints exist, stages `webhook_deliveries` and dispatches HTTP POST. If no active endpoints exist, immediately calls `Ack()`. |
+| `q.tracking.updates` | `parcel.#`, `courier.#` | Owned by Member 05 (Tracking API). Consumes milestones to project SSE streams for browser clients. |
 
 ---
 
@@ -245,17 +423,17 @@ openapi: 3.1.0
 info:
   title: SwiftDrop Merchant Outbound Webhook Specification
   description: >
-    Specification for outbound HTTP webhook events dispatched by the SwiftDrop
-    Event Worker to registered merchant endpoints.
+    Authoritative specification for outbound HTTP POST webhook events dispatched
+    by the SwiftDrop Event Worker to registered merchant HTTPS endpoints.
   version: 1.0.0
 paths:
   /{merchant_configured_path}:
     post:
-      summary: Receive Parcel Milestone Webhook Event
+      summary: Receive Parcel Lifecycle Milestone Webhook
       description: >
         Receives real-time parcel lifecycle milestone updates. Merchant servers must
-        verify the HMAC-SHA256 signature in X-SwiftDrop-Signature and acknowledge
-        with HTTP 2xx within 5.0 seconds.
+        verify the HMAC-SHA256 signature in X-SwiftDrop-Signature and respond with HTTP 2xx
+        within 5.0 seconds.
       parameters:
         - name: X-SwiftDrop-Delivery-ID
           in: header
@@ -263,20 +441,23 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Unique delivery attempt identifier.
-        - name: X-SwiftDrop-Timestamp
+          description: Unique delivery attempt identifier for merchant idempotency tracking.
+        - name: X-SwiftDrop-Event-ID
           in: header
           required: true
           schema:
-            type: integer
-          description: Unix epoch timestamp in seconds when the request was sent.
+            type: string
+            format: uuid
+          description: Authoritative domain event identifier.
         - name: X-SwiftDrop-Signature
           in: header
           required: true
           schema:
             type: string
           example: t=1729512000,v1=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
-          description: HMAC-SHA256 signature over "timestamp.raw_body".
+          description: >
+            HMAC-SHA256 signature containing Unix timestamp and hex hash.
+            Supports multi-v1 headers during secret rotation (e.g. t=...,v1=sig1,v1=sig2).
         - name: User-Agent
           in: header
           required: true
@@ -307,8 +488,8 @@ paths:
                   type: string
                   example: parcel.delivered.v1
                 schema_version:
-                  type: string
-                  example: "1.0.0"
+                  type: integer
+                  example: 1
                 occurred_at:
                   type: string
                   format: date-time
@@ -326,31 +507,101 @@ paths:
                   enum: [CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, ATTEMPT_FAILED, RETURNED, CANCELLED]
                 payload:
                   type: object
-                  description: Sanitized event-specific attributes.
+                  description: Event-specific domain payload (customer notify PII stripped).
+                  oneOf:
+                    - $ref: '#/components/schemas/ParcelBookedPayload'
+                    - $ref: '#/components/schemas/ParcelDeliveredPayload'
+                    - $ref: '#/components/schemas/ParcelDeliveryFailedPayload'
+                    - $ref: '#/components/schemas/GenericParcelPayload'
       responses:
         '200':
           description: Webhook acknowledged successfully.
+        '201':
+          description: Webhook received and resource created by merchant.
+        '202':
+          description: Webhook accepted for asynchronous merchant processing.
         '204':
           description: Webhook accepted with no body returned.
         '400':
-          description: Invalid payload or signature verification failure.
+          description: Invalid payload syntax or signature verification failure (terminal failure).
+        '408':
+          description: Request timeout on merchant gateway (triggers retry).
+        '410':
+          description: Webhook endpoint deactivated permanently on merchant side (terminal failure).
+        '429':
+          description: Merchant server rate limit reached (triggers retry with backoff).
         '500':
-          description: Merchant server error. Triggers bounded exponential retry.
+          description: Merchant internal server error (triggers retry).
+        '502':
+          description: Bad gateway at merchant reverse proxy (triggers retry).
+        '503':
+          description: Merchant service temporarily unavailable (triggers retry).
+        '504':
+          description: Gateway timeout at merchant proxy (triggers retry).
+components:
+  schemas:
+    ParcelBookedPayload:
+      type: object
+      properties:
+        sender_id: { type: string, format: uuid }
+        service_level: { type: string, enum: [STANDARD, EXPRESS] }
+        weight_kg: { type: number }
+        fee_cents: { type: integer }
+        currency: { type: string }
+    ParcelDeliveredPayload:
+      type: object
+      properties:
+        courier_id: { type: string, format: uuid }
+        proof_type: { type: string, enum: [PHOTO, SIGNATURE, OTP] }
+        proof_id: { type: string, format: uuid }
+        delivered_at: { type: string, format: date-time }
+    ParcelDeliveryFailedPayload:
+      type: object
+      properties:
+        courier_id: { type: string, format: uuid }
+        attempt_number: { type: integer }
+        max_attempts: { type: integer }
+        reason_code: { type: string }
+        attempted_at: { type: string, format: date-time }
+    GenericParcelPayload:
+      type: object
+      additionalProperties: true
 ```
 
 ### 4.1 Cryptographic Signature Verification Algorithm
-Merchants authenticate webhooks using the following canonical scheme:
-$$\text{SignedString} = \text{X-SwiftDrop-Timestamp} + "." + \text{RawBodyBytes}$$
-$$\text{ExpectedHash} = \text{HMAC-SHA256}(\text{MerchantSigningSecret}, \text{SignedString})$$
-$$\text{SignatureHeader} = "t=" + \text{X-SwiftDrop-Timestamp} + ",v1=" + \text{hex}(\text{ExpectedHash})$$
+Merchants authenticate outbound webhooks using HMAC-SHA256:
+$$\text{SignedPayload} = \text{timestamp} + "." + \text{RawRequestBodyBytes}$$
+$$\text{ExpectedHash} = \text{HMAC-SHA256}(\text{MerchantSigningSecret}, \text{SignedPayload})$$
+$$\text{SignatureHeader} = "t=" + \text{timestamp} + ",v1=" + \text{hex}(\text{ExpectedHash})$$
+
+During signing secret rotation, Member 08 signs with both current and previous active keys, sending multiple `v1=` tokens:
+```http
+X-SwiftDrop-Signature: t=1729512000,v1=9f86d081884c7d65...,v1=4a5b6c7d8e9f0...
+```
+Merchants should compute the HMAC with their configured secret and verify that at least one `v1` token matches using constant-time comparison (`crypto/subtle.ConstantTimeCompare`). Merchants must also reject timestamps where $|\text{current\_time} - \text{timestamp}| > 300\text{ seconds}$ to defeat replay attacks.
 
 ---
 
 ## 5. Real SMTP Mail Protocol & Delivery Contract
 
-Member 08 delivers transactional emails directly to a configured real SMTP server via RFC 5321 and RFC 3207.
+Member 08 delivers transactional customer emails directly to a configured real SMTP server via RFC 5321 and RFC 3207.
 
-### 5.1 Protocol Dialogue & Network Boundaries
+### 5.1 TLS Negotiation Modes & Port Configurations
+The SMTP client supports three distinct cryptographic negotiation modes controlled via `SMTP_SECURITY`:
+
+| Mode (`SMTP_SECURITY`) | Default Port | Protocol Behavior | Environment |
+| :--- | :--- | :--- | :--- |
+| `starttls` *(default)* | `587` | Connects plain TCP, issues `EHLO`, requests `STARTTLS`, upgrades socket to TLS 1.2+, re-issues `EHLO`, authenticates, and transmits. | Staging, Production |
+| `tls` | `465` | Connects directly via implicit TLS (`tls.DialWithDialer`), issues `EHLO`, authenticates, and transmits. | Production alternative |
+| `none` | `1025` | Connects plain TCP without TLS handshake or authentication. Transmits directly to local test listener (Mailpit). | `APP_ENV=local`, CI test containers |
+
+### 5.2 Email Envelope & Header Standards
+- **Sender Address (`From`):** Formatted as `SMTP_FROM_NAME <SMTP_FROM_EMAIL>` (e.g. `SwiftDrop Deliveries <notifications@swiftdrop.io>`). Addresses are validated via Go `mail.ParseAddress()`; all carriage returns (`\r`) and line feeds (`\n`) are stripped to prevent header injection.
+- **Message-ID:** Authoritatively generated by the worker as `<{uuidv7}@{from_domain}>` and recorded in `notification_deliveries.provider_message_id` for end-to-end delivery tracing.
+- **Subject Encoding:** Encoded using RFC 2047 Q-encoding if non-ASCII characters are present.
+- **Body MIME Format:** All emails are rendered as `multipart/alternative` containing both a human-readable plain text part and an HTML styled receipt part.
+
+### 5.3 Protocol Dialogue & Network Boundaries
 ```http
 Client (SwiftDrop Worker)                      Server (Real SMTP Host: 587)
 ----------------------------------------------------------------------------
@@ -375,6 +626,7 @@ RCPT TO:<recipient@example.com> ---------->
                                 <----------- 250 2.1.5 Recipient OK
 DATA ------------------------------------->
                                 <----------- 354 Start mail input; end with <CRLF>.<CRLF>
+Message-ID: <0192e4a1-8d2b-7abc-8def-0123456789ab@swiftdrop.io>
 From: "SwiftDrop Deliveries" <notifications@swiftdrop.io>
 To: recipient@example.com
 Subject: SwiftDrop Delivery Update: SD-20261021-99812 DELIVERED
@@ -396,15 +648,31 @@ QUIT ------------------------------------->
                                 <----------- 221 2.0.0 Bye
 ```
 
-### 5.2 SMTP Failure Response Code Matrix
-| SMTP Status Code | Classification | Worker Action | Delivery Record State |
+### 5.4 SMTP Response Code Classification Matrix
+Worker inspects `*textproto.Error` responses to classify delivery outcomes:
+
+| SMTP Status Code | Classification | Worker Action | `notification_deliveries.status` |
 | :--- | :--- | :--- | :--- |
-| `250 OK` | Success | Captured message ID, ACK RabbitMQ | `status = 'SENT'` |
-| `421 Service not available` | Transient Network/Provider | NACK RabbitMQ with backoff | `status = 'RETRYING'` |
-| `450 Mailbox busy` | Transient Recipient State | NACK RabbitMQ with backoff | `status = 'RETRYING'` |
-| `452 Too many recipients` | Transient Rate Limit | NACK RabbitMQ with backoff | `status = 'RETRYING'` |
-| `550 User unknown / No such user` | Permanent Failure | Log error, ACK RabbitMQ (No retry) | `status = 'FAILED'` |
-| `554 Transaction failed` | Permanent Policy Rejection | Log error, ACK RabbitMQ (No retry) | `status = 'FAILED'` |
+| `250 OK` | Success | Store `provider_message_id`, record terminal success in `processed_events`. | `SUCCESS` |
+| `421 Service not available` | Transient Network/Provider | Set `next_attempt_at = NOW() + backoff`, reset lease. Poller retries. | `PENDING` |
+| `450 Mailbox busy / graylisted` | Transient Recipient State | Set `next_attempt_at = NOW() + backoff`, reset lease. Poller retries. | `PENDING` |
+| `451 Local error in processing` | Transient Provider Issue | Set `next_attempt_at = NOW() + backoff`, reset lease. Poller retries. | `PENDING` |
+| `452 Too many recipients` | Transient Rate Limit | Set `next_attempt_at = NOW() + backoff`, reset lease. Poller retries. | `PENDING` |
+| `550 User unknown / invalid` | Permanent Address Error | Log warning, abort retries. Mark terminal failure. | `FAILED` |
+| `551 User not local` | Permanent Routing Error | Log warning, abort retries. Mark terminal failure. | `FAILED` |
+| `552 Storage allocation exceeded`| Permanent Mailbox Full | Log warning, abort retries. Mark terminal failure. | `FAILED` |
+| `553 Mailbox name not allowed` | Permanent Syntax Error | Log warning, abort retries. Mark terminal failure. | `FAILED` |
+| `530 / 535 / 554 Authentication` | Configuration / Policy Defect | Trigger immediate operator alert (`ERROR`). Abort retries. | `FAILED` |
+
+### 5.5 Documented Architecture Deviation (Real SMTP vs Mock Option)
+> [!NOTE]
+> **Documented Deviation from SRS FR-EVT-008 & Engineering Standards §8:**  
+> **SRS Reference:** FR-EVT-008 states that customer notification emails may support an in-memory/console mock sink.  
+> **Adopted Design:** Member 08 enforces a **single, un-mocked delivery path** using Go standard library `net/smtp`. In local development and CI test suites, a real local SMTP container ([Mailpit](https://github.com/axllent/mailpit)) is run, accepting connections on port 1025.  
+> **Rationale:** Eliminates behavioral drift and code branch divergence between testing and production environments. Verifies actual RFC 5321 handshake compliance in CI. Filed for formal group sign-off in `CHANGE_REQUESTS.md`.
+
+### 5.6 Non-Fatal Startup Behavior
+At daemon boot, `cmd/worker` executes an informational probe against the SMTP host. If the external SMTP provider is temporarily unreachable, the worker logs a warning but **does not exit**. The Kubernetes readiness probe (`/health/ready`) verifies internal infrastructure (PostgreSQL pool and RabbitMQ connection) and does not fail on external mail provider downtime.
 
 ---
 
@@ -424,17 +692,17 @@ Both `services/messaging/cmd/relay` and `services/messaging/cmd/worker` expose o
 
 ## 7. Database Access & Permission Matrix
 
-Member 08 has strict, segregated database permissions across PostgreSQL tables:
+Member 08 has strict, segregated database permissions across PostgreSQL tables, enforced through dedicated per-role credentials (`swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_reconciler`):
 
-| Table Name | Owner Context | Member 08 In-Monolith Repo (`internal/events`) | Member 08 Relay Daemon (`cmd/relay`) | Member 08 Worker Daemon (`cmd/worker`) | Member 08 Reconciler (`cmd/reconcile`) |
+| Table / View Name | Owner Context | Member 08 In-Monolith Repo (`internal/events`) | Member 08 Relay Daemon (`swiftdrop_relay`) | Member 08 Worker Daemon (`swiftdrop_worker`) | Member 08 Reconciler (`swiftdrop_reconciler`) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `outbox_events` | Member 08 | **INSERT** (via `OutboxWriter`) | **SELECT, UPDATE** (`status, published_at`) | None | **SELECT, UPDATE** (re-arm stale) |
-| `processed_events` | Member 08 | None | None | **SELECT, INSERT** (`ON CONFLICT`) | **DELETE** (expired records) |
-| `notification_deliveries`| Member 08 | None | None | **INSERT, UPDATE** | **SELECT** (audit) |
-| `webhook_deliveries` | Member 08 | None | None | **INSERT, UPDATE** | **SELECT, UPDATE** (schedule retry)|
-| `merchant_webhook_targets_view` | Member 04 | None | None | **SELECT ONLY** (`endpoint_id, url, secret_ciphertext`)| None |
-| `parcels` | Member 02 | None | None | **SELECT ONLY** (read-only hydration) | None |
-| `parcel_addresses` | Member 02 | None | None | **SELECT ONLY** (read-only hydration) | None |
+| `outbox_events` | Member 08 | **INSERT** (via `OutboxWriter`) | **SELECT, UPDATE** (`status, published_at, attempt_count, last_error, next_attempt_at`) | None | **SELECT, UPDATE** (re-arm stale), **DELETE** (7d retention) |
+| `processed_events` | Member 08 | None | None | **SELECT, INSERT** (`ON CONFLICT`), **DELETE** | **SELECT, DELETE** ($\ge 35$d retention) |
+| `notification_deliveries`| Member 08 | None | None | **SELECT, INSERT, UPDATE** | **SELECT, UPDATE** (re-arm expired lease), **DELETE** (30d retention) |
+| `webhook_deliveries` | Member 08 | None | None | **SELECT, INSERT, UPDATE** | **SELECT, UPDATE** (re-arm expired lease), **DELETE** (30d retention) |
+| `webhook_delivery_attempts`| Member 08 | None | None | **SELECT, INSERT** (append-only attempt log) | **SELECT, DELETE** (30d cascade retention) |
+| `merchant_webhook_targets` (View)| Member 04 | None | None | **SELECT ONLY** (`endpoint_id, merchant_id, url, secret_ciphertext, secret_key_version, subscribed_event_types`) | None |
+| `parcels` / `parcel_addresses` | Member 02 | None | None | **STRICTLY PROHIBITED** (Zero DB read/write; contact PII travels in event payload) | None |
 
 ---
 
@@ -478,7 +746,7 @@ sequenceDiagram
     Worker->>SMTP: Connect TLS & Authenticate (AUTH LOGIN)
     Worker->>SMTP: MAIL FROM / RCPT TO / DATA
     SMTP-->>Worker: 250 OK (Message ID: <msg_99812>)
-    Worker->>DB: INSERT INTO notification_deliveries (Status: SENT, ProviderID: msg_99812)
+    Worker->>DB: INSERT INTO notification_deliveries (Status: SUCCESS, ProviderID: msg_99812)
     Worker-->>Broker: AMQP Ack
     deactivate Worker
 ```
@@ -521,13 +789,13 @@ sequenceDiagram
     and Merchant Webhook Dispatch
         Broker->>Worker: Consume parcel.delivered.v1
         activate Worker
-        Worker->>DB: Query merchant_webhook_targets_view for Merchant
+        Worker->>DB: Query merchant_webhook_targets for Merchant
         Worker->>Worker: Decrypt secret_ciphertext via AES-256-GCM
         Worker->>Worker: Calculate HMAC-SHA256 Signature (t={now},v1={hash})
         Worker->>Worker: SafeDialContext: Resolve DNS & Verify Public CIDR
         Worker->>MerchantServer: POST /webhooks/swiftdrop (Timeout: 5s)
         MerchantServer-->>Worker: 200 OK
-        Worker->>DB: INSERT INTO webhook_deliveries (Status: SUCCESS, StatusCode: 200)
+        Worker->>DB: INSERT INTO webhook_deliveries & webhook_delivery_attempts (Status: SUCCESS, StatusCode: 200)
         Worker-->>Broker: AMQP Ack
         deactivate Worker
     end
