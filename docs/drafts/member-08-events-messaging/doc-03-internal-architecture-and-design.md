@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), [database-schema.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md), [domain-boundaries.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/domain-boundaries.md)
+> **Relevant Contracts:** [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md), [database-schema.md](../../architecture/database-schema.md), [domain-boundaries.md](../../architecture/domain-boundaries.md)
 
 ---
 
@@ -168,7 +168,7 @@ services/messaging/
 ## 3. Layer Responsibilities & Key Go Interfaces
 
 ### 3.1 `core-api/internal/events/envelope.go`
-Defines the canonical event envelope adhering to [event-contracts.md §1](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md):
+Defines the canonical event envelope adhering to [event-contracts.md §1](../../contracts/event-contracts.md):
 
 ```go
 package events
@@ -384,7 +384,7 @@ To pass `.golangci.yml` `depguard` automated checks:
 ## 9. Scaling & Performance Considerations
 
 ### 9.1 Outbox Relay Scalability
-- **Singleton Constraint:** Per [AGENTS.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/AGENTS.md), the Outbox Relay MUST run with `replicas: 1`. Horizontal scaling of the poller without distributed leader election is strictly prohibited.
+- **Singleton Constraint:** Per [AGENTS.md](../../../AGENTS.md), the Outbox Relay MUST run with `replicas: 1`. Horizontal scaling of the poller without distributed leader election is strictly prohibited.
 - **Throughput Profile:** 
   - Batch size: 50 rows.
   - Polling interval: 500ms.

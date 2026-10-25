@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), [database-schema.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md), [sequence-diagrams.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/sequence-diagrams.md)
+> **Relevant Contracts:** [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md), [database-schema.md](../../architecture/database-schema.md), [sequence-diagrams.md](../../architecture/sequence-diagrams.md)
 
 ---
 
@@ -417,7 +417,7 @@ flowchart TD
 
 ### Edge Case 4: Merchant Signature Verification Clock Skew
 - **Scenario:** SwiftDrop server time is `12:00:00`. Merchant server clock is slightly ahead at `12:05:30`.
-- **System Defense:** Per contract [webhook-security.md §2.3](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), the signature header includes `t={timestamp}`. The receiver verifies $| \text{CurrentTime} - t | \le 300\text{ seconds}$. A 5-minute absolute difference window accommodates acceptable NTP drift while defeating replay attacks.
+- **System Defense:** Per contract [webhook-security.md §2.3](../../contracts/webhook-security.md), the signature header includes `t={timestamp}`. The receiver verifies $| \text{CurrentTime} - t | \le 300\text{ seconds}$. A 5-minute absolute difference window accommodates acceptable NTP drift while defeating replay attacks.
 
 ---
 

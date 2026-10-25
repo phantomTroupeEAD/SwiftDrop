@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [database-schema.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md), [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md)
+> **Relevant Contracts:** [database-schema.md](../../architecture/database-schema.md), [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md)
 
 ---
 
@@ -14,7 +14,7 @@
 
 Member 08 owns four authoritative database tables in the PostgreSQL 16+ relational store. These tables form the asynchronous durability engine of SwiftDrop, managing outbox queuing, consumer deduplication, real SMTP email logs, and outbound merchant webhook audit histories.
 
-This specification complements the system-wide ER design in [database-schema.md §1](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md).
+This specification complements the system-wide ER design in [database-schema.md §1](../../architecture/database-schema.md).
 
 ```mermaid
 erDiagram

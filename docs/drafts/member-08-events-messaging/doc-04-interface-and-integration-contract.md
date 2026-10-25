@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), [api-conventions.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/api-conventions.md), [database-schema.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md)
+> **Relevant Contracts:** [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md), [api-conventions.md](../../contracts/api-conventions.md), [database-schema.md](../../architecture/database-schema.md)
 
 ---
 

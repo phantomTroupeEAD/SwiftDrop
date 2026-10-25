@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (Transactional Outbox Writer, Event Envelopes, Schemas)  
 > - `services/messaging/` (Outbox Relay Daemon, RabbitMQ Topology, Event Worker, Webhook Dispatcher, Real SMTP Notifier, Reconciliation Engine)  
-> **Relevant Contracts:** [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), [database-schema.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md), [domain-boundaries.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/domain-boundaries.md)
+> **Relevant Contracts:** [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md), [database-schema.md](../../architecture/database-schema.md), [domain-boundaries.md](../../architecture/domain-boundaries.md)
 
 ---
 
@@ -68,7 +68,7 @@ It accomplishes this by implementing:
    - Author operational playbooks for DLQ replay, stuck outbox draining, and merchant delivery audits.
 
 ### 2.2 Explicit Exclusions (What Member 08 Must NEVER Own)
-To prevent architectural drift and preserve strict domain boundaries (per [domain-boundaries.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/domain-boundaries.md)):
+To prevent architectural drift and preserve strict domain boundaries (per [domain-boundaries.md](../../architecture/domain-boundaries.md)):
 - **NO Business Domain Invariant Evaluation:** Member 08 never decides whether a parcel *can* transition from `ASSIGNED` to `PICKED_UP`, nor calculates pricing fees. Business invariants belong strictly to Member 02 (`internal/parcels`, `internal/pricing`) and Member 03 (`internal/dispatch`, `internal/delivery`).
 - **NO Direct Database State Mutation of Other Domains:** Member 08 never updates `parcels.current_status`, `courier_assignments`, or `users`.
 - **NO In-Monolith Broker Imports:** Core API domain and application layers must NEVER import `github.com/rabbitmq/amqp091-go` or publish messages directly over the network.
@@ -164,7 +164,7 @@ This module operates across two architectural planes:
 2. **Asynchronous Daemon Plane (`services/messaging/`):** A dedicated, standalone Go service containing the Outbox Relay, the Event Worker consumers, and the Reconciliation job.
 
 ### 4.2 Authoritative Database Tables Owned by Member 08
-In strict compliance with the **10-Member Capability Ownership Matrix** ([database-schema.md §2](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/architecture/database-schema.md)):
+In strict compliance with the **10-Member Capability Ownership Matrix** ([database-schema.md §2](../../architecture/database-schema.md)):
 
 | Table Name | Owning Bounded Context | Primary Write Path | Purpose |
 | :--- | :--- | :--- | :--- |

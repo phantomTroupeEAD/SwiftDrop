@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [deployment-guide.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/operations/deployment-guide.md), [environment-variables.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/operations/environment-variables.md), [runbook.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/operations/runbook.md), [local-development.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/operations/local-development.md)
+> **Relevant Contracts:** [deployment-guide.md](../../operations/deployment-guide.md), [environment-variables.md](../../operations/environment-variables.md), [runbook.md](../../operations/runbook.md), [local-development.md](../../operations/local-development.md)
 
 ---
 

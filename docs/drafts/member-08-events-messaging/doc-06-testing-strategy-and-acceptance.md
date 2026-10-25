@@ -6,7 +6,7 @@
 > **Target Production Locations:**  
 > - `core-api/internal/events/` (In-Monolith Outbox Writer & Envelopes)  
 > - `services/messaging/` (Outbox Relay Daemon, Real SMTP Worker, Webhook Dispatcher, Reconciler)  
-> **Relevant Contracts:** [event-contracts.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/event-contracts.md), [webhook-security.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/webhook-security.md), [test-strategy.md](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/testing/test-strategy.md)
+> **Relevant Contracts:** [event-contracts.md](../../contracts/event-contracts.md), [webhook-security.md](../../contracts/webhook-security.md), [test-strategy.md](../../testing/test-strategy.md)
 
 ---
 
@@ -290,7 +290,7 @@ go tool cover -func=coverage.out
 ```
 
 ### 6.2 CI Pipeline Integration (`scripts/verify.sh`)
-As defined in [scripts/verify.sh](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/scripts/verify.sh), every Pull Request must pass:
+As defined in [scripts/verify.sh](../../../scripts/verify.sh), every Pull Request must pass:
 1. Secret scanning check (no committed SMTP passwords or private keys).
 2. Go code formatting verification (`gofmt`).
 3. Static analysis and architecture linter (`golangci-lint run ./...` with `depguard`).
