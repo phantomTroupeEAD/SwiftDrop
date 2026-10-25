@@ -4,7 +4,7 @@
 > **Author / Owner:** Member 03  
 > **Status:** Draft / Baseline (For Review in Team Meeting 2)  
 > **Target Production Code Paths:** `core-api/internal/dispatch/` and `core-api/internal/delivery/`  
-> **Target Migration File:** `core-api/migrations/000003_dispatch_and_delivery.up.sql`  
+> **Target Migration Files:** `core-api/migrations/000006_create_couriers.up.sql` & `core-api/migrations/000007_create_dispatch_and_delivery.up.sql`  
 > **Authoritative Persistence:** PostgreSQL (Authoritative Business Store) & Cloudflare R2 / S3 (Proof Image Blobs)  
 > **Key Upstream Dependencies:** Member 1 (`users`), Member 2 (`parcels`), Member 7 / Admin (`delivery_zones`)  
 > **Key Downstream Dependencies:** Member 5 (Tracking API read models), Member 8 (`outbox_events`)
@@ -14,10 +14,12 @@
 ## 1. Executive Summary & Data Ownership Boundaries
 
 PostgreSQL is the single authoritative source of truth for all operational fleet data, assignments, and delivery attempt logs in SwiftDrop. In accordance with `AGENTS.md` (§4.2 and §7.2):
-- Member 03 authoritatively owns the schema, migrations, DDL, and repository operations for three tables:
-  1. **`couriers`:** Operational fleet metadata, motorized vehicle classifications, max capacities, and shift statuses.
-  2. **`courier_assignments`:** Historical parcel assignments and unassignment lifecycles.
-  3. **`delivery_attempts`:** Chronological doorstep attempt event logs, structured failure codes, and proof-of-delivery references.
+- Member 03 authoritatively owns the schema, migrations, DDL, and repository operations for three tables split across two sequential migrations (Agreement D3):
+  1. **Migration 000006 (`000006_create_couriers.up.sql`):**
+     - **`couriers`:** Operational fleet metadata, motorized vehicle classifications, max capacities, and shift statuses (foreign keys to `users` and `delivery_zones`).
+  2. **Migration 000007 (`000007_create_dispatch_and_delivery.up.sql`):**
+     - **`courier_assignments`:** Historical parcel assignments and unassignment lifecycles (foreign keys to `parcels` and `couriers`).
+     - **`delivery_attempts`:** Chronological doorstep attempt event logs, structured failure codes, and proof-of-delivery references (foreign keys to `parcels` and `couriers`).
 - External binary image blobs (photos) are stored in S3-compatible cloud storage (**Cloudflare R2** with zero egress fees or local MinIO), storing only the relative storage path/key in PostgreSQL.
 
 ---
@@ -40,7 +42,7 @@ erDiagram
         varchar vehicle_type "MOTORCYCLE, VAN, TRUCK"
         integer max_capacity "1 to 200"
         varchar status "OFF_SHIFT, ON_SHIFT, ON_BREAK, SUSPENDED"
-        varchar zone_code FK "e.g. ZONE_COLOMBO_METRO"
+        varchar current_zone_id FK "e.g. ZONE_COLOMBO_01"
         boolean is_active
         timestamptz created_at
         timestamptz updated_at
@@ -51,7 +53,7 @@ erDiagram
         uuid parcel_id FK
         uuid courier_id FK
         uuid assigned_by FK
-        varchar status "ASSIGNED, COMPLETED, CANCELLED"
+        varchar status "ACTIVE, COMPLETED, REASSIGNED, CANCELLED"
         timestamptz assigned_at
         timestamptz ended_at "nullable"
         text notes "nullable"
@@ -79,25 +81,24 @@ erDiagram
 
 ## 3. Canonical PostgreSQL DDL Specification
 
-The following DDL represents the authoritative schema implemented in `core-api/migrations/000003_dispatch_and_delivery.up.sql`:
+The following DDL represents the authoritative schemas implemented in `core-api/migrations/`:
+
+### 3.1 Migration `000006_create_couriers.up.sql`
 
 ```sql
 -- ============================================================================
--- SwiftDrop Core API: Migration 000003 - Dispatch & Delivery Records
+-- SwiftDrop Core API: Migration 000006 - Courier Profiles
 -- Author: Member 03 (Dispatch, Couriers & Proof of Delivery)
+-- Dependencies: 000001_create_users, 000002_create_delivery_zones
 -- ============================================================================
 
--- ----------------------------------------------------------------------------
--- 1. Table: couriers
--- Description: Operational fleet profiles linked to authenticated user accounts
--- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS couriers (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
     employee_code VARCHAR(20) NOT NULL UNIQUE,
     vehicle_type VARCHAR(20) NOT NULL,
     max_capacity INTEGER NOT NULL DEFAULT 25,
     status VARCHAR(20) NOT NULL DEFAULT 'OFF_SHIFT',
-    zone_code VARCHAR(50) NOT NULL REFERENCES delivery_zones(code) ON DELETE RESTRICT,
+    current_zone_id VARCHAR(32) REFERENCES delivery_zones(id) ON DELETE SET NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -114,38 +115,44 @@ CREATE TABLE IF NOT EXISTS couriers (
     )
 );
 
--- Comments for documentation & audit
 COMMENT ON TABLE couriers IS 'Operational fleet profiles linked to authenticated user accounts';
 COMMENT ON COLUMN couriers.vehicle_type IS 'Motorized vehicle classification: MOTORCYCLE, VAN, or TRUCK';
 COMMENT ON COLUMN couriers.max_capacity IS 'Maximum concurrent active parcels allowed for this courier';
+COMMENT ON COLUMN couriers.current_zone_id IS 'Assigned delivery zone referencing delivery_zones(id)';
 COMMENT ON COLUMN couriers.status IS 'Current shift availability: OFF_SHIFT, ON_SHIFT, ON_BREAK, SUSPENDED';
+```
 
--- ----------------------------------------------------------------------------
--- 2. Table: courier_assignments
--- Description: Historical tracking of parcel assignments to couriers
--- ----------------------------------------------------------------------------
+### 3.2 Migration `000007_create_dispatch_and_delivery.up.sql`
+
+```sql
+-- ============================================================================
+-- SwiftDrop Core API: Migration 000007 - Dispatch & Delivery Records
+-- Author: Member 03 (Dispatch, Couriers & Proof of Delivery)
+-- Dependencies: 000005_create_parcels_and_quotes, 000006_create_couriers
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS courier_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE RESTRICT,
     courier_id UUID NOT NULL REFERENCES couriers(user_id) ON DELETE RESTRICT,
     assigned_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    status VARCHAR(20) NOT NULL DEFAULT 'ASSIGNED',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at TIMESTAMPTZ NULL,
     notes TEXT NULL,
 
     -- Invariants & Check Constraints
     CONSTRAINT chk_assignments_status CHECK (
-        status IN ('ASSIGNED', 'COMPLETED', 'CANCELLED')
+        status IN ('ACTIVE', 'COMPLETED', 'REASSIGNED', 'CANCELLED')
     ),
     CONSTRAINT chk_assignments_ended_at CHECK (
-        (status = 'ASSIGNED' AND ended_at IS NULL) OR
-        (status IN ('COMPLETED', 'CANCELLED') AND ended_at IS NOT NULL)
+        (status = 'ACTIVE' AND ended_at IS NULL) OR
+        (status IN ('COMPLETED', 'REASSIGNED', 'CANCELLED') AND ended_at IS NOT NULL)
     )
 );
 
 COMMENT ON TABLE courier_assignments IS 'Historical and active assignments of parcels to couriers';
-COMMENT ON COLUMN courier_assignments.status IS 'Assignment lifecycle: ASSIGNED, COMPLETED, or CANCELLED';
+COMMENT ON COLUMN courier_assignments.status IS 'Assignment lifecycle: ACTIVE, COMPLETED, REASSIGNED, or CANCELLED';
 
 -- ----------------------------------------------------------------------------
 -- 3. Table: delivery_attempts
@@ -212,19 +219,19 @@ High-frequency queries executed during dispatching and courier mobile synchroniz
 -- 1. Fast dispatch board active courier lookups
 -- Filter couriers by operating zone and active shift
 CREATE INDEX idx_couriers_zone_shift 
-ON couriers (zone_code, status) 
+ON couriers (current_zone_id, status) 
 WHERE is_active = TRUE;
 
 -- 2. Fast courier active workload aggregation
 -- Computes COUNT(*) of active parcels for a courier in < 1ms
 CREATE INDEX idx_assignments_courier_active 
 ON courier_assignments (courier_id) 
-WHERE status = 'ASSIGNED';
+WHERE status = 'ACTIVE';
 
 -- 3. Concurrency guard: Ensure a parcel can have at most ONE active assignment
 CREATE UNIQUE INDEX idx_assignments_parcel_single_active 
 ON courier_assignments (parcel_id) 
-WHERE status = 'ASSIGNED';
+WHERE status = 'ACTIVE';
 
 -- 4. Chronological doorstep attempt reconstruction
 -- Used by Tracking API and Admin audit timelines
@@ -234,7 +241,7 @@ ON delivery_attempts (parcel_id, attempt_number ASC);
 -- 5. Dispatch board unassigned parcel lookup
 -- Optimizes GET /api/v1/dispatch/board for parcels in CREATED or ATTEMPT_FAILED
 CREATE INDEX idx_parcels_dispatch_eligible 
-ON parcels (destination_zone, current_status, created_at ASC) 
+ON parcels (destination_zone_id, current_status, created_at ASC) 
 WHERE current_status IN ('CREATED', 'ATTEMPT_FAILED');
 ```
 
@@ -263,7 +270,7 @@ FOR UPDATE;
 -- 3. Calculate active workload with lock held
 SELECT COUNT(*) 
 FROM courier_assignments 
-WHERE courier_id = $2 AND status = 'ASSIGNED';
+WHERE courier_id = $2 AND status = 'ACTIVE';
 
 -- Application validates:
 -- a) current_status IN ('CREATED', 'ATTEMPT_FAILED')
@@ -272,7 +279,7 @@ WHERE courier_id = $2 AND status = 'ASSIGNED';
 
 -- 4. Execute inserts and state update
 INSERT INTO courier_assignments (parcel_id, courier_id, assigned_by, status)
-VALUES ($1, $2, $3, 'ASSIGNED');
+VALUES ($1, $2, $3, 'ACTIVE');
 
 UPDATE parcels 
 SET current_status = 'ASSIGNED', updated_at = NOW() 
@@ -320,15 +327,16 @@ All state transitions managed by Member 03 execute in a single PostgreSQL transa
 
 ## 8. Deterministic Seed Data (Local Development & CI)
 
-The following baseline records are seeded in local environments to enable instant, repeatable demonstrations:
+In accordance with Agreement D12, migration directories contain strictly DDL. Deterministic seed records are maintained in `deploy/seeds/000006_couriers_seed.sql` to enable instant, repeatable local demonstrations and automated tests:
 
 ```sql
+-- deploy/seeds/000006_couriers_seed.sql
 -- Seed Couriers (Linked to Member 1 Seed Users)
-INSERT INTO couriers (user_id, employee_code, vehicle_type, max_capacity, status, zone_code, is_active)
+INSERT INTO couriers (user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active)
 VALUES 
-    ('018e3a2b-1111-7000-8000-000000000001', 'CR-0012', 'MOTORCYCLE', 25, 'ON_SHIFT', 'ZONE_COLOMBO_METRO', TRUE),
-    ('018e3a2b-2222-7000-8000-000000000002', 'CR-0015', 'VAN', 60, 'ON_SHIFT', 'ZONE_GREATER_WESTERN', TRUE),
-    ('018e3a2b-3333-7000-8000-000000000003', 'CR-0019', 'MOTORCYCLE', 25, 'OFF_SHIFT', 'ZONE_COLOMBO_METRO', TRUE)
+    ('018e3a2b-1111-7000-8000-000000000001', 'CR-0012', 'MOTORCYCLE', 25, 'ON_SHIFT', 'ZONE_COLOMBO_01', TRUE),
+    ('018e3a2b-2222-7000-8000-000000000002', 'CR-0015', 'VAN', 60, 'ON_SHIFT', 'ZONE_KANDY_01', TRUE),
+    ('018e3a2b-3333-7000-8000-000000000003', 'CR-0019', 'MOTORCYCLE', 25, 'OFF_SHIFT', 'ZONE_COLOMBO_01', TRUE)
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Seed Sample Active Assignment (Courier 1 has 1 active delivery)
@@ -338,18 +346,22 @@ VALUES (
     '018e3a2b-9999-7000-8000-000000000001',
     '018e3a2b-1111-7000-8000-000000000001',
     '018e3a2b-0000-7000-8000-000000000001',
-    'ASSIGNED',
+    'ACTIVE',
     NOW() - INTERVAL '1 hour'
 ) ON CONFLICT (id) DO NOTHING;
 ```
 
 ---
 
-## 9. Rollback Migration Specification (`down.sql`)
+## 9. Rollback Migration Specifications (`down.sql`)
 
+### 9.1 `core-api/migrations/000007_create_dispatch_and_delivery.down.sql`
 ```sql
--- core-api/migrations/000003_dispatch_and_delivery.down.sql
 DROP TABLE IF EXISTS delivery_attempts CASCADE;
 DROP TABLE IF EXISTS courier_assignments CASCADE;
+```
+
+### 9.2 `core-api/migrations/000006_create_couriers.down.sql`
+```sql
 DROP TABLE IF EXISTS couriers CASCADE;
 ```

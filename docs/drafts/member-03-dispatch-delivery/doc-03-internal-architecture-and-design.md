@@ -462,7 +462,7 @@ The `R2StorageClient` implements `ObjectStorageClient` using the official `aws-s
 
 ### 6.2 Offline Local Development & CI Driver
 For clean local setup without external cloud credentials:
-- When `STORAGE_DRIVER=local` (default in local Docker Compose and automated tests), `LocalStorageClient` stores uploaded photos in `core-api/uploads/proofs/` and serves them via an authenticated Core API media endpoint (`/api/v1/deliveries/proofs/{id}`).
+- When `OBJECT_STORAGE_DRIVER=local` (or fallback `STORAGE_DRIVER=local`, default in local Docker Compose and automated tests), `LocalStorageClient` stores uploaded photos in `core-api/uploads/proofs/` and serves them via an authenticated Core API media endpoint (`/api/v1/deliveries/proofs/{id}`).
 - Ensures CI test suites (`verify.sh`) run deterministically without internet access or paid credentials.
 
 ---

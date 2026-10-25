@@ -191,7 +191,7 @@ To detect any potential operational inconsistencies (e.g., a parcel in `OUT_FOR_
 -- Operational Audit Query: Detect inconsistent active assignments
 SELECT p.id AS parcel_id, p.current_status, ca.id AS assignment_id, ca.status AS assignment_status
 FROM parcels p
-LEFT JOIN courier_assignments ca ON p.id = ca.parcel_id AND ca.status = 'ASSIGNED'
+LEFT JOIN courier_assignments ca ON p.id = ca.parcel_id AND ca.status = 'ACTIVE'
 WHERE p.current_status = 'OUT_FOR_DELIVERY' AND ca.id IS NULL;
 ```
 If this query returns rows, the automated reconciliation job (`internal/admin` / Member 8) alerts the on-duty dispatcher to re-link or return the affected parcels to the depot.

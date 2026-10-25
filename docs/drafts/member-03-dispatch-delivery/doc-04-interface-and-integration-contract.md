@@ -73,7 +73,7 @@ This document specifies the complete, binding external and internal interface co
   "employee_code": "CR-0042",
   "vehicle_type": "MOTORCYCLE",
   "max_capacity": 25,
-  "zone_code": "ZONE_COLOMBO_METRO"
+  "current_zone_id": "ZONE_COLOMBO_01"
 }
 ```
 
@@ -86,7 +86,7 @@ This document specifies the complete, binding external and internal interface co
     "vehicle_type": "MOTORCYCLE",
     "max_capacity": 25,
     "status": "OFF_SHIFT",
-    "zone_code": "ZONE_COLOMBO_METRO",
+    "current_zone_id": "ZONE_COLOMBO_01",
     "is_active": true,
     "created_at": "2026-10-24T08:00:00Z"
   }
@@ -103,7 +103,7 @@ This document specifies the complete, binding external and internal interface co
 - **Method / Path:** `GET /api/v1/dispatch/couriers`
 - **Auth Required:** Bearer JWT (`DISPATCHER`, `ADMIN`)
 - **Query Parameters:**
-  - `zone_code` (string, optional): Filter by `ZONE_COLOMBO_METRO`, `ZONE_GREATER_WESTERN`, `ZONE_OUTSTATION`.
+  - `zone_id` (string, optional): Filter by `ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01` (supports legacy `zone_code`).
   - `status` (string, optional): Filter by `ON_SHIFT`, `OFF_SHIFT`, `ON_BREAK`, `SUSPENDED`.
   - `vehicle_type` (string, optional): Filter by `MOTORCYCLE`, `VAN`, `TRUCK`.
 
@@ -121,7 +121,7 @@ This document specifies the complete, binding external and internal interface co
         "vehicle_type": "MOTORCYCLE",
         "max_capacity": 25,
         "status": "ON_SHIFT",
-        "zone_code": "ZONE_COLOMBO_METRO",
+        "current_zone_id": "ZONE_COLOMBO_01",
         "active_assignments": 3,
         "is_active": true
       },
@@ -133,7 +133,7 @@ This document specifies the complete, binding external and internal interface co
         "vehicle_type": "VAN",
         "max_capacity": 60,
         "status": "ON_SHIFT",
-        "zone_code": "ZONE_GREATER_WESTERN",
+        "current_zone_id": "ZONE_KANDY_01",
         "active_assignments": 1,
         "is_active": true
       }
@@ -162,7 +162,7 @@ This document specifies the complete, binding external and internal interface co
     "vehicle_type": "MOTORCYCLE",
     "max_capacity": 25,
     "status": "ON_SHIFT",
-    "zone_code": "ZONE_COLOMBO_METRO",
+    "current_zone_id": "ZONE_COLOMBO_01",
     "active_assignments": 3,
     "capacity_available": 22,
     "is_active": true,
@@ -180,14 +180,14 @@ This document specifies the complete, binding external and internal interface co
 - **Method / Path:** `GET /api/v1/dispatch/board`
 - **Auth Required:** Bearer JWT (`DISPATCHER`, `ADMIN`)
 - **Query Parameters:**
-  - `zone_code` (string, required): Canonical zone identifier (`ZONE_COLOMBO_METRO`, `ZONE_GREATER_WESTERN`, `ZONE_OUTSTATION`).
+  - `zone_id` (string, required): Canonical zone identifier (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`; supports legacy `zone_code`).
   - `status` (string, optional, default: `ELIGIBLE`): Filter by `CREATED` or `ATTEMPT_FAILED`.
 
 #### Success Response (`200 OK`)
 ```json
 {
   "data": {
-    "zone_code": "ZONE_COLOMBO_METRO",
+    "zone_id": "ZONE_COLOMBO_01",
     "summary": {
       "total_unassigned_parcels": 2,
       "total_active_couriers": 2,

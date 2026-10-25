@@ -236,8 +236,8 @@ Member 03 strictly owns the schema definitions, migrations, and repository imple
 
 | Table Name | Primary Responsibility | Key Fields Owned | Mutability |
 | :--- | :--- | :--- | :--- |
-| **`couriers`** | Courier operational fleet metadata | `user_id` (PK, FK), `employee_code`, `vehicle_type`, `max_capacity`, `status`, `zone_code`, `created_at` | Mutable (via Dispatcher/Admin & Shift toggles) |
-| **`courier_assignments`** | Historical parcel assignments | `id` (PK), `parcel_id` (FK), `courier_id` (FK), `assigned_by` (FK), `status`, `assigned_at`, `ended_at`, `notes` | Append-only with status closure (`CANCELLED`, `COMPLETED`) |
+| **`couriers`** | Courier operational fleet metadata | `user_id` (PK, FK), `employee_code`, `vehicle_type`, `max_capacity`, `status`, `current_zone_id`, `created_at` | Mutable (via Dispatcher/Admin & Shift toggles) |
+| **`courier_assignments`** | Historical parcel assignments | `id` (PK), `parcel_id` (FK), `courier_id` (FK), `assigned_by` (FK), `status`, `assigned_at`, `ended_at`, `notes` | Append-only with status closure (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`) |
 | **`delivery_attempts`** | Doorstep attempt event logs | `id` (PK), `parcel_id` (FK), `courier_id` (FK), `attempt_number`, `outcome`, `failure_reason_code`, `proof_type`, `proof_attachment_url`, `proof_signature_data`, `received_by_name`, `latitude`, `longitude`, `notes`, `attempted_at` | **Strictly Immutable** append-only |
 
 ### Outbox Events Emitted:

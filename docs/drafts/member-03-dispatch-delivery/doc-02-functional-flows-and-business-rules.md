@@ -69,7 +69,7 @@ sequenceDiagram
 
     rect rgb(240, 248, 255)
     Note over Admin,DB: Step A: Profile Provisioning (One-Time)
-    Admin->>Gateway: POST /api/v1/dispatch/couriers (user_id, vehicle_type, max_capacity, zone_code)
+    Admin->>Gateway: POST /api/v1/dispatch/couriers (user_id, vehicle_type, max_capacity, current_zone_id)
     Gateway->>DispatchAPI: Authenticated (Role: ADMIN or DISPATCHER)
     DispatchAPI->>DB: INSERT INTO couriers (user_id, vehicle_type, max_capacity, status = 'OFF_SHIFT')
     DB-->>DispatchAPI: 201 Created (Profile linked)
@@ -124,8 +124,8 @@ sequenceDiagram
     participant DB as PostgreSQL (Single Transaction)
     participant Outbox as outbox_events Table
 
-    Dispatcher->>DispatchAPI: GET /api/v1/dispatch/board?zone_code=ZONE_COLOMBO_METRO
-    DispatchAPI->>DB: Query unassigned parcels & active courier workloads in ZONE_COLOMBO_METRO
+    Dispatcher->>DispatchAPI: GET /api/v1/dispatch/board?zone_id=ZONE_COLOMBO_01
+    DispatchAPI->>DB: Query unassigned parcels & active courier workloads in ZONE_COLOMBO_01
     DB-->>DispatchAPI: Return eligible parcels + courier load counts
     DispatchAPI-->>Dispatcher: 200 OK (Render board with capacity progress bars)
 
@@ -139,7 +139,7 @@ sequenceDiagram
     Note over UseCase,DB: Pessimistic Row Lock Acquired (Blocks Concurrent Assigners)
     
     UseCase->>DB: SELECT id, max_capacity, status FROM couriers WHERE user_id = 'cr_101' FOR UPDATE
-    UseCase->>DB: SELECT COUNT(*) FROM courier_assignments WHERE courier_id = 'cr_101' AND status = 'ASSIGNED'
+    UseCase->>DB: SELECT COUNT(*) FROM courier_assignments WHERE courier_id = 'cr_101' AND status = 'ACTIVE'
     
     alt Ineligible Parcel Status
         UseCase-->>DispatchAPI: Error: Parcel not in CREATED or ATTEMPT_FAILED
@@ -150,7 +150,7 @@ sequenceDiagram
         UseCase->>DB: ROLLBACK
         DispatchAPI-->>Dispatcher: 409 Conflict (COURIER_CAPACITY_EXCEEDED)
     else Valid Assignment
-        UseCase->>DB: INSERT INTO courier_assignments (id, parcel_id, courier_id, assigned_by, status = 'ASSIGNED', assigned_at)
+        UseCase->>DB: INSERT INTO courier_assignments (id, parcel_id, courier_id, assigned_by, status = 'ACTIVE', assigned_at)
         UseCase->>DB: UPDATE parcels SET current_status = 'ASSIGNED', updated_at = NOW() WHERE id = 'prcl_123'
         UseCase->>DB: INSERT INTO parcel_status_history (parcel_id, from_status, to_status, actor_id, actor_role)
         UseCase->>Outbox: INSERT INTO outbox_events (event_type = 'parcel.assigned.v1', status = 'PENDING', payload = {...})
@@ -192,7 +192,7 @@ sequenceDiagram
     participant Outbox as outbox_events Table
 
     Courier->>DeliveryAPI: GET /api/v1/courier/parcels
-    DeliveryAPI->>DB: SELECT parcels WHERE id IN (SELECT parcel_id FROM courier_assignments WHERE courier_id = auth.UserID AND status = 'ASSIGNED')
+    DeliveryAPI->>DB: SELECT parcels WHERE id IN (SELECT parcel_id FROM courier_assignments WHERE courier_id = auth.UserID AND status = 'ACTIVE')
     DB-->>DeliveryAPI: Return active parcels (Masked: no merchant pricing/keys)
     DeliveryAPI-->>Courier: 200 OK (Render mobile parcel cards with addresses & phone numbers)
 
@@ -258,11 +258,11 @@ sequenceDiagram
     Note over UseCase,Outbox: Single Atomic PostgreSQL Transaction
     UseCase->>DB: BEGIN TRANSACTION
     UseCase->>DB: SELECT id, current_status FROM parcels WHERE id = 'prcl_123' FOR UPDATE
-    UseCase->>DB: Verify assignment: courier_id == auth.UserID AND status == 'ASSIGNED'
+    UseCase->>DB: Verify assignment: courier_id == auth.UserID AND status == 'ACTIVE'
     
     UseCase->>DB: INSERT INTO delivery_attempts (id, parcel_id, courier_id, attempt_number, outcome = 'SUCCESS', proof_type, proof_attachment_url, proof_signature_data, received_by_name, notes, attempted_at)
     UseCase->>DB: UPDATE parcels SET current_status = 'DELIVERED', updated_at = NOW() WHERE id = 'prcl_123'
-    UseCase->>DB: UPDATE courier_assignments SET status = 'COMPLETED', ended_at = NOW() WHERE parcel_id = 'prcl_123' AND status = 'ASSIGNED'
+    UseCase->>DB: UPDATE courier_assignments SET status = 'COMPLETED', ended_at = NOW() WHERE parcel_id = 'prcl_123' AND status = 'ACTIVE'
     UseCase->>DB: INSERT INTO parcel_status_history (from_status = 'OUT_FOR_DELIVERY', to_status = 'DELIVERED', ...)
     UseCase->>Outbox: INSERT INTO outbox_events (event_type = 'parcel.delivered.v1', status = 'PENDING', payload = {...})
     UseCase->>DB: COMMIT TRANSACTION
@@ -344,7 +344,7 @@ sequenceDiagram
         else attempt_count + 1 >= 3 OR reason_code == 'REFUSED_BY_RECIPIENT'
             Note over UseCase,DB: Branch B: Terminal Return Transition
             UseCase->>DB: UPDATE parcels SET current_status = 'RETURNED', attempt_count = attempt_count + 1 WHERE id = 'prcl_123'
-            UseCase->>DB: UPDATE courier_assignments SET status = 'COMPLETED' WHERE parcel_id = 'prcl_123' AND status = 'ASSIGNED'
+            UseCase->>DB: UPDATE courier_assignments SET status = 'COMPLETED' WHERE parcel_id = 'prcl_123' AND status = 'ACTIVE'
             UseCase->>Outbox: INSERT INTO outbox_events (event_type = 'parcel.returned.v1', ...)
             UseCase->>DB: COMMIT TRANSACTION
             DeliveryAPI-->>Courier: 200 OK { "status": "RETURNED", "attempt_number": 3, "next_action": "RETURN_TO_SENDER" }

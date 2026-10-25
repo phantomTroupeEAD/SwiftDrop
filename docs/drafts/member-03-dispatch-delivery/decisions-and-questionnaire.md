@@ -74,7 +74,7 @@ Please review each question. If you agree with the recommended answers, you can 
   - **Dispatcher-Driven Manual Assignment with Smart Suggestions (Baseline):**
     - Primary workflow: Dispatcher views unassigned parcels (`GET /api/v1/dispatch/unassigned`), selects a courier from active list (`GET /api/v1/dispatch/workloads`), and assigns (`POST /api/v1/dispatch/assignments`).
     - Smart filter: The dispatch board sorts/filters couriers by:
-      1. Zone match (`courier.zone_code == parcel.delivery_zone_code`).
+      1. Zone match (`courier.current_zone_id == parcel.destination_zone_id`).
       2. Lowest current workload (`active_assignments ASC`).
       3. Available capacity margin (`max_capacity - active_assignments > 0`).
     - Optional/Stretch Auto-Assign endpoint: `POST /api/v1/dispatch/auto-assign` to assign top pending parcels to the least-loaded available couriers in the zone.
@@ -204,9 +204,9 @@ Please review each question. If you agree with the recommended answers, you can 
           GetPreSignedURL(ctx context.Context, key string, ttl time.Duration) (string, error)
       }
       ```
-    - **Development / Demo Mode (`STORAGE_DRIVER=local`):**
+    - **Development / Demo Mode (`OBJECT_STORAGE_DRIVER=local` with fallback to `STORAGE_DRIVER`):**
       - Photos saved to `core-api/uploads/proofs/` directory and served via authenticated endpoint.
-    - **Production / Cloud Mode (`STORAGE_DRIVER=s3`):**
+    - **Production / Cloud Mode (`OBJECT_STORAGE_DRIVER=s3`):**
       - Direct S3-API compatible upload to **Cloudflare R2** (recommended for zero-egress fees), AWS S3, or local MinIO bucket.
       - Because Cloudflare R2 and MinIO conform to the AWS S3 API standard, the exact same Go `aws-sdk-go-v2` client handles all three via configurable `S3_ENDPOINT`, `S3_BUCKET`, and credentials.
       - Pre-signed URLs generated with 15-minute TTL for secure viewing.

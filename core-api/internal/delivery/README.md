@@ -37,14 +37,14 @@ internal/delivery/
 ---
 
 ## 4. Database Ownership
-- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), status (`SUCCESS`, `FAILED`), failure reason code, notes, GPS coordinates (if provided), timestamp.
-- `proof_of_delivery`: Proof ID, attempt ID, proof type (`PHOTO`, `SIGNATURE`), secure URL/blob reference, verified timestamp.
+- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), outcome (`SUCCESS`, `FAILED`), failure reason code, proof type (`PHOTO`, `SIGNATURE`, `RECIPIENT_CONFIRMATION`), proof attachment URL / storage path, signature data, received by name, GPS coordinates, notes, attempted_at timestamp. Migrated via `000007_create_dispatch_and_delivery.up.sql`.
 
 ---
 
 ## 5. Events Emitted
 - `parcel.delivered.v1`: Published upon successful delivery with proof.
-- `delivery.attempt_failed.v1`: Published upon failed attempt.
+- `parcel.delivery_failed.v1`: Published upon failed attempt.
+- `parcel.returned.v1`: Published upon 3rd failed attempt or refusal.
 
 ---
 
@@ -52,3 +52,4 @@ internal/delivery/
 | Date | Change Summary | Author / Agent |
 | :--- | :--- | :--- |
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
+| 2026-10-25 | Standardized single delivery_attempts table DDL, decoupled storage health checks, and ADR-004 failure reason codes | Member 3 & Review Agent |

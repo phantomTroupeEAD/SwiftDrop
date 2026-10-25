@@ -106,7 +106,7 @@ Integration tests validate transaction boundaries, database constraints, pessimi
 - **Pass Criteria:**
   - Exactly **1 goroutine succeeds** with `200 OK`.
   - Exactly **19 goroutines fail** with `409 Conflict` (`PARCEL_ALREADY_ASSIGNED`).
-  - Database verification: `SELECT COUNT(*) FROM courier_assignments WHERE parcel_id = 'prcl_race_01' AND status = 'ASSIGNED'` equals **exactly 1**.
+  - Database verification: `SELECT COUNT(*) FROM courier_assignments WHERE parcel_id = 'prcl_race_01' AND status = 'ACTIVE'` equals **exactly 1**.
 
 ```go
 func TestConcurrentParcelAssignment_AT013(t *testing.T) {

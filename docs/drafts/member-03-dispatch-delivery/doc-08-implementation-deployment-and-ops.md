@@ -98,8 +98,9 @@ All runtime parameters are externalized via environment variables. To guarantee 
 | `DATABASE_URL` | **Yes (Prod)** | `postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable` | `string` | Authoritative PostgreSQL connection string. |
 | `DB_MAX_OPEN_CONNS` | No | `50` | `int` | Maximum open database connections in connection pool. |
 | `DB_MAX_IDLE_CONNS` | No | `10` | `int` | Minimum idle database connections maintained. |
-| `STORAGE_DRIVER` | No | `local` | `string` | Storage engine: `local` for offline dev/CI; `s3` for production Cloudflare R2 / AWS S3. |
-| `LOCAL_STORAGE_PATH` | No | `./uploads/proofs` | `string` | Target directory when `STORAGE_DRIVER=local`. |
+| `OBJECT_STORAGE_DRIVER` | No | `local` | `string` | Primary storage engine key: `local` for offline dev/CI; `s3` for production Cloudflare R2 / AWS S3. |
+| `STORAGE_DRIVER` | No | `local` | `string` | Backward-compatible alias for `OBJECT_STORAGE_DRIVER`. |
+| `LOCAL_STORAGE_PATH` | No | `./uploads/proofs` | `string` | Target directory when storage driver is `local`. |
 | `S3_ENDPOINT` | Cond. | *N/A (Required if S3)* | `string` | Cloudflare R2 / AWS S3 API endpoint URI. |
 | `S3_BUCKET` | Cond. | *N/A (Required if S3)* | `string` | Dedicated S3 bucket for proof-of-delivery photos. |
 | `S3_ACCESS_KEY_ID` | Cond. | *N/A (Required if S3)* | `string` | Cloud storage access key ID credential. |
@@ -171,7 +172,7 @@ func LoadDispatchAndDeliveryConfig(logger *slog.Logger) *DispatchAndDeliveryConf
 		DatabaseURL:               getEnvString("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable", logger),
 		DBMaxOpenConns:            getEnvInt("DB_MAX_OPEN_CONNS", FallbackDBMaxOpenConns, logger),
 		DBMaxIdleConns:            getEnvInt("DB_MAX_IDLE_CONNS", FallbackDBMaxIdleConns, logger),
-		StorageDriver:             getEnvString("STORAGE_DRIVER", FallbackStorageDriver, logger),
+		StorageDriver:             getEnvString("OBJECT_STORAGE_DRIVER", getEnvString("STORAGE_DRIVER", FallbackStorageDriver, logger), logger),
 		LocalStoragePath:          getEnvString("LOCAL_STORAGE_PATH", FallbackLocalStoragePath, logger),
 		S3Endpoint:                os.Getenv("S3_ENDPOINT"),
 		S3Bucket:                  os.Getenv("S3_BUCKET"),
@@ -232,7 +233,7 @@ docker compose up -d postgres minio
 migrate -path core-api/migrations -database "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable" up
 
 # 3. Seed deterministic local couriers and test parcels
-psql "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable" -f core-api/migrations/seeds/000003_dispatch_seed.sql
+psql "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable" -f deploy/seeds/000006_couriers_seed.sql
 
 # 4. Start Core API in development mode
 cd core-api
@@ -246,7 +247,7 @@ To verify that the local environment has seeded properly:
 curl -H "Authorization: Bearer <jwt>" "http://localhost:8080/api/v1/dispatch/couriers"
 
 # Verify dispatch board loads
-curl -H "Authorization: Bearer <jwt>" "http://localhost:8080/api/v1/dispatch/board?zone_code=ZONE_COLOMBO_METRO"
+curl -H "Authorization: Bearer <jwt>" "http://localhost:8080/api/v1/dispatch/board?zone_id=ZONE_COLOMBO_01"
 ```
 
 ---
@@ -275,7 +276,7 @@ readinessProbe:
   timeoutSeconds: 2
   failureThreshold: 2
 ```
-- `/health/ready` validates active database connectivity (`db.PingContext`) and Cloudflare R2 bucket connectivity before accepting ingress traffic.
+- `/health/ready` validates active database connectivity (`db.PingContext`) and local process health only; per Agreement A2, it strictly **does NOT probe Cloudflare R2 / S3 storage** synchronously to prevent cascading pod restart failures during external network blips. Object storage failures are isolated per-request (returning HTTP 503 on proof uploads).
 
 ### 5.2 Resource Limits & Sizing
 ```yaml
@@ -300,11 +301,11 @@ Member 03 exports native Prometheus metrics via `GET /metrics`:
 ### 6.1 Metric Catalog
 | Metric Name | Type | Labels | Operational Meaning |
 | :--- | :---: | :--- | :--- |
-| `swiftdrop_dispatch_assignments_total` | Counter | `zone_code`, `status` | Total parcel assignments processed by dispatchers. |
+| `swiftdrop_dispatch_assignments_total` | Counter | `zone_id`, `status` | Total parcel assignments processed by dispatchers. |
 | `swiftdrop_courier_active_workload` | Gauge | `courier_id`, `vehicle_type` | Current active parcel count per courier. |
 | `swiftdrop_delivery_completions_total` | Counter | `proof_type` | Total successfully delivered parcels partitioned by proof type. |
 | `swiftdrop_delivery_failures_total` | Counter | `reason_code` | Total failed delivery attempts partitioned by failure classification. |
-| `swiftdrop_assignment_duration_seconds`| Histogram | `zone_code` | Latency distribution of pessimistic row-lock assignments. |
+| `swiftdrop_assignment_duration_seconds`| Histogram | `zone_id` | Latency distribution of pessimistic row-lock assignments. |
 
 ### 6.2 Recommended Grafana Alerting Rules
 - **Courier Overload Alert:** Triggers if any courier's `swiftdrop_courier_active_workload` exceeds `max_capacity` (indicates invariant breach).
