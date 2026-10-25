@@ -30,7 +30,7 @@ Every requirement in **SwiftDrop SRS v1.0**, the **Assignment Rubric**, and **Te
 | **M1** | **Identity, Access & Security** | FR-AUTH-001–007, SEC-001–006, SEC-011 | Docs 1–8 submitted | **Low:** Complete 8-document suite submitted. Identified minor alignment items: fix migration naming (`20261021000001` $\to$ `000001_create_users_and_roles.up.sql`); combine `users.role` with `roles` lookup table; align seed domain to `@swiftdrop.com`. |
 | **M2** | **Parcels & Pricing** | FR-PRC-001–004, FR-BOK-001–006, SEC-009 | Docs 1–8 submitted | **Low:** Post-review alignment complete (v2.0.0). Ratified binding integer cents tariff, JSONB address snapshots, 15-min quote TTL, optimistic locking (`version`), and `idempotency_keys` table. |
 | **M3** | **Dispatch, Couriers & POD** | FR-DSP-001–004, FR-POD-001–005, ADR-004 | Docs 1–8 + Questionnaire | **Low:** Post-review alignment complete (v2.0.0). Split into migrations 000006 & 000007; decoupled R2 from readiness probe; harmonized current_zone_id and assignment status lifecycle; pessimistic locking and ADR-004 invariants bound. |
-| **M4** | **Merchant Integration** | FR-MER-001–011, SEC-007, SEC-010 | Docs 1–8 + Tests/Evidence | **Low:** Exceptional depth, but unresolved U-01–U-47 questions; webhook secret hashed instead of encrypted; timestamp migrations; DB role names. |
+| **M4** | **Merchant Integration** | FR-MER-001–011, SEC-007, SEC-010 | Docs 1–8 + Tests/Evidence | **Low:** Post-review alignment complete (v2.0.0). Resolved all U-01–U-14 dilemmas; unified 4 draft migrations into 000003; encrypted AES-256-GCM webhook secrets; ratified merchant_webhook_targets_view. |
 | **M5** | **Tracking & Real-Time SSE** | FR-TRK-001–005, SEC-008, NFR-001 | README only | **High:** Full 8-doc suite not submitted. Needs SSE stream protocol, Redis fan-out architecture, read-only DB projection queries, and public PII masking rules. |
 | **M6** | **Customer/Merchant Web** | FR-UI-001–004, UX-001–005 | README only | **High:** Full 8-doc suite not submitted. Needs booking wizard state flow, real-time SSE hook integration, merchant batch CSV UI, and `data-testid` E2E conventions. |
 | **M7** | **Ops/Courier Web & Gateway** | FR-ADM-001–009, SEC-012–016, ADR-001 | Docs 1–3, 5–8 (Missing Doc 4) | **High:** Missing Doc 4 interface contract; Traefik port conflict (8080 vs Core API); `sslmode=require`; DB superuser roles; U-01–U-62 questions. |
@@ -91,6 +91,14 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Standardize on `status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED', 'REASSIGNED', 'CANCELLED'))`.
 3. **Storage Driver Configuration Naming:** In `doc-08`, Member 3 configures `STORAGE_DRIVER`, while Member 9 specifies `OBJECT_STORAGE_DRIVER`.
    - *Fix:* Configuration loader maps `OBJECT_STORAGE_DRIVER` as primary key with fallback to `STORAGE_DRIVER`.
+
+### 2.7 Member 04 Contradictions
+1. **Database View Naming Discrepancy:** In `doc-05` and `contracts/`, Member 4 named the target view `merchant_webhook_targets`. In Member 8's worker documents and queries, the view was named `merchant_webhook_targets_view`.
+   - *Fix:* Standardize canonical view name as `merchant_webhook_targets_view`, with a backward-compatible alias `merchant_webhook_targets`.
+2. **Migration Splitting & Timestamp Naming:** In `migrations-draft/`, Member 4 authored four 14-digit timestamp files (`20261101000100`–`000400`), violating the 6-digit sequence (Agreement D2).
+   - *Fix:* Consolidate all tables and views into single migration `000003_create_merchants_and_credentials.up.sql`.
+3. **API Key Prefix Length:** In `doc-03` and `doc-05`, Member 4 defined `key_prefix CHAR(8)`, which truncates the standard prefix `sd_live_a1b2c3d4` (16 chars).
+   - *Fix:* Standardize on `key_prefix VARCHAR(16) NOT NULL` and `key_hash VARCHAR(64) NOT NULL UNIQUE`.
 
 ---
 
