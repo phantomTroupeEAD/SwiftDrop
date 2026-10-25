@@ -3,7 +3,7 @@
 > **Status:** Draft / Proposed (For Review in Team Meeting 2)  
 > **Author:** Member 9 — Minidu Dhananjana  
 > **Purpose:** One page of **shared rules** every member must agree with Member 9, so that all 10 services build, run, deploy and migrate together. It also answers the questions other members asked Member 9 in their drafts, and lists the places where submitted drafts disagree with team decisions.  
-> **Based on:** the group decisions of 2026-10-24, the repo docs (SRS, ADR-001/002, AGENTS.md, `docs/operations/*`, `database-schema.md`) and the drafts submitted on this branch by Members 2, 4, 7 and 10 (checked 2026-10-25).  
+> **Based on:** the group decisions of 2026-10-24, the repo docs (SRS, ADR-001/002, AGENTS.md, `docs/operations/*`, `database-schema.md`) and the drafts submitted on this branch by Members 2, 3, 4, 7 and 10 (checked 2026-10-25).  
 > **How to reply:** tick your row in §6, or write your objection next to the item number (e.g. "A5: I disagree because…").
 
 ---
@@ -13,7 +13,7 @@
 | # | Topic | Agreement | Source / status |
 | :-: | :--- | :--- | :--- |
 | **A1** | **Service names and ports** | `core-api` **8080** · `tracking-api` **8081** · `ai-assistant` **8000** · `web` **3000** · `outbox-relay` / `event-worker`: small internal health port (M8 to name). The same names are used in Compose, Kubernetes and Traefik | ADR-001, `dynamic-routes.yml`, `environment-variables.md` |
-| **A2** | **Health and metrics paths** | Every HTTP service exposes **`/health/live`** (process only, never checks the DB), **`/health/ready`** (checks its own dependencies; returns 503 when one is down) and **`/metrics`**. **Internal only**: never routed by Traefik | ✅ group decision C1 (SRS §6.2) |
+| **A2** | **Health and metrics paths** | Every HTTP service exposes **`/health/live`** (process only, never checks the DB), **`/health/ready`** (checks only the dependencies the *whole* service cannot work without; returns 503 when one is down) and **`/metrics`**. **Internal only**: never routed by Traefik. For core-api, readiness checks **PostgreSQL only**. Optional or external dependencies (object storage, LLM, email, webhooks) must **not** make pods unready: their failures are handled per request (e.g. 503 on photo upload only), otherwise one outside outage takes the whole API offline | ✅ group decision C1 (SRS §6.2) + readiness rule (proposal) |
 | **A3** | **Dockerfile rules** | multi-stage build · pinned base image (no `latest`) · **`USER 10001:10001`** · no secrets inside the image · `.dockerignore` · `EXPOSE` the A1 port · JSON logs to stdout · handle SIGTERM. A health check must not use tools the image doesn't contain (e.g. `curl` is **not** in `python:*-slim` or distroless images) | security-notes §6, SRS SEC-016 |
 | **A4** | **Env vars** | every variable your service reads must be listed in `docs/operations/environment-variables.md` and the root `.env.example` (placeholders only). New variables: send them to Member 9, who updates both in one PR | SRS §11.1–11.3 |
 | **A5** | **Secrets (Kubernetes)** | Shared names: `postgres-secrets` (app `DATABASE_URL`), `postgres-migrator-secrets` (migration URL), `rabbitmq-secrets`, `jwt-secrets` (private key), `integrations-secrets` (Google, LLM, email/SMS, object storage). **Module-specific secrets** use the pattern `<service>-<module>-secrets` (e.g. `core-api-merchants-secrets`). A key needed by **two services** (e.g. `WEBHOOK_SECRET_ENCRYPTION_KEY`, used by core-api and the worker) goes into one shared secret that both mount. Never commit real values | ✅ C4 decision + this proposal for the new cases |
@@ -91,6 +91,11 @@
 | **K9** | Members 4 and 7 | timestamp-named migrations, plus stub `users`/audit tables | D2 vote; stubs stay in test folders (D4) | Members 4 and 7 |
 | **K10** | Members 4 and 7 | separate Compose files (`compose.yml`, `docker-compose.m7.yml`) | merged into the one `deploy/docker-compose.yml` by Member 9 (A7) | Member 9 |
 | **K11** | Member 9's own drafts | 6-digit migration numbers with reserved 000001–000011; migrate Job `backoffLimit: 2`; flat `.yml` files; role names | update after the votes on D2, D1, A8, D6 | Member 9 |
+| **K12** | Member 3 | migration `000003_dispatch_and_delivery`, which runs **before parcels and couriers exist**, but its tables have foreign keys to them | must run **after** parcels (M2) and couriers in the D3 order; file name per the D2 vote | Member 3 |
+| **K13** | Member 3 | seed file inside `core-api/migrations/seeds/`, loaded with `psql` | seeds are not migrations: run them through `make seed` / the seed binary (D12) | Member 3 + Member 2 |
+| **K14** | Member 3 | `/health/ready` also checks **Cloudflare R2** | core-api readiness = PostgreSQL only (A2); an R2 outage should fail photo uploads only, not take the whole core-api offline | Member 3 |
+| **K15** | Member 3 | env names `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | `environment-variables.md` says `OBJECT_STORAGE_*`. **Proposal: adopt Member 3's names** (code examples already exist); Member 9 updates the env doc and puts the keys in `integrations-secrets` | Member 9 |
+| **K16** | Member 3 | `docker compose up -d postgres minio` (root Compose), DB URL `postgres:postgres@…/swiftdrop` | `make up` (A7); database `swiftdrop_db` with the `swiftdrop_app` login (D6) | Member 3 |
 
 ## 5. What each member agrees with Member 9 (checklist)
 
@@ -98,7 +103,7 @@
 | :--- | :--- | :-: |
 | **M1 Umesh** | A1–A6, A10–A13 · real `users`/roles migrations first (D3, D4) · JWT key delivery (`jwt-secrets` private key, public key as file mount) · review of the DB login roles (D6) · Google callback path | ❌ |
 | **M2 Hansi** | A1–A13 · D1–D12 · seed command (D12) · core-api pool size (D8) · owner of `idempotency_keys` (proposed: Member 2) | ✅ |
-| **M3 Kalani** | A1–A6, A10–A13 · migrations in D3 order · proof storage choice (MinIO locally; K8s option) | ❌ |
+| **M3 Kalani** | K12–K16 · A1–A6, A10–A13 · proof storage: **Cloudflare R2 in production, MinIO locally** (from Member 3's draft; this settles the storage part of C26). Member 9 creates the R2 bucket keys as secrets | ✅ (added 2026-10-24 by Poorna) |
 | **M4 Nagitha** | K8, K9 · secret pattern A5 · webhook key shared with M8 · D6 role names | ✅ |
 | **M5 Senuji** | A1–A6, A10–A13 · SSE and public tracking paths · Redis need · HPA range · `swiftdrop_tracking_ro` | ❌ |
 | **M6 Sajini** | A1, A3, A4, A7, A9, A12, A13 · web build command and `VITE_*` names · Nginx on port 3000 | ❌ (the first M6 draft PR, #1, was reverted) |

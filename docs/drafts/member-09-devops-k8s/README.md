@@ -19,6 +19,16 @@
 
 ---
 
+## Team agreements with Member 9 (read this first)
+
+📄 **[team-agreements-with-member-09.md](./team-agreements-with-member-09.md)**: the shared rules every member agrees with Member 9:
+- ports, health paths, Dockerfile rules, env vars and secrets, the Compose/Makefile stack, Kubernetes layout, gateway split, request ID, metrics, CI;
+- the database rules: migration tool, file names, order, stubs, review, DB roles, rights, connection budget, timeouts, driver, seed.
+
+It also has answers to every question other members asked Member 9, a list of conflicts found in submitted drafts, and a sign-off table.
+
+---
+
 ## How this module differs from business modules
 
 The 8-document template was written for business modules such as Parcels or Merchants. Member 9's module is a **technical supporting module**: it has **no business entities, no business REST API and no domain events**. Where the template asks for those, the docs explain the platform equivalent:
