@@ -1,33 +1,36 @@
 # SwiftDrop Infrastructure & Deployment Tier (`deploy/`)
 
 > **Primary Ownership:**  
-> - **Member 9:** DevOps, Kubernetes Manifests, Helm Charts, CI/CD & Observability  
+> - **Member 9:** DevOps, Kubernetes Manifests, Helm Charts, CI/CD, Observability & Database Coordinator  
 > - **Member 7:** API Gateway & Edge Routing Policies (`deploy/gateway/`)  
 > - **Member 8:** Outbox Reconciliation CronJob & Event Worker Deployment  
-> **Target Environment:** K3s Lightweight Kubernetes on single-node VPS / Cloud Provider
+> **Target Environment:** K3s Lightweight Kubernetes on single-node VPS / Cloud Provider | Local Docker Compose
 
 ---
 
-## 1. Workload Architecture & Classification
+## 1. Workload Architecture & Service Topology
 
-To guarantee data safety and prevent volume mount conflicts, cluster workloads are strictly separated into **Stateless** and **Stateful** paradigms:
+To guarantee data safety, high availability, and prevent volume mount conflicts, cluster workloads are strictly separated into **Stateless**, **Stateful**, and **Scheduled** paradigms:
 
 ```
 SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 ├── Edge & Gateway Tier:
-│   └── Traefik Ingress Controller (Deployment, NodePort / HostPort, Cloudflare Real-IP trust)
+│   └── Traefik Ingress Controller (Ports: :80 HTTP, :443 HTTPS, :8090 Dashboard)
 ├── Stateless Workloads (Deployments):
 │   ├── core-api (Go Modular Monolith: :8080)
-│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA)
-│   ├── ai-assistant (FastAPI Service: :8000)
-│   ├── web (React/TS Unified SPA: :3000)
-│   ├── outbox-relay (Go Transactional Outbox Publisher daemon)
-│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA)
+│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA, replicas 2-5)
+│   ├── ai-assistant (FastAPI Service: :8000 — Zero DB access)
+│   ├── web (React/TS Unified SPA + Nginx: :3000)
+│   ├── outbox-relay (Go Transactional Outbox Publisher daemon — Singleton replicas: 1)
+│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA, replicas 1-5)
+├── Database Release Migration (Job):
+│   └── core-api-migrate-job (One-shot Job per release, backoffLimit: 0)
 ├── Scheduled Batch Workloads (CronJob):
-│   └── swiftdrop-outbox-reconciler (CronJob: `*/10 * * * *` — Sweeps stuck outbox entries & delivery timeouts)
+│   └── swiftdrop-outbox-reconciler (CronJob: `*/10 * * * *` — Sweeps stuck outbox rows & retries)
 └── Stateful Workloads (StatefulSets):
     ├── postgres (PostgreSQL 16 StatefulSet + headless Service + 10Gi PVC on `local-path`)
-    └── rabbitmq (RabbitMQ 3.13 StatefulSet + headless Service + 5Gi PVC on `local-path`)
+    ├── rabbitmq (RabbitMQ 3.13 StatefulSet + headless Service + 5Gi PVC on `local-path`)
+    └── redis (Optional Ephemeral Redis for multi-replica Tracking SSE fan-out)
 ```
 
 ---
@@ -37,18 +40,23 @@ SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 ```
 deploy/
 ├── README.md                            # Living deployment documentation (This file)
+├── docker-compose.yml                   # Unified local development stack (make up)
 ├── gateway/                             # Edge gateway and reverse proxy (Member 7)
 │   ├── README.md                        # Gateway architecture and local Docker run guide
 │   └── traefik/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
 │       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
 └── kubernetes/                          # Kubernetes resource manifests (Member 9)
-    ├── postgres-statefulset.yml         # Authoritative PostgreSQL 16 StatefulSet & headless service
-    ├── rabbitmq-statefulset.yml         # RabbitMQ 3.13 event broker StatefulSet & headless service
-    ├── cronjob-reconciliation.yml       # Periodic outbox sweeper & delivery audit CronJob
-    └── autoscaling/                     # Bonus criteria autoscaling profiles (SRS §15.3)
-        ├── hpa-tracking.yml             # CPU-based HorizontalPodAutoscaler for Tracking API
-        └── keda-event-worker.yml        # RabbitMQ queue depth ScaledObject for Event Worker
+    ├── namespace.yaml                   # Namespace definition (swiftdrop)
+    ├── postgres/                        # PostgreSQL 16 StatefulSet, Service, PVC
+    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet, Service, PVC
+    ├── redis/                           # Ephemeral Redis StatefulSet / Deployment
+    ├── core-api/                        # Deployment, Service, ConfigMap, migrate-job.yaml
+    ├── tracking-api/                    # Deployment, Service, hpa.yaml
+    ├── messaging/                       # Relay Deployment, Worker Deployment, keda-scaledobject.yaml
+    ├── ai-assistant/                    # Deployment, Service, ConfigMap
+    ├── web/                             # Deployment, Service (Port 3000)
+    └── monitoring/                      # Prometheus & Grafana manifests
 ```
 
 ---
@@ -65,7 +73,7 @@ As specified in **SRS §11.2** (*"do not assume a Deployment alone makes statefu
 ## 4. Cloudflare + Traefik Real-IP Trust
 
 Because Cloudflare sits in front of the cluster edge, Traefik is configured with `forwardedHeaders.trustedIPs` in `deploy/gateway/traefik/traefik.yml` covering all official Cloudflare IPv4 CIDR blocks.
-- **Without trusted IPs:** Traefik would attribute all inbound traffic to Cloudflare's edge IPs, causing the 30 req/min rate limiter on `/api/v1/tracking` to lock out all users globally.
+- **Without trusted IPs:** Traefik would attribute all inbound traffic to Cloudflare's edge IPs, causing rate limiters to lock out all users globally.
 - **With trusted IPs:** Traefik restores the true client IP from `CF-Connecting-IP` / `X-Forwarded-For`, isolating rate-limiting buckets per visitor.
 
 ---
@@ -73,25 +81,38 @@ Because Cloudflare sits in front of the cluster edge, Traefik is configured with
 ## 5. Micro-Scaling Profile (HPA & KEDA)
 
 To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (OOM) crashes on a single-node VPS, autoscalers are configured with **Micro-Scaling demonstration envelopes**:
-- **Tracking API (HPA):** Scales from `1` &rarr; `2` replicas when CPU utilization exceeds 50%.
-- **Event Worker (KEDA):** Scales from `1` &rarr; `2` replicas when the `parcel.events` queue backlog exceeds 10 messages.
+- **Tracking API (HPA):** Scales from `2` &rarr; `5` replicas when CPU utilization exceeds 70%.
+- **Event Worker (KEDA):** Scales from `1` &rarr; `5` replicas when the `q.notifications.worker` or `q.webhooks.dispatcher` queue backlog exceeds 10 messages.
+- **Outbox Relay:** Strictly a singleton (`replicas: 1`) to eliminate row lock contention.
 
 ---
 
-## 6. Local / Cluster Deployment Commands
+## 6. Database Governance & Connection Pooling Budget
+
+PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling). Connection budgets are strictly enforced per pod ConfigMap:
+- `core-api`: 12 conns/pod $\times$ 4 replicas = 48
+- `tracking-api`: 5 conns/pod $\times$ 4 replicas = 20
+- `outbox-relay`: 5 conns
+- `event-worker`: 10 conns/pod $\times$ 3 replicas = 30
+- `reconciler`: 2 conns
+- **Active Subsystem Total:** 105 connections
+- **Headroom for migrations, admin & growth:** 45 connections
+
+---
+
+## 7. Local & Cluster Deployment Commands
 
 ```bash
-# 1. Create the SwiftDrop namespace
-kubectl create namespace swiftdrop
+# 1. Start unified local Docker Compose stack
+make up
 
-# 2. Deploy Stateful Persistence (Postgres & RabbitMQ)
-kubectl apply -f deploy/kubernetes/postgres-statefulset.yml
-kubectl apply -f deploy/kubernetes/rabbitmq-statefulset.yml
+# 2. Run sequential database migrations (000001 to 000011)
+make migrate-up
 
-# 3. Deploy Periodic Reconciliation CronJob
-kubectl apply -f deploy/kubernetes/cronjob-reconciliation.yml
+# 3. Seed demonstration data (refuses in production)
+make seed
 
-# 4. Deploy Autoscaling Profiles (Optional / Demo)
-kubectl apply -f deploy/kubernetes/autoscaling/hpa-tracking.yml
-kubectl apply -f deploy/kubernetes/autoscaling/keda-event-worker.yml
+# 4. Run automated test suites
+make test
+make test-e2e
 ```

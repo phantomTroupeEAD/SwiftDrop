@@ -118,6 +118,18 @@ Detailed inspection revealed internal discrepancies where a single member's docu
 3. **Port Allocation & Environment Configuration:** In `doc-08` Section 4, Member 5 left service port as an unconfirmed open decision.
    - *Fix:* Pin container port to **`:8081`** (`PORT=8081`) aligned with Member 9 Agreement A1.
 
+### 2.9 Member 09 Contradictions
+1. **Migration Naming Convention (Timestamps vs 6-Digit Sequential):** In `team-agreements-with-member-09.md` (item D2) and `doc-08`, Member 9 proposed timestamps (`YYYYMMDDHHMMSS`), whereas AGENTS.md Section 7 and the team vote ratified 6-digit sequential numbers (`000NNN_name.up.sql`).
+   - *Fix:* Unanimously lock in the 6-digit prefix format (`000001` through `000011`) for the canonical migration sequence.
+2. **Kubernetes Manifest Directory Layout (Flat `.yml` vs Per-Service `.yaml`):** In `doc-03` lines 94–100, manifests were listed as flat files with `.yml` extensions, whereas in Agreement A8 and updated guidelines, a per-service modular folder layout (`deploy/kubernetes/<service>/`) using `.yaml` was mandated.
+   - *Fix:* Adopt the per-service directory structure (`deploy/kubernetes/<service>/`) with standard `.yaml` extensions.
+3. **Database Migration Runner in Kubernetes (`initContainer` vs `Job`):** In `doc-03` line 80, Member 9 considered running migrations via pod `initContainer`, while in Agreement D1 and `doc-05`, Member 9 mandated a one-time release Job.
+   - *Fix:* Mandate a standalone Kubernetes Job (`deploy/kubernetes/core-api/migrate-job.yaml`) with `backoffLimit: 0` per release to eliminate multi-pod DDL locking races.
+4. **Image Tagging in CronJob Manifests:** In `doc-06` PLT-006, Member 9 noted their existing CronJob manifest uses `:latest`, violating Agreement A3.
+   - *Fix:* Purge `:latest` across all manifests; pin tags strictly to `<git-sha>`.
+5. **Performance Latency Target Ambiguity:** In `doc-03`, Member 9 highlighted that SRS specifies p95 <= 500ms for Core API, while `database-schema.md` states 200ms.
+   - *Fix:* Standardize SLA: Core API end-to-end transactional HTTP requests p95 <= 500ms (SRS NFR-PERF-001); internal DB query execution p95 <= 50ms; Edge Traefik proxy overhead p95 <= 15ms.
+
 ---
 
 ## 3. Inter-Member Contradictions & Boundary Conflicts
