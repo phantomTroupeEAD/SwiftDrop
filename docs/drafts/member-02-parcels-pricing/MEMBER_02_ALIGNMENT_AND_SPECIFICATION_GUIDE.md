@@ -290,7 +290,7 @@ CREATE TABLE parcels (
     current_status VARCHAR(32) NOT NULL DEFAULT 'CREATED'
         CHECK (current_status IN (
             'CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 
-            'DELIVERED', 'FAILED', 'RETURNED', 'CANCELLED'
+            'OUT_FOR_DELIVERY', 'DELIVERED', 'ATTEMPT_FAILED', 'FAILED', 'RETURNED', 'CANCELLED'
         )),
     weight_kg NUMERIC(6, 3) NOT NULL CHECK (weight_kg > 0 AND weight_kg <= 30.0),
     length_cm NUMERIC(6, 2) NOT NULL CHECK (length_cm > 0 AND length_cm <= 150.0),

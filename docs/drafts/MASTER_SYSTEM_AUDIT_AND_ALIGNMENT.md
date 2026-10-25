@@ -29,7 +29,7 @@ Every requirement in **SwiftDrop SRS v1.0**, the **Assignment Rubric**, and **Te
 | :---: | :--- | :--- | :--- | :--- |
 | **M1** | **Identity, Access & Security** | FR-AUTH-001–007, SEC-001–006, SEC-011 | Docs 1–8 submitted | **Low:** Complete 8-document suite submitted. Identified minor alignment items: fix migration naming (`20261021000001` $\to$ `000001_create_users_and_roles.up.sql`); combine `users.role` with `roles` lookup table; align seed domain to `@swiftdrop.com`. |
 | **M2** | **Parcels & Pricing** | FR-PRC-001–004, FR-BOK-001–006, SEC-009 | Docs 1–8 submitted | **Low:** Post-review alignment complete (v2.0.0). Ratified binding integer cents tariff, JSONB address snapshots, 15-min quote TTL, optimistic locking (`version`), and `idempotency_keys` table. |
-| **M3** | **Dispatch, Couriers & POD** | FR-DSP-001–004, FR-POD-001–005, ADR-004 | Docs 1–8 + Questionnaire | **Medium:** Migration ordering flaw (FK before PK); seed files in migration folder; R2 checked in readiness probe; storage env naming mismatch. |
+| **M3** | **Dispatch, Couriers & POD** | FR-DSP-001–004, FR-POD-001–005, ADR-004 | Docs 1–8 + Questionnaire | **Low:** Post-review alignment complete (v2.0.0). Split into migrations 000006 & 000007; decoupled R2 from readiness probe; harmonized current_zone_id and assignment status lifecycle; pessimistic locking and ADR-004 invariants bound. |
 | **M4** | **Merchant Integration** | FR-MER-001–011, SEC-007, SEC-010 | Docs 1–8 + Tests/Evidence | **Low:** Exceptional depth, but unresolved U-01–U-47 questions; webhook secret hashed instead of encrypted; timestamp migrations; DB role names. |
 | **M5** | **Tracking & Real-Time SSE** | FR-TRK-001–005, SEC-008, NFR-001 | README only | **High:** Full 8-doc suite not submitted. Needs SSE stream protocol, Redis fan-out architecture, read-only DB projection queries, and public PII masking rules. |
 | **M6** | **Customer/Merchant Web** | FR-UI-001–004, UX-001–005 | README only | **High:** Full 8-doc suite not submitted. Needs booking wizard state flow, real-time SSE hook integration, merchant batch CSV UI, and `data-testid` E2E conventions. |
@@ -83,6 +83,14 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Standardize on `/health/live`, `/health/ready`, and `/metrics`.
 3. **Container Packaging:** In `doc-08`, Member 8 builds two separate images (`swiftdrop/outbox-relay:latest` and `swiftdrop/event-worker:latest`) under `USER 65532:65532`.
    - *Fix:* Build a single multi-binary image `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>` running as `USER 10001:10001` (Rule A3 & K18).
+
+### 2.6 Member 03 Contradictions
+1. **Delivery Zone Key Inconsistency (`zone_code` vs `zone_id`):** In `doc-01`, `doc-04`, and `doc-05`, Member 3 defines foreign key `zone_code REFERENCES delivery_zones(code)`. In Member 7's canonical schema (`000002_create_delivery_zones.up.sql`), the primary key is `id VARCHAR(32)`.
+   - *Fix:* Standardize column as `current_zone_id VARCHAR(32) REFERENCES delivery_zones(id) ON DELETE SET NULL`.
+2. **Assignment Status Lifecycle Enum:** In `doc-05`, the check constraint allows only `ASSIGNED`, `COMPLETED`, `CANCELLED`, while `doc-04` and capacity queries evaluate `status = 'ACTIVE'`.
+   - *Fix:* Standardize on `status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED', 'REASSIGNED', 'CANCELLED'))`.
+3. **Storage Driver Configuration Naming:** In `doc-08`, Member 3 configures `STORAGE_DRIVER`, while Member 9 specifies `OBJECT_STORAGE_DRIVER`.
+   - *Fix:* Configuration loader maps `OBJECT_STORAGE_DRIVER` as primary key with fallback to `STORAGE_DRIVER`.
 
 ---
 
