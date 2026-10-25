@@ -377,7 +377,15 @@ spec:
         protocol: amqp
         queueName: q.notifications.worker
         mode: QueueLength
-        value: "10" # Scales up when queue backlog exceeds 10 messages
+        value: "10" # Scales up when notification queue backlog exceeds 10 messages
+      authenticationRef:
+        name: keda-rabbitmq-auth
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.webhooks.dispatcher
+        mode: QueueLength
+        value: "10" # Scales up when webhook dispatcher queue backlog exceeds 10 messages (Agreement C7)
       authenticationRef:
         name: keda-rabbitmq-auth
 ```
@@ -385,7 +393,7 @@ spec:
 ---
 
 ### 6.3 Scheduled Reconciliation CronJob (`deploy/kubernetes/reconciliation-cronjob.yml`)
-Periodically audits for stuck outbox events (>5m) and overdue webhook retries:
+Periodically audits for stuck outbox events (>5m) and overdue webhook retries (Member 09 Agreement C10):
 
 ```yaml
 apiVersion: batch/v1
@@ -394,7 +402,7 @@ metadata:
   name: reconciliation-worker
   namespace: swiftdrop
 spec:
-  schedule: "*/5 * * * *" # Runs every 5 minutes
+  schedule: "*/10 * * * *" # Runs every 10 minutes (Agreement C10)
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
@@ -408,6 +416,7 @@ spec:
             - name: reconciler
               image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
               command: ["/usr/local/bin/reconcile"]
+              args: ["--stale-threshold=5m", "--batch-size=50"]
               envFrom:
                 - configMapRef:
                     name: messaging-config
