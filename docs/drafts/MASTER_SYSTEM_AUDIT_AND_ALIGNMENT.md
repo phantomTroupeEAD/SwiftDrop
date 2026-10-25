@@ -66,6 +66,20 @@ Detailed inspection revealed internal discrepancies where a single member's docu
 2. **Pricing Currency Minor Units:** In `doc-03`, Member 2 refers to floating-point `3.50 LKR`, while in `doc-05` specifying `bigint base_fee_cents`.
    - *Fix:* Enforce integer minor units (`bigint` cents in LKR) everywhere. Floating-point numbers are strictly prohibited.
 
+### 2.4 Member 01 Contradictions
+1. **Account State Machine vs Database Schema:** In `doc-02` Section 3.1, Member 1 specifies user states (`PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`, `DEACTIVATED`), while in `doc-05` Member 1 only defines `is_active BOOLEAN`. A boolean cannot distinguish between an administratively suspended account and an unverified or deactivated account.
+   - *Fix:* Define `status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED'))` in the `users` table.
+2. **Google Redirect URI Bypass:** In `doc-08`, Member 1 configures `GOOGLE_REDIRECT_URI` directly to `localhost:8080`, bypassing Traefik Gateway ports 80/443.
+   - *Fix:* Route through the gateway origin (`http://localhost/api/v1/auth/google/callback` or `https://swiftdrop.example.com/api/v1/auth/google/callback`).
+
+### 2.5 Member 08 Contradictions
+1. **Webhook Secret Hash vs HMAC Signing Key:** In `doc-01` and `doc-05`, Member 8 names the secret column `secret_hash` and inserts plaintext keys into it, yet in `doc-02`, `doc-04`, and `doc-07`, Member 8 uses it to compute `HMAC-SHA256(payload, secret)`. One-way hashes cannot be decrypted to compute HMAC.
+   - *Fix:* Align with Member 4's encrypted `secret_ciphertext BYTEA` (AES-256-GCM) via `merchant_webhook_targets_view` and decrypt using `WEBHOOK_SECRET_ENCRYPTION_KEY`.
+2. **Health Probe Paths:** In `doc-08` manifests, Member 8 uses `/livez` and `/readyz` instead of `/health/live` and `/health/ready` (mandated by Rule A2 & K17).
+   - *Fix:* Standardize on `/health/live`, `/health/ready`, and `/metrics`.
+3. **Container Packaging:** In `doc-08`, Member 8 builds two separate images (`swiftdrop/outbox-relay:latest` and `swiftdrop/event-worker:latest`) under `USER 65532:65532`.
+   - *Fix:* Build a single multi-binary image `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>` running as `USER 10001:10001` (Rule A3 & K18).
+
 ---
 
 ## 3. Inter-Member Contradictions & Boundary Conflicts
