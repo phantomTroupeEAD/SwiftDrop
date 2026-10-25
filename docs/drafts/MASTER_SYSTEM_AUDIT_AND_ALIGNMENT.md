@@ -3,7 +3,7 @@
 > **Authority:** Comprehensive Repository Audit & Architectural Alignment Document  
 > **Status:** Authoritative Team Baseline (Resolving Draft Discrepancies Ahead of Team Meeting 2)  
 > **Target Audience:** All 10 SwiftDrop Team Members, Evaluators, and AI Coding Agents  
-> **Date:** 25 October 2026 | **Version:** 1.0.0
+> **Date:** 25 October 2026 | **Version:** 2.2.0
 
 ---
 
@@ -28,7 +28,7 @@ Every requirement in **SwiftDrop SRS v1.0**, the **Assignment Rubric**, and **Te
 | Member | Domain & Ownership | SRS Requirements Covered | Status in `docs/drafts/` | Gap / Missing Work Identified & Assigned |
 | :---: | :--- | :--- | :--- | :--- |
 | **M1** | **Identity, Access & Security** | FR-AUTH-001–007, SEC-001–006, SEC-011 | Docs 1–8 submitted | **Low:** Complete 8-document suite submitted. Identified minor alignment items: fix migration naming (`20261021000001` $\to$ `000001_create_users_and_roles.up.sql`); combine `users.role` with `roles` lookup table; align seed domain to `@swiftdrop.com`. |
-| **M2** | **Parcels & Pricing** | FR-PRC-001–004, FR-BOK-001–006, SEC-009 | Docs 1–8 submitted | **Medium:** Docs 1–8 are abstract templates filled with "to be agreed". Needs concrete tariff formula, integer cents currency, idempotency table ownership, and state transition lock. |
+| **M2** | **Parcels & Pricing** | FR-PRC-001–004, FR-BOK-001–006, SEC-009 | Docs 1–8 submitted | **Low:** Post-review alignment complete (v2.0.0). Ratified binding integer cents tariff, JSONB address snapshots, 15-min quote TTL, optimistic locking (`version`), and `idempotency_keys` table. |
 | **M3** | **Dispatch, Couriers & POD** | FR-DSP-001–004, FR-POD-001–005, ADR-004 | Docs 1–8 + Questionnaire | **Medium:** Migration ordering flaw (FK before PK); seed files in migration folder; R2 checked in readiness probe; storage env naming mismatch. |
 | **M4** | **Merchant Integration** | FR-MER-001–011, SEC-007, SEC-010 | Docs 1–8 + Tests/Evidence | **Low:** Exceptional depth, but unresolved U-01–U-47 questions; webhook secret hashed instead of encrypted; timestamp migrations; DB role names. |
 | **M5** | **Tracking & Real-Time SSE** | FR-TRK-001–005, SEC-008, NFR-001 | README only | **High:** Full 8-doc suite not submitted. Needs SSE stream protocol, Redis fan-out architecture, read-only DB projection queries, and public PII masking rules. |
@@ -65,6 +65,10 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Standardize canonical endpoint as **`POST /api/v1/pricing/quotes`**. An alias or redirect from `/pricing/estimate` may be provided if legacy clients request it.
 2. **Pricing Currency Minor Units:** In `doc-03`, Member 2 refers to floating-point `3.50 LKR`, while in `doc-05` specifying `bigint base_fee_cents`.
    - *Fix:* Enforce integer minor units (`bigint` cents in LKR) everywhere. Floating-point numbers are strictly prohibited.
+3. **Address Snapshot Model (JSONB vs Child Table):** In `doc-03`/`doc-04`, pickup and drop-off addresses are structured JSON objects in API payloads. In `doc-05` Section 4.2, Member 2 introduces a relational child table `parcel_addresses`, while in Section 3 Notes stating address storage is an open question.
+   - *Fix:* Mandate immutable JSONB address snapshots directly on the `parcels` table (`pickup_address JSONB NOT NULL`, `dropoff_address JSONB NOT NULL`). This guarantees point-in-time snapshot immutability, prevents relational joins on parcel queries, and shields historical deliveries from retroactive profile edits.
+4. **Quote Persistence vs Booking Dependency:** In `doc-02` line 132 and `doc-05` Section 3, quote persistence is marked "optional", while in `doc-04` Section 4.3 `POST /api/v1/parcels` requires `"quote_id"`.
+   - *Fix:* Quotes **must be persisted** in `pricing_quotes` with an explicit 15-minute validity window (`expires_at TIMESTAMPTZ NOT NULL`). Booking supports both quote-referenced bookings and direct dynamic fee calculations.
 
 ### 2.4 Member 01 Contradictions
 1. **Account State Machine vs Database Schema:** In `doc-02` Section 3.1, Member 1 specifies user states (`PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`, `DEACTIVATED`), while in `doc-05` Member 1 only defines `is_active BOOLEAN`. A boolean cannot distinguish between an administratively suspended account and an unverified or deactivated account.
