@@ -46,25 +46,25 @@ The module shall aim to:
 10. Provide automated tests, database migrations, API documentation, and reproducible setup instructions for the module.
 
 ## 2. Scope and Responsibilities
-
-### 2.1 In-Scope Responsibilities
+### 2.1 In-Scope Responsibilities
 
 | Capability | Responsibility |
 |---|---|
-| Parcel booking | Receive, validate, and process parcel-creation requests. |
-| Parcel data | Maintain authoritative parcel business records within the agreed schema. |
-| Tracking number | Generate or assign a unique public tracking number and enforce uniqueness. |
-| Pricing and estimation | Calculate fees using approved, configurable rules. |
-| Price snapshot | Preserve the accepted fee, currency, and applicable pricing-rule version with the booking. |
-| Parcel lifecycle | Validate permitted parcel-state transitions and reject illegal transitions. |
-| Status history | Record status changes with timestamps, actors, and applicable notes or references. |
-| Parcel history API | Provide authorized access to the parcel's chronological history. |
-| Receipt data | Provide the booking and pricing data required for receipt presentation or generation. |
-| Idempotency | Prevent duplicate parcel creation for retried requests using the same valid idempotency key. |
-| Persistence | Implement module-owned PostgreSQL migrations, constraints, and indexes. |
-| Event production | Create applicable outbox records through the shared event interface in coordination with Member 8. |
-| Quality assurance | Write unit and integration tests for booking, pricing, persistence, idempotency, and lifecycle rules. |
-| Documentation | Maintain API examples, pricing rules, module README, test instructions, and known limitations. |
+| Parcel booking | Receive, validate, and process parcel-creation requests for customers and authorized merchants via both quoted booking (`quote_id`) and direct booking paths. |
+| Parcel data | Maintain authoritative parcel business records within the canonical PostgreSQL schema, including immutable JSONB address snapshots (`pickup_address`, `dropoff_address`). |
+| Tracking number | Generate unique public tracking numbers in the canonical format `SD-YYYYMMDD-XXXXXX` and enforce database uniqueness with bounded collision retries. |
+| Pricing and estimation | Calculate deterministic fees via `POST /api/v1/pricing/quotes` using approved rule-based tariff formulas, volumetric calculations (divisor 5000), and service-level multipliers. |
+| Quote persistence | Persist 15-minute validity quote records in `pricing_quotes` to lock fees before booking. |
+| Price snapshot | Atomically preserve the accepted fee (`price_cents` in integer minor units), currency (`LKR`), and pricing-rule/version reference directly on the parcel record. |
+| Parcel lifecycle | Validate permitted parcel-state transitions through the `Parcel` aggregate root (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`) with optimistic concurrency (`version`), rejecting illegal or direct SQL status updates. |
+| Status history | Atomically record every valid status transition in `parcel_status_history` with UTC timestamp, actor ID/role, reason code, notes, and aggregate version. |
+| Parcel history API | Provide authorized access to the parcel's chronological history via `GET /api/v1/parcels/{id}/history`. |
+| Receipt data | Expose `GET /api/v1/parcels/{id}/receipt` providing the booking and pricing snapshot data required for receipt presentation without recalculating against current tariffs. |
+| Idempotency | Enforce caller-scoped idempotency for non-idempotent mutations (`POST /api/v1/parcels`) using the canonical `idempotency_keys` table (24-hour retention, SHA-256 payload hash, HTTP 409 on payload mismatch). |
+| Persistence | Implement and maintain module-owned PostgreSQL migrations (`000004_create_pricing_rules.up.sql`, `000005_create_parcels_and_quotes.up.sql`, `000010_create_idempotency_keys.up.sql`), constraints, and performance indexes. |
+| Event production | Atomically write integration events (`parcel.booked.v1`, `parcel.cancelled.v1`) into the `outbox_events` table inside the business transaction for asynchronous relay by Member 8. |
+| Quality assurance | Write unit, repository, and integration tests for booking, pricing, persistence, idempotency, privacy masking, and lifecycle rules. |
+| Documentation | Maintain API contracts, pricing specifications, co-located module living documentation (`README.md`, `API.md`), test instructions, and operational runbooks. |
 
 ### 2.2 Explicit Exclusions
 
@@ -72,18 +72,17 @@ The module must not take ownership of capabilities assigned to other members.
 
 | Excluded Capability | Owner | Boundary |
 |---|---|---|
-| User registration, password handling, JWT issuance, and Google sign-in | Member 1 | The module consumes the approved authentication and authorization mechanisms. |
-| Shared courier assignment and reassignment operations | Member 3 | The module provides the authoritative parcel data and coordinates lifecycle rules with dispatch. |
-| Courier workload calculations and delivery execution | Member 3 | These belong to Dispatch & Couriers. |
-| Proof-of-delivery uploads and delivery-attempt management | Member 3 | The module coordinates required parcel-state transitions but does not own proof storage or attempt workflows. |
-| Independent Tracking API and real-time SSE delivery | Member 5 | The Tracking API reads authoritative parcel and status data; it does not define a competing parcel lifecycle. |
-| Customer and merchant user interfaces | Member 6 | The module exposes backend contracts consumed by the frontend. |
-| Dispatcher/admin interfaces and API Gateway configuration | Member 7 | The module publishes its API requirements and does not own gateway or frontend implementation. |
-| Outbox Relay, RabbitMQ topology, Event Worker, notification delivery, webhook retries, and dead-letter queues | Member 8 | The module writes agreed outbox records; Member 8 owns asynchronous publication and delivery processing. |
-| Platform-wide Docker Compose, Kubernetes, Helm, and observability configuration | Member 9 | The module supplies the service configuration and health/build information needed for integration. |
-| AI Assistant and MCP tools | Member 10 | The assistant consumes approved backend APIs; it does not access the module's database directly. |
-| Merchant credential issuance and webhook configuration | Member 4 | The module may support the shared parcel-creation capability, but merchant onboarding and credentials remain Member 4's responsibility. |
-| System-wide database governance | Team-appointed database coordinator | Member 2 owns the module's migrations and tables, subject to shared schema conventions and review. |
+| User registration, password handling, JWT issuance, and Google sign-in | Member 1 | The module consumes the approved authentication middleware and RBAC context (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`). |
+| Courier assignment, dispatch board, fleet capacity, and route sequencing | Member 3 | Member 3 coordinates dispatch; courier assignment is recorded via the `Parcel` aggregate contract. |
+| Courier delivery attempts and proof-of-delivery uploads | Member 3 | Member 3 owns `delivery_attempts` and proof assets (photos/signatures); Member 2 manages the resulting parcel status transitions (`ATTEMPT_FAILED`, `DELIVERED`). |
+| Independent Tracking API and real-time SSE delivery | Member 5 | The Tracking API reads authoritative parcel data and projects privacy-sanitized milestones; it does not alter parcel state. |
+| Customer and merchant user interfaces | Member 6 | Member 6 builds the frontend booking wizard, dashboard, and receipt view; frontend fee calculations are non-authoritative. |
+| Dispatcher/admin interfaces and API Gateway configuration | Member 7 | Member 7 manages dispatcher/admin portals and Traefik Ingress routing/rate-limiting policies. |
+| Outbox Relay daemon, RabbitMQ broker, Event Worker, notifications, and webhooks | Member 8 | Member 2 writes to `outbox_events`; Member 8 owns outbox polling, RabbitMQ delivery, notification dispatch, and merchant webhook retries/DLQ. |
+| Platform-wide Docker Compose, Kubernetes, Helm, and observability configuration | Member 9 | Member 9 manages container orchestration, database pool budgets, and deployment manifests. |
+| AI Assistant and MCP tools | Member 10 | The assistant consumes approved REST endpoints (`POST /api/v1/pricing/quotes`, `GET /api/v1/parcels/{id}`); zero direct database access. |
+| Merchant credential issuance, API keys, and webhook configuration | Member 4 | Member 4 owns `POST /api/v1/merchant/parcels` transport and tenant verification, delegating core parcel creation to Member 2's application use case. |
+| System-wide database governance | Database Coordinator / Member 9 | Member 2 owns its sequential migrations within the unified database schema conventions. |
 
 The exclusions do not remove the need for collaboration. Other modules may invoke the parcel or pricing capabilities through approved interfaces without taking ownership of their business rules or persistence.
 
@@ -95,59 +94,66 @@ The Parcel Management & Pricing capability is a logical bounded context within t
 
 The module must not require frontend code, tracking services, or event workers to reproduce its business rules independently.
 
-The current proposed repository layout is:
+The canonical Go Core API modular monolith directory structure is:
 
 ```text
 core-api/
 ├── internal/
 │   ├── parcels/
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── infrastructure/
-│   │   └── transport/
+│   │   ├── domain/           # Pure domain models (Parcel aggregate root, status state machine, events, domain errors)
+│   │   ├── application/      # Use cases (BookParcel, GetParcel, ListParcels, GetHistory, GetReceipt)
+│   │   ├── infrastructure/   # PostgreSQL repositories, outbox adapters, tracking number generator
+│   │   └── transport/        # HTTP handlers, DTO mapping, input validation
 │   ├── pricing/
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── infrastructure/
-│   │   └── transport/
-│   ├── events/
-│   └── platform/
-├── migrations/
-└── tests/
+│   │   ├── domain/           # Tariff calculation engine, volumetric weight formulas, pricing rules
+│   │   ├── application/      # Quote generation use case (CalculateQuoteUseCase)
+│   │   ├── infrastructure/   # Pricing rule and quote PostgreSQL repositories
+│   │   └── transport/        # HTTP quote handlers, request/response DTOs
+│   ├── events/               # Shared outbox writer contract and event envelope
+│   └── platform/             # Technical drivers (database pool, auth middleware, HTTP helpers)
+├── migrations/               # Canonical PostgreSQL migrations
+└── tests/                    # Integration and contract test suites
 ```
 
-This is a proposed organizational structure, not a requirement to create every directory regardless of need. The final package structure should follow the repository's agreed conventions and the complexity of each capability.
+Following Clean Architecture rules, the `domain/` layer has zero external dependencies (no `database/sql`, no `net/http`, no RabbitMQ imports).
 
 ### 3.2 Parcel Management Ownership
 
 The Parcel Management area owns:
 
-- The parcel aggregate and its business invariants.
-- Booking creation and parcel lifecycle validation.
-- Public tracking-number uniqueness.
-- The parcel's authoritative current status.
-- Parcel status-history records.
-- The application use cases for retrieving authorized parcel details, history, and receipt data.
-- The transactional coordination needed to persist booking or lifecycle changes and their required history/outbox records.
+- The `Parcel` aggregate root and its domain invariants.
+- Booking creation use cases for both customers and merchants.
+- Public tracking-number generation (`SD-YYYYMMDD-XXXXXX`) and uniqueness enforcement.
+- The parcel's authoritative current status state machine.
+- Immutable booking-time address snapshots (`pickup_address`, `dropoff_address` stored as JSONB).
+- Parcel status-history audit records in `parcel_status_history`.
+- Application use cases for authorized parcel details, history, and receipt data.
+- The atomic transaction persisting parcel state, history, idempotency records, and outbox integration events.
 
 ### 3.3 Pricing Ownership
 
 The Pricing area owns:
 
-- The delivery-fee calculation logic.
-- Validation of pricing-related inputs, including applicable parcel size and weight limits.
-- Evaluation of approved delivery zones or zone-based tariff rules.
-- Money representation, currency handling, and rounding according to the approved policy.
-- The applicable pricing-rule version used to calculate a fee.
-- The pricing snapshot included in a confirmed booking.
+- The deterministic delivery-fee calculation engine (`POST /api/v1/pricing/quotes`).
+- Validation of pricing-related inputs against configured operational thresholds (provisional: weight 0.01–50.0 kg, max length 150 cm).
+- Evaluation of the delivery-fee calculation formula. *(Provisional proposal pending team confirmation: Volumetric Weight (kg) = $\frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$)*.
+- Chargeable weight determination ($\max(\text{actual}, \text{volumetric})$) and billable extra weight calculation.
+- Evaluation of zone tariffs and service-level tiers. *(Provisional proposal pending team confirmation: `STANDARD` 1.0x, `EXPRESS` 1.5x, `SAME_DAY` 2.0x)*.
+- Strict integer minor-unit financial representation (`BIGINT` / `int64` in cents, currency `LKR`) — *Confirmed Project Standard*.
+- Quote generation and persistence with a price freeze window. *(Provisional proposal pending team confirmation: standard 15-minute expiration period)*.
+- Creation and persistence of the immutable accepted-price snapshot embedded in confirmed bookings — *Confirmed Project Standard*.
 
-The module must calculate prices on the server. It must not trust a client-submitted fee as the authoritative amount.
+> [!IMPORTANT]
+> **Provisional Pricing Notice (Pending Team Confirmation):**
+> The specific pricing formula, divisor (5000), service tier multipliers, numerical tariff rates, weight bands, and 15-minute quote validity window are **provisional proposals pending formal team confirmation**. All example figures are illustrative. The underlying architecture—server-side price calculation, integer minor units (LKR cents), quote persistence, and immutable accepted-price snapshots on `parcels`—is fixed and invariant.
+
+The module must calculate prices on the server. It must not trust a client-submitted fee as authoritative.
 
 ### 3.4 Authoritative Data
 
 PostgreSQL is the authoritative source for parcel business state.
 
-The module owns the parcel-related data assigned to it in the canonical database schema. Other modules may read approved fields or invoke published operations, but they must not create independent, conflicting parcel or status tables.
+The module owns the parcel-related tables assigned to it in the canonical database schema (`parcels`, `parcel_status_history`, `pricing_rules`, `pricing_quotes`, `idempotency_keys`). Other modules may read approved fields or invoke published operations, but they must not create independent, conflicting parcel or status tables.
 
 The module must not treat RabbitMQ messages, frontend state, tracking caches, or AI responses as authoritative parcel records.
 
@@ -157,95 +163,90 @@ The module must not treat RabbitMQ messages, frontend state, tracking caches, or
 
 | Dependency | Provider | Required Input or Capability |
 |---|---|---|
-| Authentication and identity context | Member 1 | Verified caller identity, role, and reusable authorization helpers. |
-| API conventions | Team | Base path, JSON conventions, error envelope, request IDs, and timestamp format. |
-| Database conventions | Team/database coordinator | Canonical identifiers, migration ordering, naming conventions, and shared constraints. |
-| Parcel lifecycle agreement | Members 2, 3, 5, and relevant team members | Approved statuses, legal transitions, actor permissions, and failed-delivery semantics. |
-| Pricing decisions | Team and relevant admin capability owners | Currency, pricing formula, zone model, limits, and rounding rules. |
-| Outbox/event interface | Member 8 | Event envelope, outbox-writing interface, schema versions, and transaction conventions. |
-| Customer interface requirements | Member 6 | Booking fields, estimate response, receipt requirements, and history display requirements. |
-| Merchant integration requirements | Member 4 | Agreed mechanism for merchant-originated parcel creation and merchant ownership context. |
+| Authentication and identity context | Member 1 | Verified caller identity (`user_id`), roles (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`), and tenant context via JWT middleware. |
+| API conventions | Shared Contract | Base path `/api/v1`, standard JSON envelopes (`{"data": ...}`, `{"error": ...}`), correlation IDs, and ISO 8601 UTC timestamps. |
+| Database conventions | Shared Contract / Member 9 | Canonical identifiers (`UUIDv4`), migration sequencing (`migrations/NNNNNN_name.up.sql`), and exact integer minor-unit conventions (`BIGINT`). |
+| Parcel lifecycle agreement | Members 2, 3, 5 | Approved 9-state lifecycle (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`), actor permissions, and ADR-004 failed-delivery semantics. |
+| Pricing decisions | Member 2 / Team | Canonical formula, volumetric divisor (5000), LKR minor units, zone IDs (`VARCHAR(64)`), and 15-minute quote validity. |
+| Outbox/event interface | Member 8 | Canonical event envelope, `outbox_events` table contract, event types `parcel.booked.v1` and `parcel.cancelled.v1`. |
+| Customer interface requirements | Member 6 | Booking wizard inputs, quote request DTO, receipt presentation fields. |
+| Merchant integration requirements | Member 4 | Transport endpoint `POST /api/v1/merchant/parcels`, merchant tenant verification, and delegation to Member 2's booking use case. |
 
 ### 4.2 Downstream Consumers
 
 | Consumer | Expected Interaction |
 |---|---|
-| Customer frontend — Member 6 | Requests fee estimates, creates bookings, and retrieves authorized parcel history and receipt data. |
-| Merchant integration — Member 4 | Uses the agreed parcel-creation capability for authenticated merchant orders. |
-| Dispatch & Couriers — Member 3 | Uses authoritative parcel data and coordinates legal lifecycle changes and status-history ownership. |
-| Tracking API — Member 5 | Reads current authoritative parcel status and approved tracking fields. |
-| Event-driven backend — Member 8 | Receives persisted outbox records for publication and asynchronous processing. |
-| AI Assistant — Member 10 | May call approved fee-estimation and tracking/history APIs, subject to authorization and data-disclosure rules. |
-| Admin/frontend capabilities — Member 7 | May consume approved pricing or zone-related APIs according to the final ownership agreement. |
+| Customer frontend — Member 6 | Requests fee quotes (`POST /api/v1/pricing/quotes`), creates bookings (`POST /api/v1/parcels`), and retrieves authorized parcel history and receipt data. |
+| Merchant integration — Member 4 | In-process invocation of Member 2's `CreateParcelUseCase` within the authenticated merchant tenant context. |
+| Dispatch & Couriers — Member 3 | Reads authoritative parcel state and invokes the `Parcel` aggregate methods to advance operational status (`ASSIGNED`, `PICKED_UP`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`). |
+| Tracking API — Member 5 | Reads authoritative parcel and status history records from PostgreSQL to construct read-optimized Server-Sent Events (SSE) and public tracking projections. |
+| Event-driven backend — Member 8 | Outbox Relay poller queries unpublished rows from `outbox_events` and publishes them to RabbitMQ. |
+| AI Assistant — Member 10 | Calls approved REST endpoints (`POST /api/v1/pricing/quotes`, `GET /api/v1/parcels/{id}`) through the API Gateway; zero direct database or message bus access. |
+| Admin / Operations — Member 7 | Consumes parcel and pricing data for admin reporting and zone/tariff maintenance. |
 
 ### 4.3 Collaboration Boundaries
 
-The following decisions must be agreed before dependent implementation is finalized:
-
-- Parcel fields, relationships, and status-history schema with Member 3 and the database coordinator.
-- The lifecycle and failed-delivery semantics with Members 3 and 5.
-- The event/outbox interface and transaction boundary with Member 8.
-- Merchant parcel-creation contracts with Member 4.
-- Customer-facing request and response contracts with Member 6.
-- Pricing-rule administration and zone ownership with Member 7 and the team.
+The following interface contracts govern collaboration across boundaries:
+- **Delivery Attempts:** Member 3 owns `delivery_attempts` logs. When an attempt fails, Member 3 records the attempt and invokes Member 2's `parcel.RecordFailedAttempt(reasonCode, courierID)` to increment `attempt_count` (max 3) and transition to `ATTEMPT_FAILED`.
+- **Proof of Delivery:** Member 3 captures photo/signature attachments in private object storage and provides the proof reference metadata when transitioning to `DELIVERED`.
+- **Merchant Ingress:** Member 4 owns API key authentication and the external path `POST /api/v1/merchant/parcels`, calling Member 2's internal application layer directly without HTTP overhead.
+- **Public Tracking Redaction:** Member 5 queries parcel records but strictly filters out private customer PII (recipient phone, street address, instructions) in accordance with Section 8.
 
 ## 5. Invariants and Business Guarantees
 
-The module must preserve the following invariants. Exact status names, pricing values, and transition permissions remain subject to the approved SRS and team decisions.
+The module strictly enforces the following core business invariants:
 
 ### 5.1 Parcel Invariants
 
-1. Every persisted parcel has a stable internal identifier.
-2. Every confirmed booking has a unique public tracking number.
-3. Required parcel fields must satisfy the approved validation rules before a booking is accepted.
-4. The current parcel status must be consistent with the agreed lifecycle state machine.
-5. A status transition must be validated by the domain/application logic rather than performed through an unrestricted database update.
-6. Each accepted status change must produce an appropriate status-history record.
-7. Status-history records are append-only under normal application operations; corrections must follow an explicitly approved audit procedure.
-8. Private parcel details and receipt data are available only to authorized owners or roles.
-9. Public tracking disclosure is restricted to the approved public field set.
+1. **Identity & Reference:** Every persisted parcel has an immutable internal `UUIDv4` identifier and a unique public tracking number in the format `SD-YYYYMMDD-XXXXXX`.
+2. **Immutable Address Snapshots:** Pickup and drop-off addresses are stored as JSONB snapshots on the `parcels` table at booking creation. Subsequent customer profile updates never alter existing bookings.
+3. **Validated Input Boundaries:** Weight must be between 0.100 kg and 50.000 kg. Dimensions must not exceed 150.00 cm per edge, with maximum combined girth ($L + 2(W+H)$) $\le 300.00$ cm.
+4. **Aggregate Root State Machine:** Parcel status transitions can only occur through the `Parcel` aggregate root methods, enforcing legal transitions and rejecting direct SQL updates.
+5. **Optimistic Concurrency Control:** Every parcel row includes an integer `version` column incremented on every transition. Stale concurrent updates fail with HTTP `409 Conflict`.
+6. **Append-Only Status History:** Every accepted status transition creates an immutable record in `parcel_status_history` within the same transaction.
+7. **Attempt Limits:** Delivery attempts are capped at 3 (`attempt_count <= 3`). Upon the third failure, the status must transition to terminal `RETURNED`.
+8. **Privacy Protection:** Private parcel details and full recipient addresses are available only to authenticated senders, authorized merchants, assigned couriers, and dispatchers.
 
 ### 5.2 Pricing Invariants
 
-1. The same valid inputs evaluated under the same pricing-rule version must produce the same result.
-2. Currency, units, precision, and rounding must follow the team-approved policy.
-3. Monetary values must use an exact representation, such as integer minor units or PostgreSQL `NUMERIC`, rather than binary floating-point arithmetic.
-4. Zone eligibility and parcel size/weight limits must be validated before a quote is accepted.
-5. A confirmed booking preserves the price accepted at booking time.
-6. Changes to future pricing rules must not silently rewrite historical booking prices.
+1. **Deterministic Calculation:** Identical inputs evaluated against the same pricing rule version produce identical fees.
+2. **Canonical Financial Representation:** All monetary amounts are stored as 64-bit integers (`BIGINT` / `int64`) in Sri Lankan Rupee minor units (**cents**). Floating-point arithmetic is strictly prohibited.
+3. **Volumetric Standard:** Volumetric weight is calculated using the divisor $5000 \text{ cm}^3/\text{kg}$. Chargeable weight is the greater of actual and volumetric weight.
+4. **Quote Immutability:** Generated quotes in `pricing_quotes` are valid for **15 minutes** (`expires_at = NOW() + 15m`).
+5. **Accepted Price Lock:** Confirmed bookings lock the accepted price (`price_cents`), currency (`LKR`), and rule version permanently onto the `parcels` record. Subsequent rule changes never alter booked prices.
+6. **No Fallback Guessing:** If no active, enabled pricing rule covers the requested zone pair, the pricing engine returns HTTP `422 Unprocessable Entity` (`PRICING_RULE_NOT_FOUND`). The system never fabricates a fee.
 
 ### 5.3 Idempotency and Transaction Invariants
 
-1. A repeated create request with the same idempotency key, caller/operation scope, and request content returns the prior result rather than creating another parcel.
-2. Reusing an idempotency key with a different request payload produces a conflict.
-3. Booking state, initial status history, and any required outbox event must be persisted atomically.
-4. For lifecycle changes, the parcel state, applicable status-history record, and corresponding outbox event must be committed in the same database transaction where required by the shared event design.
-5. External notifications and webhook delivery must not occur inside a long-running database transaction.
-6. Database constraints must reinforce important invariants, including unique tracking numbers and relevant foreign-key relationships.
+1. **Booking Idempotency:** Parcel bookings require an `Idempotency-Key` header (UUIDv4). Duplicate requests with the same key and payload within 24 hours return the cached response with `Idempotent-Replay: true`.
+2. **Payload Conflict Detection:** Reusing an idempotency key with a different request payload returns HTTP `409 Conflict` (`IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`).
+3. **Transaction Atomicity:** Parcel creation commits the parcel aggregate, JSONB address snapshots, initial status history, idempotency record, and outbox event (`parcel.booked.v1`) within a single PostgreSQL transaction.
+4. **Outbox Decoupling:** External notifications, webhooks, and RabbitMQ publishing are never executed inside the database transaction; they are handled asynchronously by Member 8's Outbox Relay.
+5. **Database-Level Enforcement:** Foreign keys (`ON DELETE RESTRICT`), unique indexes (`idx_parcels_tracking_number`, `idempotency_keys_pkey`), and check constraints enforce domain guarantees at the storage engine level.
 
 ## 6. What Other Modules May Request
 
-The Parcel Management & Pricing module exposes capabilities rather than allowing other modules to manipulate its internal state directly.
+The Parcel Management & Pricing module exposes strict capabilities rather than allowing other modules to manipulate internal tables directly.
 
 Approved callers may request:
 
-- A delivery-fee estimate for validated parcel inputs.
-- Creation of a parcel booking with the required ownership context.
-- Retrieval of parcel details subject to authorization and field-disclosure rules.
-- Retrieval of chronological parcel status history subject to authorization.
-- Retrieval of receipt data for an authorized booking.
-- Execution of an approved parcel lifecycle operation, where that operation belongs to the Parcel Management domain and the caller is permitted to perform it.
+- **Delivery Fee Quote:** `POST /api/v1/pricing/quotes` to calculate a fee and receive a 15-minute quote reference.
+- **Parcel Booking:** `POST /api/v1/parcels` with validated inputs and mandatory `Idempotency-Key`.
+- **Direct Merchant Booking:** Internal use case `parcels.CreateParcelUseCase` called by Member 4's merchant handler.
+- **Parcel Details:** `GET /api/v1/parcels/{id}` subject to authenticated ownership and role scoping.
+- **Parcel Listing:** `GET /api/v1/parcels` with bounded pagination (`page`, `per_page` $\le 100$).
+- **Status History:** `GET /api/v1/parcels/{id}/history` returning chronological status milestones.
+- **Receipt Data:** `GET /api/v1/parcels/{id}/receipt` returning accepted price snapshot data.
+- **Lifecycle Transition Execution:** Invoking the `Parcel` aggregate methods to execute valid transitions (`ASSIGNED`, `PICKED_UP`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`).
 
 Other modules must not:
 
-- Update parcel status through direct, unvalidated SQL.
-- Set a booking fee by trusting a client-supplied amount.
-- Bypass booking validation or idempotency.
-- Insert competing parcel or status-history records outside the canonical schema and approved transaction interfaces.
-- Treat a successful message publication as a substitute for committing the business state.
-- Expose private parcel data solely because the caller knows a parcel ID or tracking number.
-
-Exact endpoint paths and DTO schemas belong in Document 4, Interface & Integration Contract.
+- Execute direct SQL updates on parcel status (e.g. `UPDATE parcels SET current_status = ...`).
+- Pass a client-supplied fee to be saved as the authoritative booking price.
+- Bypass idempotency checks or input validation.
+- Create competing parcel or status history tables in PostgreSQL.
+- Publish events to RabbitMQ before the database transaction commits.
+- Expose unmasked recipient PII to public tracking clients.
 
 ## 7. Ownership of Files, Tables, APIs, and Configuration
 
@@ -253,117 +254,137 @@ Exact endpoint paths and DTO schemas belong in Document 4, Interface & Integrati
 
 | Path | Ownership |
 |---|---|
-| `core-api/internal/parcels/` | Member 2 — parcel domain, booking, lifecycle rules, and history use cases. |
-| `core-api/internal/pricing/` | Member 2 — pricing rules and fee calculation. |
-| `core-api/migrations/` | Member 2 owns parcel/pricing migrations; shared review and migration ordering are required. |
-| `core-api/tests/` | Member 2 contributes parcel/pricing tests; shared test conventions apply. |
-| `docs/` | Member 2 maintains module scope, pricing rules, API references, and module-specific documentation in the agreed documentation locations. |
-| `core-api/internal/events/` | Member 8 owns the shared event/outbox contract; Member 2 integrates with it without independently redefining it. |
-| `core-api/internal/identity/` | Member 1 owns identity and shared authorization primitives. |
-| `services/tracking/` | Member 5 owns the separately deployed Tracking API. |
-
-These boundaries describe primary ownership. Changes to shared files, migrations, or interfaces require coordination and review.
+| `core-api/internal/parcels/` | Member 2 — Parcel aggregate root, booking use cases, lifecycle state machine, status history, and receipt data. |
+| `core-api/internal/pricing/` | Member 2 — Pricing engine, volumetric calculations, tariff rules, quote persistence. |
+| `core-api/migrations/000004_create_pricing_rules.up.sql` | Member 2 — Schema for `pricing_rules` and `pricing_quotes`. |
+| `core-api/migrations/000005_create_parcels_and_quotes.up.sql` | Member 2 — Schema for `parcels` and `parcel_status_history`. |
+| `core-api/migrations/000010_create_idempotency_keys.up.sql` | Member 2 (Shared technical driver) — Schema for `idempotency_keys`. |
+| `core-api/tests/` | Member 2 contributes parcel and pricing unit, repository, and integration test suites. |
+| `docs/drafts/member-02-parcels-pricing/` | Member 2 authoritative specifications (doc-01 through doc-08). |
+| `core-api/internal/parcels/README.md`, `API.md` | Member 2 co-located living module documentation and living API contract. |
+| `core-api/internal/pricing/README.md`, `API.md` | Member 2 co-located living module documentation and living API contract. |
 
 ### 7.2 Database Ownership
 
-Member 2 owns the parcel/pricing tables or table portions formally assigned to the module. The following are expected data responsibilities, subject to the approved canonical ERD:
+Member 2 owns the following PostgreSQL tables within the authoritative database schema:
 
-- Parcel records and the accepted price snapshot.
-- Parcel status history.
-- Parcel-related idempotency records or the agreed shared idempotency storage mechanism.
-- Pricing-rule data only to the extent assigned to Member 2 after the team resolves pricing/zone administration ownership.
+- `parcels`: Core parcel aggregate, tracking number, status, JSONB address snapshots, accepted price snapshot, optimistic lock version.
+- `parcel_status_history`: Append-only chronological audit log of all parcel status transitions.
+- `pricing_rules`: Zone-pair tariff rates, base fees, per-kg rates, service multipliers, and effective validity windows.
+- `pricing_quotes`: Ephemeral 15-minute quote snapshots locking calculated prices prior to booking confirmation.
+- `idempotency_keys`: Central idempotency store tracking caller scope, request SHA-256 hash, and cached HTTP responses.
 
-The module may reference users, merchants, addresses, delivery zones, assignments, or other records owned by other modules. Referencing a record does not automatically transfer ownership of its schema or business rules.
-
-The final table names, columns, constraints, indexes, and migration order are defined in Document 5, Data & Persistence Specification.
+Referenced external tables (`delivery_zones` owned by Member 7/Admin; `users` owned by Member 1; `merchants` owned by Member 4; `delivery_attempts` owned by Member 3; `outbox_events` owned by Member 8) are coordinated via foreign keys and application identifiers without transferring schema ownership.
 
 ### 7.3 API Ownership
 
-Member 2 owns the implementation and contract for parcel-booking, fee-estimation, history, and receipt-data endpoints assigned to this module.
+Member 2 owns the implementation, OpenAPI specification, and maintenance of the following REST endpoints:
 
-The API contract must follow the team's versioning and error conventions. Illustrative paths may use `/api/v1`, but the final route inventory is confirmed in Document 4.
+- `POST /api/v1/pricing/quotes` (Calculate delivery fee and generate 15-minute quote)
+- `POST /api/v1/parcels` (Create parcel booking with idempotency key)
+- `GET /api/v1/parcels` (List authenticated caller's parcels with bounded pagination)
+- `GET /api/v1/parcels/{id}` (Get authorized parcel details)
+- `GET /api/v1/parcels/{id}/history` (Get parcel status audit timeline)
+- `GET /api/v1/parcels/{id}/receipt` (Get parcel booking receipt data)
+
+The merchant-facing endpoint `POST /api/v1/merchant/parcels` is owned by Member 4 at the transport and auth layer, which calls Member 2's application use case.
 
 ### 7.4 Queue and Event Ownership
 
-Member 2 does not own RabbitMQ queues, worker deployment, notification delivery, or webhook retry processing.
+Member 2 does not own RabbitMQ broker configuration, exchange bindings, consumer workers, or webhook delivery.
 
-Member 2 is responsible for requesting and recording the relevant domain/outbox event through the shared interface when a qualifying parcel business operation commits.
-
-Event names, payload schemas, versioning, and publication behavior must be agreed with Member 8 and documented in the shared event contract.
+Member 2 is responsible for:
+- Writing integration events (`parcel.booked.v1`, `parcel.cancelled.v1`) into the `outbox_events` table inside the booking/cancellation database transaction.
+- Providing consistent event payloads containing `event_id`, `event_type`, `aggregate_type: "parcel"`, `aggregate_id`, `version`, `timestamp`, `correlation_id`, and business payload.
 
 ### 7.5 Configuration Ownership
 
-Member 2 documents module-specific configuration, including any approved pricing defaults, limits, and database-related settings.
+Member 2 defines module-specific environment configuration in `.env.example`:
+- `PRICING_DEFAULT_CURRENCY=LKR`
+- `PRICING_QUOTE_TTL_MINUTES=15`
+- `PARCEL_MAX_WEIGHT_KG=50.0`
+- `PARCEL_MAX_DIMENSION_CM=150.0`
+- `IDEMPOTENCY_RETENTION_HOURS=24`
 
-Sensitive credentials must be supplied through the team's configuration mechanism. Real secrets must never be committed to source control.
+Real secrets must never be committed to source control.
 
-Pricing parameters that require runtime administration must use the approved configuration or database model rather than unexplained hard-coded values.
+## 8. Decision and Resolution Tracking
 
-## 8. Assumptions and Unresolved Decisions
+The table below summarizes the alignment between authoritative project sources, the comprehensive audit baseline, and decisions confirmed for implementation:
 
-This document defines module boundaries but does not silently settle project-wide decisions that remain open.
+| Domain Area | Audit / Baseline Recommendation | Authoritative Resolution Status | Supporting Source | Affected Documents |
+|---|---|---|---|---|
+| **Pricing Endpoint & Quote Persistence** | Standardize on `POST /api/v1/pricing/quotes` with persisted quote record. | **RESOLVED:** Adopted canonical endpoint `POST /api/v1/pricing/quotes` and quote persistence in `pricing_quotes`. | Audit §4.A, `docs/contracts/pricing-rules.md` §6 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Monetary Representation** | Store all monetary values as integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floating point. | **RESOLVED:** Canonical fields `fee_cents`, `price_cents`, `base_fee_cents`, `per_kg_fee_cents`, `currency = 'LKR'`. Strict prohibition of floats. | Engineering Standards §5.2, `pricing-rules.md` §1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Pricing Formula & Divisor (5000)** | Volumetric divisor 5000, chargeable weight $\max(\text{actual}, \text{volumetric})$, billable extra weight $\lceil \max(0, \text{chargeable} - 1.0) \rceil$. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Adopted as working design proposal. Mathematical logic and divisor must be formally ratified before production release. | Audit §4.C, `pricing-rules.md` §2–3 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Tariffs & Service Multipliers** | Illustrative base/per-kg rates and multipliers (`STANDARD` 1.0x, `EXPRESS` 1.5x, `SAME_DAY` 2.0x). | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Example rates and multiplier ratios are illustrative placeholders. Production tariffs await commercial sign-off. | Audit §4.C | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Quote Validity Period** | 15-minute price freeze window (`expires_at = created_at + 15m`). | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Adopted as working design proposal from Audit §4.A. Validity duration must be ratified by team. | Audit §4.A | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Address Data Model** | Replace separate `parcel_addresses` child rows with immutable `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL` directly on `parcels`. | **RESOLVED:** Single canonical model is JSONB snapshots on `parcels`. Separate `parcel_addresses` table removed from active design. | Audit §4.D, SRS §7.1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Tracking Number** | Format `SD-YYYYMMDD-XXXXXX` using Crockford's Base32 alphabet. Bounded collision retry (max 3). | **RESOLVED:** Standardized format `SD-YYYYMMDD-XXXXXX`. Tracking number is a public identifier, not an auth secret. | Audit §4.G, SRS FR-PAR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Parcel Lifecycle** | 9-state machine: `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`. | **RESOLVED:** All transitions evaluated by `Parcel` aggregate root. Optimistic locking via `version INT`. | `domain-boundaries.md` §3, ADR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Failed Delivery** | Decouple `delivery_attempts` (Member 3) from `parcels` (Member 2). Increment `attempt_count` (max 3). | **RESOLVED:** Transient `ATTEMPT_FAILED` requires dispatcher rescheduling; terminal `RETURNED` upon 3rd failure. | ADR-004, SRS §13.2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Idempotency** | Header `Idempotency-Key` (UUIDv4), table `idempotency_keys` with caller scope, SHA-256 hash, 24h TTL, HTTP 409 on mismatch. | **RESOLVED:** Single canonical idempotency implementation shared via platform driver. | Audit §4.H, `api-conventions.md` §4 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Database Migrations** | Sequential numbers: `000004_create_pricing_rules.up.sql`, `000005_create_parcels_and_quotes.up.sql`, `000010_create_idempotency_keys.up.sql`. `delivery_zones.id` is `VARCHAR(64)`. | **RESOLVED:** Adopted migration schedule aligned with Member 9 database coordination. | Audit §4.I, `database-schema.md` | Docs 1, 5, 8 |
+| **Outbox Events** | Atomic commit of `parcels`, `parcel_status_history`, and `outbox_events` (`parcel.booked.v1`, `parcel.cancelled.v1`). | **RESOLVED:** Producer responsibility separated from Member 8 relay daemon. | Audit §4.J, `event-contracts.md` §2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Merchant Ingress** | Merchant route `POST /api/v1/merchant/parcels` owned by Member 4; invokes Member 2 use case in-process. | **RESOLVED:** Member 2 does not document competing merchant routes as canonical. | Audit §4.E, `domain-boundaries.md` §2 | Docs 1, 2, 3, 4 |
+| **Tariff Administration** | Administrative write endpoints for zones and pricing rules (`/api/v1/admin/pricing-rules`). | **PENDING TEAM CONFIRMATION:** Candidate ownership belongs to Member 7 (Admin UI / Gateway) and Member 1 (Admin RBAC). Member 2 provides domain calculation interfaces. | Team Work Division §3 (Member 7) | Docs 1, 2, 3, 4 |
+| **Receipt Rendering** | Downloadable PDF presentation vs structured JSON receipt endpoint. | **PENDING TEAM CONFIRMATION:** Member 2 standardizes `GET /api/v1/parcels/{id}/receipt` returning structured JSON receipt data; presentation/PDF download coordinated with Member 6. | SRS FR-PAR-008 | Docs 1, 2, 3, 4, 6 |
 
-| Decision | Current Position | Required Action |
-|---|---|---|
-| Pricing formula | Must be configurable, deterministic, and documented. Exact formula and rates are not established here. | Agree on base fee, weight/dimension factors, zone rules, currency, and rounding. |
-| Pricing-rule administration | Pricing calculation belongs to Member 2; administrative UI and zone/reporting capabilities involve Member 7 and potentially Member 4. | Confirm ownership of pricing-rule persistence and administrative write operations. |
-| Parcel statuses | A controlled state machine is required. Exact status names and transitions must match the approved lifecycle. | Agree on valid transitions and actor permissions with Members 3 and 5. |
-| Failed delivery and redelivery | Delivery attempts and proof belong to Member 3. Parcel-level consequences require a shared decision. | Define whether failure changes parcel status, how reattempts work, and how history is retained. |
-| Merchant booking | Merchant onboarding and credentials belong to Member 4. Parcel creation logic is owned by Member 2. | Agree on the shared use case and caller/tenant context. |
-| Idempotency storage | Duplicate booking protection is required. | Select a module-owned or shared implementation and define key scope, retention, and request hashing. |
-| Outbox contract | Member 8 owns the shared event/outbox mechanism. | Agree on the interface, event envelope, and transaction participation. |
-| Public tracking disclosure | The Tracking API is owned by Member 5. | Agree on public fields and ensure private parcel fields are not exposed. |
-| Receipt format | Member 2 provides receipt data; presentation/download integration must be coordinated with Member 6. | Confirm required receipt fields and output format. |
-| Schema and migrations | Member 2 owns module migrations within a shared canonical database. | Agree on migration naming, ordering, review, and conflict resolution. |
+### 8.1 Pricing-Policy Dependency & Impact Analysis (If Pricing Policy Changes)
 
-Any decision that changes module ownership or a published interface must be recorded in the team's decision log and reflected in the relevant specifications.
+The delivery pricing policy has been architected to isolate mathematical formulas and tariff configurations from core parcel booking and state persistence. If the team changes the pricing policy, the following table details the exact impact and required modifications:
+
+| Component / Layer | Stable / Invariant Aspect | Impact If Pricing Policy Changes | Specific Files / Tables Affected |
+| :--- | :--- | :--- | :--- |
+| **Core Architecture & Persistence** | PostgreSQL persistence, atomic transaction, `parcels` table schema, accepted-price snapshot storage, outbox events. | **Zero Impact:** Booking transactions, address snapshots, and parcel lifecycle remain completely unchanged. | `parcels`, `parcel_status_history`, `outbox_events` |
+| **Monetary Standard** | Integer minor units (`BIGINT` in SQL, `int64` in Go, LKR cents). No binary floating-point. | **Zero Impact:** Any revised tariff must still be stored and calculated in integer minor units. | All schemas and domain structs |
+| **API Contracts** | `POST /api/v1/pricing/quotes` endpoint path and base envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`). | **DTO Breakdown Update:** `breakdown` JSON object fields in quote response may need adjusting if weight bands or multiplier tiers change. | `core-api/internal/pricing/API.md`, `doc-03`, `doc-04` |
+| **Database Schema** | `pricing_quotes` and `pricing_rules` table existence and foreign key relationships. | **Column & Constraint Alterations:** If formula replaces multipliers or alters volumetric divisor, `pricing_rules.volumetric_factor` or `pricing_rules.service_multiplier_*` columns and DDL check constraints must be updated via migration. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05` |
+| **Quote Expiry Policy** | Quote verification during booking (`quote_id` lookup and freeze enforcement). | **TTL & Error Handling:** If 15-minute window is lengthened or shortened, `PRICING_QUOTE_TTL_MINUTES` config and checkout timers in frontend require updating. | `.env.example`, `doc-08`, Member 6 UI |
+| **Validation Limits** | Bounded validation in Go transport DTOs before persistence. | **Boundary Checks:** If maximum weight (50 kg) or dimension (150 cm) changes, validator logic and error codes (`WEIGHT_LIMIT_EXCEEDED`) adapt. | `internal/pricing/transport/dto.go`, `doc-03` |
+| **Automated Tests** | Test structure, mocks, transaction rollback assertions, idempotency checks. | **Test Assertions Update:** Test cases `TC-PRC-001`, `TC-PRC-002`, `TC-PRC-003` must be updated with newly approved mathematical expected values. | `doc-06`, `internal/pricing/domain/formula_test.go` |
 
 ## 9. Out-of-Scope Work
 
-The following activities are outside this document's implementation scope:
+The following activities are strictly outside Member 2's implementation scope:
 
-- Implementing the complete customer, merchant, dispatcher, or administrator frontend.
-- Implementing Google OAuth, JWT issuance, or password management.
-- Building the separately deployed Tracking API or its SSE connection management.
-- Implementing courier dispatch algorithms, courier assignments, delivery-attempt execution, or proof-file storage.
-- Building the Outbox Relay, RabbitMQ consumers, email/SMS provider, or outbound merchant webhook worker.
-- Implementing the AI Assistant/MCP service.
-- Owning platform-wide Kubernetes and Helm deployment.
-- Defining the entire system ERD or replacing the team's canonical database governance process.
+- Implementing Google OAuth, user registration, JWT token generation, or credential hashing (Member 1).
+- Building courier route dispatching algorithms, driver workload balancing, or mobile delivery apps (Member 3).
+- Storing high-resolution proof-of-delivery photos or raw SVG signature data in object storage (Member 3).
+- Implementing the independently deployed Tracking API service, Redis caching, or SSE connections (Member 5).
+- Building customer booking wizards or dispatcher boards in React (Members 6 and 7).
+- Implementing the Outbox Relay poller daemon, RabbitMQ exchange topology, or consumer workers (Member 8).
+- Managing platform-wide Kubernetes manifests, Helm charts, CI/CD pipelines, or Prometheus setups (Member 9).
+- Building Python/FastAPI AI Assistant tools or LLM integrations (Member 10).
 
-Member 2 remains responsible for providing the interfaces, data contracts, migrations, and tests required for these other components to integrate correctly.
+Member 2 remains responsible for providing the robust interfaces, data contracts, migrations, and test suites required for these components to integrate seamlessly.
 
 ## 10. Acceptance Criteria
 
-The module is considered ready for integration when the following conditions are demonstrated:
+The module is considered implementation-ready and acceptable when:
 
-1. A valid booking request creates exactly one parcel with a unique tracking number.
-2. Invalid or unsupported parcel fields return structured validation errors.
-3. Fee estimates are reproducible for the same inputs and pricing-rule version.
-4. The confirmed booking preserves the accepted price and currency information.
-5. Parcel history and receipt data can be retrieved by authorized callers.
-6. Unauthorized users cannot retrieve private parcel information by changing an identifier.
-7. Repeating a booking request with the same idempotency key and payload does not create a duplicate.
-8. Reusing an idempotency key with a different payload is rejected according to the agreed conflict contract.
-9. Illegal parcel-state transitions are rejected.
-10. Required parcel state, history, and outbox records are persisted atomically according to the agreed event design.
-11. Database migrations and indexes are reproducible in the team's documented environment.
-12. Unit and integration tests cover valid and invalid bookings, pricing boundaries, idempotency, history access, and lifecycle rules.
-13. API examples and module setup instructions are maintained and consistent with the implementation.
-14. The module is integrated through the agreed shared interfaces and passes review.
+1. **Deterministic Pricing:** A valid quote request (`POST /api/v1/pricing/quotes`) deterministically calculates delivery fees using LKR integer cents, volumetric divisor 5000, and returns a 15-minute quote snapshot.
+2. **Atomic Booking:** Submitting `POST /api/v1/parcels` with a valid quote or inputs atomically creates the parcel record, JSONB address snapshots, initial status history, idempotency record, and outbox event (`parcel.booked.v1`).
+3. **Idempotency Guarantees:** Repeating an identical booking with the same `Idempotency-Key` returns the original cached response with `Idempotent-Replay: true`. Reusing a key with a different payload returns HTTP `409 Conflict`.
+4. **Tracking Number Integrity:** Every booked parcel receives an unambiguous `SD-YYYYMMDD-XXXXXX` tracking number, backed by database unique constraints and collision retry logic.
+5. **State Machine Invariants:** All lifecycle status changes are evaluated by the `Parcel` aggregate root, incrementing `version` for optimistic locking, rejecting direct SQL mutations, and creating immutable audit records in `parcel_status_history`.
+6. **Failed Delivery Handling:** Delivery failures increment `attempt_count` up to 3; transient failures enter `ATTEMPT_FAILED` requiring dispatcher intervention, while the 3rd failure transitions to terminal `RETURNED`.
+7. **Authorization & Privacy:** Cross-customer and cross-tenant access attempts return HTTP `403 Forbidden` or `404 Not Found`. Public tracking views strictly redact recipient phone numbers and street addresses.
+8. **Receipt Historical Stability:** `GET /api/v1/parcels/{id}/receipt` retrieves accepted price snapshot values, unaffected by subsequent pricing-rule modifications.
+9. **Migration Repeatability:** PostgreSQL migrations (`000004`, `000005`, `000010`) execute cleanly on clean databases and support reproducible automated test suites.
+10. **Living Documentation Integrity:** Co-located living documentation (`README.md`, `API.md`) in `core-api/internal/parcels/` and `core-api/internal/pricing/` precisely mirrors implemented contracts.
 
 ## 11. Definition of Done
 
-For every completed feature, Member 2 must ensure that:
+For every completed capability, Member 2 must verify that:
 
-- The implementation matches the approved business rules and API contract.
-- Go code is formatted, builds successfully, and follows repository conventions.
-- Relevant automated tests pass.
-- Input validation, authorization, privacy, idempotency, and failure cases are covered.
-- Database migrations can be applied reproducibly.
-- Configuration examples contain placeholders rather than real secrets.
-- API documentation, module README, and known limitations are updated.
-- Changes are committed on an appropriate feature branch and reviewed before merging.
+- The implementation matches the approved domain boundaries, API specifications, and database schema.
+- Go code is formatted with `gofmt`, adheres to project standards, and passes `golangci-lint`.
+- Automated unit and integration tests cover happy paths, boundary conditions, authorization denial, idempotency replay, and transaction rollbacks.
+- Database migrations execute cleanly up and down in CI environments.
+- Configuration templates contain safe placeholders with zero hardcoded credentials or secrets.
+- Co-located module living documentation (`README.md` and `API.md`) and specifications are updated synchronously.
+- Changes are verified against a local PostgreSQL instance before pull request review.itted on an appropriate feature branch and reviewed before merging.
 - The feature can be demonstrated using the agreed local development environment.
 
 

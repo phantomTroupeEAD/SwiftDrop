@@ -1,291 +1,202 @@
 # SwiftDrop Parcel Delivery & Courier Management System
 
-# Document 7 — Security, Failure & Recovery Specification
+## Document 7 — Security, Failure & Recovery Specification
+
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
+> **Status:** Aligned Security Specification (Post-Audit v2.0.0 Alignment)  
+> **Date:** 25 October 2026  
+> **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
+
+---
 
 ## 1. Purpose and Authority
 
-This document defines security controls, relevant threats, failure behavior, and recovery rules for Member 2's Parcel Management & Pricing module. It supplements the shared SwiftDrop security and engineering standards; it does not replace or redefine the system-wide security policy.
+This document defines the application security guardrails, data privacy boundaries, failure modes, error recovery procedures, and fault-tolerance mechanisms for Member 2 (**Parcel Management & Pricing**) in the SwiftDrop Core API Go modular monolith.
 
-The source documents are proposed baselines awaiting team approval. Requirements that depend on unresolved decisions—such as the final authentication mechanism, authorization response policy, pricing rules, lifecycle semantics, retention periods, and idempotency retention—are explicitly identified and must not be treated as approved values.
+### 1.1 In-Scope Security Capabilities
+- **Server-Side Enforcement & Authority:** Strict rejection of client-supplied prices, status values, or unauthorized user/tenant identifiers.
+- **Tenant & Object Isolation (IDOR Prevention):** Scoping all queries by authenticated `customer_id` or `merchant_id` extracted from verified JWT claims.
+- **Public Tracking Privacy Masking:** Strict redaction of recipient phone numbers, exact street addresses, pricing, and internal delivery notes from public tracking projections.
+- **Idempotency Protection:** Enforcing unique `(key, caller_id)` constraints in PostgreSQL with SHA-256 payload fingerprinting and 24-hour TTL.
+- **Quote Expiration & Price Lock Security:** Rejection of expired ($> 15$m) or parameter-mismatched quotes to prevent tariff tampering.
+- **State Machine Integrity & OCC:** Enforcing the 9-state machine and optimistic concurrency control (`version` checks) to eliminate race conditions and unauthorized transitions.
+- **Transactional Atomicity:** Ensuring parcel state, status history, idempotency cache, and outbox integration records commit or roll back together.
 
-### 1.1 In scope
-
-- Authentication-context handling and authorization checks on parcel and pricing endpoints.
-- Customer ownership and merchant tenant isolation at the module boundary.
-- Validation of booking, quote, parcel identifiers, and state-transition requests.
-- Privacy controls for parcel addresses, recipient contacts, receipt data, history, logs, and event payloads.
-- Abuse controls for fee estimation, booking, public tracking references, and resource-intensive requests where Member 2 owns or contributes to the endpoint.
-- Safe handling of duplicate requests, concurrent updates, database failures, and transactional outbox failures.
-- Recovery coordination with Members 1, 3, 4, 5, 8, and 9.
-
-### 1.2 Out of scope / system-wide owners
-
-| Area | Owner / boundary |
-|---|---|
-| Identity provider, credentials, token issuance/validation, shared authentication middleware, and role definitions | Member 1; Member 2 must enforce the supplied identity/authorization contract on its own endpoints |
-| Merchant approval, API credentials, and merchant tenant identity | Member 4; Member 2 must not trust a caller-supplied merchant ID without a trusted authenticated context |
-| Courier assignment, delivery attempts, and proof-of-delivery | Member 3 |
-| Public/private tracking API, SSE and tracking response projection | Member 5; Member 2 supplies authoritative data under the agreed access boundary |
-| Outbox relay, RabbitMQ topology, event workers, notification/webhook retries and DLQ | Member 8; Member 2 writes business outbox records through the shared interface in the business transaction |
-| Gateway policy, platform secrets, network policy, deployment, centralized monitoring | Members 7 and 9 according to the approved architecture |
-| AI assistant tools and model/provider controls | Member 10; the assistant must use approved APIs and must not bypass Member 2 validation or authorization |
+---
 
 ## 2. Security Principles and Protected Assets
 
-1. **Server-side authority:** The server calculates or validates prices, checks ownership, validates state transitions, and applies business rules. Client-supplied role, owner, status, or price values are not authoritative.
-2. **Least privilege:** Every request, service identity, and database role receives only the access required for its task.
-3. **Single source of truth:** PostgreSQL is authoritative for parcel business state. RabbitMQ transports events; a cache or tracking projection must not become a competing authority.
-4. **Privacy by default:** Return only fields required by the caller's approved use case. Public tracking must expose an approved minimal field set.
-5. **Atomic business changes:** Parcel state, required status-history records, idempotency outcome, and outbox records must follow the approved transaction boundary. A partial business operation must not be reported as successful.
-6. **Fail closed for security:** If authentication, authorization, ownership, or tenant context cannot be established, protected reads and writes are denied.
-7. **Observable without leaking secrets:** Use request/correlation IDs and safe structured logs, but never log credentials, access tokens, API keys, webhook secrets, or unnecessary personal data.
-8. **Bounded recovery:** Retries must be finite or governed by an explicit retry policy. Reconciliation must be auditable and must not invent business state.
+1. **Zero Client Trust:** All delivery fees, tax calculations, chargeable weights, tracking numbers, and state transitions are calculated and validated server-side.
+2. **Least Privilege & Role Enforcement:** Access is strictly mediated via role-based access control (RBAC). A valid JWT token alone does not authorize access to foreign parcels.
+3. **Data Minimization & Public Masking:** Public endpoints must never leak customer PII, recipient phone numbers, or commercial pricing details.
+4. **Single System of Record:** PostgreSQL is the authoritative business store. Event brokers and read caches are non-authoritative.
+5. **Fail-Closed Semantics:** Any failure in authentication, permission evaluation, or parameter validation halts request processing and returns structured HTTP 400, 401, 403, 409, or 422 errors.
 
-### 2.1 Assets requiring protection
+### 2.1 Critical Protected Assets
+- **Customer & Recipient PII:** Names, mobile phone numbers, exact physical delivery addresses, and building access codes stored in `pickup_address` and `dropoff_address` JSONB snapshots.
+- **Financial & Commercial Data:** Tariff rules, base fees, volumetric factors, accepted price snapshots, and merchant-specific discounts.
+- **System State & History:** Immutable status transition logs in `parcel_status_history` and integration events in `outbox_events`.
+- **System Credentials:** PostgreSQL database credentials, JWT signing keys, and internal API secrets.
 
-- Internal parcel ID and public tracking number.
-- Pickup/drop-off addresses and customer/recipient contact information.
-- Parcel description, weight/dimensions, status history, receipt/accepted-price snapshot.
-- Pricing rules and rule versions, including any administration capability.
-- Customer/merchant ownership associations and trusted actor identity.
-- Idempotency keys, request fingerprints, and stored replay outcomes.
-- Outbox event IDs, payloads, correlation IDs, and publication state.
-- Database credentials, authentication tokens, application secrets, and operational configuration.
+---
 
 ## 3. Authentication, Authorization, Ownership and Tenant Isolation
 
-### 3.1 Authentication boundary
+### 3.1 Authentication Boundary
+All incoming HTTP requests to Member 2 endpoints pass through the platform authentication middleware (`core-api/internal/platform/auth/middleware.go`, owned by Member 1). The middleware validates JWT cryptographic signatures, checks expiration, and injects authenticated claims into `context.Context`:
+- `user_id` (`UUID`): Authenticated user identifier.
+- `tenant_id` (`UUID` / `string`): Authenticated merchant tenant identifier (for merchant principals).
+- `role` (`string`): Principal role (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`).
 
-- Member 2 endpoints must use the shared authentication middleware and trusted actor context supplied by Member 1.
-- Protected operations must reject missing, invalid, expired, or otherwise unacceptable credentials according to the shared auth contract.
-- Member 2 must not implement a second, inconsistent token parser or treat a Google identity alone as authorization to read or modify a parcel.
-- Internal module-to-module calls within the Go modular monolith should use the agreed in-process application interfaces and trusted context; do not add an unnecessary internal HTTP hop.
-- Exact token/session strategy and trusted service identity mechanism remain system-wide decisions for Member 1/team approval.
+### 3.2 Authorization Matrix
 
-### 3.2 Authorization matrix (proposed; confirm with approved role policy)
+| Endpoint | Method | Allowed Roles | Enforcement Mechanism |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/pricing/quotes` | `POST` | `CUSTOMER`, `MERCHANT`, `ADMIN`, Anonymous* | Evaluates active tariff rules; rate-limited. |
+| `/api/v1/parcels` | `POST` | `CUSTOMER` | Requires valid JWT; sets `customer_id = caller.user_id`. |
+| `/api/v1/parcels/{id}` | `GET` | `CUSTOMER`, `MERCHANT`, `COURIER`, `ADMIN` | Verifies `customer_id == caller.user_id` OR `merchant_id == caller.tenant_id` OR assigned courier. |
+| `/api/v1/parcels` | `GET` | `CUSTOMER`, `MERCHANT`, `ADMIN` | Injects `WHERE customer_id = $1` or `WHERE merchant_id = $1`. |
+| `/api/v1/parcels/{id}/history`| `GET` | `CUSTOMER`, `MERCHANT`, `COURIER`, `ADMIN` | Enforces ownership check; redacts courier internal notes. |
+| `/api/v1/parcels/{id}/receipt`| `GET` | `CUSTOMER`, `MERCHANT`, `ADMIN` | Enforces ownership check; returns frozen financial snapshot. |
+| `/api/v1/merchant/parcels` | `POST` | `MERCHANT` | Owned by Member 4 for transport/API-key auth; delegates to Member 2. |
 
-| Actor / context | Quote or fee estimate | Create parcel | Read parcel/history/receipt | Change parcel status |
-|---|---|---|---|---|
-| Anonymous visitor | Only if quote endpoint is approved as public and rate-limited | Deny | Deny private data; public tracking is a separate Member 5 contract | Deny |
-| Authenticated customer | Allowed within approved service scope | Own booking only | Own parcel data only | Deny except explicitly approved customer actions |
-| Authenticated merchant | Through Member 4's approved merchant flow; tenant-scoped | Only via approved merchant capability | Only own tenant's permitted data | Deny unless explicitly authorized |
-| Courier | Only if required by an approved use case | Deny | Only assigned/authorized delivery details, limited to required fields | Member 3's assignment/lifecycle rules govern |
-| Dispatcher/admin | As explicitly allowed by the approved role matrix | Only if an admin workflow is approved | Only for operational duties and authorized scope | Member 3/admin policy governs; never bypass lifecycle invariants |
-| Internal service | Only with explicit service permission and validated input | Only via documented interface | Only minimum fields needed | Only through the canonical parcel use case |
+*\*Note: Anonymous quote queries are subject to edge API Gateway rate limiting.*
 
-This matrix is a coordination baseline, not a substitute for the final role/permission matrix. UI visibility is not an authorization control. Every protected endpoint and application use case must enforce authorization server-side.
+### 3.3 Tenant Isolation & Anti-IDOR Protections
+To prevent Insecure Direct Object References (IDOR):
+1. **Repository Query Scoping:** SQL queries never execute unconstrained `SELECT * FROM parcels WHERE id = $1`. Queries from customer principals implicitly append `AND customer_id = $2`. Queries from merchant principals append `AND merchant_id = $2`.
+2. **Uniform Rejection Responses:** When a user requests a parcel ID that exists but belongs to a different user/tenant, the system returns `403 Forbidden` (or privacy-preserving `404 Not Found` if hiding resource existence) without confirming whether the ID is valid.
 
-### 3.3 Object ownership and tenant checks
+---
 
-- Resolve owner/merchant identity from trusted authentication context or the approved Member 4 integration contract, not from an unverified request field.
-- Include ownership/tenant scope in repository queries and mutation predicates where practical; do not fetch a private record and rely only on the frontend to hide it.
-- Changing a parcel UUID or tracking number must not allow a user to read or mutate another party's data.
-- Merchant-originated parcel creation must be tenant-scoped and idempotent under the agreed contract.
-- A forbidden or cross-tenant request must not modify parcel data, status history, idempotency outcomes belonging to another principal, or outbox records.
-- The team must decide whether inaccessible objects return `403 Forbidden` or a privacy-preserving `404 Not Found` consistently. Do not vary responses in a way that leaks record existence.
+## 4. Data Privacy & Public Disclosure Boundary
 
-## 4. Data Disclosure, Privacy and Logging
+Public parcel tracking (`/api/v1/tracking/public/{trackingNumber}`, implemented by Member 5) exposes milestone tracking for end-recipients. Member 2's domain data must be sanitized before exposure:
 
-### 4.1 Response disclosure rules
+```mermaid
+flowchart LR
+    subgraph M2Private["Member 2 Core Database (Authoritative)"]
+        P1["tracking_number"]
+        P2["current_status"]
+        P3["pickup_address (JSONB)"]
+        P4["dropoff_address (JSONB)"]
+        P5["price_cents & base_fee_cents"]
+        P6["special_instructions"]
+    end
 
-| Data | Authorized owner / operational use | Public tracking or unauthorized caller |
-|---|---|---|
-| Public tracking number and approved status | Return when required by the contract | Only the public fields explicitly approved by Member 5 |
-| Full pickup/drop-off address | Return only to authorized roles when needed | Must not be exposed |
-| Customer/recipient phone or email | Return only to authorized roles when needed | Must not be exposed |
-| Parcel description, private delivery notes, proof images/references | Restrict to roles with an approved operational need | Must not be exposed |
-| Accepted fee, currency, pricing-rule/version snapshot | Return to authorized owner/merchant as contract permits | Do not expose merchant-only or private receipt fields |
-| Internal IDs, actor IDs, tenant IDs, idempotency metadata | Use internally and expose only where the API contract requires it | Do not expose internal operational metadata unnecessarily |
-| Stack traces, SQL errors, secrets, environment values | Never return to clients | Never return to clients |
+    subgraph MaskingFilter["Privacy Masking & Projection Engine"]
+        MF["Filter & Redact Private Fields"]
+    end
 
-### 4.2 Data minimization and retention
+    subgraph M5Public["Member 5 Public Tracking Stream"]
+        PUB1["tracking_number: Visible"]
+        PUB2["status: Visible"]
+        PUB3["origin_city: Visible (City only)"]
+        PUB4["destination_city: Visible (City only)"]
+        PUB5["Phone & Street: REDACTED"]
+        PUB6["Financials: REDACTED"]
+    end
 
-- Collect only the contact, address, parcel, and pricing fields required for booking and fulfilment.
-- Keep accepted-price snapshots needed for a consistent receipt/audit trail; do not recalculate historical receipts from current pricing rules.
-- Do not copy full addresses, phone numbers, idempotency keys, credentials, or unnecessary payloads into events or logs.
-- Retention, deletion, legal/audit retention, and treatment of status history must be agreed with the team. This document does not invent retention durations.
-- Demo and automated test fixtures must use synthetic data only.
-- Public tracking disclosure is owned by Member 5 in coordination with Member 2; payloads and logs must follow the same privacy boundary.
+    M2Private --> MaskingFilter --> M5Public
+```
 
-### 4.3 Logging and audit
+### 4.1 Field-Level Privacy Classification
 
-Log relevant security and failure events using structured logs and request/correlation IDs. Suitable fields may include operation name, result category, timestamp, request ID, and a non-sensitive internal reference where approved.
+| Data Attribute | Storage Representation | Public Tracking View | Security Rationale |
+| :--- | :--- | :--- | :--- |
+| `tracking_number` | `VARCHAR(32)` | **Exposed** | Public operational lookup identifier. |
+| `status` | `VARCHAR(32)` | **Exposed** | Delivery milestone indicator. |
+| `pickup_address.contact_phone` | `JSONB` | **REDACTED** | High-risk personal contact information. |
+| `pickup_address.address_line1` | `JSONB` | **REDACTED** | Residential address privacy. |
+| `pickup_address.city` | `JSONB` | **Exposed** | General routing context (e.g., "Colombo 03"). |
+| `dropoff_address.contact_phone`| `JSONB` | **REDACTED** | High-risk personal contact information. |
+| `dropoff_address.address_line1`| `JSONB` | **REDACTED** | Residential address privacy. |
+| `dropoff_address.city` | `JSONB` | **Exposed** | General routing destination (e.g., "Peradeniya"). |
+| `price_cents` / `fee_cents` | `BIGINT` | **REDACTED** | Commercial confidentiality. |
+| `special_instructions` | `TEXT` | **REDACTED** | May contain security access codes or sensitive notes. |
 
-Never log passwords, access tokens, API keys, webhook secrets, full request bodies containing personal data, or database connection strings. Log authorization denials and repeated abuse in a way that supports investigation without exposing private parcel details. Status history/audit rows are business records and must not be confused with general application logs.
+---
 
-## 5. Input Validation and Abuse Controls
+## 5. Input Validation & Abuse Prevention
 
-- Validate required fields, formats, lengths, allowed enum values, measurement ranges, and cross-field constraints on the server.
-- Reject malformed JSON, unsupported content types, oversized requests, invalid identifiers, unsupported service levels, and unknown/invalid zone references according to the published contract.
-- Do not trust a client-supplied price, pricing version, parcel status, owner ID, or merchant ID as authoritative.
-- Use exact decimal or integer-minor-unit money representation; currency and rounding must follow the approved pricing decision.
-- Use parameterized database queries and safe serialization. Do not build SQL from user-controlled values.
-- Apply request-size limits and reasonable timeouts at the agreed gateway/application boundary.
-- Fee estimation and public tracking can be abused for enumeration or resource exhaustion. Rate limits and monitoring thresholds must be selected by the team/platform owners; no numeric limit is asserted here.
-- Ensure pagination and bounded query behavior for history/list endpoints where provided.
-- Validate public tracking numbers with the approved format and rate-limit lookup attempts through Member 5/gateway policy. Tracking references should be sufficiently hard to guess under the approved design.
-- Treat notes, address fields, merchant payloads, and other user-controlled text as untrusted data; escape output in consuming UIs and never execute or render it as trusted HTML.
-- Pricing rule administration must require the approved admin permission and audit changes. Exact administration API ownership must be confirmed with Member 7.
+### 5.1 Request Sanitization & Boundary Rules
+- **Physical Weight:** Constrained strictly between $0.01$ kg and $50.00$ kg. Values $\le 0$ or $> 50$ kg are rejected with `422 WEIGHT_LIMIT_EXCEEDED`.
+- **Dimensions:** Length, width, and height are each constrained between $1.0$ cm and $150.0$ cm. Values exceeding 150 cm are rejected with `422 DIMENSION_LIMIT_EXCEEDED`.
+- **Address Strings:** Contact names, address lines, and cities are trimmed and bounded to 255 characters to prevent buffer and memory exhaustion attacks.
+- **Tracking Number Format:** Validated against pattern `^SD-[0-9]{8}-[0-9A-Z]{6}$`.
 
-## 6. Idempotency, Concurrency and State Integrity
+### 5.2 SQL Injection & Sanitization
+All database interactions in Member 2 utilize parameterized prepared statements via `jackc/pgx/v5`. Direct SQL string concatenation is strictly prohibited across all repositories and query builders.
 
-### 6.1 Booking idempotency
+---
 
-- Parcel booking and merchant order creation must support the shared idempotency behavior agreed by the team.
-- For a repeated request with the same idempotency key and same effective request, return the original/replayed outcome according to the published contract and do not create another parcel.
-- Reusing a key with a different effective payload must return the agreed conflict response and must not create a second parcel.
-- Enforce uniqueness and concurrency safety in PostgreSQL, not only with an in-memory check.
-- Scope keys to the appropriate authenticated principal/tenant and operation according to the approved contract; never allow one caller to replay another caller's stored result.
-- Store only the minimum replay data needed and protect it as sensitive operational data.
-- Retention/expiry and behavior after expiry require explicit approval.
+## 6. Failure Modes, Edge Cases, and Recovery Procedures
 
-### 6.2 Status transition safety
+| Failure Scenario | Root Cause | Impact | Automated Recovery / System Behavior |
+| :--- | :--- | :--- | :--- |
+| **Quote Expired (> 15m)** | User delays checkout past quote TTL. | Booking submission with expired quote ID. | Server rejects with `422 QUOTE_EXPIRED`. Client must request a fresh quote via `POST /api/v1/pricing/quotes`. |
+| **Quote Parameter Mismatch** | Client tampers with weight or destination after quote. | Attempted tariff circumvention. | Server recomputes hash of booking inputs and rejects with `422 QUOTE_PARAM_MISMATCH`. |
+| **Idempotency Key Reuse** | Network timeout causes client retry with different body. | Potential duplicate or corrupted booking. | Server computes SHA-256 hash. If hash matches: returns cached 201. If hash differs: returns `409 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`. |
+| **Tracking Number Collision** | Random 6-char Base32 collision. | Database unique constraint violation on `tracking_number`. | Generator catches unique constraint error and automatically retries with a new seed up to 3 times before failing. |
+| **Database Failure Mid-Tx** | PostgreSQL crashes or connection drops during commit. | Incomplete transaction. | PostgreSQL rolls back entire transaction atomically; no orphan parcel, status history, or outbox record is committed. |
+| **Outbox Relay Failure** | RabbitMQ broker is temporarily down. | Integration events remain in `outbox_events`. | Core API booking succeeds. Outbox Relay (Member 8) retries publishing with exponential backoff once broker recovers. |
+| **Concurrent State Mutation** | Dispatcher and Courier update parcel status simultaneously. | Race condition / lost update. | Optimistic Concurrency Control checks `version`. The second transaction affects 0 rows and returns `409 VERSION_CONFLICT`. |
+| **Exceeded Delivery Attempts** | Courier fails 3rd delivery attempt. | Undeliverable shipment. | ADR-004 logic sets `attempt_count = 3`, marks status `ATTEMPT_FAILED`, and triggers terminal return transition to `RETURNED`. |
 
-- All status changes must go through the canonical parcel domain/application use case and approved lifecycle matrix.
-- Reject arbitrary status strings, illegal transitions, stale-version updates, and duplicate/conflicting transitions.
-- Status state, corresponding history/audit record, and required outbox event must commit atomically in one PostgreSQL transaction.
-- Never publish a domain event before its business transaction commits.
-- Member 3 owns courier execution details; Members 2, 3, and 5 must agree lifecycle states, actor permissions, failed-delivery semantics, and authoritative status ownership before final implementation.
-- A rejected transition must not leave a changed status, new history row, or outbox event.
+---
 
-## 7. Failure Modes and Required Behavior
+## 7. Operational Logging and Observability
 
-| Failure / threat | Expected safe behavior | Recovery / owner coordination |
-|---|---|---|
-| Missing/invalid authentication context | Reject protected operation; do not access private parcel data | Member 1 auth middleware; Member 2 integration tests |
-| Cross-customer or cross-tenant ID substitution | Deny access without changing data or leaking private fields | Member 1 ownership helpers; Member 4 tenant contract; Member 2 query-level enforcement |
-| Malformed/oversized booking request | Return structured client error; do not partially persist | Validation and request limits at agreed gateway/API boundary |
-| Pricing rule missing, disabled, or ambiguous | Return an explicit domain error; never invent a fallback tariff | Pricing policy/admin owner must define rule-selection behavior |
-| PostgreSQL unavailable before transaction | Return safe service/dependency error; do not claim booking succeeded | Member 9 environment/health; bounded client retry using idempotency |
-| Transaction fails partway through booking | Roll back all related writes; no partial parcel/history/outbox success | Database transaction and integration test |
-| Tracking-number collision | Unique constraint prevents duplicate; bounded generation retry or safe failure | Database constraint and tested generator policy |
-| Same idempotency key, same payload | Replay agreed result; no duplicate parcel | Member 2 idempotency store and database uniqueness |
-| Same key, different payload | Conflict; do not mutate original result or create another parcel | Stable request fingerprint and contract error |
-| Concurrent duplicate booking | At most one logical booking commits | Unique constraints/transactional coordination; concurrency test |
-| Concurrent conflicting status transitions | Reject stale/conflicting operation; retain one valid transition history | Canonical state/version check and transaction |
-| Required outbox write fails | Roll back the corresponding business change and history | Shared Member 8 outbox writer within the same transaction |
-| Outbox relay or RabbitMQ unavailable after commit | Booking/status transaction remains committed; event stays durable for retry; do not create a second business operation to compensate | Member 8 relay retry/monitoring; Member 9 observability |
-| Event published more than once | Downstream consumer handles duplicates idempotently; Member 2 must not assume exactly-once delivery | Member 8 consumer idempotency |
-| Public/private field accidentally added to DTO | Contract/security test fails before release; remove field or restrict endpoint | Member 2 and Member 5 disclosure review |
-| Logs contain personal data or secret | Treat as a security defect; restrict access and remove/rotate exposed secret as appropriate | Module owner plus platform/security owners; assess impact |
-| Migration fails | Stop release/startup path according to migration tooling; preserve diagnosable logs; do not manually edit shared DB silently | Database coordinator and Member 9 |
-| Stale/missing history detected | Flag for investigation; no silent history fabrication or destructive repair | Audited deterministic repair approved by team |
-| Unknown or stale cache/projection | Re-read authoritative PostgreSQL state or use documented fallback; do not present stale data as truth | Member 5 cache/read strategy |
-| Repeated fee-estimate or tracking enumeration abuse | Apply approved rate limit and safe response; record sanitized abuse signal | Gateway/platform owner and relevant API owner |
+### 7.1 Sanitized Logging Standards
+All log entries generated by Member 2 packages use structured JSON via `log/slog`.
+- **Mandatory Correlation IDs:** Every log entry must include `request_id` (propagated from HTTP header `X-Request-ID`) and `trace_id`.
+- **Strict PII Redaction:** Logs must NEVER contain passwords, JWT tokens, customer mobile numbers, street addresses, or credit card numbers.
+- **Non-Sensitive Operational Identifiers:** Logs may safely include `parcel_id`, `tracking_number`, `status`, `attempt_count`, and `fee_cents`.
 
-## 8. Recovery and Reconciliation Rules
+### 7.2 Core Health Checks & Metrics
+Member 2 exposes operational signals for platform monitoring (Member 9):
+- **Liveness Probe:** `GET /healthz` (returns 200 OK if service process is running).
+- **Readiness Probe:** `GET /readyz` (verifies PostgreSQL database connection pool health with `SELECT 1`).
+- **Operational Metrics:**
+  - `swiftdrop_parcel_bookings_total{status="created|failed"}`: Booking counter.
+  - `swiftdrop_pricing_quote_duration_seconds`: Histogram of tariff calculation latency.
+  - `swiftdrop_idempotency_conflicts_total`: Counter for 409 idempotency mismatches.
+  - `swiftdrop_state_machine_violations_total`: Counter for invalid state transitions.
 
-### 8.1 Database transaction failure
+---
 
-1. Do not return a successful booking/status response unless the required database transaction commits.
-2. Roll back parcel state, related address/price snapshot, initial or changed status history, idempotency completion state, and outbox write together when they belong to the same atomic operation.
-3. Return the agreed safe error envelope with request/correlation ID. Do not return raw SQL details or stack traces.
-4. If the client cannot tell whether a request committed because the connection failed after commit, it should retry with the same idempotency key; the server must resolve the retry using the persisted idempotency outcome.
+## 8. Alignment & Decision Tracking Matrix
 
-### 8.2 Outbox and broker failure
+| Security / Failure Topic | Initial Draft State | Aligned Final Specification | Source / Status |
+| :--- | :--- | :--- | :--- |
+| **Public Tracking Privacy** | Vague field list | Explicit masking matrix: redacts phone, street address, notes, fees | AGENTS.md Section 8 & SRS FR-PAR-009 |
+| **Quote TTL & Expiry** | Undefined quote TTL | 15-minute expiration window (`expires_at = created_at + 15m`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Tampering Protection** | Client supplied price | Server recomputes hash of booking inputs against frozen quote | Engineering Standards & Audit |
+| **Monetary Data Type** | Allowed binary floats | Integer LKR cents (`BIGINT`); prevents precision rounding exploits | Engineering Standards v1.0 Section 6 |
+| **Address Snapshot Integrity** | Child table `parcel_addresses` | Immutable JSONB snapshots on `parcels` | Database Schema Standards & Audit |
+| **Idempotency Mechanism** | Duplicate local ideas | Canonical `idempotency_keys` table (24h TTL, SHA-256 hash) | Engineering Standards v1.0 Section 7 |
+| **Delivery Failure Semantics**| Ambiguous terminal failure | ADR-004 3-attempt ceiling (`ATTEMPT_FAILED` $\to$ `RETURNED`) | ADR-004 Failed Delivery Semantics |
+| **Tariff Administration** | Mixed Member 2 admin claims | Admin write endpoints owned by M7/M1 | `PENDING TEAM CONFIRMATION` |
+| **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
-- Member 2 writes the outbox record through Member 8's agreed interface in the same transaction as the associated business change.
-- Once the business transaction commits, temporary RabbitMQ/relay unavailability must not cause the client to create a second parcel as a workaround.
-- Member 8 owns publishing, publisher confirmation, bounded retry/backoff, dead-letter behavior, and relay monitoring.
-- Outbox relay must mark a record published only after broker confirmation. A crash can cause duplicate publication; consumers must tolerate it.
-- Reconciliation may identify stale unpublished records and safely make them eligible for retry or raise an alert. It must not bypass the relay or fabricate a business event.
+### 8.1 Pricing Policy Dependency & Security Impact Analysis
 
-### 8.3 Data inconsistency and manual repair
+| Security & Failure Control | Invariant Aspect | Impact If Pricing Policy Changes |
+| :--- | :--- | :--- |
+| **Server Authority** | Frontend-supplied price is NEVER authoritative; price always validated server-side. | **Zero Impact:** Any future tariff formula will still be enforced strictly by server use cases. |
+| **Anti-Tampering** | Input parameters submitted at booking must match the quote parameters. | **Zero Impact:** Tampering with weights, dimensions, or zones will still be rejected with `422 QUOTE_PARAM_MISMATCH`. |
+| **Quote TTL Expiration** | Bookings submitted after quote expiry are rejected with `422 QUOTE_EXPIRED`. | If the team changes the 15-minute window, the expiration check will use the newly configured TTL. |
+| **Financial Integrity** | Integer minor units prevent floating-point rounding vulnerabilities. | **Zero Impact:** No floating-point precision exploits can occur under any future pricing schedule. |
 
-- Reconciliation should detect inconsistencies such as a parcel state with missing required history or conflicting status versions.
-- Do not silently invent a status, delete legitimate history, or repair production-like data through ad hoc SQL.
-- Any repair procedure must be deterministic, authorized, logged/audited, reviewed, and followed by verification tests.
-- The team must decide which consistency checks run automatically, their thresholds, and who receives alerts.
+---
 
-### 8.4 Retry policy
+## 9. Definition of Done & Security Checklist
 
-- Retry only operations that are safe to retry and only within a bounded policy.
-- Use idempotency for client booking retries and idempotent processing for asynchronous events.
-- Do not retry permanent validation/authorization errors as though they were transient.
-- Use explicit timeouts and retry budgets to avoid retry storms. Exact timeout/backoff values belong to shared API/platform decisions and are not invented here.
-- Avoid holding PostgreSQL transactions open while performing external network calls.
-
-## 9. Security and Failure Test Matrix
-
-| ID | Test scenario | Expected result | Test level |
-|---|---|---|---|
-| SEC-001 | Missing, invalid, or expired authentication context on protected parcel endpoint | Denied; no private data returned and no write occurs | API/security integration |
-| SEC-002 | Customer A requests Customer B's detail, history, or receipt | Agreed forbidden/not-found response; no private data disclosed | API/security integration |
-| SEC-003 | Merchant attempts cross-tenant read/create using a forged merchant ID | Trusted tenant context wins; request is denied or scoped correctly | Integration with Member 4 |
-| SEC-004 | Public tracking/DTO response is checked for addresses, phone numbers, private notes, proof references, and merchant-only fields | Restricted fields are absent | Contract/security integration with Member 5 |
-| SEC-005 | Malformed JSON, invalid enum, excessive field length, unsupported measurements, oversized request | Safe structured error; no partial persistence | Unit + API integration |
-| SEC-006 | Client supplies forged price, owner, merchant, or status field | Values are ignored or rejected according to contract; server rules remain authoritative | API integration |
-| SEC-007 | Same idempotency key and same request sent repeatedly/concurrently | One logical booking; response follows replay contract | Database concurrency integration |
-| SEC-008 | Same idempotency key reused with a different payload | Conflict; original booking remains unchanged | API/database integration |
-| SEC-009 | Force tracking-number uniqueness collision | No duplicate tracking number is committed | Database integration |
-| SEC-010 | Force failure after some related database writes but before transaction commit | Full rollback of required atomic records | Database integration |
-| SEC-011 | Force outbox writer failure during booking/status change | Business transaction rolls back | Integration with Member 8 interface |
-| SEC-012 | RabbitMQ unavailable after business transaction commits | Parcel remains committed; outbox is pending and recoverable; no duplicate booking required | Integrated resilience test with Member 8 |
-| SEC-013 | Duplicate event delivery | Downstream idempotency prevents duplicate side effects under the agreed consumer contract | Integration with Member 8 |
-| SEC-014 | Attempt illegal/stale/concurrent status transition | Rejected without state/history/outbox mutation | Unit + database integration |
-| SEC-015 | Inspect application logs and error responses after failures | No secrets, raw stack traces, or unnecessary personal data exposed | Security review/test |
-| SEC-016 | Run migrations against clean database and simulate migration failure | Migration outcome is explicit; no undocumented manual repair | Migration integration |
-| SEC-017 | Trigger configured request-rate/resource limit | Correct safe rate-limit behavior and observable sanitized event | API/gateway integration; only after thresholds are approved |
-| SEC-018 | Simulate stale outbox or missing-history detection | Alert/retry/investigation path is followed; no invented state | Controlled recovery test |
-
-## 10. Operational Security and Monitoring
-
-Member 2 should provide enough safe signals for Member 9 and the team to diagnose module failures. Candidate signals include:
-
-- Booking/quote request counts and latency, split by result category.
-- Validation, authorization, conflict, and dependency-error counts.
-- Database transaction failures and connection-pool saturation.
-- Idempotency replays and key/payload conflict counts.
-- Tracking-number generation collision/retry failures.
-- Required outbox-write failures and age of pending records, using the shared outbox observability model.
-- Illegal/stale transition rejections and history consistency check failures.
-
-Do not use parcel IDs, user IDs, tracking numbers, or other high-cardinality identifiers as metric labels. Keep detailed identifiers in access-controlled logs only when needed and approved. Thresholds, dashboards, alert routes, and SLOs must be agreed with Member 9; this document does not claim that monitoring is already configured.
-
-## 11. Incident Handling and Response
-
-For suspected data exposure, unauthorized mutation, credential leakage, or inconsistent parcel state:
-
-1. Record the incident time, affected component, sanitized request/correlation IDs, and observed impact.
-2. Avoid exposing more data while diagnosing; disable or restrict the affected endpoint/configuration if authorized and necessary.
-3. Notify the relevant owners: Member 1 for auth, Member 2 for parcel/pricing, Member 3 for courier/lifecycle, Member 4 for merchant tenant boundaries, Member 5 for tracking disclosure, Member 8 for event pipeline, and Member 9 for platform/observability.
-4. Rotate/revoke an exposed credential through its owner; never paste the secret into an issue or chat.
-5. Preserve necessary audit evidence while limiting access to personal data.
-6. Apply a reviewed fix, add a regression test, and verify data integrity and affected integrations.
-7. Document root cause, impact, remediation, and follow-up tasks without publishing unnecessary personal data.
-
-This is a project-level workflow recommendation; the team should confirm the actual incident coordinator and communication channel.
-
-## 12. Decisions Required Before Security/Recovery Sign-Off
-
-The following remain unresolved in the supplied proposed baselines and require explicit team decisions:
-
-1. Final authentication/session strategy and trusted internal service context (Member 1).
-2. Approved role/permission matrix and consistent `403` versus privacy-preserving `404` policy.
-3. Merchant tenant identity propagation and endpoint boundary (Member 4).
-4. Final public tracking disclosure matrix and tracking-number format/rate limit (Member 5 and platform owners).
-5. Pricing formula, currency, rounding, active-rule selection, and behavior when no rule matches.
-6. Canonical lifecycle, allowed transitions, actor matrix, failed-delivery and reattempt semantics (Members 2, 3, and 5).
-7. Exact idempotency key scope, fingerprinting, storage, expiry/retention, and replay response.
-8. Shared outbox interface, event schema, event identifiers, and Member 8 recovery/DLQ policy.
-9. Personal-data retention/deletion policy and status-history retention.
-10. Request size, timeout, rate-limit, retry, alert, and performance thresholds.
-11. Migration failure/rollback or forward-fix convention and approved reconciliation permissions.
-12. Final incident owner, escalation route, and evidence-retention process.
-
-## 13. Acceptance Checklist
-
-- [ ] Protected endpoints use the shared authentication context and enforce server-side authorization.
-- [ ] Parcel reads and mutations enforce owner/tenant scope; caller-supplied IDs are not trusted as proof of ownership.
-- [ ] Public tracking disclosure is limited to the approved Member 5 field matrix.
-- [ ] Pricing, status, owner, and tenant values cannot be forged by client payloads.
-- [ ] Input validation and request/resource limits are implemented at the agreed boundaries.
-- [ ] Idempotency prevents duplicate bookings and cross-principal replay.
-- [ ] Database uniqueness, transaction atomicity, and concurrency controls are tested against PostgreSQL.
-- [ ] Status/history/outbox changes use the approved canonical lifecycle and shared Member 8 interface.
-- [ ] Database/broker failure behavior is documented and verified; retries are bounded and safe.
-- [ ] Logs/errors do not expose secrets, stack traces, or unnecessary personal data.
-- [ ] Recovery/reconciliation paths are auditable and never invent parcel state.
-- [ ] Security/failure test evidence and known gaps are recorded.
-- [ ] Unresolved decisions are approved or explicitly tracked as blockers before release.
-
+- [ ] All protected parcel endpoints require authenticated JWT context and enforce tenant/user scoping.
+- [ ] Direct SQL string interpolation is eliminated; 100% of repository queries use prepared statements.
+- [ ] Public tracking responses are verified by automated tests to ensure zero recipient phone numbers or street addresses leak.
+- [ ] Expired quotes ($> 15$m) and parameter-mismatched quotes are rejected with structured HTTP 422 errors.
+- [ ] Reused idempotency keys with differing payloads trigger HTTP 409 Conflict without creating secondary records.
+- [ ] Concurrent state mutations with stale version numbers trigger HTTP 409 Conflict via OCC.
+- [ ] Booking transactions roll back completely if outbox event insertion fails.
+- [ ] Structured logs contain zero customer PII, tokens, or plaintext secrets.

@@ -2,228 +2,405 @@
 
 ## Document 4 — Interface & Integration Contract
 
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
+> **Status:** Aligned Integration Contract (Post-Audit v2.0.0 Alignment)  
+> **Date:** 25 October 2026  
+> **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
+
+---
+
 ## 1. Purpose and Authority
 
-This document defines the interface and integration contract for Member 2 — Parcel Management & Pricing in SwiftDrop. It specifies the proposed REST endpoints, request/response fields, access boundaries, error behavior, and integration responsibilities needed for other team members to consume the module.
+This document defines the authoritative external and inter-module interface contracts for Member 2 — **Parcel Management & Pricing** in the SwiftDrop Parcel Delivery & Courier Management System. It establishes explicit HTTP route contracts, JSON payload DTOs, query parameters, header requirements, authorization rules, idempotency semantics, transactional outbox contracts, and public tracking privacy masking rules.
 
-Source baseline: SwiftDrop SRS v1.0, Team Work Division v1.0, Engineering Standards and Best Practices v1.0, Document 1 — Module Scope & Responsibility Specification, and Document 2 — Functional Flows & Business Rules. These source documents are proposed/draft baselines. The approved assignment and approved SRS take precedence.
+### 1.1 Source Baseline & Alignment
+- **SwiftDrop SRS v1.0:** Core functional requirements (FR-PAR-001 through FR-PAR-009, FR-LIFE-001 through FR-LIFE-004).
+- **Engineering Standards & Best Practices v1.0:** Monetary integer cents convention, UTC timestamps, UUID primary keys, and transaction management.
+- **ADR-004:** Failed delivery semantics, transient `ATTEMPT_FAILED` state, and the 3-attempt ceiling.
+- **Shared Event Contracts (`docs/contracts/event-contracts.md`):** Canonical event envelope and schema versioning.
+- **Member 02 Comprehensive Audit (v2.0.0):** Standardized route naming, quote lifecycle, deterministic volumetric pricing, and address persistence models.
 
-Contract status: Draft for team review. Paths and representative DTOs below follow the SRS proposed endpoint inventory. Any detail not explicitly fixed by the sources is marked as requiring team agreement; examples are not proof that a decision has been approved.
+---
 
-## 2. Interface Principles
+## 2. Core Interface Principles & Conventions
 
-- Base path: /api/v1. Payloads use REST/JSON with application/json and UTF-8.
-- Use stable internal resource IDs (UUID recommended) separately from public tracking numbers.
-- Use ISO 8601/RFC 3339 timestamps in UTC in API payloads.
-- Validate input and authorization in the backend. The frontend may display estimates but must not be the source of truth for pricing or parcel-state rules.
-- Use a shared error format containing code, message, request_id, and optional field_errors. Never expose SQL, stack traces, credentials, tokens, or internal hostnames.
-- List endpoints must support bounded pagination and documented sorting/filtering; enforce a maximum page size.
-- Document finalized paths, schemas, status codes, and examples in the repository’s OpenAPI specification.
+1. **Uniform Base Path & Protocol:** All endpoints are served over TLS under the base URI `/api/v1`. Payloads are formatted as UTF-8 encoded `application/json`.
+2. **Identifier Isolation:** Internal database entities use RFC 4122 Version 4 UUIDs. Public lookups use business tracking numbers (`SD-YYYYMMDD-XXXXXX`). Internal UUIDs are never exposed in public tracking streams.
+3. **Monetary Representation:** Stored and exchanged strictly as **integer minor units** (LKR cents, PostgreSQL `BIGINT`, Go `int64`). Floating-point arithmetic is strictly prohibited.
+4. **Time Representation:** Timestamps use ISO 8601 / RFC 3339 format with second or millisecond precision in UTC (`YYYY-MM-DDTHH:MM:SSZ`).
+5. **Server-Side Authority:** The backend is the sole authority for pricing calculation, quote validation, and state machine transitions. Client-supplied price values or state parameters are rejected.
+6. **Unified Error Contract:** All error responses follow the standard SwiftDrop error envelope with contextual error codes and request correlation IDs.
+7. **Zero-PII Public Masking:** Public tracking endpoints (owned by Member 5) consume authoritative parcel data but must never expose recipient phone numbers, full street addresses, or private courier notes.
 
-HTTP semantics from the SRS baseline: 201 Created, 200 OK, 202 Accepted where asynchronous processing applies, 400 validation error, 401 unauthenticated, 403 forbidden, 404 absent/not visible, 409 conflict, 422 semantic validation if selected by the team, 429 rate limited, 500 unexpected error, and 503 dependency unavailable.
+---
 
-## 3. Endpoint Contract
+## 3. Member 2 Endpoint Inventory
 
-| Method / path | Purpose | Caller / boundary |
-| --- | --- | --- |
-| POST /api/v1/pricing/quotes | Calculate delivery-fee quote | Authenticated customer or approved merchant. Merchant authentication/tenant validation belongs to Member 4. |
-| POST /api/v1/parcels | Create customer parcel booking | Authenticated customer; require idempotency according to agreed shared contract. |
-| GET /api/v1/parcels | List caller-visible parcel bookings | Customer/merchant; results must be scoped to caller/tenant. |
-| GET /api/v1/parcels/{id} | Retrieve parcel details | Owner, authorized merchant, assigned courier, or authorized staff according to approved role rules. |
-| GET /api/v1/parcels/{id}/history | Retrieve parcel status history | Authorized caller only. |
-| GET /api/v1/parcels/{id}/receipt | Retrieve/generate receipt | Owner or authorized merchant. Receipt format and eligibility need team agreement. |
-| POST /api/v1/merchant/orders | Create parcel via merchant API | Approved merchant client. Member 4 validates API credentials and tenant; parcel creation/pricing must use the shared module capability. |
+| Method & Path | Operation Name | Primary Actor | Idempotency | Auth / Scope |
+| :--- | :--- | :--- | :--- | :--- |
+| `POST /api/v1/pricing/quotes` | Create Pricing Quote | Customer, Merchant, Admin | Safe (No) | JWT / Public |
+| `POST /api/v1/parcels` | Book Customer Parcel | Customer | Yes (`Idempotency-Key`) | JWT (`ROLE_CUSTOMER`) |
+| `GET /api/v1/parcels/{id}` | Get Parcel Details | Customer, Merchant, Courier, Admin | Safe (Yes) | JWT (Resource Owner / Assigned Staff) |
+| `GET /api/v1/parcels` | List Visible Parcels | Customer, Merchant, Admin | Safe (Yes) | JWT (Scoped to caller ID / Tenant ID) |
+| `GET /api/v1/parcels/{id}/history` | Get Parcel History | Customer, Merchant, Courier, Admin | Safe (Yes) | JWT (Resource Owner / Assigned Staff) |
+| `GET /api/v1/parcels/{id}/receipt` | Get Booking Receipt | Customer, Merchant, Admin | Safe (Yes) | JWT (Resource Owner / Admin) |
+| `POST /api/v1/merchant/parcels` | Create Merchant Parcel | Merchant | Yes (`Idempotency-Key`) | *Member 4 owns transport/auth; invokes Member 2 use case* |
 
-The SRS also lists public tracking endpoints under the Tracking API. Member 2 supplies authoritative parcel/status data and privacy-safe fields but does not own the Tracking API route implementation or its SSE behavior.
+---
 
-## 4. Request Contracts
+## 4. Detailed Request and Response Contracts
 
-### 4.1 Fee quote request
+### 4.1 Fee Quote Contract
 
-```json
-POST /api/v1/pricing/quotes
+#### Endpoint
+`POST /api/v1/pricing/quotes`
+
+#### Purpose
+Generates a deterministic delivery quote based on weight, dimensions, pickup/dropoff zones, and service tier. Persists the quote in `pricing_quotes` with a 15-minute price guarantee window.
+
+#### Request Headers
+```http
+POST /api/v1/pricing/quotes HTTP/1.1
+Host: api.swiftdrop.io
+Authorization: Bearer <jwt-token>
 Content-Type: application/json
+```
 
+#### Request Payload
+```json
 {
-  "pickup_zone_id": "...",
-  "dropoff_zone_id": "...",
-  "weight_kg": 2.0,
-  "length_cm": 30,
-  "width_cm": 20,
-  "height_cm": 10,
+  "pickup_zone_id": "ZONE-WESTERN-01",
+  "dropoff_zone_id": "ZONE-CENTRAL-01",
+  "weight_kg": 2.50,
+  "dimensions": {
+    "length_cm": 30.0,
+    "width_cm": 25.0,
+    "height_cm": 15.0
+  },
   "service_level": "STANDARD"
 }
 ```
 
-Fields shown are from the SRS representative example. The exact accepted service-level values, units, ranges, zone identifiers, and whether dimensions are mandatory for every service must be confirmed against the approved parcel/pricing rules.
+#### Field Specifications (Request)
+| Field | Type | Constraint | Description |
+| :--- | :--- | :--- | :--- |
+| `pickup_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-WESTERN-01`). |
+| `dropoff_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-CENTRAL-01`). |
+| `weight_kg` | Float | Required, $0.01 \le w \le 50.00$ | Physical measured weight in kilograms. |
+| `dimensions.length_cm` | Float | Required, $1.0 \le l \le 150.0$ | Parcel length in centimeters. |
+| `dimensions.width_cm` | Float | Required, $1.0 \le w \le 150.0$ | Parcel width in centimeters. |
+| `dimensions.height_cm` | Float | Required, $1.0 \le h \le 150.0$ | Parcel height in centimeters. |
+| `service_level` | String | Required, Enum: `STANDARD`, `EXPRESS`, `SAME_DAY` | Target speed tier. |
 
-### 4.2 Quote response fields
-
-| Field | Contract meaning |
-| --- | --- |
-| quote_id | Identifier for the quote, if quotes are persisted or referenced by booking. |
-| currency | Currency code agreed by the team. SRS examples use LKR, but currency is an open decision until approved. |
-| amount_minor or amount | Calculated amount using integer minor units or exact NUMERIC; do not use binary floating point. Choose one canonical representation. |
-| pricing_version | Identifies the pricing rule/version used for the calculation. |
-| valid_until | Include only if the team adopts quote expiry/validity. |
-
-The SRS sample amount (amount_minor 125000) is illustrative only and must not be used as an approved tariff.
-
-### 4.3 Parcel creation request
-
+#### Response Payload (`201 Created`)
 ```json
-POST /api/v1/parcels
-Idempotency-Key: <key agreed by the API contract>
-Content-Type: application/json
-
 {
-  "quote_id": "...",
-  "pickup": {
-    "name": "...",
-    "phone": "...",
-    "address_lines": ["..."],
-    "city": "...",
-    "zone_id": "..."
+  "quote_id": "d3b07384-d113-494b-9c8e-aa672580c822",
+  "pricing_rule_id": "pr-rule-zone-w-c-v2",
+  "pricing_rule_version": 2,
+  "service_level": "STANDARD",
+  "currency": "LKR",
+  "breakdown": {
+    "actual_weight_kg": 2.50,
+    "volumetric_weight_kg": 2.25,
+    "chargeable_weight_kg": 2.50,
+    "billable_extra_weight_kg": 2.0,
+    "base_fee_cents": 35000,
+    "per_kg_fee_cents": 10000,
+    "additional_fee_cents": 20000,
+    "service_multiplier": 1.0
   },
-  "dropoff": {
-    "name": "...",
-    "phone": "...",
-    "address_lines": ["..."],
-    "city": "...",
-    "zone_id": "..."
-  },
-  "parcel": {
-    "weight_kg": 2.0,
-    "dimensions_cm": {
-      "length": 30,
-      "width": 20,
-      "height": 10
-    },
-    "description": "..."
-  }
+  "fee_cents": 55000,
+  "expires_at": "2026-10-25T14:45:00Z",
+  "created_at": "2026-10-25T14:30:00Z"
 }
 ```
 
-This is the SRS representative payload, not a complete finalized schema. The team must decide whether booking requires quote_id, whether the server revalidates/recalculates a quote, the exact required fields, and how additional optional parcel fields are represented.
+> [!NOTE]
+> **Provisional Pricing Notice (Pending Team Confirmation):**
+> The mathematical breakdown shown above (volumetric divisor 5000, billable extra weight, multiplier tiers, illustrative rates, and 15-minute quote validity) represents a **provisional design proposal pending team confirmation**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements.
 
-### 4.4 Parcel creation response
+---
 
-A successful booking response must include the internal parcel ID, a unique non-guessable tracking number, initial status CREATED, and the accepted price snapshot. The exact JSON envelope, timestamps, and HTTP response schema must be recorded in OpenAPI.
+### 4.2 Customer Parcel Booking Contract
 
-### 4.5 Idempotency
+#### Endpoint
+`POST /api/v1/parcels`
 
-- Use an Idempotency-Key header for parcel-creation requests, scoped to caller/tenant and operation according to the shared contract.
-- Store the request hash and resulting resource/response reference using the agreed shared or module-owned persistence design.
-- Same key + same effective request returns the prior result and must not create another parcel.
-- Same key + different request returns 409 Conflict (or the team-approved equivalent).
-- Key retention duration, key syntax/length, canonical request hashing, and behavior for simultaneous in-progress requests remain open decisions.
+#### Purpose
+Executes parcel booking under the caller's authenticated user ID. Evaluates quote validity or calculates price synchronously, generates a Crockford Base32 tracking number (`SD-YYYYMMDD-XXXXXX`), snapshots pickup and dropoff addresses, inserts initial status history (`CREATED`), records idempotency response cache, and writes `parcel.booked.v1` to the outbox inside a single PostgreSQL transaction.
 
-## 5. Read Contracts
+#### Request Headers
+```http
+POST /api/v1/parcels HTTP/1.1
+Host: api.swiftdrop.io
+Authorization: Bearer <jwt-token>
+Idempotency-Key: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+Content-Type: application/json
+```
 
-### 5.1 Parcel list
-
-GET /api/v1/parcels returns only parcels visible to the authenticated caller. It must support bounded pagination and documented filters/sorting. Exact query parameters and response pagination envelope must be finalized in OpenAPI.
-
-### 5.2 Parcel details
-
-GET /api/v1/parcels/{id} returns authorized parcel data, including appropriate parcel details and accepted pricing information. Knowing an ID or tracking number is not authorization. Private contact/address data must not be returned to public tracking clients.
-
-### 5.3 Status history
-
-GET /api/v1/parcels/{id}/history returns persisted chronological history records. The SRS baseline includes status, timestamp, actor, optional note, and relevant attempt/assignment reference. Exact exposure of actor details and notes depends on caller role and privacy policy.
-
-### 5.4 Receipt
-
-GET /api/v1/parcels/{id}/receipt provides receipt data for an eligible booking. The receipt must use the accepted price snapshot and include parcel reference, booking time, price, service details, and current/terminal status as appropriate. Whether the endpoint returns JSON, PDF, or a generated download and which bookings are eligible must be agreed.
-
-## 6. Error Contract
-
+#### Request Payload
 ```json
 {
-  "code": "VALIDATION_ERROR",
-  "message": "Request validation failed",
-  "request_id": "...",
+  "quote_id": "d3b07384-d113-494b-9c8e-aa672580c822",
+  "service_level": "STANDARD",
+  "weight_kg": 2.50,
+  "dimensions": {
+    "length_cm": 30.0,
+    "width_cm": 25.0,
+    "height_cm": 15.0
+  },
+  "pickup": {
+    "contact_name": "Kasun Perera",
+    "contact_phone": "+94771234567",
+    "address_line1": "45 Galle Road",
+    "address_line2": "Apartment 3B",
+    "city": "Colombo 03",
+    "postal_code": "00300",
+    "zone_id": "ZONE-WESTERN-01",
+    "instructions": "Ring intercom 3B"
+  },
+  "dropoff": {
+    "contact_name": "Nimal Fernando",
+    "contact_phone": "+94719876543",
+    "address_line1": "12 Kandy Road",
+    "address_line2": "",
+    "city": "Peradeniya",
+    "postal_code": "20400",
+    "zone_id": "ZONE-CENTRAL-01",
+    "instructions": "Leave at front security desk"
+  },
+  "item_description": "Electronics - Replacement Laptop Battery",
+  "special_instructions": "Handle with care. Fragile."
+}
+```
+
+#### Response Payload (`201 Created`)
+```json
+{
+  "id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "customer_id": "usr-8812c9b4-3312-4aa8-b112-998877665544",
+  "status": "CREATED",
+  "service_level": "STANDARD",
+  "weight_kg": 2.50,
+  "dimensions": {
+    "length_cm": 30.0,
+    "width_cm": 25.0,
+    "height_cm": 15.0
+  },
+  "chargeable_weight_kg": 2.50,
+  "price": {
+    "currency": "LKR",
+    "base_fee_cents": 35000,
+    "additional_fee_cents": 20000,
+    "price_cents": 55000,
+    "pricing_rule_id": "pr-rule-zone-w-c-v2",
+    "pricing_rule_version": 2
+  },
+  "pickup": {
+    "contact_name": "Kasun Perera",
+    "contact_phone": "+94771234567",
+    "address_line1": "45 Galle Road",
+    "address_line2": "Apartment 3B",
+    "city": "Colombo 03",
+    "postal_code": "00300",
+    "zone_id": "ZONE-WESTERN-01",
+    "instructions": "Ring intercom 3B"
+  },
+  "dropoff": {
+    "contact_name": "Nimal Fernando",
+    "contact_phone": "+94719876543",
+    "address_line1": "12 Kandy Road",
+    "address_line2": "",
+    "city": "Peradeniya",
+    "postal_code": "20400",
+    "zone_id": "ZONE-CENTRAL-01",
+    "instructions": "Leave at front security desk"
+  },
+  "attempt_count": 0,
+  "max_attempts": 3,
+  "version": 1,
+  "created_at": "2026-10-25T14:32:00Z",
+  "updated_at": "2026-10-25T14:32:00Z"
+}
+```
+
+---
+
+### 4.3 Idempotency Contract & Behavior
+
+All mutating parcel creation requests (`POST /api/v1/parcels` and `POST /api/v1/merchant/parcels`) require the HTTP header `Idempotency-Key`.
+
+#### Processing Rules
+1. **Header Validation:** If `Idempotency-Key` is missing, empty, or exceeds 255 characters, the request is rejected with `400 Bad Request`.
+2. **Caller Scoping:** The key is combined with the authenticated caller ID: `(key, caller_id)`. Keys from different users/tenants do not collide.
+3. **Fingerprint Verification:** The server computes a SHA-256 hash of the normalized request JSON body.
+4. **Existing Key Lookup:**
+   - **Case A (Exact Match):** If the key exists and the computed SHA-256 matches the stored `request_hash`, the operation is bypassed and the previously recorded HTTP status (201) and JSON response body are returned immediately.
+   - **Case B (Payload Mismatch):** If the key exists but the SHA-256 hash differs from the stored record, the request is rejected with `409 Conflict` (`IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`).
+   - **Case C (In-Flight Concurrency):** If a concurrent transaction is currently processing the exact same key, subsequent requests block briefly or fail fast with `409 Conflict` (`CONCURRENT_REQUEST_IN_FLIGHT`).
+5. **Retention Window:** Idempotency records are retained in PostgreSQL for exactly 24 hours (`expires_at = created_at + INTERVAL '24 hours'`), after which keys expire and can be safely recycled.
+
+---
+
+## 5. Read Contracts & Privacy Allow-Lists
+
+### 5.1 GET /api/v1/parcels/{id} (Authorized Resource Detail)
+Returns the complete parcel aggregate model. Accessible only by the booking customer, merchant tenant, assigned courier, or administrative staff.
+
+### 5.2 GET /api/v1/parcels (Paginated Query)
+Returns caller-visible parcels filtered by status and dates.
+- Supported query parameters: `status` (string), `page` (int, default 1), `page_size` (int, default 20, max 100), `from_date` (ISO UTC), `to_date` (ISO UTC).
+- Enforces strict tenant/customer scoping: customer queries implicitly include `WHERE customer_id = $1`; merchant queries implicitly include `WHERE merchant_id = $1`.
+
+### 5.3 Public Tracking Masking Policy (Member 5 Integration)
+To comply with global privacy standards and project security rules, the public tracking lookup endpoint (`/api/v1/tracking/public/{trackingNumber}`, served by Member 5 from read projections) must strictly redact private data.
+
+| Field Name | Internal Parcel Model | Public Tracking Projection | Privacy Justification |
+| :--- | :--- | :--- | :--- |
+| `tracking_number` | Visible | **Visible** | Public operational lookup key. |
+| `status` | Visible | **Visible** | Public milestone indicator. |
+| `pickup.contact_name` | Visible | **REDACTED** | Protects sender privacy. |
+| `pickup.contact_phone` | Visible | **REDACTED** | High-risk PII; telecommunications privacy. |
+| `pickup.address_line1` | Visible | **REDACTED** | Physical residence/facility privacy. |
+| `pickup.city` | Visible | **Visible** (City only) | Safe milestone origin (e.g., "Colombo 03"). |
+| `dropoff.contact_name` | Visible | **REDACTED** | Protects recipient privacy. |
+| `dropoff.contact_phone` | Visible | **REDACTED** | High-risk PII; telecommunications privacy. |
+| `dropoff.address_line1` | Visible | **REDACTED** | Recipient residence privacy. |
+| `dropoff.city` | Visible | **Visible** (City only) | Safe milestone destination (e.g., "Peradeniya"). |
+| `price_cents` | Visible | **REDACTED** | Commercial confidentiality between sender and courier. |
+| `special_instructions` | Visible | **REDACTED** | May contain security access codes or intercom details. |
+
+---
+
+## 6. Centralized Error Contract & Catalogue
+
+### 6.1 Standard Error Payload Schema
+```json
+{
+  "code": "QUOTE_PARAM_MISMATCH",
+  "message": "The submitted parcel dimensions do not match the frozen quote parameters.",
+  "request_id": "req-98e3b4a2-11c5-4a7b-8912-32b5091a1a7f",
   "field_errors": [
     {
-      "field": "weight_kg",
-      "message": "Value is outside the permitted range"
+      "field": "dimensions.length_cm",
+      "code": "FIELD_VALUE_MISMATCH",
+      "message": "Length was 30.0 cm in quote, but 45.0 cm was submitted."
     }
   ]
 }
 ```
 
-| HTTP status | Use for |
-| --- | --- |
-| 400 | Malformed request or field validation failure. |
-| 401 | Missing, invalid, or expired authentication credentials. |
-| 403 | Authenticated caller lacks permission. |
-| 404 | Resource does not exist or is not visible to the caller; avoid leaking unauthorized resource existence. |
-| 409 | Idempotency-key reuse with a different request, duplicate/conflicting operation, or version/concurrency conflict. |
-| 422 | Optional team choice for semantically invalid input, if adopted consistently. |
-| 429 | Rate limit exceeded. |
-| 500 | Unexpected server failure; response must not expose internals. |
-| 503 | Required dependency unavailable. |
+### 6.2 Error Code Mapping Catalogue
 
-The error JSON is illustrative of the SRS shape. Exact code names, field_errors schema, and the use of 400 versus 422 must match the shared API contract.
+| HTTP Status | Error Code | Trigger Condition |
+| :--- | :--- | :--- |
+| `400 Bad Request` | `MALFORMED_JSON` | Syntactically invalid JSON payload. |
+| `400 Bad Request` | `MISSING_IDEMPOTENCY_KEY` | Header `Idempotency-Key` was not provided on booking. |
+| `401 Unauthorized` | `AUTHENTICATION_REQUIRED` | Missing, expired, or cryptographically invalid JWT. |
+| `403 Forbidden` | `FORBIDDEN_RESOURCE_ACCESS` | Authenticated user lacks permission to access parcel. |
+| `404 Not Found` | `PARCEL_NOT_FOUND` | Parcel ID does not exist or is invisible to caller. |
+| `409 Conflict` | `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` | Idempotency key reused with altered payload body. |
+| `409 Conflict` | `INVALID_STATE_TRANSITION` | Parcel state cannot transition to the target state. |
+| `409 Conflict` | `VERSION_CONFLICT` | Stale update detected; concurrent update modified parcel. |
+| `422 Unprocessable` | `QUOTE_EXPIRED` | Quote timestamp is older than 15 minutes. |
+| `422 Unprocessable` | `QUOTE_PARAM_MISMATCH` | Booking inputs do not match frozen quote parameters. |
+| `422 Unprocessable` | `UNSERVICEABLE_ZONE_PAIR` | No active pricing rule covers the requested zone combination. |
+| `422 Unprocessable` | `WEIGHT_LIMIT_EXCEEDED` | Parcel weight exceeds maximum allowable threshold (50 kg). |
+| `422 Unprocessable` | `DIMENSION_LIMIT_EXCEEDED` | Dimension exceeds maximum allowable threshold (150 cm). |
+| `500 Server Error` | `INTERNAL_SYSTEM_ERROR` | Unhandled internal error; sanitized response returned. |
 
-## 7. Status and Event Integration
+---
 
-- Parcel lifecycle is authoritative in the Core API parcel domain. Baseline sequence: CREATED → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED.
-- FAILED/reattempt semantics and the exact permitted transition/actor matrix are not finalized; Member 2 must agree these with Members 3 and 5 before implementation freeze.
-- Every accepted status change must be validated by domain logic; raw SQL status updates that bypass invariants are prohibited.
-- Persist parcel state, append-only status history, and corresponding outbox event in one PostgreSQL transaction.
-- Outbox Relay (Member 8) publishes committed outbox entries to RabbitMQ after commit. Member 2 writes through the shared outbox interface and does not own queue/worker processing.
-- Events should carry the agreed event ID/type/schema version, aggregate ID and version/sequence where required, occurrence time, and minimum safe payload. Canonical event names, envelope fields, routing keys, and schema versioning must be agreed with Member 8.
-- Downstream consumers must tolerate duplicate delivery; event ordering must not be assumed across queues or competing consumers.
+## 7. Status & Event Integration Contract
 
-Do not invent event names or publish directly from the parcel use case unless the shared event contract explicitly requires it.
+### 7.1 Authoritative 9-State Lifecycle
+Member 2 owns the parcel aggregate root and state machine. The 9 canonical states are:
+1. `CREATED`: Booking recorded; awaiting courier assignment.
+2. `ASSIGNED`: Courier assigned by dispatch board (Member 3).
+3. `PICKED_UP`: Physical collection confirmed by courier (Member 3).
+4. `IN_TRANSIT`: Sorting hub / line-haul movement in progress (Member 3).
+5. `OUT_FOR_DELIVERY`: Courier departs on final delivery run (Member 3).
+6. `DELIVERED`: Terminal successful delivery; POD signature/photo verified (Member 3).
+7. `ATTEMPT_FAILED`: Transient failed delivery attempt; `attempt_count` incremented (Member 3).
+8. `RETURNED`: Terminal failed state after 3 failed attempts; returned to sender (Member 3/7).
+9. `CANCELLED`: Terminal cancellation prior to courier pickup (Member 2/7).
 
-## 8. Security and Data Disclosure
+### 7.2 Outbox Event Contracts
+Committed atomically into `outbox_events` table during state mutations. Published asynchronously to RabbitMQ by Member 8's Outbox Relay daemon.
 
-- Authentication identity and roles come from Member 1’s approved middleware/context. Member 2 must still enforce parcel ownership and tenant scoping within its use cases.
-- Merchant API credential validation and merchant tenant identification belong to Member 4; Member 2 must receive the verified merchant context through the agreed interface.
-- Never trust client-supplied actor_user_id or a client-supplied final price as authoritative.
-- Public tracking responses must not expose pickup/drop-off contact details, private address data, internal notes, proof-of-delivery files, or merchant-only information.
-- Return 404 or the agreed safe response when a caller is not allowed to see a resource; do not allow ID substitution to bypass authorization.
-- Use rate limiting for public quote/tracking endpoints as assigned by the gateway/API owners. Do not include secrets or unnecessary personal data in logs/events.
+#### Event Envelope Specification
+- `event_id`: RFC 4122 UUID.
+- `aggregate_type`: String (`"PARCEL"`).
+- `aggregate_id`: UUID matching `parcels.id`.
+- `event_type`: Formatted string (`"parcel.booked.v1"`, `"parcel.cancelled.v1"`).
+- `schema_version`: Integer (`1`).
+- `occurred_at`: UTC timestamp ISO 8601.
+- `payload`: Structured JSON payload.
 
-## 9. Ownership and Coordination
+---
 
-| Member / area | Integration responsibility |
-| --- | --- |
-| Member 1 — Identity & Access | Authentication context, role/authorization helpers, shared identity contract. |
-| Member 3 — Dispatch & Couriers | Coordinate parcel schema, lifecycle transitions, status actors, assignment/attempt references, and concurrency behavior. |
-| Member 4 — Merchant Integration | Validate merchant API credentials and tenant; invoke shared parcel creation without duplicating parcel/pricing rules. |
-| Member 5 — Tracking API | Read authoritative parcel/status data; agree privacy-safe tracking DTO and current-status/history read pattern. |
-| Member 6 — Customer Frontend | Consume published OpenAPI contract for quote, booking, history, and receipt; display only server-calculated prices. |
-| Member 8 — Events / Outbox | Own canonical event envelope, outbox interface, relay, broker publication, and worker integration. |
-| Member 10 — AI Assistant (bonus) | Call approved backend APIs/tools; no direct database access and no invented pricing/tracking answers. |
+## 8. Cross-Member Integration & Responsibility Boundaries
 
-Primary implementation paths: core-api/internal/parcels/ and core-api/internal/pricing/. Follow Clean/Hexagonal Architecture: transport maps HTTP to application commands/queries; application coordinates use cases and transactions; domain owns invariants; infrastructure implements repository/outbox adapters.
+```mermaid
+flowchart TD
+    M1["Member 1: Identity & Access"] -->|Validates JWT & Extracts User/Role| M2["Member 2: Parcels & Pricing"]
+    M4["Member 4: Merchant Integration"] -->|Delegates Booking to Application Use Case| M2
+    M2 -->|Writes Atomically to PostgreSQL| DB[("PostgreSQL DB: parcels, outbox")]
+    M8["Member 8: Outbox Relay"] -->|Polls Outbox & Publishes to RabbitMQ| RMQ[("RabbitMQ Bus")]
+    RMQ -->|Consumes Delivery Events| M3["Member 3: Dispatch & Couriers"]
+    M3 -->|Invokes Application Service to Transition State| M2
+    RMQ -->|Projects Read Streams| M5["Member 5: Tracking API (SSE)"]
+    M6["Member 6: Customer Portal"] -->|Consumes Quote & Booking REST APIs| M2
+    M10["Member 10: AI Assistant"] -->|Queries Quote REST API with Auth Token| M2
+```
 
-## 10. Contract Decisions Required Before Freeze
+| Member / Domain | Boundary Responsibility | Contract Touchpoint |
+| :--- | :--- | :--- |
+| **Member 1 (Identity)** | Authenticates incoming HTTP requests; supplies claims (`user_id`, `role`, `tenant_id`). | `platform/auth/middleware.go` attaches user context to `context.Context`. |
+| **Member 3 (Dispatch)** | Manages fleet, couriers, and delivery attempts. Records attempts in `delivery_attempts`. | Calls Member 2 application service (`RecordAttemptOutcome`) to update parcel state. |
+| **Member 4 (Merchants)** | Exposes `POST /api/v1/merchant/parcels`, validates API keys, handles webhook registrations. | Invokes Member 2's `CreateParcelUseCase` directly with verified merchant context. |
+| **Member 5 (Tracking)** | Exposes public read endpoints and SSE streaming. | Reads authoritative state from database/read projection; redacts private PII fields. |
+| **Member 6 (Frontend)** | Implements React booking and tracking portals. | Consumes `POST /api/v1/pricing/quotes` and `POST /api/v1/parcels` via OpenAPI DTOs. |
+| **Member 7 (Admin)** | Implements dispatcher and administration dashboards. | Consumes zone and parcel admin endpoints; monitors attempt counts. |
+| **Member 8 (Events)** | Implements Outbox Relay publisher and RabbitMQ consumer workers. | Polls `outbox_events` table populated by Member 2; relays messages to RabbitMQ exchanges. |
+| **Member 10 (AI Assistant)** | Implements conversational support bot. | Calls `POST /api/v1/pricing/quotes` using authorized client credentials; zero direct DB access. |
 
-| Decision | Required agreement |
-| --- | --- |
-| Pricing | Approved currency, formula, units, rounding, zone model, weight/dimension bands, service levels, rule versioning, and quote validity. |
-| Booking DTO | Required/optional fields, address model, parcel description, service option, quote reference and accepted-price behavior. |
-| Authentication | Exact route access scopes, owner/merchant/courier/staff visibility, and tenant context propagation. |
-| Idempotency | Header/key policy, retention, request hash, same-key conflict behavior, and concurrent request behavior. |
-| Read APIs | List filters/sort/page envelope; detail/history field allow-list; receipt format and eligibility. |
-| Lifecycle | Legal status transitions, actor matrix, failure/reattempt semantics, optimistic version/locking strategy. |
-| Events | Canonical event names/envelope, aggregate version, payload allow-list, and outbox interface. |
-| Errors | Canonical error JSON, error code catalogue, and 400/422 convention. |
+---
 
-Record each decision in the team decision log and update the OpenAPI specification, tests, and relevant documents together. Do not treat illustrative examples in this document as approved implementation values.
+## 9. Alignment & Open Decisions
 
-## 11. Definition of Done
+| Decision Topic | Aligned Specification Baseline | Status / Source |
+| :--- | :--- | :--- |
+| **Canonical Quote Route & Persistence** | `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes` | Aligned with Member 10 & API Conventions |
+| **Pricing Formula & Divisor (5000)** | Volumetric divisor 5000, chargeable weight, billable extra weight | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Tariffs & Multipliers** | Multipliers (1.0x, 1.5x, 2.0x) and illustrative base/per-kg rates | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Monetary Data Type** | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
+| **Address Snapshot Model** | Immutable `pickup_address` & `dropoff_address` JSONB on `parcels` | Database Schema Standards & Audit |
+| **Tracking Number Format** | `SD-YYYYMMDD-XXXXXX` (Crockford Base32 uppercase) | SRS FR-PAR-004 & Member 5 Alignment |
+| **Delivery Failure Lifecycle** | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
+| **Idempotency Mechanism** | Header `Idempotency-Key`, `idempotency_keys` table, SHA-256 | Engineering Standards v1.0 Section 7 |
+| **Tariff Administration** | Admin write endpoints owned by Member 7 / Member 1 | `PENDING TEAM CONFIRMATION` |
+| **Receipt Rendering Format** | Member 2 outputs JSON; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
 
-- All Member 2 endpoints are represented in version-controlled OpenAPI with request/response and error examples.
-- Request validation, caller/tenant authorization, privacy-safe responses, and shared error conventions are implemented.
-- Pricing responses are deterministic and include currency/amount representation and pricing-rule version.
-- Booking creates exactly one parcel with a unique tracking number and accepted-price snapshot; retries behave according to the idempotency contract.
-- History and receipt data use persisted records and are accessible only to authorized callers.
-- Parcel state, status history, and required outbox records commit atomically.
-- Contract tests or integration tests verify key success, validation, authorization, idempotency, conflict, and failure paths.
-- Member 3, Member 4, Member 5, Member 6, and Member 8 have reviewed the interfaces relevant to their integrations.
+### 9.1 Pricing Policy Dependency & Cross-Contract Impact Analysis
 
+| Integration Boundary | Invariant Contract Elements | Impact If Pricing Policy Changes |
+| :--- | :--- | :--- |
+| **Member 6 (Customer UI)** | Endpoint `POST /api/v1/pricing/quotes`, `quote_id`, and `fee_cents` binding. | Checkout countdown timer must adapt to ratified quote validity duration. |
+| **Member 4 (Merchant Ingress)** | `POST /api/v1/merchant/parcels` delegates to Member 2 booking use case. | Direct bookings evaluate the new tariff rules; no change to merchant transport layer. |
+| **Member 10 (AI Assistant)** | Tool calls approved Core API `POST /api/v1/pricing/quotes` with auth context. | AI Tool returns updated fee amounts deterministically; prompt guides reflect new validity window. |
+| **Database Migrations** | Core `parcels` and `pricing_quotes` schema and foreign keys remain fixed. | Multiplier columns or divisor checks in `pricing_rules` update via additive migration. |
+
+---
+
+## 10. Definition of Done & Acceptance Criteria
+
+1. **Deterministic Pricing Contract:** Repeated calls to `POST /api/v1/pricing/quotes` with identical parameters and active rule version yield identical `fee_cents`.
+2. **Quote Validity Contract:** Booking succeeds within the quote validity window; fails with `422 QUOTE_EXPIRED` after expiration.
+3. **Idempotency Contract:** Identical requests with same `Idempotency-Key` return identical `201 Created` payloads without creating secondary database records; payload variations trigger `409 Conflict`.
+4. **State Machine Verification:** Direct SQL updates to parcel status are blocked; all status transitions pass through the domain aggregate and record an immutable entry in `parcel_status_history`.
+5. **Outbox Atomicity Contract:** Every successful parcel booking commits an outbox event (`parcel.booked.v1`) within the same PostgreSQL transaction.
+6. **Privacy Masking Compliance:** Public tracking projections exclude recipient contact names, phone numbers, and street addresses.

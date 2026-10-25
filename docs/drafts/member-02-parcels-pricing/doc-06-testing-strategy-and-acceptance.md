@@ -1,339 +1,282 @@
 # SwiftDrop Parcel Delivery & Courier Management System
 
-# Document 6 — Testing Strategy & Acceptance Specification
+## Document 6 — Testing Strategy & Acceptance Specification
+
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
+> **Status:** Aligned Testing Specification (Post-Audit v2.0.0 Alignment)  
+> **Date:** 25 October 2026  
+> **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
+
+---
 
 ## 1. Purpose and Scope
 
-This document defines how Member 2's Parcel Management & Pricing module will be tested and accepted. It provides test levels, requirement-to-test traceability, test scenarios, test-data rules, automation guidance, execution gates, and evidence needed to demonstrate correctness.
-
-This is a test specification, not a claim that tests have already been implemented or passed. Actual test results must be recorded from the repository and execution environment.
-
-### 1.1 In scope
-
-- Parcel booking and server-side request validation.
-- Fee estimation and reproducibility of the accepted price snapshot.
-- Unique tracking-number generation.
-- Booking idempotency and duplicate-request handling.
-- Parcel detail, history, and receipt-data reads.
-- Ownership/tenant authorization and privacy-safe response fields.
-- Legal status-transition validation within the lifecycle agreed with Members 3 and 5.
-- Atomic persistence of parcel changes, history, and required outbox records through Member 8's shared interface.
-- Database migrations, constraints, indexes, and transaction behavior owned by Member 2.
-- API error contracts and integration compatibility relevant to Member 2.
-
-### 1.2 Out of scope or shared responsibility
-
-- Authentication provider and identity implementation: Member 1; Member 2 must still test the module's authorization behavior using the agreed auth middleware/fixtures.
-- Merchant onboarding, credential lifecycle, and tenant validation: Member 4; merchant parcel creation tests must use the published interface and coordinate shared scenarios.
-- Courier assignment, delivery attempts, and proof-of-delivery: Member 3; tests that cross lifecycle boundaries require agreement with Member 3.
-- Tracking API implementation and SSE behavior: Member 5; Member 2 tests authoritative data consistency and the approved read boundary.
-- Outbox relay, RabbitMQ topology, event workers, notifications, and webhook delivery: Member 8; Member 2 tests writing the required outbox record through the shared interface.
-- Frontend component and end-to-end implementation: Members 6–7; Member 2 supplies stable API contracts and supports integrated journey tests.
-- Deployment platform and shared CI configuration: Member 9; Member 2 supplies module-level commands and test requirements.
-- AI Assistant tool implementation: Member 10; any fee-estimation tool must consume the approved API and must not bypass its validation.
-
-## 2. Testing Principles
-
-1. **Test the approved contract.** Test expected behavior from the approved SRS, API contract, business rules, and lifecycle agreement. Do not treat unresolved draft values as final.
-2. **Protect business invariants.** A successful booking has one unique tracking number, a reproducible accepted-price snapshot, and no duplicate parcel for an identical idempotent retry.
-3. **Test failures as well as success.** Invalid input, authorization denial, conflicts, persistence failures, and dependency failures must have explicit expected outcomes.
-4. **Keep tests repeatable.** Use deterministic synthetic fixtures, controlled clocks where needed, isolated data, and explicit setup/cleanup.
-5. **Use real persistence for persistence claims.** Unit mocks cannot prove database constraints, transaction atomicity, or migration correctness.
-6. **Never depend on unspecified business values.** Currency, tariff formula/rates, size/weight limits, quote expiry, lifecycle edge cases, and retention values require team approval before tests assert exact values.
-7. **Do not claim completion without evidence.** Test execution reports, commands, environment details, and known gaps must be recorded.
-
-## 3. Test Levels and Methods
-
-| Test level | Purpose | Required Member 2 coverage | Suggested method/tool |
-|---|---|---|---|
-| Unit | Verify isolated business logic | Pricing calculation; field and cross-field validation; tracking-number generation policy; legal transition rules; idempotency decision logic; DTO mapping | Go `testing`; `testify` if adopted by the repository |
-| Repository/database integration | Verify real PostgreSQL behavior | Migrations; constraints; unique tracking number; persisted price snapshot; history queries; rollback; concurrent booking/idempotency | PostgreSQL test instance; Testcontainers where practical or controlled Compose test database |
-| API integration | Verify HTTP contract and application wiring | Booking, quote, detail, history, receipt-data routes; request validation; response DTOs; error envelope; authorization; pagination if supported | Go HTTP tests with test server and real test database where needed |
-| Contract | Verify compatibility between module boundaries | Request/response DTOs, error schema, shared auth context, Member 8 outbox interface, Member 4 merchant capability, Member 5 tracking read expectations | OpenAPI validation or equivalent contract checks; consumer/provider examples |
-| Security/authorization | Verify access boundaries and disclosure | Cross-customer access denial; merchant tenant scoping through agreed integration; public/private field minimization; malformed input and rate-limit behavior where configured | HTTP integration tests; negative authorization matrix |
-| End-to-end | Verify customer-visible business journey | Estimate fee → valid booking → confirmation/tracking number → authorized history/receipt data; retry does not duplicate | Playwright or agreed system-level test harness; coordinate with Members 6 and 9 |
-| Resilience/fault | Verify safe behavior under failure | Database write failure/rollback; outbox write failure; concurrent duplicate requests; transient dependency failure if applicable | Controlled fault injection or deterministic integration tests |
-| Migration/deployment acceptance | Verify reproducible setup | Clean database migration; upgrade supported development database; module test commands in local Compose/CI | Migration tool and Docker Compose; Kubernetes checks only where included in the agreed demo scope |
-
-## 4. Requirements and Test Traceability
-
-The IDs below are module-local test-case IDs. They are not new SRS requirement IDs. Map them to the final approved `FR-PAR-*` requirement wording in Document 3 and update the matrix if the team revises that contract.
-
-| Requirement area | Test cases | Required evidence |
-|---|---|---|
-| Fee estimation and pricing consistency | TC-PRC-001–006 | Unit test report with approved examples, boundary cases, exact-money assertions, and rule-version/snapshot checks |
-| Parcel booking and validation | TC-BKG-001–008 | API/integration results showing valid booking and structured rejection without partial data |
-| Tracking number | TC-TRK-001–002 | Database uniqueness test and generated-reference behavior evidence |
-| Idempotency | TC-IDM-001–005 | Repeated same-key tests, different-payload conflict test, and concurrent-request test |
-| Parcel detail, history, receipt data | TC-READ-001–006 | API responses, ownership-denial results, and accepted-price snapshot verification |
-| Lifecycle and history | TC-LCY-001–006 | Approved transition-matrix tests and atomic state/history/outbox assertions |
-| Persistence and migrations | TC-DB-001–006 | Clean migration, upgrade, constraint, rollback, and query tests |
-| API/error contract | TC-API-001–005 | Contract validation and examples for success and error responses |
-| Security/privacy | TC-SEC-001–006 | Authorization matrix results and checks that private data is not returned to unauthorized/public callers |
-| Integrated acceptance | AT-M2-001–006 | Reproducible end-to-end run log and linked test report |
-
-## 5. Detailed Test Case Matrix
-
-### 5.1 Pricing and fee estimation
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-PRC-001 | Valid quote request using an approved active rule and valid supported inputs | A fee is calculated using the approved formula and returned using the agreed money representation and currency | Unit + API integration |
-| TC-PRC-002 | Weight or dimension at each approved lower/upper boundary | Result follows the approved boundary rule; no guessed limits are embedded in the test | Unit |
-| TC-PRC-003 | Zero, negative, non-finite, malformed, or out-of-range measurement | Request is rejected according to the approved validation contract; no quote/booking is incorrectly persisted | Unit + API integration |
-| TC-PRC-004 | No enabled/effective pricing rule matches the requested inputs | Defined domain/API error is returned; no invented fallback price is applied | Unit + API integration |
-| TC-PRC-005 | Price calculation and persistence | Exact arithmetic is used; binary floating-point is not used as the authoritative money representation | Unit + database integration |
-| TC-PRC-006 | A pricing rule changes after a parcel has been booked | Historical accepted price and rule/version snapshot remain unchanged | Database integration |
-| TC-PRC-007 | Two effective rules overlap for the same scope/time | Behavior matches the team-approved overlap policy; test must remain blocked until that policy is defined | Unit + integration |
-
-### 5.2 Booking and input validation
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-BKG-001 | Complete valid booking request using approved fields and pricing reference | One parcel is created, with a unique tracking number, accepted-price snapshot, and agreed initial state | API + database integration |
-| TC-BKG-002 | Missing each mandatory field in turn | Structured validation error identifies the invalid field(s); no partial parcel is stored | API integration |
-| TC-BKG-003 | Invalid formats, overlong text, unsupported enum, or invalid address/zone reference | Request is rejected with the agreed error envelope; database remains unchanged | Unit + API integration |
-| TC-BKG-004 | Unsupported weight/dimensions or invalid cross-field combination | Rejected using the approved limits and rules; no parcel is stored | Unit + API integration |
-| TC-BKG-005 | Client supplies a price that differs from the server-calculated/approved quote | Client amount is not treated as authoritative; server validates/recalculates according to the approved quote contract | API integration |
-| TC-BKG-006 | Database failure after parcel insertion but before all required related writes complete | Transaction rolls back; no partial parcel/history/outbox/idempotency completion state remains | Database integration |
-| TC-BKG-007 | Successful booking with address snapshots | The accepted pickup/drop-off details are preserved according to the approved snapshot model and access policy | Database integration |
-| TC-BKG-008 | Tracking-number generation collision is forced in a test | Unique constraint prevents duplicate tracking numbers; generation retries follow the implemented bounded policy or returns a safe failure | Database integration |
-
-### 5.3 Tracking number and idempotency
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-TRK-001 | Create multiple parcels using normal generation | Tracking numbers are server-generated and unique | Unit + database integration |
-| TC-TRK-002 | Query a tracking number that does not exist | API returns the agreed not-found response without disclosing unrelated records | API integration |
-| TC-IDM-001 | Repeat the same effective booking request with the same idempotency key | Only one parcel is created; the second request follows the agreed replay response semantics | API + database integration |
-| TC-IDM-002 | Reuse a key with a different effective request payload | Request is rejected with the contract's conflict behavior; a second parcel is not created | API integration |
-| TC-IDM-003 | Send concurrent identical requests using the same key | At most one business operation is committed; other requests receive the agreed replay/in-progress result | Concurrency integration |
-| TC-IDM-004 | Simulate failure before transaction commit and retry with the same key | No partial business operation is left; retry follows the approved recovery semantics | Database integration |
-| TC-IDM-005 | Repeat a request after idempotency-record expiry | Behavior matches the approved retention and expiry policy; test is blocked until that policy is set | Integration |
-
-### 5.4 Reads, history, receipt data, and privacy
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-READ-001 | Authorized owner requests parcel details | Only fields permitted by the API contract are returned | API integration |
-| TC-READ-002 | Customer A requests Customer B's parcel detail, history, or receipt data | Access is denied using the agreed not-found/forbidden policy; no private data is disclosed | Security integration |
-| TC-READ-003 | Authorized owner requests parcel history | History is chronological and reflects committed status changes only | API + database integration |
-| TC-READ-004 | Receipt-data request after pricing rules have changed | Response uses the stored accepted-price snapshot, not today's tariff | API + database integration |
-| TC-READ-005 | Public tracking response is inspected | No full address, phone number, private note, proof photo, or merchant-only field is exposed | Security/contract integration with Member 5 |
-| TC-READ-006 | List/history query returns multiple records | Pagination and ordering follow the published contract; ordering is deterministic where pagination is supported | API + database integration |
-
-### 5.5 Lifecycle, status history, and outbox
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-LCY-001 | Apply a legal transition from the approved lifecycle matrix | Current state is updated and one corresponding history record is appended | Unit + database integration |
-| TC-LCY-002 | Attempt an illegal transition | Request is rejected; no state update, history record, or outbox event is committed | Unit + database integration |
-| TC-LCY-003 | Two conflicting transitions start from the same stale state | Concurrency control permits no more than one incompatible transition to succeed | Database integration |
-| TC-LCY-004 | Successful transition requiring an event | Current state, history, and outbox record commit atomically | Database integration with Member 8 interface |
-| TC-LCY-005 | Outbox write fails during a status change | Business state and history roll back with the failed required outbox write | Database integration |
-| TC-LCY-006 | Read history after several transitions | Existing history remains append-only through normal application paths and is not silently rewritten | Database integration |
-| TC-LCY-007 | Initial booking | Initial status and initial history behavior match the lifecycle agreement; current SRS baseline proposes `CREATED` and requires team confirmation | Integration; pending lifecycle approval |
-
-### 5.6 Database, migration, and API contract
-
-| ID | Scenario / setup | Expected result | Level |
-|---|---|---|---|
-| TC-DB-001 | Apply migrations to a clean PostgreSQL database | All approved module migrations succeed in the repository's documented order | Migration integration |
-| TC-DB-002 | Upgrade a supported existing development database | Upgrade succeeds according to the team's migration/rollback or forward-fix convention | Migration integration |
-| TC-DB-003 | Insert duplicate tracking number | Database uniqueness constraint rejects the duplicate | Database integration |
-| TC-DB-004 | Insert invalid values violating approved constraints | Database rejects the invalid write where the invariant is represented by a constraint | Database integration |
-| TC-DB-005 | Query history and common parcel lookup paths with representative synthetic data | Queries use the intended indexes where applicable; no numeric latency target is asserted unless approved | Database/performance check |
-| TC-DB-006 | Runtime application attempts schema migration or unauthorized direct data access | Database permissions follow the agreed least-privilege split; runtime role does not gain unapproved schema privileges | Security/integration |
-| TC-API-001 | Valid quote and booking requests | Status codes and response DTOs match the published API contract | Contract + API integration |
-| TC-API-002 | Malformed JSON or invalid content type | Request fails safely with the agreed error format | API integration |
-| TC-API-003 | Validation, conflict, forbidden, and not-found conditions | Correct agreed HTTP status and error envelope are returned; internal stack traces/secrets are not exposed | API integration |
-| TC-API-004 | OpenAPI or equivalent contract is checked against implementation | Required paths, DTOs, schemas, and examples remain compatible | Contract |
-| TC-API-005 | API change affects Member 4, 5, 6, 7, or 8 | Consumer/provider examples and affected integration tests are updated before the change is accepted | Contract/integration |
-
-## 6. Module-Level Acceptance Scenarios
-
-These scenarios adapt the global SRS acceptance baseline to Member 2. Global acceptance IDs AT-001 through AT-016 remain defined by the SRS and should not be renumbered by this module.
-
-| ID | Acceptance scenario | Pass criteria | Dependencies |
-|---|---|---|---|
-| AT-M2-001 | Estimate a fee and create a valid customer parcel booking | Fee estimate follows the approved pricing rule; booking creates one parcel with unique tracking number and accepted-price snapshot | Approved tariff, currency, units, API contract |
-| AT-M2-002 | Submit invalid parcel data | Structured field-level errors are returned and no partial booking is persisted | Approved required fields and limits |
-| AT-M2-003 | Repeat booking with the same idempotency key | Exactly one parcel exists for the logical operation and response follows agreed replay semantics | Approved idempotency contract |
-| AT-M2-004 | Read parcel history and receipt data as the owner and as an unauthorized user | Owner can read permitted data; unauthorized user receives the agreed denial response; receipt uses the stored accepted price | Member 1 auth contract and privacy policy |
-| AT-M2-005 | Attempt illegal transition and perform a legal transition | Illegal transition changes nothing; legal transition atomically persists state, history, and required outbox record | Approved lifecycle; Member 3 and Member 8 interfaces |
-| AT-M2-006 | Apply migrations and execute the critical test suite from a clean clone | Setup and migrations succeed, critical tests pass, and commands/results are documented | Member 9/local Compose and repository conventions |
-
-## 7. Test Data and Fixtures
-
-Use deterministic synthetic fixtures only. Never use real customer contact details, real credentials, live API secrets, or production parcel records.
-
-Required fixture categories:
-
-- At least one valid pricing rule/version after the tariff and rule-selection policy are approved.
-- Valid measurement examples plus values immediately below, at, and above approved limits.
-- Valid and invalid pickup/drop-off zones based on approved zone fixtures.
-- Customers with separate ownership scopes and, if merchant creation is in scope, at least two distinct merchant tenants.
-- Parcels with multiple chronological status-history records using the approved lifecycle matrix.
-- A parcel whose accepted price remains stable after a later pricing-rule version is introduced.
-- Same-key/same-request, same-key/different-request, and concurrent idempotency requests.
-- Controlled database/outbox failures for rollback tests.
-- Tracking-number collision fixture or injectable generator for collision-path tests.
-- Unknown parcel/tracking IDs and unauthorized access attempts.
-
-Fixtures must not depend on test execution order. Tests that require unresolved tariffs, currencies, lifecycle transitions, quote expiry, or retention semantics must be marked blocked/pending rather than filled with guessed values.
-
-## 8. Mocking and Test Environment Strategy
-
-### 8.1 Unit tests
-
-- Keep pricing, validation, transition, and idempotency decision logic testable without HTTP or database dependencies.
-- Use small fakes for clocks, tracking-number generation, and repositories where dependency injection supports them.
-- Do not use a mock-only test to claim PostgreSQL constraints or transaction atomicity have been verified.
-
-### 8.2 Integration tests
-
-- Use PostgreSQL test instances for migration, uniqueness, rollback, concurrency, and query behavior.
-- Use the agreed shared outbox interface. Do not create a second test-only outbox schema that diverges from Member 8's contract.
-- Use a test HTTP server/client for API contract and authorization behavior.
-- Use RabbitMQ only for tests that genuinely cross the broker boundary; Member 2's core persistence tests should verify its outbox write boundary without duplicating Member 8's relay tests.
-
-### 8.3 End-to-end tests
-
-- Use the agreed Docker Compose environment and synthetic seed data.
-- Coordinate customer booking and receipt journeys with Member 6, and merchant order journeys with Member 4 and Member 6.
-- Use deterministic test identities and credentials supplied through local test configuration, never committed secrets.
-- Record any mocked service or skipped integration explicitly in the result report.
-
-### 8.4 Environment isolation
-
-- Tests must target a dedicated test database/broker, not a developer's or production database.
-- Reset/cleanup data safely between runs.
-- Keep environment configuration in documented example files with placeholder values.
-- Make test failures diagnosable through request/correlation IDs and non-sensitive logs.
-
-## 9. Coverage and Quality Gates
-
-The SRS v1.0 proposes a baseline target of **at least 70% line coverage for core business packages**, with explicit tests for every security/authorization requirement and the end-to-end event pipeline. The team should confirm this target as part of approving the SRS baseline.
-
-For Member 2:
-
-- Measure coverage for pricing, parcel booking, validation, idempotency, lifecycle rules, and relevant application use cases.
-- Prioritize meaningful assertions and negative cases; coverage percentage alone is not proof of correctness.
-- Every critical business invariant in this document must have at least one automated test at the appropriate level.
-- Database transaction, uniqueness, and migration claims require database-backed evidence.
-- Any failing, skipped, flaky, or blocked test must be reported; do not silently exclude it from the result summary.
-- Security-critical tests for owner/tenant isolation and public data minimization are required regardless of overall coverage percentage.
-
-## 10. Local Execution and CI Requirements
-
-Exact commands depend on the repository's selected Go module layout, test libraries, migration tool, and Compose service names. Do not publish commands that have not been verified against the repository.
-
-The module README and CI pipeline must document and run the equivalent of:
-
-1. Format and static checks required by the team.
-2. Go unit tests for the Member 2 packages.
-3. Database-backed integration tests using an isolated PostgreSQL instance.
-4. Migration test against a clean database.
-5. API/contract tests.
-6. Coverage report for core business packages.
-7. Secret scan or the team's documented secrets check.
-8. Critical end-to-end smoke flow in the agreed local Compose environment before release/demo.
-
-The final repository must provide exact copyable commands, required environment variables, prerequisites, expected test duration where useful, and cleanup/reset instructions. If a test requires an optional dependency or external credential, document a safe mock/development alternative where the project permits it.
-
-## 11. Defect Severity and Failure Handling
-
-Use the SRS defect priority definitions:
-
-| Priority | Meaning for Member 2 | Example |
-|---|---|---|
-| P0 | Critical security/data loss or core system cannot demonstrate the flow | Duplicate/partial booking causes data corruption; cross-customer private data is exposed |
-| P1 | Core feature is incorrect or insecure with no viable workaround | Incorrect accepted fee snapshot; idempotency allows duplicate parcel; illegal status transition commits |
-| P2 | Secondary issue with a workaround | Non-critical history filter edge case |
-| P3 | Minor usability/documentation issue | Non-blocking wording or formatting issue |
-
-A defect report should include: summary, priority, affected requirement/test ID, reproduction steps, expected versus actual result, environment/commit, sanitized logs or evidence, and any workaround. Never include secrets or unnecessary personal data.
-
-## 12. Evidence and Test Execution Report
-
-A test run is not considered documented until the following are recorded:
-
-- Commit/branch or source revision tested.
-- Date/time and environment details, including Go version and PostgreSQL version actually used.
-- Exact commands executed and their exit status.
-- Test counts: passed, failed, skipped, and blocked.
-- Coverage report for core business packages.
-- Migration and database integration results.
-- API/contract and authorization test results.
-- Relevant end-to-end evidence, such as sanitized logs, screenshots, or CI run links.
-- Known defects, flaky tests, exclusions, and unresolved blockers.
-- Reviewer/approver and date, when applicable.
-
-### 12.1 Execution result template
-
-| Field | Value to complete from an actual run |
-|---|---|
-| Revision/commit | Pending execution |
-| Environment | Pending execution |
-| Unit tests | Pending execution |
-| Integration tests | Pending execution |
-| API/contract tests | Pending execution |
-| Security/authorization tests | Pending execution |
-| End-to-end tests | Pending execution |
-| Core-package line coverage | Pending execution |
-| Migration clean/upgrade tests | Pending execution |
-| Known failures/blocked cases | Pending execution |
-| Report location | Pending execution |
-| Reviewer | Pending review |
-
-Do not replace “Pending execution” with a pass claim until evidence exists.
-
-## 13. Dependencies and Coordination
-
-| Dependency | Testing coordination required |
-|---|---|
-| Member 1 — Identity & Access | Agree test identity/auth fixtures, roles, ownership checks, and forbidden/not-found behavior |
-| Member 3 — Dispatch & Couriers | Agree lifecycle matrix, legal transitions, failed-delivery/reattempt semantics, and status-history ownership |
-| Member 4 — Merchant Integration | Agree merchant parcel-creation path, tenant scope, idempotency behavior, and error contract |
-| Member 5 — Tracking API | Agree authoritative status reads and public/private field disclosure; verify current committed state is visible |
-| Member 6 — Customer & Merchant Frontend | Agree booking, fee estimate, receipt-data API examples and critical user journey |
-| Member 7 — Admin UI & Gateway | Agree route/policy behavior and any admin-controlled pricing/zone interfaces |
-| Member 8 — Outbox & Events | Agree shared outbox write interface, required event metadata, transaction boundary, and test seam |
-| Member 9 — Platform & Observability | Agree Compose/CI test services, environment configuration, migration checks, and evidence collection |
-| Database coordinator | Review canonical table/ID/timestamp conventions, constraints, migration ordering, and shared schema assumptions |
-
-## 14. Decisions Required Before Final Test Freeze
-
-The following cannot be asserted as final until the project team approves them:
-
-1. Canonical parcel schema, shared table ownership, IDs, timestamp conventions, and migration tool.
-2. Pricing formula, tariff values, currency, precision, rounding, rule-selection and overlapping-rule behavior.
-3. Valid weight/dimension limits, supported service levels, and zone eligibility.
-4. Whether quotes are persisted, expire, can be reused, or are single-use.
-5. Final parcel lifecycle and actor/permission matrix, including failed-delivery and reattempt semantics.
-6. Exact initial-history behavior and status-change event requirements.
-7. Idempotency scope, retention/expiry, concurrent-request behavior, and exact replay response.
-8. Shared outbox schema/interface and event payload contract with Member 8.
-9. Exact authorization response policy (for example, 403 versus privacy-preserving 404) where not already standardized.
-10. Numeric performance targets, if the SRS/team approves measurable targets.
-11. Final CI commands, repository package paths, test framework versions, and coverage reporting mechanism.
-
-## 15. Acceptance Checklist
-
-- [ ] Approved requirements and business rules are traceable to test cases.
-- [ ] Pricing tests cover approved examples, boundary conditions, rule selection, and exact-money behavior.
-- [ ] Valid and invalid booking tests verify no partial writes on failure.
-- [ ] Tracking-number uniqueness is verified against PostgreSQL.
-- [ ] Same-key/same-request, same-key/different-request, and concurrent idempotency behavior is verified.
-- [ ] Owner/tenant authorization and public/private data boundaries are tested.
-- [ ] Receipt data uses the stored accepted-price snapshot.
-- [ ] Legal and illegal status transitions are tested against the approved lifecycle.
-- [ ] State, history, and required outbox records are proven atomic in database-backed tests.
-- [ ] Clean-database migration and supported upgrade tests pass.
-- [ ] API/error contracts and affected module integrations are checked.
-- [ ] Critical tests run locally and in CI using documented commands.
-- [ ] Coverage and execution evidence are attached; failures and blockers are reported honestly.
-- [ ] No real personal data or secrets are used in fixtures or committed files.
-- [ ] Open decisions are resolved or explicitly recorded as blockers before schema/test freeze.
-
-
+This document defines the comprehensive testing strategy, quality assurance gates, requirement traceability, test case specifications, and acceptance criteria for Member 2 (**Parcel Management & Pricing**) in the SwiftDrop Core API.
+
+### 1.1 In-Scope Test Boundaries
+- **Deterministic Pricing & Quote Verification:** Volumetric calculations ($L \times W \times H / 5000$), chargeable weight, billable extra weight ceilings, service tier multipliers, and 15-minute quote expiration enforcement.
+- **Parcel Booking & Aggregate Invariants:** Quoted booking validation, direct booking tariff evaluation, tracking number generation (`SD-YYYYMMDD-XXXXXX`), address snapshot persistence in JSONB, and optimistic concurrency versioning.
+- **Idempotency Protection:** Replay verification of cached 201 responses, payload alteration conflict detection (409 Conflict), and 24-hour retention window verification.
+- **Authoritative 9-State Lifecycle (ADR-004):** State transition rules, actor permission checks, delivery attempt ceiling (max 3), transition to `ATTEMPT_FAILED` vs terminal `RETURNED`, and optimistic locking conflicts.
+- **Transactional Outbox Atomicity:** Verifying atomic persistence of parcel state, status history, and outbox integration events (`parcel.booked.v1`, `parcel.cancelled.v1`).
+- **Data Privacy & Authorization:** Cross-customer/cross-tenant access denial (IDOR prevention) and redaction of PII from public tracking projections.
+- **Database Migrations:** Clean schema creation and rollback verification for migrations `000004`, `000005`, and `000010`.
+
+---
+
+## 2. Core Testing Principles
+
+1. **Deterministic Financial Verification:** Monetary amounts are asserted strictly in integer minor units (LKR cents). Floating-point comparisons are prohibited.
+2. **Real Persistence for Invariants:** Database constraints, transaction rollbacks, uniqueness checks, and outbox atomicity are verified against a real PostgreSQL instance (via Docker Compose or Testcontainers), never via unit mocks.
+3. **Fail-Fast Boundary Testing:** Input parameters (weights $> 50$ kg, dimensions $> 150$ cm, negative values) are verified to fail early with structured 400/422 errors before reaching persistence layers.
+4. **Zero-PII Disclosure Checks:** Public tracking tests assert that recipient phone numbers, complete street addresses, and internal notes are strictly omitted from responses.
+5. **No Synthetic Pass Claims:** Test execution reports must reflect actual execution output and exit codes.
+
+---
+
+## 3. Test Levels and Execution Framework
+
+```mermaid
+flowchart TD
+    subgraph UnitTests["1. Pure Unit Tests (In-Memory)"]
+        UT1["Pricing Formula & Volumetric Engine"]
+        UT2["Aggregate Lifecycle State Transitions"]
+        UT3["Input Validation & Crockford Tracking Generator"]
+    end
+
+    subgraph IntegrationTests["2. Persistence & API Integration (Real PostgreSQL)"]
+        IT1["PostgreSQL Migrations 000004, 000005, 000010"]
+        IT2["Idempotency SHA-256 Hashing & Replay"]
+        IT3["Atomic Booking Tx (Parcel + History + Outbox)"]
+        IT4["Optimistic Locking Version Conflict (409)"]
+    end
+
+    subgraph SecurityContractTests["3. Security & Contract Tests"]
+        ST1["Tenant & Customer Scoped Isolation (IDOR)"]
+        ST2["Public Tracking Privacy Field Redaction"]
+        ST3["OpenAPI Schema Contract Compliance"]
+    end
+
+    UnitTests --> IntegrationTests --> SecurityContractTests
+```
+
+| Test Level | Scope | Primary Tools & Drivers | Execution Target |
+| :--- | :--- | :--- | :--- |
+| **Unit** | Pure domain logic, pricing formulas, state machine, input validators. | Go standard `testing`, `testify/assert` | Fast ($< 2$s), zero external dependencies. |
+| **Database Integration** | SQL repositories, transactions, migrations, concurrency locks, outbox inserts. | Go `testing`, `pgxpool`, Docker PostgreSQL | Local Docker Compose test DB. |
+| **API Integration** | HTTP handlers, middleware, request parsing, response status codes, error shapes. | `net/http/httptest`, `chi.Router` | In-process HTTP server against test DB. |
+| **Security & Privacy** | Multi-tenant scoping, RBAC role enforcement, PII masking in tracking views. | Integration test harness with mock JWTs | Verifies 403 Forbidden and redacted DTOs. |
+| **Migration Quality** | Sequential migration execution (`up`) and clean reversal (`down`). | `golang-migrate/migrate/v4` | Clean ephemeral database. |
+
+---
+
+## 4. Requirements Traceability Matrix
+
+| Requirement ID | Domain Area | Test Case IDs | Test Level | Verification Objective |
+| :--- | :--- | :--- | :--- | :--- |
+| **FR-PAR-001** | Booking Details | `TC-BKG-001`, `TC-BKG-002` | API / DB Integration | Captures dimensions, weights, and JSONB addresses. |
+| **FR-PAR-002** | Pricing Quote | `TC-PRC-001`, `TC-PRC-002` | Unit / API Integration | Computes volumetric fee; guarantees 15m price freeze. |
+| **FR-PAR-003** | Accepted Price | `TC-PRC-005`, `TC-BKG-007` | Database Integration | Persists immutable rule version and LKR cents snapshot. |
+| **FR-PAR-004** | Tracking Number | `TC-TRK-001`, `TC-TRK-002` | Unit / DB Integration | Crockford Base32 format `SD-YYYYMMDD-XXXXXX`; unique. |
+| **FR-PAR-005** | Input Validation | `TC-VAL-001`, `TC-VAL-002` | Unit / API Integration | Rejects weights $> 50$ kg, dimensions $> 150$ cm (422). |
+| **FR-PAR-006** | Idempotency | `TC-IDM-001`, `TC-IDM-002` | API / DB Integration | Key replay returns cached 201; payload mismatch returns 409. |
+| **FR-PAR-007** | Caller Scoping | `TC-SEC-001`, `TC-SEC-002` | Security Integration | Prevents IDOR cross-tenant access to foreign parcels. |
+| **FR-PAR-008** | Booking Receipt | `TC-READ-003` | API Integration | Receipt reflects stored price snapshot, not current tariff. |
+| **FR-PAR-009** | Public Privacy | `TC-SEC-003` | Security Integration | Public tracking redacts recipient phone, street address, notes. |
+| **FR-LIFE-001-004**| Lifecycle Machine | `TC-LCY-001` to `TC-LCY-006`| Unit / DB Integration | Enforces 9 states, max 3 attempts, atomic outbox commit. |
+
+---
+
+## 5. Detailed Test Case Specifications
+
+### 5.1 Deterministic Pricing & Quote Management (`TC-PRC-*`)
+
+#### `TC-PRC-001`: Standard Tariff Calculation & Volumetric Weight
+- **Objective:** Verify deterministic fee calculation using $(L \times W \times H) / 5000$. *(Provisional formula proposal pending team confirmation)*.
+- **Inputs:** Dimensions $30 \times 25 \times 15$ cm, actual weight $2.00$ kg, service level `STANDARD`.
+- **Calculations (Illustrative Baseline):**
+  - Volumetric weight = $(30 \times 25 \times 15) / 5000 = 2.25$ kg.
+  - Chargeable weight = $\max(2.00, 2.25) = 2.25$ kg.
+  - Billable extra weight = $\lceil \max(0, 2.25 - 1.0) \rceil = 2.0$ kg.
+  - Base fee = 35,000 cents (LKR 350.00), per-kg fee = 10,000 cents (LKR 100.00).
+  - Total fee = $(35000 + 2 \times 10000) \times 1.0 = 55,000$ cents (LKR 550.00).
+- **Assertions:** Returns HTTP 201; `fee_cents == 55000`, `currency == "LKR"`, `expires_at == created_at + 15m`.
+
+> [!NOTE]
+> **Provisional Pricing Test Fixture Notice:**
+> Test cases `TC-PRC-001`, `TC-PRC-002`, and `TC-PRC-003` assert calculations against provisional pricing proposals (divisor 5000, 1.5x/2.0x multipliers, 15m TTL). If the team adopts alternative tariff structures or formulas, the testing harness and invariant assertions remain valid while the specific mathematical expected values will be updated to match the ratified policy.
+
+#### `TC-PRC-002`: Service Tier Multipliers
+- **Objective:** Verify `EXPRESS` (1.5x) and `SAME_DAY` (2.0x) multipliers.
+- **Inputs:** Identical parcel as `TC-PRC-001` evaluated under `EXPRESS` and `SAME_DAY`.
+- **Assertions:**
+  - `EXPRESS`: $55000 \times 1.5 = 82,500$ cents (HTTP 201).
+  - `SAME_DAY`: $55000 \times 2.0 = 110,000$ cents (HTTP 201).
+
+#### `TC-PRC-003`: Quote Expiration Enforcement
+- **Objective:** Attempt to book a parcel with an expired quote.
+- **Setup:** Create a quote with `expires_at = NOW() - INTERVAL '1 minute'`.
+- **Action:** Submit `POST /api/v1/parcels` referencing the expired `quote_id`.
+- **Assertions:** Request rejected with HTTP 422 Unprocessable Entity (`code: "QUOTE_EXPIRED"`). No parcel created.
+
+#### `TC-PRC-004`: Quote Parameter Mismatch
+- **Objective:** Prevent price tampering by altering parcel weight between quote and booking.
+- **Setup:** Generate quote for 2.0 kg. Submit booking referencing quote with weight 5.0 kg.
+- **Assertions:** Request rejected with HTTP 422 Unprocessable Entity (`code: "QUOTE_PARAM_MISMATCH"`).
+
+---
+
+### 5.2 Parcel Booking & Input Validation (`TC-BKG-*`, `TC-VAL-*`)
+
+#### `TC-VAL-001`: Maximum Weight Boundary Enforcement
+- **Objective:** Reject bookings exceeding operational limit of 50.00 kg.
+- **Inputs:** Weight = 50.01 kg.
+- **Assertions:** HTTP 422 Unprocessable Entity (`code: "WEIGHT_LIMIT_EXCEEDED"`).
+
+#### `TC-VAL-002`: Maximum Dimension Boundary Enforcement
+- **Objective:** Reject parcels exceeding maximum single dimension of 150.00 cm.
+- **Inputs:** Length = 150.50 cm.
+- **Assertions:** HTTP 422 Unprocessable Entity (`code: "DIMENSION_LIMIT_EXCEEDED"`).
+
+#### `TC-BKG-001`: Successful Quoted Customer Booking
+- **Objective:** Verify end-to-end booking with valid quote, address snapshots, and tracking number.
+- **Action:** `POST /api/v1/parcels` with valid `Idempotency-Key` and unexpired `quote_id`.
+- **Assertions:**
+  - HTTP 201 Created with `Location: /api/v1/parcels/{id}`.
+  - Tracking number matches regex `^SD-[0-9]{8}-[0-9A-Z]{6}$`.
+  - `parcels.pickup_address` and `parcels.dropoff_address` stored as JSONB.
+  - `parcel_status_history` contains initial row (`from_status: null`, `to_status: "CREATED"`).
+  - `outbox_events` contains `parcel.booked.v1` event with matching payload.
+
+---
+
+### 5.3 Idempotency & Concurrency (`TC-IDM-*`)
+
+#### `TC-IDM-001`: Exact Request Replay
+- **Objective:** Verify that identical repeated booking requests return the original response without duplicating records.
+- **Action:** Send identical `POST /api/v1/parcels` payload with identical `Idempotency-Key` header twice.
+- **Assertions:**
+  - First request: HTTP 201 Created (new parcel record inserted).
+  - Second request: HTTP 201 Created (cached payload returned).
+  - Exactly 1 row exists in `parcels` table.
+
+#### `TC-IDM-002`: Key Reuse with Payload Conflict
+- **Objective:** Detect and reject payload tampering under a reused idempotency key.
+- **Action:** Send initial booking with key `KEY-ABC`. Send second booking with same key `KEY-ABC` but different destination address.
+- **Assertions:** Second request returns HTTP 409 Conflict (`code: "IDEMPOTENCY_KEY_PAYLOAD_MISMATCH"`). No second parcel inserted.
+
+#### `TC-IDM-003`: Optimistic Concurrency Control (OCC)
+- **Objective:** Prevent lost updates when two actors concurrently modify a parcel.
+- **Setup:** Load parcel at `version = 1`.
+- **Action:** Actor A updates parcel status to `ASSIGNED` (`version` becomes 2). Actor B attempts to update parcel status using stale `version = 1`.
+- **Assertions:** Actor B's update affects 0 rows and fails with HTTP 409 Conflict (`code: "VERSION_CONFLICT"`).
+
+---
+
+### 5.4 Lifecycle State Machine & ADR-004 Delivery Semantics (`TC-LCY-*`)
+
+#### `TC-LCY-001`: Canonical Transition Sequence
+- **Objective:** Transition parcel through happy path: `CREATED` $\to$ `ASSIGNED` $\to$ `PICKED_UP` $\to$ `IN_TRANSIT` $\to$ `OUT_FOR_DELIVERY` $\to$ `DELIVERED`.
+- **Assertions:** Every transition succeeds, increments `version`, appends to `parcel_status_history`, and writes to `outbox_events`.
+
+#### `TC-LCY-002`: Illegal State Transition Rejection
+- **Objective:** Reject invalid lifecycle shortcuts (e.g., `CREATED` $\to$ `DELIVERED`).
+- **Assertions:** HTTP 409 Conflict (`code: "INVALID_STATE_TRANSITION"`). Database state remains unchanged.
+
+#### `TC-LCY-003`: Failed Delivery Attempt Increment (ADR-004)
+- **Objective:** Verify transient failed delivery attempt semantics.
+- **Setup:** Parcel in `OUT_FOR_DELIVERY` (`attempt_count = 0`).
+- **Action:** Courier reports delivery failure (e.g., recipient unavailable).
+- **Assertions:**
+  - Status transitions to `ATTEMPT_FAILED`.
+  - `attempt_count` increments to 1.
+  - Parcel is NOT in terminal state; can be rescheduled to `OUT_FOR_DELIVERY`.
+
+#### `TC-LCY-004`: Maximum Delivery Attempts Exceeded (ADR-004)
+- **Objective:** Verify terminal return when delivery attempts reach 3.
+- **Setup:** Parcel in `ATTEMPT_FAILED` with `attempt_count = 3`.
+- **Action:** Dispatcher/system triggers return process.
+- **Assertions:** Status transitions to terminal `RETURNED`. No further delivery reattempts allowed.
+
+---
+
+### 5.5 Security, Authorization & Privacy (`TC-SEC-*`)
+
+#### `TC-SEC-001`: Tenant & Customer Isolation (IDOR Prevention)
+- **Objective:** Prevent Customer A from viewing or modifying Customer B's parcels.
+- **Action:** Customer A sends `GET /api/v1/parcels/{id_of_customer_b}`.
+- **Assertions:** HTTP 403 Forbidden (or 404 Not Found to prevent resource enumeration).
+
+#### `TC-SEC-002`: Public Tracking PII Redaction
+- **Objective:** Ensure public tracking endpoint redacts all recipient PII.
+- **Action:** Query public tracking projection for an existing parcel.
+- **Assertions:**
+  - `status`, `tracking_number`, `pickup_city`, `dropoff_city` are present.
+  - `recipient_phone`, `recipient_name`, `address_line1`, `price_cents`, and `special_instructions` are completely absent.
+
+---
+
+### 5.6 Database Migrations (`TC-DB-*`)
+
+#### `TC-DB-001`: Full Forward Migration Execution
+- **Objective:** Apply migrations `000004`, `000005`, and `000010` on clean PostgreSQL.
+- **Assertions:** All tables, indexes, checks, and foreign keys created successfully.
+
+#### `TC-DB-002`: Clean Migration Rollback
+- **Objective:** Reverse migrations `000010`, `000005`, and `000004`.
+- **Assertions:** All tables dropped cleanly; database returns to pre-migration state.
+
+---
+
+## 6. Local Test Execution Instructions
+
+### 6.1 Unit Test Execution
+Execute all pure domain and pricing calculation unit tests:
+```powershell
+go test -v -race -cover ./internal/pricing/... ./internal/parcels/...
+```
+
+### 6.2 Database Integration Test Execution
+Spin up the local PostgreSQL container and execute repository integration tests:
+```powershell
+docker compose up -d postgres
+$env:TEST_DATABASE_URL="postgres://swiftdrop:swiftdrop_dev_password@localhost:5432/swiftdrop_test?sslmode=disable"
+go test -v -tags=integration ./internal/parcels/infrastructure/...
+```
+
+---
+
+## 7. Alignment & Decision Tracking Matrix
+
+| Testing Topic | Initial Draft State | Aligned Final Specification | Source / Status |
+| :--- | :--- | :--- | :--- |
+| **Monetary Validation** | Allowed float fee checks | Exact integer LKR cents comparison | Engineering Standards v1.0 Section 6 |
+| **Pricing Formula Test** | General estimation tests | Volumetric ($/ 5000$), billable extra weight, tier multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Tariffs & Multipliers Test** | Undefined test rates | Multipliers (1.0x, 1.5x, 2.0x) and illustrative rates | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`TC-PRC-003`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Address Verification** | Tested `parcel_addresses` child table | Tests JSONB snapshots on `parcels` | Database Schema Standards |
+| **Failure Semantics** | Tested terminal `FAILED` | Tested transient `ATTEMPT_FAILED` (max 3) vs `RETURNED` | ADR-004 Failed Delivery Semantics |
+| **Migration Testing** | Unnumbered migrations | Explicit testing of `000004`, `000005`, `000010` | Database Migration Baseline |
+| **Tariff Administration** | Mixed ownership tests | Admin writes owned by M7/M1; M2 tests calculation | `PENDING TEAM CONFIRMATION` |
+| **Receipt File Format** | Tested arbitrary PDF output | M2 tests JSON snapshot; M6 tests rendering | `PENDING TEAM CONFIRMATION` |
+
+### 7.1 Pricing Policy Dependency & Test Suite Impact Analysis
+
+| Test Suite / Area | Invariant Framework (Unaffected by Pricing Changes) | Impact If Pricing Policy Changes |
+| :--- | :--- | :--- |
+| **Pricing Unit Tests (`internal/pricing/...`)** | Unit test framework, deterministic calculation assertion, zero-float validation. | Mathematical expected values in `TC-PRC-001` and `TC-PRC-002` will be updated to match the newly ratified formula/rates. |
+| **Quote Expiration Tests** | Test verifying expired quotes are rejected during booking with HTTP 422 (`QUOTE_EXPIRED`). | If the 15-minute TTL changes, the synthetic timestamp delta in `TC-PRC-003` will adjust to match the ratified duration. |
+| **Booking & Idempotency Integration** | Booking transaction atomicity, `Idempotency-Key` replay, payload mismatch conflict (409), address snapshots. | **Zero Impact:** Booking workflows test the accepted price snapshot irrespective of how the fee was calculated. |
+| **Lifecycle & Concurrency Tests** | 9-state machine transitions, ADR-004 attempt ceiling (max 3), optimistic locking (`version INT`). | **Zero Impact:** Parcel state machine is decoupled from pricing formulas. |
+
+---
+
+## 8. Acceptance Checklist & Quality Gates
+
+- [ ] Core package code coverage reaches or exceeds 70% line coverage.
+- [ ] 100% of defined invariant tests (`TC-PRC-*`, `TC-BKG-*`, `TC-IDM-*`, `TC-LCY-*`) pass without flake.
+- [ ] Zero binary floating-point assertions exist in monetary test suites.
+- [ ] Transaction rollbacks tested: simulated failure during outbox insert confirms zero partial commits.
+- [ ] Concurrency verified: simultaneous duplicate requests under same idempotency key create exactly 1 parcel.
+- [ ] Public tracking privacy tests confirm complete redaction of customer phone and street address.
+- [ ] Clean migration up and down tests succeed against real PostgreSQL.
