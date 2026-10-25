@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Reconciler command for the AT-016 CronJob test (Member 8); how to make a liveness probe fail safely for the probe test (service owners); is Docker Compose the end-to-end test environment (Member 10)?  
+> **Open Questions / Needs Clarification:** Reconciler command is known (`/usr/local/bin/reconcile --stale-threshold=5m --batch-size=50`, `messaging` image; Member 8); how to make a liveness probe fail safely for the probe test (service owners); is Docker Compose the end-to-end test environment (Member 10)?  
 > **Answers:** How will we prove the module is correct?  
 > **My acceptance test:** **AT-016**, *"Kubernetes readiness/liveness behavior and reconciliation CronJob are demonstrated"* (SRS §12.2; `test-strategy.md`). Platform tests are part of the SRS §12.1 **"Deployment"** level: *"Docker Compose and Kubernetes acceptance tests: configuration, probes, gateway routes, persistence, CronJob, scaling"*.  
 
@@ -51,7 +51,7 @@
 | PLT-020 | Reconciliation CronJob runs safely | cluster | AT-016; FR-REC-004 | `kubectl create job --from=cronjob/swiftdrop-outbox-reconciler test-run` | `Complete`, logs bounded | manual | ⏳ (needs M8's command) |
 | PLT-021 | CronJob never overlaps | cluster | ADR-002 §7.2 | start a long run, wait for the next schedule | second run skipped (`Forbid`) | manual | ⏳ |
 | PLT-022 | HPA scales core-api | cluster | SRS §15.3 | load test → `kubectl get hpa -w` | replicas 2 → up to 4, then back | manual (demo) | ⏳ |
-| PLT-023 | KEDA scales event-worker on backlog | cluster | SRS §15.3 | publish more than 10 messages to the worker queue (C7) | replicas go up, then back to 1 | manual (demo) | ⏳ |
+| PLT-023 | KEDA scales event-worker on backlog | cluster | SRS §15.3 | publish more than 10 messages to `q.notifications.worker` or `q.webhooks.dispatcher` | replicas go up, then back to 1 | manual (demo) | ⏳ |
 | PLT-024 | Outbox Relay never scales | static | AGENTS.md §4.4 | check no HPA/ScaledObject targets `outbox-relay` and `replicas: 1` | pass | CI | ⏳ |
 | PLT-025 | Bad deploy rolls back | resilience | runbook §7; demo | deploy a broken tag → `rollout undo` | the old version serves again | manual (demo) | ⏳ |
 | PLT-026 | Concurrent migration runs are safe | migration | Doc 2 §4 | start 2 migrate runs at once | one waits (lock), both end OK, `dirty = false` | manual | ⏳ |

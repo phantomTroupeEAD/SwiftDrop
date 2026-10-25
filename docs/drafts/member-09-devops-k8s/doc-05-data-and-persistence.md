@@ -63,7 +63,8 @@ Core API is **one process** (modular monolith), so all its modules share one rol
 | Role | Used by | Permissions |
 | :--- | :--- | :--- |
 | `swiftdrop_migrator` | migrate Job / Compose service only | owns the schema; DDL (CREATE/ALTER/DROP) |
-| `swiftdrop_app` | core-api (and the reconciler unless C10 says otherwise) | SELECT/INSERT/UPDATE on core tables; DELETE only where a module needs it |
+| `swiftdrop_reconciler` *(proposed)* | reconciler CronJob (`messaging` image, Member 8) | SELECT on core tables; UPDATE on `outbox_events`, `webhook_deliveries`, `notification_deliveries` |
+| `swiftdrop_app` | core-api | SELECT/INSERT/UPDATE on core tables; DELETE only where a module needs it |
 | `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels`, `parcel_status_history`, `parcel_addresses` (column-level grant possible, e.g. city/zone only; confirm with M5) |
 | `swiftdrop_relay` | outbox-relay | SELECT/UPDATE on `outbox_events` |
 | `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on `webhook_endpoints` |
@@ -129,19 +130,19 @@ After the first wave, every change takes the next free number. The seed runs aft
 
 ## 5. Connection budget (owned by M9, decided C11)
 
-**Rule:** `Σ (max replicas × pool size) + admin/migration headroom ≤ max_connections` (default **100**).
+**Rule:** `Σ (max replicas × pool size) + admin/migration headroom ≤ max_connections` (**150**: raised from the default 100 by the DB coordinator on 2026-10-25; Postgres memory limit 1Gi).
 
 | Service | Max replicas | Pool per pod (`DB_MAX_OPEN_CONNS`) | Total | Owner confirms |
 | :--- | :-: | :-: | :-: | :--- |
 | core-api | 4 | 12 *(example)* | 48 | Hansi |
 | tracking-api | TBD (C8), e.g. 4 | 5 | 20 | Senuji |
-| outbox-relay | 1 | 4 | 4 | Watti |
-| event-worker | 3 (C7) | 3 | 9 | Watti |
-| reconciler | 1 | 2 | 2 | Watti |
-| migrations + admin + spare | — | — | ~17 | Minidu |
-| **Total** | | | **≈ 100** | |
+| outbox-relay | 1 | **5** (idle 2) | 5 | ✅ Watti |
+| event-worker | 3 (KEDA) | **10** (idle 5) | 30 | ✅ Watti |
+| reconciler | 1 | 2 *(to confirm)* | 2 | Watti |
+| migrations + admin + spare | — | — | ~45 | Minidu |
+| **Total** | | | **150** (105 used) | |
 
-The **defaults** in `environment-variables.md` (25 per pod) would reach about 225, so the per-service values above **must** go into each ConfigMap. If more capacity is needed, raise `max_connections` and the Postgres memory together.
+The **defaults** in `environment-variables.md` (25 per pod) would reach about 225, so the per-service values above **must** go into each ConfigMap. If more capacity is needed, raise `max_connections` and the Postgres memory together. **Done on 2026-10-25: 150 connections, 1Gi**, so Member 8's pools fit.
 
 ## 6. Data validation and integrity rules (checked in every migration review)
 

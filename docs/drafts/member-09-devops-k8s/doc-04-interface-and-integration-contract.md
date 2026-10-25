@@ -25,7 +25,7 @@
 
 ## 2. P1 — Health and metrics contract (decided C1)
 
-Every HTTP service (core-api, tracking-api, ai-assistant; relay and worker on a small internal HTTP port) **must** expose these. They are **internal only**: never routed by Traefik.
+Every HTTP service (core-api, tracking-api, ai-assistant; outbox-relay on **8082** and event-worker on **8083**, internal only) **must** expose these. They are **internal only**: never routed by Traefik.
 
 ```yaml
 openapi: 3.0.3
@@ -134,28 +134,29 @@ The per-service variable list lives in `docs/operations/environment-variables.md
 ## 5. P4 — Metrics naming contract (proposed; owners implement)
 
 ```yaml
-# Prometheus metric names. Labels must be low-cardinality (SRS §11.4):
+# Prometheus metric names. Rule (A11): every custom metric starts with swiftdrop_.
+# Labels must be low-cardinality (SRS §11.4):
 # never tracking numbers, user IDs, emails or raw URLs. Use route templates like /api/v1/parcels/{id}.
 http:
-  - { name: http_requests_total,            type: counter,   labels: [service, method, route, status] }
-  - { name: http_request_duration_seconds,  type: histogram, labels: [service, method, route] }
+  - { name: swiftdrop_http_requests_total,  type: counter,   labels: [service, method, route, status] }
+  - { name: swiftdrop_http_request_duration_seconds,  type: histogram, labels: [service, method, route] }
 database:
-  - { name: db_pool_open_connections,       type: gauge,     labels: [service] }
-  - { name: db_pool_wait_seconds_total,     type: counter,   labels: [service] }
-outbox (M8):
-  - { name: outbox_pending_events,          type: gauge }
-  - { name: outbox_oldest_pending_age_seconds, type: gauge }
-  - { name: outbox_publish_failures_total,  type: counter }
-worker (M8):
-  - { name: worker_messages_processed_total, type: counter, labels: [queue, outcome] }
-  - { name: worker_consumer_failures_total, type: counter,  labels: [queue] }
-  - { name: webhook_deliveries_total,       type: counter,   labels: [outcome] }
-  - { name: notification_deliveries_total,  type: counter,   labels: [channel, outcome] }
+  - { name: swiftdrop_db_pool_open_connections,  type: gauge,     labels: [service] }
+  - { name: swiftdrop_db_pool_wait_seconds_total,  type: counter,   labels: [service] }
+outbox (M8, names agreed 2026-10-25):
+  - { name: swiftdrop_outbox_pending_count,            type: gauge }    # K19 suggestion: swiftdrop_outbox_pending_events
+  - { name: swiftdrop_outbox_oldest_pending_age_seconds, type: gauge }  # proposed by M9, not yet confirmed by M8
+  - { name: swiftdrop_outbox_publish_failures_total,   type: counter }
+worker (M8, names agreed 2026-10-25):
+  - { name: swiftdrop_dlq_messages_routed_total,       type: counter }
+  - { name: swiftdrop_webhook_delivery_attempts_total, type: counter }
+  - { name: swiftdrop_smtp_deliveries_total,           type: counter }
+  - rabbitmq_queue_messages{queue="swiftdrop.dlq"}    # DLQ depth from the RabbitMQ plugin
 tracking (M5):
-  - { name: sse_active_connections,         type: gauge }
+  - { name: swiftdrop_sse_active_connections,  type: gauge }
 ai (M10):
-  - { name: ai_requests_total,              type: counter,   labels: [outcome] }
-  - { name: ai_tokens_total,                type: counter }
+  - { name: swiftdrop_ai_requests_total,  type: counter,   labels: [outcome] }
+  - { name: swiftdrop_ai_tokens_total,  type: counter }
 infrastructure (M9 via exporters):
   - rabbitmq queue depth / DLQ depth        # RabbitMQ Prometheus plugin (rabbitmq_prometheus, port 15692)
   - postgres connections / size             # optional postgres_exporter
@@ -169,10 +170,10 @@ These names map to the SRS §11.4 list (request count, latency, errors, DB pool 
 | Rule | Value |
 | :--- | :--- |
 | Name | `ghcr.io/<org-lowercase>/swiftdrop/<service>:<git-sha>` (registry TBD, C24) |
-| Services | `core-api`, `tracking-api`, `outbox-relay`, `event-worker`, `ai-assistant`, `web` |
+| Images | `core-api`, `tracking-api`, **`messaging`** (relay + worker + reconcile, Member 8), `ai-assistant`, `web` (Dockerfile by Member 9), `core-api-migrations` |
 | User | non-root `10001:10001` |
 | Base | pinned version; distroless/alpine for Go, slim for Python, nginx alpine for web |
-| Port | declared with `EXPOSE`, and equal to the contract port (8080 / 8081 / 8000 / 3000) |
+| Port | declared with `EXPOSE`, and equal to the contract port (8080 / 8081 / 8082 / 8083 / 8000 / 3000) |
 | Secrets | none inside the image |
 | Logs | JSON lines to stdout with `request_id` (runbook §2) |
 | Shutdown | handle SIGTERM; finish within the grace period (core-api 20s) |
@@ -236,7 +237,7 @@ These names map to the SRS §11.4 list (request count, latency, errors, DB pool 
 
 ## 12. Events produced and consumed
 
-**None.** The platform neither publishes nor consumes domain events. KEDA only **reads queue length** from RabbitMQ (queue name TBD, C7). Event schemas are M8's (`event-contracts.md`).
+**None.** The platform neither publishes nor consumes domain events. KEDA only **reads queue length** from RabbitMQ (queues `q.notifications.worker` and `q.webhooks.dispatcher`). Event schemas are M8's (`event-contracts.md`).
 
 ## 13. Database access and table ownership rules
 
@@ -309,7 +310,7 @@ sequenceDiagram
 | M3 Kalani | proof storage choice (C26), migrations | MinIO in Compose (+ K8s plan), review |
 | M4 Nagitha | webhook egress needs, migrations | NetworkPolicy egress, review |
 | M5 Senuji | SSE paths, Redis need, HPA numbers | Deployment, HPA, Redis, read-only DB role |
-| M6 Sajini | build command, `VITE_*` vars | web image, Nginx config, Compose service |
+| M6 Sajini | ✅ `npm run build` → `dist/`, `VITE_API_BASE_URL=/api/v1` (2026-10-25); build requirements + review | **web Dockerfile + Nginx config (owned by M9)**, Compose service |
 | M7 Bagya | routes and policies (CRDs), dashboard port | Traefik install, Ingress connectivity, smoke tests |
-| M8 Watti | queue names, reconciler command, metrics, core-api Dockerfile lead | RabbitMQ StatefulSet, relay (×1) and worker Deployments, KEDA, CronJob |
+| M8 Watti | ✅ queues, reconciler command, ports 8082/8083, metrics, pools (2026-10-25); `messaging` image; core-api Dockerfile lead | RabbitMQ StatefulSet, relay (×1) and worker Deployments, KEDA, CronJob |
 | M10 Kakkaya | E2E command, AI health, mock mode | Compose stack as the E2E environment, AI Deployment |

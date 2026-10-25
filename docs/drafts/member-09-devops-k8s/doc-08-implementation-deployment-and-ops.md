@@ -114,14 +114,14 @@ kubectl get pods -n swiftdrop -w
 | core-api | Deployment | ClusterIP 8080 | startup + ready + live (Doc 4 §2) | TBD | HPA 2–4 @ CPU 70% |
 | tracking-api | Deployment | ClusterIP 8081 | same | TBD | HPA, TBD (C8) |
 | ai-assistant | Deployment | ClusterIP 8000 | same | TBD | 1 replica |
-| web | Deployment | ClusterIP 3000 | HTTP `/` | TBD | HPA 2–3 @ CPU 80% |
-| outbox-relay | Deployment | internal health port TBD | same | TBD | **always 1** |
-| event-worker | Deployment | internal health port TBD | same | TBD | KEDA 1–3 (C7) |
-| postgres | StatefulSet ✅ | `postgres` + headless ✅ | `pg_isready` ✅ (fix user, C14) | 100m/256Mi → 500m/512Mi ✅ | never |
+| web | Deployment (Nginx; Dockerfile by Member 9) | ClusterIP 3000 | HTTP `/` | TBD | HPA 2–3 @ CPU 80% |
+| outbox-relay | Deployment (`messaging` image, `/usr/local/bin/relay`) | internal 8082 | same | TBD | **always 1** |
+| event-worker | Deployment (`messaging` image, `/usr/local/bin/worker`) | internal 8083 | same | TBD | KEDA 1–3 (two queues) |
+| postgres | StatefulSet ✅ | `postgres` + headless ✅ | `pg_isready` ✅ (fix user, C14) | 100m/256Mi → 500m/**1Gi** (`max_connections=150`) | never |
 | rabbitmq | StatefulSet ✅ | `rabbitmq` + headless ✅ | `rabbitmq-diagnostics` ✅ | 100m/256Mi → 500m/512Mi ✅ | never |
 | redis *(if needed)* | Deployment | ClusterIP 6379 | `redis-cli ping` | small | 1 |
 | migrate | Job | — | — | small | once per deploy |
-| reconciler | CronJob ✅ | — | — | 50m/64Mi → 200m/128Mi ✅ | `*/10`, Forbid ✅ |
+| reconciler | CronJob ✅ (`messaging` image, `/usr/local/bin/reconcile --stale-threshold=5m --batch-size=50`) | — | — | 50m/64Mi → 200m/128Mi ✅ | `*/10`, Forbid ✅ |
 | traefik | Deployment (Helm) | LoadBalancer/NodePort 80/443 | `/ping` | TBD | 1–2 |
 
 **Deploy order (K8s):**
@@ -149,14 +149,14 @@ This follows `deployment-guide.md` §3 with the decided names.
 
 | Panel | Query idea | Target |
 | :--- | :--- | :--- |
-| Request rate per service | `sum(rate(http_requests_total[5m])) by (service)` | — |
-| p95 latency | `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))` | ≤ 500 ms (NFR-PERF-001) |
-| Error rate (5xx) | `sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)` | ~0 |
-| Outbox backlog / oldest age | `outbox_pending_events`, `outbox_oldest_pending_age_seconds` | publish ≤ 5 s (NFR-PERF-003) |
+| Request rate per service | `sum(rate(swiftdrop_http_requests_total[5m])) by (service)` | — |
+| p95 latency | `histogram_quantile(0.95, sum(rate(swiftdrop_http_request_duration_seconds_bucket[5m])) by (le, service))` | ≤ 500 ms (NFR-PERF-001) |
+| Error rate (5xx) | `sum(rate(swiftdrop_http_requests_total{status=~"5.."}[5m])) by (service)` | ~0 |
+| Outbox backlog / oldest age | `swiftdrop_outbox_pending_count`, `swiftdrop_outbox_oldest_pending_age_seconds` | publish ≤ 5 s (NFR-PERF-003) |
 | Queue depth / DLQ | RabbitMQ plugin metrics | DLQ = 0 |
-| Worker failures, webhook outcomes | `worker_consumer_failures_total`, `webhook_deliveries_total` | — |
-| SSE connections | `sse_active_connections` | — |
-| DB connections | `db_pool_open_connections` + Postgres total | < 100 (C11) |
+| Worker failures, webhook outcomes | `swiftdrop_dlq_messages_routed_total`, `swiftdrop_webhook_delivery_attempts_total` | — |
+| SSE connections | `swiftdrop_sse_active_connections` | — |
+| DB connections | `swiftdrop_db_pool_open_connections` + Postgres total | < 150 (C11) |
 | Pod restarts, CPU, memory | kube metrics | — |
 
 **Tracing:** `OTEL_EXPORTER_OTLP_ENDPOINT` exists in `environment-variables.md` (pointing at `tempo:4317`), but **no tracing backend is planned yet**, so treat it as optional. Correlation through `request_id` / `correlation_id` in logs is the baseline (runbook §2).
@@ -169,7 +169,7 @@ This follows `deployment-guide.md` §3 with the decided names.
 - disk > 80% (ADR-002 §9);
 - 5xx rate high;
 - p95 > 500 ms;
-- DB connections > 90.
+- DB connections > 135 (90% of 150).
 
 ## 8. Troubleshooting
 
@@ -182,7 +182,7 @@ This follows `deployment-guide.md` §3 with the decided names.
 | Pod `Running` but not Ready | dependency down or wrong ready path | `kubectl describe pod`; check `/health/ready` |
 | `ImagePullBackOff` | wrong tag or no GHCR access | check the tag; for local images use `k3d image import` |
 | HPA shows `<unknown>` | no metrics yet or no CPU requests | wait about a minute; add `resources.requests.cpu` |
-| KEDA not scaling | wrong queue name (C7) or missing secret key (C6) | `kubectl describe scaledobject -n swiftdrop` |
+| KEDA not scaling | old queue `parcel.events` still in the ScaledObject (use `q.notifications.worker` + `q.webhooks.dispatcher`), or `host` not pointing at `RABBITMQ_URL` | `kubectl describe scaledobject -n swiftdrop` |
 | `too many clients` from Postgres | pool budget exceeded | runbook Playbook A; lower the pool sizes (Doc 5 §5) |
 | PVC `Pending` | no `local-path` StorageClass | `kubectl get storageclass` (K3s/k3d has it by default) |
 | Gateway returns 404 | route rule or service name mismatch | Traefik dashboard via port-forward; check names against Doc 4 §7 |

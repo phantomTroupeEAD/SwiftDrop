@@ -72,6 +72,8 @@ Existing files are marked ✅. Everything else is planned.
 ```
 Makefile                                  # make up · migrate-up · seed · test-e2e (C22)
 .env.example                              # placeholders only (SRS §11.1)
+web/Dockerfile + web/nginx.conf           # owned by Member 9 (Member 6 decision, 2026-10-25): port 3000, SPA fallback
+services/messaging/Dockerfile             # Member 8: ONE image, binaries relay / worker / reconcile
 deploy/
 ├── README.md                             ✅ living doc (update)
 ├── docker-compose.yml                    # local stack (C3)
@@ -79,7 +81,7 @@ deploy/
 ├── docker/templates/
 │   ├── Dockerfile.go                     # multi-stage → distroless/alpine, USER 10001
 │   ├── Dockerfile.python                 # FastAPI (ai-assistant)
-│   ├── Dockerfile.web + nginx.conf       # SPA, listens on 3000 (C15)
+│   ├── Dockerfile.web + nginx.conf       # template for the real web/Dockerfile (port 3000, decided)
 │   └── dockerignore.example
 ├── gateway/                              ✅ (M7 policies, M9 install)
 │   ├── README.md                         ✅
@@ -103,13 +105,13 @@ deploy/
 │   ├── ai-assistant.yml
 │   ├── web.yml
 │   ├── migrate-job.yml                   # golang-migrate, once per deploy (C22)
-│   ├── cronjob-reconciliation.yml        ✅ (pin image, add SA, C10)
+│   ├── cronjob-reconciliation.yml        ✅ (switch to messaging image + /usr/local/bin/reconcile, add SA)
 │   ├── networkpolicies.yml               # DB/broker only from app pods (ADR-002 §8)
 │   ├── autoscaling/
 │   │   ├── hpa-core-api.yml
 │   │   ├── hpa-tracking.yml              ✅ (numbers C8)
 │   │   ├── hpa-web.yml
-│   │   └── keda-event-worker.yml         ✅ (queue C7, key C6)
+│   │   └── keda-event-worker.yml         ✅ (two triggers: q.notifications.worker + q.webhooks.dispatcher; host = RABBITMQ_URL)
 │   └── tests/probe_test.sh               # AT-016 evidence
 ├── helm/swiftdrop/                       # bonus (SRS §15.3)
 │   ├── Chart.yaml
@@ -202,20 +204,20 @@ Migrations   ──► run by the platform, owned by table owners
 
 | Workload | Replicas | CPU request / limit | Memory request / limit |
 | :--- | :--- | :--- | :--- |
-| postgres | 1 | 100m / 500m ✅ | 256Mi / 512Mi ✅ |
+| postgres | 1 | 100m / 500m ✅ | 256Mi / **1Gi** (raised for `max_connections=150`) |
 | rabbitmq | 1 | 100m / 500m ✅ | 256Mi / 512Mi ✅ |
 | reconciler (while running) | 0–1 | 50m / 200m ✅ | 64Mi / 128Mi ✅ |
 | core-api | 2–4 | TBD | TBD |
 | tracking-api | TBD (C8) | TBD | TBD |
 | outbox-relay | 1 | TBD | TBD |
-| event-worker | 1–3 (C7) | TBD | TBD |
+| event-worker | 1–3 (KEDA, two queues) | TBD | TBD |
 | ai-assistant | 1 | TBD | TBD |
 | web | 2–3 | TBD | TBD |
 | traefik | 1–2 | TBD (ADR-001: about 50–80 MB RAM) | TBD |
 | monitoring | 1 each | TBD | TBD |
 
 - **Rule:** the sum of all *requests* at **max replicas** must fit the VPS, leaving headroom for K3s itself (its exact footprint is TBD and depends on the VPS size).
-- **DB connections:** the sum of `max replicas × pool size` must be ≤ 100 (C11; Doc 5 §5).
+- **DB connections:** the sum of `max replicas × pool size` must stay within `max_connections` = **150** (C11; Doc 5 §5).
 - **Performance targets** I must make measurable:
   - NFR-PERF-001: p95 ≤ 500 ms at 50 users. `database-schema.md` §4 says < 200 ms, so the team should pick one.
   - NFR-PERF-003: outbox → RabbitMQ in ≤ 5 s.

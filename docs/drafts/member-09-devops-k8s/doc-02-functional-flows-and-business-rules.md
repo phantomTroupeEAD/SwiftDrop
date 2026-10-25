@@ -202,9 +202,9 @@ sequenceDiagram
         alt CPU above target (70% core / tracking TBD C8 / 80% web)
             HPA->>DEP: scale up (max 4 / TBD / 3)
         end
-        KEDA->>MQ: read queue length (queue TBD C7)
+        KEDA->>MQ: read length of q.notifications.worker + q.webhooks.dispatcher
         alt length > 10
-            KEDA->>WK: scale up (max 2–3, TBD C7)
+            KEDA->>WK: scale up (max 3)
         end
     end
 ```
@@ -276,6 +276,6 @@ sequenceDiagram
 | A Windows teammate has no `make` | install it in WSL (`sudo apt install make`) or `choco install make` |
 | A migration failed half-way, so `schema_migrations.dirty = true` | fix the SQL, then `migrate ... force <last good version>`, then `up` (`local-development.md` §5) |
 | `kubectl get hpa` shows `<unknown>` | metrics-server isn't ready, or the pods have no CPU requests. Check both |
-| KEDA never scales | the queue name in the ScaledObject is wrong (`parcel.events` doesn't exist, C7), or the secret key is missing (C6) |
+| KEDA never scales | the ScaledObject still uses the old `parcel.events` queue instead of `q.notifications.worker` / `q.webhooks.dispatcher`, or its `host` doesn't point at the `RABBITMQ_URL` secret key |
 | SSE updates stop after ~100s behind Cloudflare | heartbeats are missing or the response is buffered. Tracking must send `X-Accel-Buffering: no` and 15s pings (ADR-002 §5.2) |
 | New core-api pods crash after a deploy | the probe fails, so the rollout stalls. Run `kubectl rollout undo` (runbook §7) |

@@ -114,7 +114,7 @@ The platform does no user login. Its security is about **who can change, deploy 
 | CI broken | red checks | merges blocked | fix the workflow; never skip checks (Engineering Standards §3.3) | no |
 | GHCR unavailable | image pull errors | new deploys blocked | running pods unaffected; retry later | no |
 
-**Reconciliation:** the outbox and delivery reconciliation **logic** is M8's (FR-REC-001..005). I deploy it as a CronJob every `*/10` minutes (C10), with no overlapping runs.
+**Reconciliation:** the outbox and delivery reconciliation **logic** is M8's (FR-REC-001..005). I deploy it as a CronJob every `*/10` minutes using the `messaging` image (`/usr/local/bin/reconcile`, agreed with Member 8), with no overlapping runs.
 
 ## 8. Audit logging
 

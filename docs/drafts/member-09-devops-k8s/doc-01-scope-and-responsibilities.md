@@ -32,7 +32,7 @@ Without a platform module:
 
 | # | Responsibility | Source |
 | :-: | :--- | :--- |
-| R1 | Dockerfiles for all 6 services, written **together with** each owner (templates from me, each owner understands their own). The core-api Dockerfile is led by Watti (M8) | Work Division §3 and §9; group decision |
+| R1 | Dockerfiles for all 6 services, written **together with** each owner (templates from me, each owner understands their own). The core-api Dockerfile is led by Watti (M8); the **`messaging`** image (relay, worker and reconcile in one Dockerfile) is Watti's; **`web/Dockerfile` + the Nginx config are mine** (Sajini, M6, 2026-10-25) | Work Division §3 and §9; group decision |
 | R2 | Local **Docker Compose** stack (`deploy/docker-compose.yml`) with Postgres, RabbitMQ, Redis, MinIO, Traefik and the app services | SRS §11.1; C3 decision |
 | R3 | Root **Makefile**: `make up`, `make migrate-up`, `make seed`, `make test-e2e` | C22 decision |
 | R4 | **Kubernetes** manifests (and the Helm chart for the bonus): Deployments, Services, StatefulSets, Job, CronJob, ConfigMap and Secret templates, NetworkPolicies | SRS §11.2; ADR-002 |
@@ -68,7 +68,7 @@ Without a platform module:
 | :--- | :--- | :--- |
 | Every service owner | port, start command, health/metrics endpoints, env vars, build context, smoke test | asked through a per-service deployment form (Member 9) |
 | M7 Bagya | route map, the `IngressRoute`/`Middleware` CRDs, CORS and rate limits | path-based routing decided (C17) |
-| M8 Watti | queue names for KEDA, reconciler command and image, relay/worker metrics | TBD (C7, C10) |
+| M8 Watti | queue names for KEDA, reconciler command and image, relay/worker metrics | ✅ answered 2026-10-25 (queues, reconciler, ports 8082/8083, metrics, pools); ⏳ health paths, `correlation_id`, `processed_events` |
 | M5 Senuji | SSE paths, Redis need, HPA numbers | TBD (C8, C18, C26) |
 | M2 Hansi | seed command, core-api pool size confirmation, idempotency table owner | TBD (C11, DB7) |
 | Every table owner | migrations that follow the rules in Doc 5 | rules announced to the team |
@@ -166,7 +166,7 @@ Without a platform module:
 **Decided (2026-10-24):** C1 health paths · C3 Compose location · C4 secret names · C11 M9 owns the pool budget · C17 path routing · C22 golang-migrate + Makefile · Minidu is DB coordinator · Watti leads the core-api Dockerfile.
 
 **Still open:**
-- infra conflicts C2, C5–C10, C12–C16, C18–C21 and C23–C26;
+- infra conflicts C2, C5, C8, C9, C12, C13 (`correlation_id`), C14, C18–C21 and C23–C26 (C6, C7, C10, C15 and C16 were settled on 2026-10-25);
 - schema problems DB1–DB11;
 - the VPS provider and size, the domain, and GitHub admin rights.
 
