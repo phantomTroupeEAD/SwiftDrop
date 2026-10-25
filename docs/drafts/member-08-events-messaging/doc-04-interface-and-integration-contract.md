@@ -18,13 +18,13 @@ Member 08 coordinates all asynchronous messaging across the system. This integra
 | :--- | :--- | :--- | :--- | :--- |
 | **Member 02 (Parcels & Pricing)** | In-Process Go Method Call | Inbound $\to$ Member 08 | `events.OutboxWriter.Write(ctx, tx, ...)` | Atomic enlistment in `*sql.Tx`; non-blocking. |
 | **Member 03 (Dispatch & Delivery)** | In-Process Go Method Call | Inbound $\to$ Member 08 | `events.OutboxWriter.Write(ctx, tx, ...)` | Atomic enlistment in `*sql.Tx`; non-blocking. |
-| **Member 04 (Merchants)** | In-Process Go Method Call & DB | Bi-Directional | `OutboxWriter` + Read-only query on `webhook_endpoints` | Member 04 owns endpoint config; Member 08 only reads. |
+| **Member 04 (Merchants)** | In-Process Go Method Call & DB | Bi-Directional | `OutboxWriter` + Read-only query on `merchant_webhook_targets_view` | Member 04 owns webhook registration & AES-GCM encryption; Member 08 decrypts at send time. |
 | **PostgreSQL 16+ Database** | PostgreSQL Wire Protocol (TCP) | Bi-Directional | Tables: `outbox_events`, `processed_events`, `deliveries` | Atomicity, row-level locks via `SKIP LOCKED`. |
 | **RabbitMQ 3.12+ Message Broker** | AMQP 0-9-1 (TCP 5672) | Bi-Directional | Exchange: `swiftdrop.events.topic` | Persistent delivery mode 2, Publisher Confirms, Manual Acks. |
 | **Member 05 (Tracking API)** | AMQP 0-9-1 (via Broker) | Outbound $\to$ Member 05 | Queue: `q.tracking.updates` | Real-time milestone projection; at-least-once. |
 | **Real SMTP Email Server** | SMTP / STARTTLS (TCP 587/465) | Outbound $\to$ Mail Server | RFC 5321 / RFC 3207 SMTP Handshake | Real TLS delivery, 10s connection timeout; no mocks. |
 | **Merchant Webhook Endpoints** | HTTPS POST (TCP 443) | Outbound $\to$ Merchant ERP | HMAC-SHA256 Signed JSON Payload | 5s timeout, SSRF SafeDial, anti-replay ($\pm 300\text{s}$). |
-| **Member 09 (DevOps / Kubernetes)** | HTTP GET (TCP 8082 / 8083) | Inbound $\to$ Member 08 | `/livez`, `/readyz`, `/metrics` | Liveness, DB/Broker connectivity readiness. |
+| **Member 09 (DevOps / Kubernetes)** | HTTP GET (TCP 8082 / 8083) | Inbound $\to$ Member 08 | `/health/live`, `/health/ready`, `/metrics` | Standard Agreement A2 probes; DB/Broker connectivity readiness. |
 
 ---
 
@@ -410,14 +410,14 @@ QUIT ------------------------------------->
 
 ## 6. Health, Liveness & Operational HTTP Endpoints
 
-Both `services/messaging/cmd/relay` and `services/messaging/cmd/worker` expose operational endpoints for Kubernetes container orchestration:
+Both `services/messaging/cmd/relay` and `services/messaging/cmd/worker` expose operational endpoints adhering to Member 09 Agreement A2, K17, and SRS §6.2:
 
 ### 6.1 Endpoints Specification
 
 | Path | Method | Daemon | Port | Purpose | Response Schema |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/livez` | `GET` | Relay & Worker | `8082` (Relay)<br>`8083` (Worker) | Process Liveness probe | `200 OK` `{"status":"UP"}` |
-| `/readyz` | `GET` | Relay & Worker | `8082` (Relay)<br>`8083` (Worker) | Dependency Readiness probe (DB & AMQP) | `200 OK` `{"status":"READY","database":"UP","broker":"UP"}`<br>`503 Service Unavailable` if DB or AMQP down. |
+| `/health/live` | `GET` | Relay & Worker | `8082` (Relay)<br>`8083` (Worker) | Process Liveness probe (Never checks DB) | `200 OK` `{"status":"UP"}` |
+| `/health/ready` | `GET` | Relay & Worker | `8082` (Relay)<br>`8083` (Worker) | Dependency Readiness probe (PostgreSQL & RabbitMQ) | `200 OK` `{"status":"READY","database":"UP","broker":"UP"}`<br>`503 Service Unavailable` if DB or AMQP down. |
 | `/metrics` | `GET` | Relay & Worker | `8082` / `8083` | Prometheus metric scrape | Standard Prometheus text exposition format. |
 
 ---
@@ -432,7 +432,7 @@ Member 08 has strict, segregated database permissions across PostgreSQL tables:
 | `processed_events` | Member 08 | None | None | **SELECT, INSERT** (`ON CONFLICT`) | **DELETE** (expired records) |
 | `notification_deliveries`| Member 08 | None | None | **INSERT, UPDATE** | **SELECT** (audit) |
 | `webhook_deliveries` | Member 08 | None | None | **INSERT, UPDATE** | **SELECT, UPDATE** (schedule retry)|
-| `webhook_endpoints` | Member 04 | None | None | **SELECT ONLY** (`WHERE enabled=true`)| None |
+| `merchant_webhook_targets_view` | Member 04 | None | None | **SELECT ONLY** (`endpoint_id, url, secret_ciphertext`)| None |
 | `parcels` | Member 02 | None | None | **SELECT ONLY** (read-only hydration) | None |
 | `parcel_addresses` | Member 02 | None | None | **SELECT ONLY** (read-only hydration) | None |
 
@@ -521,7 +521,8 @@ sequenceDiagram
     and Merchant Webhook Dispatch
         Broker->>Worker: Consume parcel.delivered.v1
         activate Worker
-        Worker->>DB: Query webhook_endpoints for Merchant
+        Worker->>DB: Query merchant_webhook_targets_view for Merchant
+        Worker->>Worker: Decrypt secret_ciphertext via AES-256-GCM
         Worker->>Worker: Calculate HMAC-SHA256 Signature (t={now},v1={hash})
         Worker->>Worker: SafeDialContext: Resolve DNS & Verify Public CIDR
         Worker->>MerchantServer: POST /webhooks/swiftdrop (Timeout: 5s)
@@ -552,7 +553,7 @@ sequenceDiagram
 - [x] Full OpenAPI 3.1 contract for outbound merchant webhook receivers.
 - [x] Cryptographic HMAC-SHA256 signature calculation formula and anti-replay window.
 - [x] Full RFC 5321/3207 SMTP protocol dialogue and response code error matrix for real SMTP mailer.
-- [x] Kubernetes operational HTTP endpoints (`/livez`, `/readyz`, `/metrics`).
+- [x] Kubernetes operational HTTP endpoints (`/health/live`, `/health/ready`, `/metrics`).
 - [x] Database table permissions matrix defining explicit access per daemon.
 - [x] Mermaid sequence diagrams for parcel booking and courier delivery milestone fan-out.
 - [x] Evolution and semantic versioning policy for event schemas and topic routing keys.

@@ -57,8 +57,7 @@ SwiftDrop Repository
         │   ├── webhook/                  # SafeDialContext, HMAC signer, backoff calculator
         │   └── reconcile/                # Stale outbox discovery and retry rescheduling
         ├── tests/                        # Integration and end-to-end tests
-        ├── Dockerfile.relay              # Multi-stage Dockerfile for Outbox Relay
-        ├── Dockerfile.worker             # Multi-stage Dockerfile for Event Worker
+        ├── Dockerfile                    # Multi-stage multi-binary Dockerfile (Agreement A3)
         ├── go.mod
         ├── go.sum
         └── README.md                     # Living documentation
@@ -113,9 +112,13 @@ SMTP_FROM_EMAIL=notifications@swiftdrop.io
 SMTP_FROM_NAME="SwiftDrop Deliveries"
 SMTP_TLS_ENABLED=true                     # Enforce TLS certificate validation
 
-# Operational Probe Server Ports
-RELAY_HTTP_PORT=8082                      # Health/metrics port for Relay pod
-WORKER_HTTP_PORT=8083                     # Health/metrics port for Worker pod
+# Operational Probe Server Ports (Agreement A1)
+RELAY_HTTP_PORT=8082                      # Health/metrics port for Relay pod (internal only)
+WORKER_HTTP_PORT=8083                     # Health/metrics port for Worker pod (internal only)
+
+# Merchant Webhook Security (Member 04 & 09 Agreement A5)
+# 32-byte hexadecimal key for AES-256-GCM webhook secret decryption (Secret: integrations-secrets)
+WEBHOOK_SECRET_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ```
 
 ---
@@ -178,14 +181,14 @@ cd services/messaging && go test -v -race ./...
 
 ## 5. Docker Container Build & Multi-Stage Packaging
 
-Daemons are packaged into hardened, non-root container images. Below is the multi-stage Dockerfile:
+Daemons are packaged into a single hardened, non-root multi-binary image adhering to Member 09 Agreement A3:
 
 ### 5.1 Dockerfile (`services/messaging/Dockerfile`)
 ```dockerfile
 # ------------------------------------------------------------------------------
 # Build Stage
 # ------------------------------------------------------------------------------
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
@@ -199,33 +202,38 @@ RUN go mod download
 # Copy source tree
 COPY . .
 
-# Compile statically linked binaries
-ARG TARGET_BIN=relay
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/service ./cmd/${TARGET_BIN}
+# Compile all three statically linked binary entrypoints
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/relay ./cmd/relay && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/worker ./cmd/worker && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/reconcile ./cmd/reconcile
 
 # ------------------------------------------------------------------------------
-# Production Minimal Scratch Image
+# Production Hardened Runtime Image
 # ------------------------------------------------------------------------------
-FROM scratch
+FROM alpine:3.20
 
-# Import root CA certificates for real SMTP TLS & HTTPS webhooks
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Create standard SwiftDrop non-root user (Agreement A3: UID/GID 10001)
+RUN addgroup -g 10001 swiftdrop && \
+    adduser -D -u 10001 -G swiftdrop swiftdrop && \
+    apk add --no-cache ca-certificates tzdata
 
-# Run as non-root user (security standard SEC-016)
-USER 65532:65532
+# Copy compiled binaries into /usr/local/bin/
+COPY --from=builder /bin/relay /usr/local/bin/relay
+COPY --from=builder /bin/worker /usr/local/bin/worker
+COPY --from=builder /bin/reconcile /usr/local/bin/reconcile
 
-COPY --from=builder /bin/service /usr/local/bin/service
+# Run as non-root user
+USER 10001:10001
 
-ENTRYPOINT ["/usr/local/bin/service"]
+# Default entrypoint (overridden per Kubernetes Deployment)
+ENTRYPOINT ["/usr/local/bin/worker"]
 ```
 
-### 5.2 Build Commands
+### 5.2 Build & Tagging Commands (Agreement A3)
 ```bash
-# Build Outbox Relay Container Image:
-docker build --build-arg TARGET_BIN=relay -t swiftdrop/outbox-relay:latest -f services/messaging/Dockerfile services/messaging
-
-# Build Event Worker Container Image:
-docker build --build-arg TARGET_BIN=worker -t swiftdrop/event-worker:latest -f services/messaging/Dockerfile services/messaging
+# Build Single Multi-Binary Image with Pinned Git SHA:
+GIT_SHA=$(git rev-parse --short HEAD)
+docker build -t ghcr.io/phantomtroupeead/swiftdrop/messaging:${GIT_SHA} -f services/messaging/Dockerfile services/messaging
 ```
 
 ---
@@ -261,12 +269,15 @@ spec:
     spec:
       containers:
         - name: outbox-relay
-          image: swiftdrop/outbox-relay:latest
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          command: ["/usr/local/bin/relay"]
           envFrom:
             - configMapRef:
                 name: messaging-config
             - secretRef:
-                name: messaging-secrets
+                name: postgres-secrets
+            - secretRef:
+                name: rabbitmq-secrets
           resources:
             requests:
               cpu: 100m
@@ -276,13 +287,13 @@ spec:
               memory: 256Mi
           livenessProbe:
             httpGet:
-              path: /livez
+              path: /health/live
               port: 8082
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /health/ready
               port: 8082
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -314,12 +325,17 @@ spec:
     spec:
       containers:
         - name: event-worker
-          image: swiftdrop/event-worker:latest
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          command: ["/usr/local/bin/worker"]
           envFrom:
             - configMapRef:
                 name: messaging-config
             - secretRef:
-                name: messaging-secrets
+                name: postgres-secrets
+            - secretRef:
+                name: rabbitmq-secrets
+            - secretRef:
+                name: integrations-secrets
           resources:
             requests:
               cpu: 100m
@@ -329,13 +345,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /livez
+              path: /health/live
               port: 8083
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /health/ready
               port: 8083
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -390,14 +406,15 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: reconciler
-              image: swiftdrop/outbox-relay:latest # Uses same binary image with command override
-              command: ["/usr/local/bin/service"]
-              args: ["reconcile"]
+              image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+              command: ["/usr/local/bin/reconcile"]
               envFrom:
                 - configMapRef:
                     name: messaging-config
                 - secretRef:
-                    name: messaging-secrets
+                    name: postgres-secrets
+                - secretRef:
+                    name: rabbitmq-secrets
               resources:
                 requests:
                   cpu: 50m
@@ -416,7 +433,7 @@ Both daemons expose Prometheus counters and histograms:
 
 | Metric Name | Type | Description |
 | :--- | :--- | :--- |
-| `swiftdrop_outbox_pending_count` | Gauge | Current number of unconfirmed pending rows in `outbox_events`. |
+| `swiftdrop_outbox_pending_events` | Gauge | Current number of unconfirmed pending rows in `outbox_events` (Agreement K19). |
 | `swiftdrop_outbox_publish_duration_seconds` | Histogram | Latency distribution of RabbitMQ publisher confirms. |
 | `swiftdrop_outbox_publish_failures_total` | Counter | Total number of failed AMQP publish attempts. |
 | `swiftdrop_smtp_deliveries_total` | Counter | Total real SMTP emails dispatched (labeled by `status=SENT|FAILED`). |
@@ -426,7 +443,7 @@ Both daemons expose Prometheus counters and histograms:
 | `swiftdrop_dlq_messages_routed_total` | Counter | Total poison messages escalated to `swiftdrop.dlq`. |
 
 ### 7.2 Core Alerting Rules
-- **OutboxBacklogHigh:** `swiftdrop_outbox_pending_count > 100` for 5m. (Indicates Outbox Relay is stuck or broker is unreachable).
+- **OutboxBacklogHigh:** `swiftdrop_outbox_pending_events > 100` for 5m. (Indicates Outbox Relay is stuck or broker is unreachable).
 - **DeadLetterQueueActive:** `increase(swiftdrop_dlq_messages_routed_total[10m]) > 0`. (Alerts on poison pills or dying merchant endpoints).
 - **SMTPFailureRateHigh:** `rate(swiftdrop_smtp_deliveries_total{status="FAILED"}[5m]) > 0.05`. (Alerts on bad SMTP credentials or provider outage).
 - **SSRFViolationDetected:** `increase(swiftdrop_webhook_ssrf_blocked_total[5m]) > 0`. (Alerts security team to malicious webhook registrations).
@@ -442,12 +459,12 @@ To prevent message loss or interrupted TCP dialogues during container updates:
 2. Establish PostgreSQL connection pool; verify connectivity via `db.PingContext(ctx)`.
 3. Establish RabbitMQ AMQP connection; declare topology (`swiftdrop.events.topic` exchange and durable queues).
 4. For Real SMTP Worker: Perform initial test handshake to verify `SMTP_HOST` connectivity.
-5. Bind HTTP server on probe port (`/livez`, `/readyz`, `/metrics`); mark readiness probe `200 OK`.
+5. Bind HTTP server on probe port (`/health/live`, `/health/ready`, `/metrics`); mark readiness probe `200 OK`.
 6. Start background worker goroutines.
 
 ### 8.2 Graceful Shutdown Sequence (`SIGTERM` / `SIGINT`)
 1. Intercept `os.Interrupt` / `syscall.SIGTERM`.
-2. Immediately set `/readyz` probe to `503 Service Unavailable` so Kubernetes detaches traffic.
+2. Immediately set `/health/ready` probe to `503 Service Unavailable` so Kubernetes detaches traffic.
 3. **Outbox Relay:** Stop poller ticker. Wait for current batch publisher confirms to complete (timeout: 10s).
 4. **Event Worker:** Cancel AMQP channel subscriptions. Allow active worker goroutines up to 15 seconds to complete in-flight SMTP handshakes and webhook requests.
 5. Close RabbitMQ AMQP connection.
@@ -471,7 +488,7 @@ To prevent message loss or interrupted TCP dialogues during container updates:
 - [x] Comprehensive `.env.example` reference with descriptions and safe values.
 - [x] Real SMTP server configuration specified from day one (no fake/mock sinks).
 - [x] Local developer setup guide: Docker commands, migration steps, and execution commands.
-- [x] Multi-stage scratch/alpine Dockerfile with non-root user execution (`USER 65532`).
+- [x] Multi-stage alpine Dockerfile with standard non-root user execution (`USER 10001:10001`, Agreement A3).
 - [x] Complete Kubernetes manifests: Singleton Relay Deployment, KEDA ScaledObject, and Reconciliation CronJob.
 - [x] Scrapable Prometheus metrics list and critical alerting thresholds.
 - [x] Graceful startup and shutdown lifecycle handling `SIGTERM` with in-flight drain.

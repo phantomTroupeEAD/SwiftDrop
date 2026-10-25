@@ -58,6 +58,8 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
 | **FR-REC-002** | Reconciliation reschedules overdue webhook retries without bypassing relay. | `TestReconciler_ReschedulesOverdueWebhookRetries` | Integration |
 | **SEC-010** | SSRF prevention: blocks loopback, private IPs, cloud metadata, redirects. | `TestSafeDialContext_BlocksSSRFAndRedirects` | Security / Unit |
 | **SEC-011** | HMAC-SHA256 signature verification with 300-second anti-replay window. | `TestWebhookSigner_HMACCalculationAndVerification` | Contract / Unit |
+| **SEC-012** | AES-256-GCM decryption of merchant webhook secrets with tamper detection. | `TestWebhookDecrypt_ValidAndTamperedCiphertext` | Security / Unit |
+| **OPS-001** | Kubernetes health endpoints (`/health/live`, `/health/ready`, `/metrics`). | `TestHealthEndpoints_LivenessAndReadiness` | Operational / HTTP |
 | **AT-010** | Assignment Acceptance Test 010: Duplicate RabbitMQ delivery handling. | `TestE2E_DuplicateDeliveryProducesSingleSideEffect` | E2E |
 | **AT-012** | Assignment Acceptance Test 012: Merchant receives signed webhook with retry. | `TestE2E_MerchantWebhookDeliveryWithSimulatedRetry` | E2E |
 
@@ -103,6 +105,15 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
 - **Assertions:**
   - Parcel milestone templates render recipient name, tracking number, and status clearly.
   - HTML tags in parcel notes are automatically escaped by Go `html/template`.
+
+#### TC-UNIT-05: AES-256-GCM Webhook Secret Decryption
+- **Component:** `services/messaging/internal/webhook/decrypt.go`
+- **Goal:** Verify accurate plaintext recovery of merchant secrets encrypted by Member 04.
+- **Assertions:**
+  - Standard AES-256-GCM ciphertext (`nonce || ciphertext || tag`) decrypts to expected plaintext secret.
+  - Truncated ciphertext (< 28 bytes) returns descriptive error `ciphertext too short`.
+  - Ciphertext with modified tag or data bytes returns authentication error `cipher: message authentication failed`.
+  - Wrong 32-byte encryption key fails authentication check.
 
 ---
 
@@ -237,6 +248,16 @@ Every requirement from the approved SRS, Engineering Standards, and Domain Contr
   - Reconciler logs detection of stale outbox event.
   - Reconciler resets `attempt_count = 0` and `last_error = NULL`.
   - On the next tick, Outbox Relay successfully publishes the row.
+
+#### TC-INT-06: Kubernetes Operational Health & Readiness Probes
+- **Component:** `services/messaging/internal/health/server.go`
+- **Goal:** Validate compliance with Member 09 Agreement A2, K17, and SRS §6.2.
+- **Assertions:**
+  - `GET /health/live`: Returns `200 OK` `{"status":"UP"}` immediately without querying database.
+  - `GET /health/ready`: Returns `200 OK` `{"status":"READY"}` when PostgreSQL and RabbitMQ are healthy.
+  - `GET /health/ready` (Simulated DB Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"db_unreachable"}`.
+  - `GET /health/ready` (Simulated Broker Outage): Returns `503 Service Unavailable` with `{"status":"DOWN","reason":"broker_disconnected"}`.
+  - `GET /metrics`: Returns `200 OK` with valid Prometheus metrics text format containing `swiftdrop_outbox_pending_events`.
 
 ---
 

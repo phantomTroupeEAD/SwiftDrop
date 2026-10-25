@@ -18,15 +18,15 @@ The Messaging & Integrations subsystem operates under a **Zero-Trust Egress & Is
 1. **Strict Merchant Scoping:**
    - Outbound webhooks must be delivered **only** to webhook endpoints owned by the authenticated merchant associated with the parcel (`webhook_endpoints.merchant_id = parcel.merchant_id`).
    - Cross-tenant delivery is strictly prevented; a merchant endpoint will never receive event notifications for another merchant's or customer's shipments.
-2. **Database Least-Privilege Access:**
-   - In production, `services/messaging` daemons run under dedicated PostgreSQL credentials (`swiftdrop_messaging_user`) granting:
-     - `SELECT, UPDATE` on `outbox_events`
-     - `SELECT, INSERT, UPDATE` on `processed_events`, `notification_deliveries`, `webhook_deliveries`
-     - `SELECT` on `webhook_endpoints`
+2. **Database Least-Privilege Access (Agreement D6):**
+   - In production, daemons run under dedicated PostgreSQL credentials:
+     - `swiftdrop_relay`: `SELECT, UPDATE (status, published_at)` on `outbox_events`.
+     - `swiftdrop_worker`: `SELECT, INSERT` on `processed_events`; `INSERT, UPDATE` on `notification_deliveries` and `webhook_deliveries`; `SELECT` on `merchant_webhook_targets_view`.
      - **DENIED:** Direct write access to `parcels`, `couriers`, `users`, or `billing` tables.
-3. **Secret Protection:**
-   - Webhook signing secrets are stored hashed or encrypted at rest in PostgreSQL.
-   - Real SMTP authentication credentials (`SMTP_USERNAME`, `SMTP_PASSWORD`) are loaded strictly via Kubernetes Secrets and environment variables. They are never written to source code, config files, or logs.
+3. **Secret Protection (Member 04 & 09 Alignment):**
+   - Merchant webhook signing secrets are stored encrypted at rest via AES-256-GCM (`secret_ciphertext bytea`) in `webhook_endpoints`.
+   - The worker reads `secret_ciphertext` from `merchant_webhook_targets_view` and decrypts it ephemerally in memory using `WEBHOOK_SECRET_ENCRYPTION_KEY` mounted from Kubernetes secret `integrations-secrets`.
+   - Real SMTP authentication credentials (`SMTP_USERNAME`, `SMTP_PASSWORD`) and RabbitMQ credentials are loaded strictly via Kubernetes Secrets (`integrations-secrets`, `rabbitmq-secrets`). They are never written to source code, config files, or logs.
 
 ---
 
@@ -37,7 +37,7 @@ In compliance with **SRS SEC-008** and **Engineering Standards §8**:
 | Data Element | Classification | Handled By | Masking / Storage Rule | Logging Policy |
 | :--- | :--- | :--- | :--- | :--- |
 | **Recipient Email Address** | PII | Real SMTP Worker | Stored in `notification_deliveries` for delivery verification and dispute audits. | Retained in delivery logs; masked in public tracking. |
-| **Merchant Webhook Signing Secret** | Secret / Key | Webhook Worker | Read from DB to compute HMAC-SHA256 signature; held in volatile memory only. | **STRICTLY PROHIBITED IN LOGS.** Zero-leak policy. |
+| **Merchant Webhook Signing Secret** | Secret / Key | Webhook Worker | Stored as AES-256-GCM ciphertext (`secret_ciphertext`). Decrypted ephemerally for HMAC-SHA256; never persisted plaintext. | **STRICTLY PROHIBITED IN LOGS.** Zero-leak policy. |
 | **SMTP Server Credentials** | Secret | Real SMTP Worker | Injected via environment variables into `SMTPSender` memory. | **STRICTLY PROHIBITED IN LOGS.** |
 | **Webhook Response Headers** | Sensitive | Webhook Worker | Discarded after status code extraction. | Strip `Set-Cookie`, `Authorization`, and `X-Auth-*` before logging. |
 | **Webhook Response Body Snippet** | Untrusted / PII | Webhook Worker | Captured for error debugging; truncated to 500 characters. | Truncated to 500 characters; never logged at INFO level. |

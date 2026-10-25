@@ -241,13 +241,14 @@ sequenceDiagram
     alt Duplicate Message
         Worker-->>Broker: AMQP Ack
     else Fresh Message
-        Worker->>DB: Query webhook_endpoints WHERE merchant_id = $1 AND enabled = true
+        Worker->>DB: SELECT endpoint_id, url, secret_ciphertext, secret_key_version<br/>FROM merchant_webhook_targets_view<br/>WHERE merchant_id = $1 AND $2 = ANY(subscribed_event_types)
         
         alt No active subscription
             Worker-->>Broker: AMQP Ack (Nothing to send)
-        else Active Endpoint Found (URL, SecretHash)
+        else Active Endpoint Found (URL, SecretCiphertext)
+            Worker->>Worker: DecryptSecret(secret_ciphertext, WEBHOOK_SECRET_ENCRYPTION_KEY)<br/>via AES-256-GCM (nonce || ciphertext || tag)
             Worker->>Worker: Generate Timestamp: t = UnixNow()
-            Worker->>Worker: Build Signature: HMAC-SHA256(secret, t + "." + raw_body)
+            Worker->>Worker: Build Signature: HMAC-SHA256(plaintext_secret, t + "." + raw_body)
             Worker->>Worker: Set Header X-SwiftDrop-Signature: t={t},v1={hash}
             
             Note over Worker,DNS: SSRF & DNS Rebinding Defense (SafeDialContext)
@@ -324,10 +325,10 @@ RabbitMQ guarantees **at-least-once** delivery. Network interruptions, worker cr
 All consumers share the authoritative deduplication table:
 ```sql
 CREATE TABLE IF NOT EXISTS processed_events (
-    event_id VARCHAR(64) NOT NULL,
     consumer_name VARCHAR(64) NOT NULL,
-    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY (event_id, consumer_name)
+    event_id UUID NOT NULL,
+    processed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (consumer_name, event_id)
 );
 ```
 

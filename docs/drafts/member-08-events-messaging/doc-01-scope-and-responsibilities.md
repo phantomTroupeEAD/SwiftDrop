@@ -145,14 +145,14 @@ flowchart LR
 ### 3.1 Upstream Dependencies (Inputs Required)
 - **Domain Event Definitions (Members 02, 03, 04):** Event names, schema payloads, and triggering conditions for parcel booking, dispatch, delivery confirmation, failure, and merchant orders.
 - **Shared DB Transaction Convention (`*sql.Tx`):** Modular Monolith use cases must pass the active database transaction into the `OutboxWriter`.
-- **Merchant Webhook Configuration (Member 04):** The authoritative schema of `webhook_endpoints` (containing `id`, `merchant_id`, `url`, `secret_hash`, `subscribed_event_types`, `enabled`).
-- **Cluster Broker & Secret Provisioning (Member 09):** RabbitMQ cluster connectivity parameters (`RABBITMQ_URL`) and Kubernetes secret references for SMTP credentials.
+- **Merchant Webhook Configuration (Member 04):** Authoritative database read contract via `merchant_webhook_targets_view` (providing `endpoint_id`, `url`, `secret_ciphertext bytea`, `secret_key_version`, and `subscribed_event_types`).
+- **Cluster Broker & Secret Provisioning (Member 09):** RabbitMQ cluster connectivity parameters (`RABBITMQ_URL`) and Kubernetes secret references for SMTP credentials and the webhook symmetric decryption key (`WEBHOOK_SECRET_ENCRYPTION_KEY` in `integrations-secrets`).
 
 ### 3.2 Downstream Dependencies (Outputs Provided)
 - **Tracking API (Member 05):** Publishes guaranteed parcel milestone events to `swiftdrop.events.topic` using routing key `parcel.*.v1`, allowing Member 05 to update read models and push SSE streams to end users.
 - **Real SMTP Mail Server:** Connects directly to external SMTP relays over TLS (e.g., Mailtrap, Postmark, AWS SES, SendGrid) to deliver notifications to recipients.
 - **Merchant Systems:** Dispatches authenticated HTTPS webhooks with HMAC-SHA256 signatures and delivery audit trails.
-- **DevOps & Operations (Member 09):** Exposes Prometheus metrics, health probes (`/livez`, `/readyz`), and the `reconcile` CLI command for Kubernetes CronJob scheduling.
+- **DevOps & Operations (Member 09):** Exposes Prometheus metrics (`/metrics`), standard Kubernetes health probes (`/health/live`, `/health/ready` on ports 8082 and 8083 per Agreement A2), and the `reconcile` CLI command for Kubernetes CronJob scheduling.
 
 ---
 

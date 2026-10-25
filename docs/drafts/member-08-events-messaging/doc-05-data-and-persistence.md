@@ -58,7 +58,8 @@ erDiagram
         uuid id PK "Owned by Member 04"
         uuid merchant_id FK
         text url
-        varchar secret_hash
+        bytea secret_ciphertext "AES-256-GCM (nonce || ct || tag)"
+        integer secret_key_version
         text_array subscribed_event_types
         boolean enabled
     }
@@ -190,16 +191,15 @@ To meet **SRS §7.2** and **§9.1** sub-200ms latency targets and support high-t
 
 ## 4. Sequential Database Migration Strategy
 
-Database changes are managed sequentially via `golang-migrate` files in `core-api/migrations/`.
+Database changes are managed sequentially via `golang-migrate` files in `core-api/migrations/`, adhering to Member 09 Agreement D3 (Events M8 is 8th and 9th in foreign-key dependency order):
 
-### 4.1 Migration File: `000008_create_events_and_messaging_schema.up.sql`
+### 4.1 Migration File: `000008_create_outbox_events.up.sql`
 ```sql
--- SwiftDrop: Migration 000008 (Member 08 - Events & Messaging)
--- Depends on: 000004_create_merchants_and_webhooks.up.sql (for webhook_endpoints)
+-- SwiftDrop: Migration 000008 (Member 08 - Transactional Outbox Engine)
+-- Executed inside core-api monolithic schema migrations
 
 BEGIN;
 
--- 1. Transactional Outbox Table
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_type VARCHAR(64) NOT NULL,
@@ -218,8 +218,9 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     published_at TIMESTAMPTZ NULL
 );
 
+-- Partial index for high-throughput pollers skipping published events
 CREATE INDEX IF NOT EXISTS idx_outbox_pending 
-ON outbox_events (created_at ASC) 
+ON outbox_events (status, created_at ASC) 
 WHERE status = 'PENDING';
 
 CREATE INDEX IF NOT EXISTS idx_outbox_aggregate 
@@ -232,18 +233,35 @@ CREATE INDEX IF NOT EXISTS idx_outbox_retention
 ON outbox_events (published_at ASC) 
 WHERE status = 'PUBLISHED';
 
--- 2. Consumer Idempotency Ledger
+COMMIT;
+```
+
+### 4.2 Rollback Migration File: `000008_create_outbox_events.down.sql`
+```sql
+BEGIN;
+DROP TABLE IF EXISTS outbox_events CASCADE;
+COMMIT;
+```
+
+### 4.3 Migration File: `000009_create_worker_dedup_and_webhooks.up.sql`
+```sql
+-- SwiftDrop: Migration 000009 (Member 08 - Messaging Worker Idempotency, Notifications & Webhooks)
+-- Depends on: 000003_create_webhook_endpoints (Member 04)
+
+BEGIN;
+
+-- 1. Consumer Idempotency Ledger (UUID Event ID)
 CREATE TABLE IF NOT EXISTS processed_events (
-    event_id VARCHAR(64) NOT NULL,
     consumer_name VARCHAR(64) NOT NULL,
+    event_id UUID NOT NULL,
     processed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY (event_id, consumer_name)
+    PRIMARY KEY (consumer_name, event_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_processed_cleanup 
 ON processed_events (processed_at ASC);
 
--- 3. Notification Deliveries Log (Real SMTP)
+-- 2. Notification Deliveries Log (Real SMTP Email & SMS Audit)
 CREATE TABLE IF NOT EXISTS notification_deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL,
@@ -267,7 +285,7 @@ CREATE INDEX IF NOT EXISTS idx_notif_retry
 ON notification_deliveries (status, next_attempt_at ASC) 
 WHERE status = 'RETRYING';
 
--- 4. Webhook Deliveries Audit History
+-- 3. Webhook Deliveries Audit History
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     endpoint_id UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
@@ -293,13 +311,12 @@ WHERE status = 'RETRYING';
 COMMIT;
 ```
 
-### 4.2 Rollback Migration File: `000008_create_events_and_messaging_schema.down.sql`
+### 4.4 Rollback Migration File: `000009_create_worker_dedup_and_webhooks.down.sql`
 ```sql
 BEGIN;
 DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS notification_deliveries CASCADE;
 DROP TABLE IF EXISTS processed_events CASCADE;
-DROP TABLE IF EXISTS outbox_events CASCADE;
 COMMIT;
 ```
 
@@ -365,14 +382,18 @@ For local development and CI test execution, seed scripts populate reproducible 
 
 ### Sample Seed SQL (`core-api/cmd/seed/data/08_messaging_seed.sql`):
 ```sql
--- Sample Webhook Endpoint for Local Merchant Testing
+-- Sample Webhook Endpoint for Local Merchant Testing (Member 04 Contract)
+-- Note: In production and integration tests, Member 04 manages webhook_endpoints.
+-- secret_ciphertext is AES-256-GCM encrypted (12-byte nonce || ciphertext || 16-byte tag).
 INSERT INTO webhook_endpoints (
-    id, merchant_id, url, secret_hash, subscribed_event_types, enabled, created_at, updated_at
+    id, merchant_id, url, secret_ciphertext, secret_key_version, secret_last4, subscribed_event_types, enabled, created_at, updated_at
 ) VALUES (
     'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     'mrc_01HABC9876543210',
     'https://merchant-test.local/webhooks/swiftdrop',
-    'whsec_test_secret_key_abcdef1234567890',
+    decode('4a72d3f9e8a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6a1b2c3d4e5', 'hex'),
+    1,
+    '7890',
     ARRAY['parcel.booked.v1', 'parcel.delivered.v1', 'parcel.delivery_failed.v1'],
     true,
     NOW(),

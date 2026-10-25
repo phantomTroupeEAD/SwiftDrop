@@ -145,10 +145,13 @@ services/messaging/
 │   │   └── handler.go               # Consumer handler mapping events to email notifications
 │   ├── webhook/
 │   │   ├── client.go                # Safe HTTP client enforcing SafeDialContext (SSRF guard)
+│   │   ├── decrypt.go               # AES-256-GCM secret decryption helper (Member 04 alignment)
 │   │   ├── signer.go                # HMAC-SHA256 signature generator
 │   │   ├── backoff.go               # Exponential backoff with randomized jitter calculator
 │   │   ├── repository.go            # webhook_deliveries repository & endpoint reader
 │   │   └── dispatcher.go            # Webhook dispatch worker handler
+│   ├── health/
+│   │   └── server.go                # Internal HTTP server for /health/live, /health/ready, /metrics (A2)
 │   └── reconcile/
 │       └── reconciler.go            # Stale outbox row & overdue retry audit logic
 ├── tests/
@@ -275,6 +278,94 @@ import (
 type SecureHTTPClient interface {
     // Do executes an outbound HTTP request through a transport enforcing SafeDialContext.
     Do(ctx context.Context, req *http.Request) (*http.Response, error)
+}
+```
+
+### 3.6 `services/messaging/internal/webhook/decrypt.go`
+AES-256-GCM secret decryption adhering to Member 04's storage contract:
+
+```go
+package webhook
+
+import (
+    "crypto/aes"
+    "crypto/cipher"
+    "errors"
+    "fmt"
+)
+
+// DecryptSecret decrypts the AES-256-GCM encrypted secret stored by Member 04 (nonce || ciphertext || tag).
+func DecryptSecret(ciphertext []byte, encryptionKey []byte) (string, error) {
+    block, err := aes.NewCipher(encryptionKey)
+    if err != nil {
+        return "", fmt.Errorf("failed to create AES cipher: %w", err)
+    }
+
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return "", fmt.Errorf("failed to create GCM: %w", err)
+    }
+
+    nonceSize := gcm.NonceSize()
+    if len(ciphertext) < nonceSize {
+        return "", errors.New("ciphertext too short")
+    }
+
+    nonce, encryptedData := ciphertext[:nonceSize], ciphertext[nonceSize:]
+    plaintext, err := gcm.Open(nil, nonce, encryptedData, nil)
+    if err != nil {
+        return "", fmt.Errorf("failed to decrypt webhook secret: %w", err)
+    }
+
+    return string(plaintext), nil
+}
+```
+
+### 3.7 `services/messaging/internal/health/server.go`
+Internal health and metrics server complying with Member 09 Agreement A2 & K17:
+
+```go
+package health
+
+import (
+    "context"
+    "database/sql"
+    "net/http"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+// StartHealthServer exposes /health/live, /health/ready, and /metrics on internal port.
+func StartHealthServer(addr string, db *sql.DB, isReady func() bool) *http.Server {
+    mux := http.NewServeMux()
+
+    // Liveness: Process is alive (never checks DB, per Agreement A2)
+    mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte(`{"status":"UP"}`))
+    })
+
+    // Readiness: Checks critical dependencies (PostgreSQL + RabbitMQ connection)
+    mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+        if db != nil {
+            if err := db.PingContext(r.Context()); err != nil {
+                http.Error(w, `{"status":"DOWN","reason":"db_unreachable"}`, http.StatusServiceUnavailable)
+                return
+            }
+        }
+        if isReady != nil && !isReady() {
+            http.Error(w, `{"status":"DOWN","reason":"broker_disconnected"}`, http.StatusServiceUnavailable)
+            return
+        }
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte(`{"status":"READY"}`))
+    })
+
+    // Prometheus metrics
+    mux.Handle("/metrics", promhttp.Handler())
+
+    srv := &http.Server{Addr: addr, Handler: mux}
+    go srv.ListenAndServe()
+    return srv
 }
 ```
 
@@ -407,6 +498,12 @@ To pass `.golangci.yml` `depguard` automated checks:
 - Daemons use bounded connection pools to prevent exhausting PostgreSQL `max_connections`:
   - `Relay`: `max_open = 5`, `max_idle = 2`
   - `Worker`: `max_open = 10`, `max_idle = 5`
+
+### 9.4 Container Packaging, Multi-Binary Standard & Security
+- **Single Multi-Binary Container:** Per Member 09 Agreement A3, all messaging daemons share a single production container image: `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`.
+- **Three Binary Entrypoints:** Compiled during multi-stage build into `/usr/local/bin/relay`, `/usr/local/bin/worker`, and `/usr/local/bin/reconcile`.
+- **Execution User:** Runs strictly under non-root user `USER 10001:10001` (SwiftDrop cluster security standard).
+- **Zero Secrets Baked In:** All credentials (`DATABASE_URL`, `RABBITMQ_URL`, `WEBHOOK_SECRET_ENCRYPTION_KEY`, SMTP credentials) are mounted at runtime from Kubernetes secrets (`postgres-secrets`, `rabbitmq-secrets`, `integrations-secrets`).
 
 ---
 
