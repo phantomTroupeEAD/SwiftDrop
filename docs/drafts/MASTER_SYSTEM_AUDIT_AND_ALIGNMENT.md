@@ -51,6 +51,12 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Authoritative REST contracts for Admin, Delivery Zones, Dispatch Board, and Courier Mobile are extracted and standardized into Member 7's alignment specification.
 3. **Database Roles:** In `doc-05`, Member 7 specifies using `swiftdrop_owner` and credentials `postgres-credentials`, whereas in `doc-07` Member 7 specifies least-privilege runtime execution.
    - *Fix:* Replace `swiftdrop_owner` with runtime role `swiftdrop_app` and migration role `swiftdrop_migrator`.
+4. **Delivery Zone Key Format (UUID vs String):** In `doc-05`, `delivery_zones.id` was typed as `UUID`, which breaks Member 2 and Member 3 foreign key references (`VARCHAR(32)`).
+   - *Fix:* Standardize `delivery_zones.id` as `VARCHAR(32) PRIMARY KEY` (e.g. `'ZONE_COLOMBO_01'`) and `code VARCHAR(32) UNIQUE`.
+5. **Currency Minor Units Representation:** In `core-api/internal/admin/API.md`, surcharge was formatted as `"base_surcharge": "3.50"`, while across domain rules integer cents are required.
+   - *Fix:* Mandate `base_surcharge_cents BIGINT` (35000 cents LKR; zero floating-point representation).
+6. **SSE Route Path & Heartbeat Interval:** In `doc-01`, four conflicting SSE paths and 20s vs 15s heartbeats were noted.
+   - *Fix:* Standardize canonical route `/api/v1/tracking/public/{trackingNumber}/stream` with a mandatory 15-second `:keepalive\n\n` comment frame.
 
 ### 2.2 Member 10 Contradictions
 1. **Port Allocation:** In `decisions-and-questionnaire.md` (Q5.1) and `doc-08`, Member 10 specifies container port `8003`. However, in `doc-04` and `team-integration-and-handoff-guide.md`, Member 10 lists `8000`.
