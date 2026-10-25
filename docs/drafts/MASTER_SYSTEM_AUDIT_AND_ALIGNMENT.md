@@ -61,10 +61,14 @@ Detailed inspection revealed internal discrepancies where a single member's docu
 ### 2.2 Member 10 Contradictions
 1. **Port Allocation:** In `decisions-and-questionnaire.md` (Q5.1) and `doc-08`, Member 10 specifies container port `8003`. However, in `doc-04` and `team-integration-and-handoff-guide.md`, Member 10 lists `8000`.
    - *Fix:* Lock container port to **`8000`** across all files to align with Member 9 Agreement A1 and ADR-001.
-2. **Health Check Probes:** In `decisions-and-questionnaire.md`, Member 10 proposes `/healthz` and `/readyz`. In `doc-08`, Member 10 lists `/health/live` and `/health/ready`.
-   - *Fix:* Mandate **`/health/live`**, **`/health/ready`**, and **`/metrics`** across all services per Agreement A2.
+2. **Health Check Probes & Cascading Dependency:** In `decisions-and-questionnaire.md`, Member 10 proposes `/healthz` and `/readyz`. In `doc-08`, Member 10 lists `/health/live` and `/health/ready`. Furthermore, the proposed readiness probe actively probed Core API and Tracking API.
+   - *Fix:* Mandate **`/health/live`**, **`/health/ready`**, and **`/metrics`** across all services per Agreement A2. The readiness probe strictly validates local model and cache status without synchronous external dependencies.
 3. **Database Persistence vs No-DB Rule:** In `doc-01` and `doc-03`, Member 10 stresses that the AI service is strictly stateless with zero database connections. Yet in `doc-05`, Member 10 specifies an `ai_conversations` table schema for PostgreSQL.
-   - *Fix:* Purge `ai_conversations` from the authoritative PostgreSQL migration plan. AI conversation sessions are purely client-side or stored in ephemeral in-memory cache.
+   - *Fix:* Purge `ai_conversations` from the authoritative PostgreSQL migration plan. AI conversation sessions are purely client-side or stored in ephemeral in-memory cache (`cachetools.TTLCache`).
+4. **Pricing API Endpoint Path & Schema Contract:** In `doc-04` and `doc-06`, Member 10's fee tool invokes `/pricing/estimate`, whereas Member 2 standardizes `POST /api/v1/pricing/quotes` returning integer minor units (`base_fee_cents`, `total_fee_cents`).
+   - *Fix:* Standardize tool call to `POST /api/v1/pricing/quotes` with integer cents parsing.
+5. **Non-Root Container Security & Health Probing Mechanism:** In `doc-08`, Dockerfile specifies `USER root` and relies on `curl` for container health checks in an image where `curl` is omitted.
+   - *Fix:* Enforce non-root execution (`USER 10001:10001`) and use Python-native `urllib.request` health check script in the Docker container definition.
 
 ### 2.3 Member 02 Contradictions
 1. **Pricing Endpoint Path:** In `doc-01` and `doc-04`, Member 2 lists `POST /api/v1/pricing/quotes`. In `doc-08` and portions of `doc-02`, Member 2 refers to `POST /api/v1/pricing/estimate`.
@@ -220,6 +224,8 @@ flowchart TD
 1. **Wrong Container Port:** Specified 8003 instead of standard 8000.
 2. **Extraneous Database Table:** Declared `ai_conversations` in Postgres schema despite AI service being stateless.
 3. **Cascading Readiness Probe:** Verified external APIs in `/health/ready`, violating decoupling principles.
+4. **Pricing API Path Drift:** Referenced legacy `/pricing/estimate` instead of canonical `POST /api/v1/pricing/quotes`.
+5. **Container Security Violation:** Proposed root execution and uninstalled `curl` dependency for Docker health checks.
 
 ---
 
