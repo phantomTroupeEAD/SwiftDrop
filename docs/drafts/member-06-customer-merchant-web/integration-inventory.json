@@ -1,26 +1,211 @@
 {
-  "owner": "Sajini, Member 6",
-  "status": "proposed-inventory-not-openapi",
+  "owner": "Sajini, Member 6 (Customer & Merchant Frontend)",
+  "status": "aligned-inventory-ready-for-review",
+  "documentSuite": [
+    "doc-01-scope-and-responsibilities.md",
+    "doc-02-functional-flows-and-business-rules.md",
+    "doc-03-internal-architecture-and-design.md",
+    "doc-04-interface-and-integration-contract.md",
+    "doc-05-data-and-persistence.md",
+    "doc-06-testing-strategy-and-acceptance.md",
+    "doc-07-security-failure-and-recovery.md",
+    "doc-08-implementation-deployment-and-ops.md"
+  ],
   "baseUrlVariable": "VITE_API_BASE_URL",
   "baseUrl": "/api/v1",
   "interfaces": [
-    {"method": "POST", "path": "/auth/register", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": "/auth/login", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": "/auth/refresh", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": "/auth/logout", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/auth/google", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/auth/google/callback", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": null, "candidates": ["/pricing/quote", "/pricing/quotes"], "owner": "M2", "schemaStatus": "path-conflict"},
-    {"method": "POST", "path": "/parcels", "owner": "M2", "idempotency": "stable-key-per-logical-request", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/parcels", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/parcels/{id}", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/parcels/{id}/history", "owner": "M2/M5-confirm", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/parcels/{id}/receipt", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/tracking/{trackingNumber}", "owner": "M5", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/tracking/{trackingNumber}/events", "owner": "M5", "transport": "SSE", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": "/merchant/orders", "owner": "M4", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "GET", "path": "/merchant/orders", "owner": "M4", "schemaStatus": "awaiting-approved-contract"},
-    {"method": "POST", "path": "/merchant/webhooks", "owner": "M4", "schemaStatus": "awaiting-approved-contract"}
+    {
+      "method": "POST",
+      "path": "/auth/register",
+      "owner": "M1",
+      "auth": "public",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "owner": "M1",
+      "auth": "public",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/refresh",
+      "owner": "M1",
+      "auth": "httpOnly-cookie",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/logout",
+      "owner": "M1",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "owner": "M1",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google",
+      "owner": "M1",
+      "auth": "public",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google/callback",
+      "owner": "M1",
+      "auth": "public",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/pricing/quotes",
+      "owner": "M2",
+      "auth": "public-or-bearer",
+      "schemaStatus": "aligned-plural-path-confirmed"
+    },
+    {
+      "method": "POST",
+      "path": "/parcels",
+      "owner": "M2",
+      "auth": "bearer-jwt",
+      "idempotency": "stable-uuidv4-key-reused-on-retry",
+      "quoteBinding": "quote_id",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/parcels",
+      "owner": "M2",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/parcels/{id}",
+      "owner": "M2",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/parcels/{id}/history",
+      "owner": "M2",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/parcels/{id}/receipt",
+      "owner": "M2",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned-open-format-question"
+    },
+    {
+      "method": "GET",
+      "path": "/tracking/public/{trackingNumber}",
+      "owner": "M5",
+      "auth": "public-masked-sec-016",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/tracking/public/{trackingNumber}/stream",
+      "owner": "M5",
+      "auth": "public-masked-sec-016",
+      "transport": "SSE",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/merchants/applications",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/merchants/me",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/merchants/me/api-keys",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/merchants/me/api-keys",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "oneTimeDisplay": true,
+      "browserStorage": "prohibited",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "DELETE",
+      "path": "/merchants/me/api-keys/{id}",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/merchants/me/webhooks",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/merchants/me/webhooks",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "oneTimeDisplay": true,
+      "browserStorage": "prohibited",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "DELETE",
+      "path": "/merchants/me/webhooks/{id}",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/merchants/me/webhooks/{id}/rotate-secret",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "oneTimeDisplay": true,
+      "browserStorage": "prohibited",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "GET",
+      "path": "/merchant/orders",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "schemaStatus": "aligned"
+    },
+    {
+      "method": "POST",
+      "path": "/merchant/orders",
+      "owner": "M4",
+      "auth": "bearer-jwt",
+      "idempotency": "stable-uuidv4-key-reused-on-retry",
+      "schemaStatus": "aligned"
+    }
   ],
   "frontendProducedBrokerEvents": [],
   "frontendOwnedDatabaseTables": []
