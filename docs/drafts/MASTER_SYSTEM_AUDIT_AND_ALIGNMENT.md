@@ -31,7 +31,7 @@ Every requirement in **SwiftDrop SRS v1.0**, the **Assignment Rubric**, and **Te
 | **M2** | **Parcels & Pricing** | FR-PRC-001–004, FR-BOK-001–006, SEC-009 | Docs 1–8 submitted | **Low:** Post-review alignment complete (v2.0.0). Ratified binding integer cents tariff, JSONB address snapshots, 15-min quote TTL, optimistic locking (`version`), and `idempotency_keys` table. |
 | **M3** | **Dispatch, Couriers & POD** | FR-DSP-001–004, FR-POD-001–005, ADR-004 | Docs 1–8 + Questionnaire | **Low:** Post-review alignment complete (v2.0.0). Split into migrations 000006 & 000007; decoupled R2 from readiness probe; harmonized current_zone_id and assignment status lifecycle; pessimistic locking and ADR-004 invariants bound. |
 | **M4** | **Merchant Integration** | FR-MER-001–011, SEC-007, SEC-010 | Docs 1–8 + Tests/Evidence | **Low:** Post-review alignment complete (v2.0.0). Resolved all U-01–U-14 dilemmas; unified 4 draft migrations into 000003; encrypted AES-256-GCM webhook secrets; ratified merchant_webhook_targets_view. |
-| **M5** | **Tracking & Real-Time SSE** | FR-TRK-001–005, SEC-008, NFR-001 | README only | **High:** Full 8-doc suite not submitted. Needs SSE stream protocol, Redis fan-out architecture, read-only DB projection queries, and public PII masking rules. |
+| **M5** | **Tracking & Real-Time SSE** | FR-TRK-001–005, SEC-008, NFR-001 | Docs 1–8 submitted | **Low:** Post-submission alignment complete (v2.0.0). Ratified port :8081, services/tracking/ path, /health/live probes, swiftdrop_tracking_ro role, 15s keepalive, Redis fan-out, and strict PII masking. |
 | **M6** | **Customer/Merchant Web** | FR-UI-001–004, UX-001–005 | README only | **High:** Full 8-doc suite not submitted. Needs booking wizard state flow, real-time SSE hook integration, merchant batch CSV UI, and `data-testid` E2E conventions. |
 | **M7** | **Ops/Courier Web & Gateway** | FR-ADM-001–009, SEC-012–016, ADR-001 | Docs 1–3, 5–8 (Missing Doc 4) | **High:** Missing Doc 4 interface contract; Traefik port conflict (8080 vs Core API); `sslmode=require`; DB superuser roles; U-01–U-62 questions. |
 | **M8** | **Events & Messaging** | FR-EVT-001–006, NFR-002–004 | Docs 1–8 submitted | **Low:** Complete 8-document suite submitted. Identified minor alignment items: fix health probe paths (`/livez` & `/readyz` $\to$ `/health/live` & `/health/ready`); standardize image to single multi-binary image `messaging:<git-sha>` with `USER 10001:10001`; align webhook secret decryption with Member 4 AES-256-GCM view (`secret_ciphertext`). |
@@ -99,6 +99,14 @@ Detailed inspection revealed internal discrepancies where a single member's docu
    - *Fix:* Consolidate all tables and views into single migration `000003_create_merchants_and_credentials.up.sql`.
 3. **API Key Prefix Length:** In `doc-03` and `doc-05`, Member 4 defined `key_prefix CHAR(8)`, which truncates the standard prefix `sd_live_a1b2c3d4` (16 chars).
    - *Fix:* Standardize on `key_prefix VARCHAR(16) NOT NULL` and `key_hash VARCHAR(64) NOT NULL UNIQUE`.
+
+### 2.8 Member 05 Contradictions
+1. **Service Root Directory Path:** In `doc-08` Section 3, Member 5 proposed `tracking-api/` at the repository root, breaking Docker Compose context and Kubernetes charts.
+   - *Fix:* Standardize codebase path to **`services/tracking/`** matching the repository architecture.
+2. **SSE Stream Endpoint Path:** In `doc-04` Section 6.1, Member 5 specified `/api/v1/tracking/public/{trackingNumber}/stream`, whereas `API.md` uses `/api/v1/tracking/{trackingNumber}/stream`.
+   - *Fix:* Standardize canonical route as **`GET /api/v1/tracking/{trackingNumber}/stream`**, supporting public alias `/api/v1/tracking/public/{trackingNumber}/stream`.
+3. **Port Allocation & Environment Configuration:** In `doc-08` Section 4, Member 5 left service port as an unconfirmed open decision.
+   - *Fix:* Pin container port to **`:8081`** (`PORT=8081`) aligned with Member 9 Agreement A1.
 
 ---
 
