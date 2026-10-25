@@ -27,6 +27,8 @@
 
 It also has answers to every question other members asked Member 9, a list of conflicts found in submitted drafts, and a sign-off table.
 
+🤖 **Check your drafts with your own AI (5 min):** [AI-REVIEW-PROMPT.md](./AI-REVIEW-PROMPT.md). Paste the prompt into Claude Code, Cursor, Copilot or ChatGPT; it lists exactly what to change in your folder.
+
 ---
 
 ## How this module differs from business modules
