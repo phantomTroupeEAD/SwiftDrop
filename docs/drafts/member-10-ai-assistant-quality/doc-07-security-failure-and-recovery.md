@@ -38,7 +38,7 @@ flowchart TD
     ToolGate -- Public Tool (track_parcel, estimate_fee) --> ExecPublic["Execute Tool"]
     ToolGate -- Auth Tool (get_my_active_parcels) --> CheckUserAuth{"Is AuthContext.user_id present?"}
     
-    CheckUserAuth -- Yes --> ForwardJWT["Forward JWT to Core API (/api/v1/parcels/my-active)"]
+    CheckUserAuth -- Yes --> ForwardJWT["Forward JWT to Core API (/api/v1/parcels)"]
     CheckUserAuth -- No --> PromptLogin["Return: 'Please log in to check your active deliveries'"]
 ```
 
@@ -142,7 +142,7 @@ flowchart LR
 | Dependency | Timeout Threshold | Retry Policy | Fallback Behavior on Failure |
 | :--- | :--- | :--- | :--- |
 | **External LLM Provider** (OpenRouter / NVIDIA / OpenAI) | **10 seconds** | 1 immediate retry on network drop | Returns graceful `503 Service Unavailable` with user-friendly apology. Never hangs the client connection. |
-| **Core Pricing API** (`/api/v1/pricing/estimate`) | **3 seconds** | 1 retry with 500ms backoff | Assistant outputs: *"Our pricing calculator is currently experiencing delays. Please try again shortly."* **Zero hallucinations.** |
+| **Core Pricing API** (`/api/v1/pricing/quotes`) | **3 seconds** | 1 retry with 500ms backoff | Assistant outputs: *"Our pricing calculator is currently experiencing delays. Please try again shortly."* **Zero hallucinations.** |
 | **Tracking API** (`/api/v1/tracking/public/...`) | **3 seconds** | 1 retry with 500ms backoff | Assistant outputs: *"Unable to retrieve live tracking milestones right now. Please check the public tracking page directly."* |
 | **Core System Policy Endpoint** (`/api/v1/system/policies`) | **3 seconds** | Silent background retry | Falls back to local version-controlled `company_policies.md` on disk. Service continues operating normally. |
 
@@ -239,7 +239,7 @@ sequenceDiagram
 | Component | Failure Mode | Impact | Automated System Defense | Recovery Action |
 | :--- | :--- | :--- | :--- | :--- |
 | **AI Assistant** | LLM Provider outage or quota exhaustion | Chat queries fail | Returns `503 Service Unavailable` with friendly message. | Circuit breaker trips; fails over to secondary provider or offline mock. |
-| **AI Assistant** | Core Pricing API down | Cannot calculate fees | Assistant informs user of system maintenance; **zero fee guessing**. | Health probe `/readyz` fails; traffic diverted until Core API recovers. |
+| **AI Assistant** | Core Pricing API down | Cannot calculate fees | Assistant informs user of system maintenance; **zero fee guessing**. | Health probe `/health/ready` remains green (decoupled from upstream); requests fail safely without pod restart. |
 | **AI Assistant** | Memory session overflow (>50 sessions) | Memory bloat in pod | LRU cache automatically evicts least recently accessed session. | Session pruned safely; client request context resumes conversation. |
 | **Core Monolith** | RabbitMQ broker network split | Cannot publish events | Transactional outbox keeps events in PostgreSQL marked `PUBLISHED = false`. | Outbox Relay catches up and publishes backlog once broker reconnects. |
 | **Event Worker** | Merchant webhook server hangs (>30s) | Thread exhaustion | Worker enforces strict 5-second socket timeout and releases thread. | Retries with exponential backoff; routes to DLQ after 3 failures. |

@@ -3,7 +3,7 @@
 > **Status:** Draft / Proposed (For Review in Team Meeting 2)  
 > **Author:** Member 10 — AI Delivery Assistant (Service & MCP) & Cross-Workflow Quality Coordination  
 > **Target Production Locations:** `services/ai-assistant/` & `tests/e2e/`  
-> **Container Port:** 8003 | **Ingress Gateway Route:** `/api/v1/ai`
+> **Container Port:** 8000 | **Ingress Gateway Route:** `/api/v1/ai`
 
 ---
 
@@ -71,12 +71,12 @@ cp .env.example .env
 # If no key is set, the service defaults to TEST_MODE=true (Offline Mock)
 ```
 
-#### 3. Run the HTTP REST Server (Local Port 8003)
+#### 3. Run the HTTP REST Server (Local Port 8000)
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
-- Interactive Swagger UI: `http://localhost:8003/docs`
-- Health Check: `http://localhost:8003/healthz`
+- Interactive Swagger UI: `http://localhost:8000/docs`
+- Health Check: `http://localhost:8000/health/live`
 
 #### 4. Run the FastMCP Server (For Cursor / Claude Desktop)
 ```bash
@@ -120,31 +120,30 @@ To enable external AI agents to use SwiftDrop's tools:
 # Multi-stage lightweight build
 FROM python:3.11-slim AS builder
 WORKDIR /app
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.11-slim
+FROM python:3.11-slim AS runner
 WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
 
-# Security: Run as non-root user
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser
-
-COPY --from=builder /root/.local /home/appuser/.local
 COPY app/ ./app/
 COPY knowledge/ ./knowledge/
 COPY mcp_server.py main.py ./
 
-ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    PORT=8003
+# Security: Run strictly as non-root user 10001:10001 per Agreement A3
+USER 10001:10001
+EXPOSE 8000
 
-USER appuser
-EXPOSE 8003
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')" || exit 1
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD curl -f http://localhost:8003/healthz || exit 1
-
-ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
+ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 #### Docker Compose Integration (`docker-compose.yml` entry for Member 9):
@@ -163,7 +162,7 @@ ai-assistant:
     - TRACKING_API_URL=http://tracking-api:8081
     - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:-dev-internal-secret-key-123}
   ports:
-    - "8003:8003"
+    - "8000:8000"
   depends_on:
     - core-api
     - tracking-api
@@ -197,7 +196,7 @@ spec:
         - name: ai-assistant
           image: swiftdrop/ai-assistant:latest
           ports:
-            - containerPort: 8003
+            - containerPort: 8000
           envFrom:
             - configMapRef:
                 name: ai-assistant-config
@@ -212,14 +211,14 @@ spec:
               memory: 256Mi
           livenessProbe:
             httpGet:
-              path: /healthz
-              port: 8003
+              path: /health/live
+              port: 8000
             initialDelaySeconds: 10
             periodSeconds: 15
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: 8003
+              path: /health/ready
+              port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
@@ -232,8 +231,8 @@ spec:
   selector:
     app: ai-assistant
   ports:
-    - port: 8003
-      targetPort: 8003
+    - port: 8000
+      targetPort: 8000
 ```
 
 ---
@@ -291,7 +290,7 @@ pytest tests/e2e/api/ -v
 | :--- | :--- | :--- |
 | **`503 Service Unavailable` on `/api/v1/ai/chat`** | External LLM provider unreachable or invalid `LLM_API_KEY`. | 1. Check container logs: `docker logs swiftdrop-ai-assistant`.<br>2. Verify `LLM_API_KEY` balance.<br>3. Set `TEST_MODE=true` to engage offline mock for testing. |
 | **`429 Too Many Requests` on Chat** | User or IP exceeded rate limits. | 1. Normal security behavior.<br>2. If tuning for demo: Increase `AI_RATE_LIMIT_ANONYMOUS_RPM=60` in `.env` and restart service. |
-| **AI outputs stale policy information** | Company policy was updated in DB but cache not refreshed. | Manually trigger cache invalidation webhook:<br>`curl -X POST http://localhost:8003/api/v1/ai/admin/refresh-knowledge -H "X-Internal-Service-Key: dev-internal-secret-key-123"` |
+| **AI outputs stale policy information** | Company policy was updated in DB but cache not refreshed. | Manually trigger cache invalidation webhook:<br>`curl -X POST http://localhost:8000/api/v1/ai/admin/refresh-knowledge -H "X-Internal-Service-Key: dev-internal-secret-key-123"` |
 | **Playwright test fails with `TimeoutError: locator.click`** | Frontend element is missing the required `data-testid` attribute. | 1. Open the failure screenshot in `tests/e2e/artifacts/`.<br>2. Check `team-integration-and-handoff-guide.md` to ensure Members 6 & 7 attached the matching `data-testid`. |
 | **Merchant webhook test fails with HMAC mismatch** | Webhook signature secret mismatch. | Verify merchant secret in `seeds/dev_seed.sql` matches `tests/e2e/fixtures/test_users.py`. |
 
@@ -312,6 +311,6 @@ pytest tests/e2e/api/ -v
 
 ## 4. Review Checklist for Team Meeting 2
 
-- [ ] **Member 9 (DevOps):** Confirm inclusion of `services/ai-assistant` on port `8003` in `docker-compose.yml` and Traefik routing rules.
+- [ ] **Member 9 (DevOps):** Confirm inclusion of `services/ai-assistant` on port `8000` in `docker-compose.yml` and Traefik routing rules.
 - [ ] **Member 9 (DevOps):** Confirm `playwright install chromium` step is included in `.github/workflows/ci.yml`.
 - [ ] **All Members (1–9):** Ensure services can be spun up cleanly with a single command: `docker compose up -d` before running `pytest tests/e2e/ -v`.

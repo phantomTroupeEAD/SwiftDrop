@@ -127,23 +127,21 @@ Below is an exact JSON snapshot of what an active `ConversationSession` holding 
     {
       "turn_id": 2,
       "role": "assistant",
-      "content": "Sending a 2.5 kg parcel from Colombo (Western Zone) to Kandy (Central Zone) is estimated at LKR 650.00 (Base fare LKR 350.00 + weight surcharge LKR 300.00). Delivery takes 1 business day.\n\nWould you like to book this delivery now?",
+      "content": "Sending a 2.5 kg parcel from Colombo Central (ZONE_COLOMBO_01) to Kandy (ZONE_KANDY_01) is estimated at LKR 650.00 (Base fare LKR 350.00 + weight surcharge LKR 300.00). Delivery takes 1 business day.\n\nWould you like to book this delivery now?",
       "timestamp": "2026-10-24T01:00:02Z",
       "tool_calls": [
         {
           "name": "estimate_shipping_fee",
           "arguments": {
-            "origin_zone": "WESTERN_ZONE",
-            "destination_zone": "CENTRAL_ZONE",
+            "origin_zone_id": "ZONE_COLOMBO_01",
+            "destination_zone_id": "ZONE_KANDY_01",
             "weight_kg": 2.5
           },
           "result": {
             "currency": "LKR",
-            "estimated_fee": "650.00",
-            "pricing_breakdown": {
-              "base_fare": "350.00",
-              "weight_surcharge": "300.00"
-            },
+            "fee_cents": 65000,
+            "base_fee_cents": 35000,
+            "weight_surcharge_cents": 30000,
             "estimated_transit_days": 1
           }
         }
@@ -151,12 +149,12 @@ Below is an exact JSON snapshot of what an active `ConversationSession` holding 
       "action": {
         "type": "NAVIGATE_BOOKING",
         "label": "Proceed to Booking (Pre-filled)",
-        "url": "/customer/book?origin=WESTERN_ZONE&dest=CENTRAL_ZONE&weight=2.5&fee=650.00",
+        "url": "/customer/book?origin=ZONE_COLOMBO_01&dest=ZONE_KANDY_01&weight=2.5&fee_cents=65000",
         "prefill_data": {
-          "origin_zone": "WESTERN_ZONE",
-          "destination_zone": "CENTRAL_ZONE",
+          "origin_zone_id": "ZONE_COLOMBO_01",
+          "destination_zone_id": "ZONE_KANDY_01",
           "weight_kg": 2.5,
-          "estimated_fee": 650.00,
+          "estimated_fee_cents": 65000,
           "currency": "LKR"
         }
       }
@@ -237,11 +235,11 @@ The automated E2E test suite requires Member 1, Member 2, and Member 3 to seed t
 
 #### 2. Deterministic Delivery Zones & Tariffs
 ```sql
-INSERT INTO delivery_zones (id, code, name, base_fare, per_kg_rate) VALUES
-('zone_01', 'WESTERN_ZONE', 'Western Province', 350.00, 100.00),
-('zone_02', 'CENTRAL_ZONE', 'Central Province', 450.00, 150.00),
-('zone_03', 'SOUTHERN_ZONE', 'Southern Province', 400.00, 120.00)
-ON CONFLICT (code) DO NOTHING;
+INSERT INTO delivery_zones (id, code, name, base_surcharge_cents, enabled) VALUES
+('ZONE_COLOMBO_01', 'COL_01', 'Colombo Central', 0, true),
+('ZONE_KANDY_01', 'KDY_01', 'Kandy Central', 10000, true),
+('ZONE_GALLE_01', 'GAL_01', 'Galle Fort', 8000, true)
+ON CONFLICT (id) DO NOTHING;
 ```
 
 ---
@@ -276,5 +274,5 @@ To test Scenario 2 (Merchant API $\to$ RabbitMQ $\to$ Webhook dispatch) without 
 ## 2. Review Checklist for Team Meeting 2
 
 - [ ] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` includes the test accounts in Section B.1 with matching passwords.
-- [ ] **Member 2 (Pricing/Parcels):** Confirm the zone codes (`WESTERN_ZONE`, `CENTRAL_ZONE`, `SOUTHERN_ZONE`) in the `delivery_zones` table.
+- [ ] **Member 2 & 7 (Pricing/Admin):** Confirm the zone IDs (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`) in the `delivery_zones` table.
 - [ ] **Member 7 & 1 (Admin/Core API):** Confirm that the `system_policies` table schema in Section A.2 will be included in the Core API database migrations.

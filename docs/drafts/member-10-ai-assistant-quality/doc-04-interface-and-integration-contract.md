@@ -25,8 +25,8 @@ The AI Assistant and MCP server execute the following HTTP calls against backend
 ```mermaid
 flowchart LR
     AIA["AI Assistant Service / MCP"] -->|"1. GET /api/v1/tracking/public/{id}"| TRK["Tracking API (Member 5)"]
-    AIA -->|"2. GET /api/v1/parcels/my-active (Bearer JWT)"| PAR["Core API Parcels (Member 2)"]
-    AIA -->|"3. POST /api/v1/pricing/estimate"| PRC["Core API Pricing (Member 2)"]
+    AIA -->|"2. GET /api/v1/parcels (Bearer JWT)"| PAR["Core API Parcels (Member 2)"]
+    AIA -->|"3. POST /api/v1/pricing/quotes"| PRC["Core API Pricing (Member 2)"]
     AIA -->|"4. GET /api/v1/parcels (Bearer JWT)"| HIS["Core API History (Member 2)"]
 ```
 
@@ -97,7 +97,7 @@ flowchart LR
 ### Endpoint 2: Authenticated Active Shipments (Disambiguation)
 - **Consumed By Tool:** `get_my_active_parcels()`
 - **Owner Service:** Member 2 — Parcel Management (`core-api/internal/parcels`)
-- **HTTP Method & Path:** `GET /api/v1/parcels/my-active`
+- **HTTP Method & Path:** `GET /api/v1/parcels` (with query parameter `status=active` or customer tenant scope)
 - **Authentication:** Required (`Authorization: Bearer <customer_jwt>`)
 - **Purpose:** Used when a logged-in user asks *"Where is my parcel?"* without specifying a tracking code.
 
@@ -137,21 +137,19 @@ flowchart LR
 ### Endpoint 3: Delivery Fee Estimation
 - **Consumed By Tool:** `estimate_shipping_fee(...)`
 - **Owner Service:** Member 2 — Pricing Engine (`core-api/internal/pricing`)
-- **HTTP Method & Path:** `POST /api/v1/pricing/estimate`
+- **HTTP Method & Path:** `POST /api/v1/pricing/quotes`
 - **Authentication:** None (Publicly callable for quoting)
 - **Headers:** `Content-Type: application/json`, `Accept: application/json`
 
 #### Expected Request Body
 ```json
 {
-  "origin_zone": "WESTERN_ZONE",
-  "destination_zone": "CENTRAL_ZONE",
-  "weight_kg": 2.5,
-  "dimensions": {
-    "length_cm": 25.0,
-    "width_cm": 15.0,
-    "height_cm": 10.0
-  }
+  "origin_zone_id": "ZONE_COLOMBO_01",
+  "destination_zone_id": "ZONE_KANDY_01",
+  "actual_weight_kg": 2.5,
+  "length_cm": 25.0,
+  "width_cm": 15.0,
+  "height_cm": 10.0
 }
 ```
 
@@ -160,14 +158,12 @@ flowchart LR
 {
   "data": {
     "currency": "LKR",
-    "estimated_fee": "650.00",
-    "pricing_breakdown": {
-      "base_fare": "350.00",
-      "weight_surcharge": "200.00",
-      "volumetric_surcharge": "100.00"
-    },
-    "origin_zone": "WESTERN_ZONE",
-    "destination_zone": "CENTRAL_ZONE",
+    "fee_cents": 65000,
+    "base_fee_cents": 35000,
+    "weight_surcharge_cents": 20000,
+    "volumetric_surcharge_cents": 10000,
+    "origin_zone_id": "ZONE_COLOMBO_01",
+    "destination_zone_id": "ZONE_KANDY_01",
     "estimated_transit_days": 1,
     "pricing_version": "v1.0"
   }
@@ -604,6 +600,6 @@ To enable full-stack browser E2E testing with **Playwright** without flakiness f
 
 ## 6. Open Questions for Team Meeting 2
 
-1. **Member 2 (Pricing):** Please confirm the zone enum identifiers (e.g., `WESTERN_ZONE` vs `ZONE_1`) and whether `POST /api/v1/pricing/estimate` expects dimensions as individual floats or a nested `dimensions` object.
+1. **Member 2 (Pricing):** Please confirm the zone enum identifiers (e.g., `ZONE_COLOMBO_01` vs `ZONE_KANDY_01`) and whether `POST /api/v1/pricing/quotes` expects dimensions as individual floats with integer cents outputs.
 2. **Member 5 (Tracking):** Please confirm that `GET /api/v1/tracking/public/{trackingNumber}` redacts recipient street address and phone number at the API level as specified in `docs/contracts/api-conventions.md`.
 3. **Members 6 & 7 (Frontend):** Please confirm adoption of the `data-testid` attributes listed in Section 5 so our automated Playwright E2E test suite can run reliably without breaking on CSS refactors.

@@ -59,7 +59,7 @@ The **AI Delivery Assistant** solves this by:
 To protect system integrity, the AI Assistant service has strictly enforced non-responsibilities:
 - **NO Direct Database Access:** The service possesses **zero SQL drivers, zero PostgreSQL connection strings, and zero direct database queries**. It communicates exclusively via approved HTTP REST endpoints.
 - **NO Autonomous Mutation Authority:** The AI service cannot book parcels, change fees, cancel shipments, re-route deliveries, or update courier assignments. It is **100% read-only**.
-- **NO Proprietary Pricing Logic:** The AI service does not calculate tariffs internally. All pricing logic belongs exclusively to Member 2's Pricing Engine (`POST /api/v1/pricing/estimate`).
+- **NO Proprietary Pricing Logic:** The AI service does not calculate tariffs internally. All pricing logic belongs exclusively to Member 2's Pricing Engine (`POST /api/v1/pricing/quotes`).
 - **NO Public PII Disclosure:** The AI service must never return recipient street addresses, recipient phone numbers, or sender personal details in public tracking queries.
 - **NO Direct Persistent User Storage:** The AI service does not maintain a user database or authentication store. User identity is derived strictly from Bearer JWTs validated by Member 1's Identity service.
 
@@ -153,7 +153,7 @@ Member 10 designs, implements, and maintains the automated End-to-End (E2E) test
 | Resource Category | Member 10 Exclusive Ownership | Shared / Upstream Ownership |
 | :--- | :--- | :--- |
 | **Source Code Directories** | `services/ai-assistant/`<br>`tests/e2e/` | `core-api/` (Members 1, 2, 3, 4, 7, 8)<br>`services/tracking/` (Member 5)<br>`web/` (Members 6, 7) |
-| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /healthz`<br>`GET /readyz` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2) |
+| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2) |
 | **Protocols & Interfaces** | Model Context Protocol (`mcp_server.py`) | Traefik Ingress Gateway routing (Member 7/9) |
 | **Database Tables** | **NONE** (Zero database ownership) | PostgreSQL tables owned by Members 1, 2, 3, 4, 8 |
 | **Message Queues** | Read-only test listener on `swiftdrop.events.topic` | RabbitMQ broker & Outbox Relay (Member 8) |
@@ -170,6 +170,6 @@ Member 10 designs, implements, and maintains the automated End-to-End (E2E) test
 3. The React frontend team (Members 6 & 7) will adopt the standardized `data-testid` attributes specified in `team-integration-and-handoff-guide.md`.
 
 ### Open Questions for Team Meeting 2
-1. **To Member 2 (Pricing):** Will `POST /api/v1/pricing/estimate` accept zone strings (e.g. `WESTERN_ZONE`) directly, or does it require postal codes?
+1. **To Member 2 (Pricing):** Will `POST /api/v1/pricing/quotes` accept zone strings (e.g. `ZONE_COLOMBO_01`) directly, or does it require postal codes?
 2. **To Member 5 (Tracking):** Can we confirm that `GET /api/v1/tracking/public/{id}` masks recipient phone numbers and street addresses at the API gateway level before reaching any client?
 3. **To Member 7 & 1 (Admin/Core API):** Can Core API provide the lightweight `GET /api/v1/system/operational-rules` endpoint so the AI assistant can dynamically reflect operating hours and attempt limits set by admins?

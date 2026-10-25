@@ -89,7 +89,7 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
        - Data Masking: Recipient street address and phone number are strictly redacted; destination city/district and milestone timestamps are returned.
     2. **Case B: Ambiguous Query (*"Where is my parcel?"*) with Authenticated User (JWT Present):**
        - Tool: `get_my_active_parcels()`
-       - Upstream Call: `GET /api/v1/parcels/my-active` (Core API with caller's Bearer JWT).
+       - Upstream Call: `GET /api/v1/parcels` (Core API forwarding caller's Bearer JWT, filtered for active states).
        - If **1 parcel found**: Assistant immediately answers with the status of that active shipment.
        - If **multiple parcels found**: Assistant lists them cleanly (e.g., *"You have 2 active parcels: 1) To Kandy [SD-101] - In Transit, 2) To Galle [SD-102] - Out for Delivery. Which one would you like details on?"*) without guessing.
        - If **0 parcels found**: Assistant informs the customer they have no active deliveries.
@@ -104,8 +104,8 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 - **Context:** Customers will ask *"How much to send 2.5 kg from Colombo to Kandy?"*.
 - **Recommended Answer:**
   - **Tool Name:** `estimate_shipping_fee(origin_zone: str, destination_zone: str, weight_kg: float, length_cm: float = None, width_cm: float = None, height_cm: float = None)`
-  - **Upstream Call:** `POST /api/v1/pricing/estimate` (Member 2's Core Pricing API).
-  - **Behavior:** The LLM extracts the city/district, maps it to a valid delivery zone (e.g., "Colombo" $\to$ `WESTERN_ZONE`, "Kandy" $\to$ `CENTRAL_ZONE`), calls the Core API, and explains the fee breakdown (base fare + weight surcharge) in friendly language.
+  - **Upstream Call:** `POST /api/v1/pricing/quotes` (Member 2's Core Pricing API returning integer cents).
+  - **Behavior:** The LLM extracts the city/district, maps it to a valid delivery zone (e.g., "Colombo" $\to$ `ZONE_COLOMBO_01`, "Kandy" $\to$ `ZONE_KANDY_01`), calls the Core API, and explains the fee breakdown (base fare + weight surcharge) in friendly language.
 - **Justification:** Keeps pricing business logic 100% inside Member 2's domain; the AI merely acts as an intelligent natural language adapter.
 
 ---
@@ -306,12 +306,13 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 - **Question:** How will the AI Assistant be packaged and orchestrated?
 - **Context:** Member 9 needs container specifications for Docker Compose and Kubernetes.
 - **Recommended Answer:**
-  - **Port:** Internal `8003`, mapped via Traefik Gateway at route `/api/v1/ai`.
-  - **Dockerfile:** Multi-stage or slim Python build (`python:3.11-slim`), non-root user `appuser`.
+  - **Port:** Internal `8000`, mapped via Traefik Gateway at route `/api/v1/ai`.
+  - **Dockerfile:** Multi-stage or slim Python build (`python:3.11-slim`), non-root user `USER 10001:10001`.
   - **Health Probes:**
-    - Liveness: `GET /healthz` (returns `{"status": "ok"}`)
-    - Readiness: `GET /readyz` (verifies connectivity to Core API and Tracking API)
-- **Justification:** Seamlessly integrates with Member 9's Docker Compose and Kubernetes deployment manifests.
+    - Liveness: `GET /health/live` (returns `{"status": "alive"}`)
+    - Readiness: `GET /health/ready` (verifies local model config and in-memory cache, strictly decoupled from external APIs)
+    - Metrics: `GET /metrics` (Prometheus metrics)
+- **Justification:** Seamlessly integrates with Member 9's Docker Compose and Kubernetes deployment manifests while preventing cascading pod restart failures.
 
 ---
 
@@ -329,7 +330,7 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 | **Safety** | Defense-in-depth: Least privilege, zero SQL access, enforceable tool output grounding, secret isolation |
 | **Rate Limits** | Fully configurable via `.env`: `AI_RATE_LIMIT_ANONYMOUS_RPM`, `AI_RATE_LIMIT_AUTHENTICATED_RPM` |
 | **E2E Testing** | Two-tier suite: Playwright browser tests (`data-testid` standard) + Pytest backend async event tests |
-| **Deployment** | Docker container on port `8003`, routed through Traefik Gateway |
+| **Deployment** | Docker container on port `8000`, non-root `USER 10001:10001`, routed through Traefik Gateway |
 
 ---
 

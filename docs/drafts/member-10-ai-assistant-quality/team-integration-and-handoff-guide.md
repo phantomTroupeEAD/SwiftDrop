@@ -47,12 +47,12 @@ When the user asks for a price quote (e.g., *"How much to send 2.5 kg from Colom
     "action": {
       "type": "NAVIGATE_BOOKING",
       "label": "Proceed to Booking",
-      "url": "/customer/book?origin=WESTERN_ZONE&dest=CENTRAL_ZONE&weight=2.5&fee=650.00",
+      "url": "/customer/book?origin=ZONE_COLOMBO_01&dest=ZONE_KANDY_01&weight=2.5&fee_cents=65000",
       "prefill_data": {
-        "origin_zone": "WESTERN_ZONE",
-        "destination_zone": "CENTRAL_ZONE",
+        "origin_zone_id": "ZONE_COLOMBO_01",
+        "destination_zone_id": "ZONE_KANDY_01",
         "weight_kg": 2.5,
-        "estimated_fee": 650.00,
+        "estimated_fee_cents": 65000,
         "currency": "LKR"
       }
     }
@@ -68,13 +68,13 @@ Playwright will automate parcel booking from start to finish.
 
 | Element | Required `data-testid` | Element Type | Notes |
 | :--- | :--- | :--- | :--- |
-| Origin Zone Dropdown | `booking-origin-zone-select` | `<select>` | Options: `WESTERN_ZONE`, `CENTRAL_ZONE`, etc. |
+| Origin Zone Dropdown | `booking-origin-zone-select` | `<select>` | Options: `ZONE_COLOMBO_01`, `ZONE_KANDY_01`, etc. |
 | Destination Zone Dropdown | `booking-dest-zone-select` | `<select>` | Destination delivery zone. |
 | Weight Input Field | `booking-weight-input` | `<input type="number">` | Gross weight in kilograms. |
 | Length Input Field | `booking-length-input` | `<input type="number">` | Length in cm. |
 | Width Input Field | `booking-width-input` | `<input type="number">` | Width in cm. |
 | Height Input Field | `booking-height-input` | `<input type="number">` | Height in cm. |
-| Estimate Fee Button | `booking-estimate-btn` | `<button>` | Calls `POST /api/v1/pricing/estimate`. |
+| Estimate Fee Button | `booking-estimate-btn` | `<button>` | Calls `POST /api/v1/pricing/quotes`. |
 | Displayed Estimated Fee | `booking-estimated-fee-display` | `<span>` / `<div>` | Must display e.g. `"LKR 650.00"`. |
 | Recipient Full Name | `booking-recipient-name-input` | `<input type="text">` | Full name of recipient. |
 | Recipient Phone Number | `booking-recipient-phone-input`| `<input type="tel">` | Recipient phone (e.g. `+94771234567`). |
@@ -179,7 +179,7 @@ In the database seed script (`seeds/dev_seed.sql`), please provide these determi
 #### 3. Internal Service-to-Service Secret Contract (`INTERNAL_SERVICE_KEY`)
 When Core API calls internal webhooks exposed by the AI Assistant (such as invalidating the knowledge base cache on policy changes), it must supply this pre-shared secret in the request header:
 ```http
-POST http://ai-assistant:8003/api/v1/ai/admin/refresh-knowledge
+POST http://ai-assistant:8000/api/v1/ai/admin/refresh-knowledge
 X-Internal-Service-Key: dev-internal-secret-key-123
 ```
 - Injected via environment variable: `INTERNAL_SERVICE_KEY`
@@ -190,19 +190,17 @@ X-Internal-Service-Key: dev-internal-secret-key-123
 ### 3.2 Member 2: Parcel Management & Pricing (`core-api/internal/pricing/` & `parcels/`)
 
 #### 1. Pricing Estimation Endpoint (Consumed by AI Tool `estimate_shipping_fee`)
-- **HTTP Method & Path:** `POST /api/v1/pricing/estimate`
+- **HTTP Method & Path:** `POST /api/v1/pricing/quotes`
 - **Auth:** Public / Optional
 - **Request Body:**
 ```json
 {
-  "origin_zone": "WESTERN_ZONE",
-  "destination_zone": "CENTRAL_ZONE",
-  "weight_kg": 2.5,
-  "dimensions": {
-    "length_cm": 25.0,
-    "width_cm": 15.0,
-    "height_cm": 10.0
-  }
+  "origin_zone_id": "ZONE_COLOMBO_01",
+  "destination_zone_id": "ZONE_KANDY_01",
+  "actual_weight_kg": 2.5,
+  "length_cm": 25.0,
+  "width_cm": 15.0,
+  "height_cm": 10.0
 }
 ```
 - **Success Response (`200 OK`):**
@@ -210,14 +208,12 @@ X-Internal-Service-Key: dev-internal-secret-key-123
 {
   "data": {
     "currency": "LKR",
-    "estimated_fee": "650.00",
-    "pricing_breakdown": {
-      "base_fare": "350.00",
-      "weight_surcharge": "200.00",
-      "volumetric_surcharge": "100.00"
-    },
-    "origin_zone": "WESTERN_ZONE",
-    "destination_zone": "CENTRAL_ZONE",
+    "fee_cents": 65000,
+    "base_fee_cents": 35000,
+    "weight_surcharge_cents": 20000,
+    "volumetric_surcharge_cents": 10000,
+    "origin_zone_id": "ZONE_COLOMBO_01",
+    "destination_zone_id": "ZONE_KANDY_01",
     "estimated_transit_days": 1,
     "pricing_version": "v1.0"
   }
@@ -225,7 +221,7 @@ X-Internal-Service-Key: dev-internal-secret-key-123
 ```
 
 #### 2. Authenticated Active Shipments (Consumed by AI Tool `get_my_active_parcels`)
-- **HTTP Method & Path:** `GET /api/v1/parcels/my-active`
+- **HTTP Method & Path:** `GET /api/v1/parcels` (filtered by active status for authenticated caller)
 - **Auth:** Required (`Authorization: Bearer <customer_jwt>`)
 - **Success Response (`200 OK`):**
 ```json
@@ -243,13 +239,13 @@ X-Internal-Service-Key: dev-internal-secret-key-123
 }
 ```
 
-#### 3. Standard Delivery Zone Enum Identifiers
-Please freeze the canonical zone codes across all backend tables:
-- `WESTERN_ZONE` (Colombo, Gampaha, Kalutara)
-- `CENTRAL_ZONE` (Kandy, Matale, Nuwara Eliya)
-- `SOUTHERN_ZONE` (Galle, Matara, Hambantota)
-- `NORTHERN_ZONE` (Jaffna, Kilinochchi, Mannar)
-- `EASTERN_ZONE` (Batticaloa, Trincomalee, Ampara)
+#### 3. Standard Delivery Zone Identifiers
+Please freeze the canonical zone IDs across all backend tables (matching Member 7's `delivery_zones` table):
+- `ZONE_COLOMBO_01` (Colombo Central)
+- `ZONE_KANDY_01` (Kandy Central)
+- `ZONE_GALLE_01` (Galle Fort)
+- `ZONE_JAFFNA_01` (Jaffna Peninsula)
+- `ZONE_BATTICALOA_01` (Batticaloa Town)
 
 ---
 
@@ -348,14 +344,15 @@ E2E tests will inspect RabbitMQ event queues to verify the asynchronous integrat
 ### 3.6 Member 9: DevOps, Kubernetes & Traefik Routing (`deploy/`)
 
 #### 1. AI Assistant Container Specifications
-- **Port:** Internal HTTP port `8003`.
+- **Port:** Internal HTTP port `8000`.
 - **Traefik Gateway Route:**
   - Rule: `PathPrefix(`/api/v1/ai`)`
-  - Target Service: `http://ai-assistant:8003`
+  - Target Service: `http://ai-assistant:8000`
   - Stripped Prefix: None (service handles `/api/v1/ai/chat` directly).
 - **Probes:**
-  - Liveness: `GET /healthz` (200 OK)
-  - Readiness: `GET /readyz` (Verifies connectivity to Core and Tracking APIs)
+  - Liveness: `GET /health/live` (200 OK)
+  - Readiness: `GET /health/ready` (Verifies local model and in-memory cache, strictly decoupled from external APIs)
+  - Metrics: `GET /metrics` (Prometheus metrics)
 - **Required Environment Variables:**
 ```env
 LLM_BASE_URL=https://openrouter.ai/api/v1
@@ -423,7 +420,7 @@ flowchart TD
 - **Goal:** Fulfill the assignment's core customer requirement completely through the React UI without invoking any LLM or AI endpoint.
 - **Step 1:** Customer logs in via web portal (local credentials or Google OIDC).
 - **Step 2:** Customer navigates to `/customer/book` and enters origin, destination, parcel weight, and dimensions.
-- **Step 3:** Customer clicks `[Estimate Fee]` button. The UI directly queries `POST /api/v1/pricing/estimate` and displays `"Estimated Fee: LKR 650.00"`.
+- **Step 3:** Customer clicks `[Estimate Fee]` button. The UI directly queries `POST /api/v1/pricing/quotes` and displays `"Estimated Fee: LKR 650.00"`.
 - **Step 4:** Customer enters recipient details and clicks `[Confirm Booking]`. The UI directly calls `POST /api/v1/parcels`.
 - **Step 5:** UI renders confirmation modal with tracking number `SD-20261021-04921`.
 - **Step 6:** Customer navigates to `/tracking/SD-20261021-04921` to view milestone progression and establishes an SSE stream for live updates.
@@ -442,8 +439,8 @@ flowchart TD
 Please review your respective section before Meeting 2:
 - [ ] **Members 6 & 7 (Frontend):** Confirm acceptance of Section 2 `data-testid` attributes and chat action card integration.
 - [ ] **Member 1 (Auth):** Confirm JWT claim structure and inclusion of test seed accounts in `seeds/dev_seed.sql`.
-- [ ] **Member 2 (Pricing/Parcels):** Confirm `POST /api/v1/pricing/estimate` and `GET /api/v1/parcels/my-active` schemas.
+- [ ] **Member 2 (Pricing/Parcels):** Confirm `POST /api/v1/pricing/quotes` and `GET /api/v1/parcels` schemas.
 - [ ] **Member 3 (Dispatch):** Confirm courier proof upload format and status transition enum.
 - [ ] **Member 5 (Tracking):** Confirm PII masking on `GET /api/v1/tracking/public/{trackingNumber}`.
 - [ ] **Member 8 (Messaging):** Confirm CloudEvents JSON envelope and webhook HMAC header.
-- [ ] **Member 9 (DevOps):** Confirm port `8003`, Traefik path `/api/v1/ai`, and probe paths.
+- [ ] **Member 9 (DevOps):** Confirm port `8000`, Traefik path `/api/v1/ai`, and probe paths (`/health/live`, `/health/ready`).

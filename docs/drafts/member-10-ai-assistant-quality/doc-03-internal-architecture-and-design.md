@@ -30,7 +30,7 @@ services/ai-assistant/
 │   ├── api/                         # Transport Layer (HTTP / REST)
 │   │   ├── __init__.py
 │   │   ├── routes_chat.py           # POST /api/v1/ai/chat
-│   │   ├── routes_health.py         # GET /healthz, GET /readyz
+│   │   ├── routes_health.py         # GET /health/live, GET /health/ready, GET /metrics
 │   │   └── routes_admin.py          # POST /api/v1/ai/admin/refresh-knowledge
 │   ├── core/                        # Cross-Cutting Infrastructure
 │   │   ├── __init__.py
@@ -303,6 +303,6 @@ sequenceDiagram
 ## 3. Review Checklist for Team Meeting 2
 
 - [ ] **Member 1 (Auth):** Confirm that the JWT payload contains `sub`, `role`, and `tenant_id` claims matching the Pydantic schemas in `domain/models.py`.
-- [ ] **Member 2 (Parcels/Pricing):** Review the `infrastructure/core_api_client.py` endpoint mappings for `/api/v1/pricing/estimate` and `/api/v1/parcels/my-active`.
+- [ ] **Member 2 (Parcels/Pricing):** Review the `infrastructure/core_api_client.py` endpoint mappings for `/api/v1/pricing/quotes` and `/api/v1/parcels`.
 - [ ] **Members 6 & 7 (Frontend):** Confirm that the Page Object Model selectors in Section B.2 align with the agreed `data-testid` attributes.
-- [ ] **Member 9 (DevOps):** Confirm that the Dockerfile multi-stage build and port `8003` integrate seamlessly into `docker-compose.yml`.
+- [ ] **Member 9 (DevOps):** Confirm that the Dockerfile multi-stage build, non-root `USER 10001:10001`, and port `8000` integrate seamlessly into `docker-compose.yml`.

@@ -60,18 +60,18 @@ sequenceDiagram
     actor Customer as Customer (React Chat)
     participant ChatAPI as AI Assistant (/api/v1/ai/chat)
     participant LLM as External LLM (OpenRouter/NVIDIA)
-    participant CorePrice as Core Pricing API (/api/v1/pricing/estimate)
+    participant CorePrice as Core Pricing API (/api/v1/pricing/quotes)
     participant WebUI as React Booking Wizard (/customer/book)
 
     Customer->>ChatAPI: POST /api/v1/ai/chat {"message": "How much for 2.5kg from Colombo to Kandy?"}
     ChatAPI->>LLM: Prompt + User Message + Tools [estimate_shipping_fee]
-    Note over LLM: Extracts: origin="WESTERN_ZONE",<br/>destination="CENTRAL_ZONE", weight_kg=2.5
-    LLM-->>ChatAPI: Tool Call: estimate_shipping_fee(origin="WESTERN_ZONE", destination="CENTRAL_ZONE", weight_kg=2.5)
+    Note over LLM: Extracts: origin="ZONE_COLOMBO_01",<br/>destination="ZONE_KANDY_01", weight_kg=2.5
+    LLM-->>ChatAPI: Tool Call: estimate_shipping_fee(origin_zone_id="ZONE_COLOMBO_01", destination_zone_id="ZONE_KANDY_01", weight_kg=2.5)
     
-    ChatAPI->>CorePrice: POST /api/v1/pricing/estimate
-    CorePrice-->>ChatAPI: 200 OK {"currency": "LKR", "estimated_fee": "650.00", "breakdown": {"base": "350.00", "weight": "300.00"}}
+    ChatAPI->>CorePrice: POST /api/v1/pricing/quotes
+    CorePrice-->>ChatAPI: 200 OK {"data": {"currency": "LKR", "fee_cents": 65000, "base_fee_cents": 35000, "weight_surcharge_cents": 30000}}
     
-    ChatAPI->>LLM: Tool Result: {"estimated_fee": "650.00", "currency": "LKR"}
+    ChatAPI->>LLM: Tool Result: {"fee_cents": 65000, "currency": "LKR", "formatted_fee": "LKR 650.00"}
     Note over LLM: Synthesizes friendly explanation
     LLM-->>ChatAPI: "Sending a 2.5 kg parcel from Colombo to Kandy costs LKR 650.00."
     
@@ -109,7 +109,7 @@ sequenceDiagram
   1. The MCP client starts `mcp_server.py` via STDIO (or connects to SSE).
   2. The server responds with tool manifests (`track_parcel`, `estimate_shipping_fee`, `get_my_active_parcels`).
   3. The client sends a `tools/call` JSON-RPC request for `estimate_shipping_fee`.
-  4. `mcp_server.py` calls `POST /api/v1/pricing/estimate` on Core API.
+  4. `mcp_server.py` calls `POST /api/v1/pricing/quotes` on Core API.
   5. The server returns the standardized JSON-RPC result to the evaluator.
 
 ---
@@ -165,8 +165,8 @@ sequenceDiagram
     Customer->>Web: Navigate to /customer/book
     Customer->>Web: Selects WESTERN_ZONE -> CENTRAL_ZONE, enters 2.5 kg
     Customer->>Web: Clicks [data-testid="booking-estimate-btn"]
-    Web->>Price: POST /api/v1/pricing/estimate
-    Price-->>Web: 200 OK { fee: "650.00" }
+    Web->>Price: POST /api/v1/pricing/quotes
+    Price-->>Web: 200 OK { data: { fee_cents: 65000 } }
     Note over Web: Displays fee in [data-testid="booking-estimated-fee-display"]
     
     Customer->>Web: Fills recipient details & clicks [data-testid="booking-submit-btn"]

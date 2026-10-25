@@ -114,7 +114,7 @@ flowchart LR
 - **Test Steps:**
   1. Open `/login`, input Customer A credentials, submit. Verify session token saved in `localStorage`.
   2. Navigate to `/customer/book`.
-  3. Select `WESTERN_ZONE` $\to$ `CENTRAL_ZONE`, input `2.5` kg, length `25`, width `15`, height `10`.
+  3. Select `ZONE_COLOMBO_01` $\to$ `ZONE_KANDY_01`, input `2.5` kg, length `25`, width `15`, height `10`.
   4. Click `[data-testid="booking-estimate-btn"]`.
   5. Assert `[data-testid="booking-estimated-fee-display"]` displays `"LKR 650.00"` within 2 seconds.
   6. Fill recipient name, phone, address, and city.
