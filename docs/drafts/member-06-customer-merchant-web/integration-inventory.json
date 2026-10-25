@@ -1,0 +1,27 @@
+{
+  "owner": "Sajini, Member 6",
+  "status": "proposed-inventory-not-openapi",
+  "baseUrlVariable": "VITE_API_BASE_URL",
+  "baseUrl": "/api/v1",
+  "interfaces": [
+    {"method": "POST", "path": "/auth/register", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": "/auth/login", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": "/auth/refresh", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": "/auth/logout", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/auth/google", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/auth/google/callback", "owner": "M1", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": null, "candidates": ["/pricing/quote", "/pricing/quotes"], "owner": "M2", "schemaStatus": "path-conflict"},
+    {"method": "POST", "path": "/parcels", "owner": "M2", "idempotency": "stable-key-per-logical-request", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/parcels", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/parcels/{id}", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/parcels/{id}/history", "owner": "M2/M5-confirm", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/parcels/{id}/receipt", "owner": "M2", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/tracking/{trackingNumber}", "owner": "M5", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/tracking/{trackingNumber}/events", "owner": "M5", "transport": "SSE", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": "/merchant/orders", "owner": "M4", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "GET", "path": "/merchant/orders", "owner": "M4", "schemaStatus": "awaiting-approved-contract"},
+    {"method": "POST", "path": "/merchant/webhooks", "owner": "M4", "schemaStatus": "awaiting-approved-contract"}
+  ],
+  "frontendProducedBrokerEvents": [],
+  "frontendOwnedDatabaseTables": []
+}
