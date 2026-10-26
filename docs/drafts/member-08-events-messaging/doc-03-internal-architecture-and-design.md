@@ -65,7 +65,7 @@ graph TB
             WKR_RETRY["DB Retry Poller<br/>(next_attempt_at + Leased Claims)"]
         end
 
-        subgraph "cmd/reconciler (CronJob / CLI)"
+        subgraph "cmd/reconcile (CronJob / CLI)"
             REC_JOB["Reconciliation Engine<br/>(Auditor & Reconciler)"]
         end
     end
@@ -81,7 +81,7 @@ graph TB
 
     RMQ_EX -->|"parcel.#, courier.#"| Q_TRACK
     RMQ_EX -->|"parcel.#"| Q_NOTIF
-    RMQ_EX -->|"parcel.#, courier.#"| Q_WH
+    RMQ_EX -->|"parcel.#, courier.#, merchant.#"| Q_WH
 
     Q_NOTIF --> WKR_IDM
     Q_WH --> WKR_IDM
@@ -190,17 +190,16 @@ import "time"
 
 // EventEnvelope provides a strongly-typed wrapper for all domain events.
 type EventEnvelope[T any] struct {
-    EventID          string    `json:"event_id"`
-    EventType        string    `json:"event_type"`
-    AggregateType    string    `json:"aggregate_type"`
-    AggregateID      string    `json:"aggregate_id"`
-    AggregateVersion int       `json:"aggregate_version,omitempty"` // Domain aggregate mutation version
-    Version          int       `json:"version"`                     // Schema version (matches event-contracts.md)
-    Timestamp        time.Time `json:"timestamp"`                   // Event emission timestamp (RFC 3339)
-    OccurredAt       time.Time `json:"occurred_at,omitempty"`       // Business occurrence timestamp
-    CorrelationID    string    `json:"correlation_id"`
-    Producer         string    `json:"producer"`
-    Payload          T         `json:"payload"`
+    EventID          uuid.UUID `json:"event_id"`                    // Canonical UUIDv7
+    EventType        string    `json:"event_type"`                  // e.g. "parcel.delivered.v1"
+    AggregateType    string    `json:"aggregate_type"`              // e.g. "parcel", "courier", "merchant"
+    AggregateID      uuid.UUID `json:"aggregate_id"`                // Authoritative aggregate UUID
+    AggregateVersion int       `json:"aggregate_version"`           // Domain aggregate sequence counter
+    SchemaVersion    string    `json:"schema_version"`              // Contract schema version (e.g. "1.0.0")
+    OccurredAt       time.Time `json:"occurred_at"`                 // Business occurrence timestamp (RFC 3339 UTC)
+    CorrelationID    string    `json:"correlation_id"`              // Distributed request trace ID
+    Producer         string    `json:"producer"`                    // Subsystem identifier (e.g. "core-api/parcels")
+    Payload          T         `json:"payload"`                     // Type-safe domain event payload
 }
 ```
 
@@ -230,10 +229,11 @@ type AnyEnvelope interface {
     GetAggregateType() string
     GetAggregateID() string
     GetAggregateVersion() int
-    GetSchemaVersion() int
+    GetSchemaVersion() string
     GetOccurredAt() time.Time
-    GetCorrelationID() string
     GetProducer() string
+    GetCorrelationID() string
+    GetPayload() any
     SerializePayload() ([]byte, error)
 }
 ```
