@@ -91,28 +91,40 @@ deploy/
 │       ├── values.yaml                   # Traefik Helm values (M9)
 │       ├── ingressroutes.yaml            # K8s routes (M7)
 │       └── middlewares.yaml              # K8s policies (M7)
-├── kubernetes/                           ✅ (C2: keep this folder and .yml)
-│   ├── namespace.yml
-│   ├── secrets.example.yml               # placeholder values only (C4 names)
-│   ├── configmaps.yml                    # one <service>-config each
-│   ├── postgres-statefulset.yml          ✅ (fix probe user, C14)
-│   ├── rabbitmq-statefulset.yml          ✅
-│   ├── redis.yml                         # only if tracking >1 replica (C26)
-│   ├── core-api.yml                      # Deployment + Service + ServiceAccount
-│   ├── tracking-api.yml
-│   ├── outbox-relay.yml                  # replicas: 1, forever
-│   ├── event-worker.yml
-│   ├── ai-assistant.yml
-│   ├── web.yml
-│   ├── migrate-job.yml                   # golang-migrate, once per deploy (C22)
-│   ├── cronjob-reconciliation.yml        ✅ (switch to messaging image + /usr/local/bin/reconcile, add SA)
-│   ├── networkpolicies.yml               # DB/broker only from app pods (ADR-002 §8)
+├── kubernetes/                           ✅ (A8: per-service modular layout, .yaml)
+│   ├── base/                             # shared namespace, secrets, network policies
+│   │   ├── namespace.yaml
+│   │   ├── secrets.example.yaml          # placeholder values (A5 pattern)
+│   │   └── networkpolicies.yaml          # pod isolation (ADR-002 §8)
+│   ├── core-api/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   └── migrate-job.yaml              # golang-migrate Job, backoffLimit: 0 (D1)
+│   ├── tracking-api/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   └── configmap.yaml
+│   ├── messaging/
+│   │   ├── relay-deployment.yaml         # replicas: 1 (singleton)
+│   │   ├── worker-deployment.yaml
+│   │   └── cronjob-reconciliation.yaml   # messaging image + /usr/local/bin/reconcile (C10)
+│   ├── ai-assistant/
+│   │   ├── deployment.yaml
+│   │   └── service.yaml
+│   ├── web/
+│   │   ├── deployment.yaml
+│   │   └── service.yaml
+│   ├── postgres/
+│   │   ├── postgres-statefulset.yaml     # 1Gi memory, 150 max_connections (D8)
+│   │   └── service.yaml
+│   ├── rabbitmq/
+│   │   ├── rabbitmq-statefulset.yaml
+│   │   └── service.yaml
 │   ├── autoscaling/
-│   │   ├── hpa-core-api.yml
-│   │   ├── hpa-tracking.yml              ✅ (numbers C8)
-│   │   ├── hpa-web.yml
-│   │   └── keda-event-worker.yml         ✅ (two triggers: q.notifications.worker + q.webhooks.dispatcher; host = RABBITMQ_URL)
-│   └── tests/probe_test.sh               # AT-016 evidence
+│   │   ├── hpa-tracking.yaml             # CPU/Memory target
+│   │   └── keda-event-worker.yaml        # two triggers: worker + webhooks; host = RABBITMQ_URL (C7)
+│   └── tests/probe_test.sh               # AT-016 verification
 ├── helm/swiftdrop/                       # bonus (SRS §15.3)
 │   ├── Chart.yaml
 │   ├── values.yaml · values-local.yaml · values-vps.yaml

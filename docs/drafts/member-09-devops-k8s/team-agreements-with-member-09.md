@@ -31,11 +31,11 @@
 | # | Topic | Agreement | Status |
 | :-: | :--- | :--- | :--- |
 | **D1** | **Migration tool** | golang-migrate. One-shot container locally (`migrate/migrate:v4.17.1`, as Members 4 and 7 already use); in Kubernetes **one Job per release** (`backoffLimit: 0`: a failed migration needs a person, not retries), image `core-api-migrations:<git-sha>` | ✅ C22 + Member 7's Job design |
-| **D2** | **File names** | **Proposal: timestamps** `YYYYMMDDHHMMSS_<module>_<change>.up.sql` / `.down.sql` (golang-migrate's default format), instead of the 6-digit numbers in AGENTS.md §7. Two members already use timestamps, and Member 7 proposed it (U-40); timestamps never clash between 10 people. AGENTS.md §7 gets a one-line update after the vote | **⏳ vote needed** |
-| **D3** | **First-wave order** | Tables must be created in foreign-key order: identity (M1) → zones (M7) → merchants (M4) → couriers (M3) → pricing rules (M2) → parcels (M2) → quotes (M2) → dispatch/delivery (M3) → events (M8) → idempotency → audit. With timestamps, Member 9 hands out one **time block per module** so the order is right | proposal |
-| **D4** | **Stub tables** | **Stubs stay in your test folders.** Never put another member's table (e.g. a stub `users`) in the real `core-api/migrations/`. Members 4 and 7 both have stub `users`/audit migrations; the real `users` comes from Member 1, and `audit_logs` is created **once**, by its owner | ⏳ agree |
+| **D2** | **File names** | **Ratified: 6-digit sequential numbering** `000NNN_<module>_<change>.up.sql` / `.down.sql` (`000001` through `000011` initial wave), per AGENTS.md §7 and Master Audit. Guarantees deterministic ordering and cross-platform consistency. | ✅ Ratified |
+| **D3** | **First-wave order** | Tables must be created in foreign-key order: identity (M1) → zones (M7) → merchants (M4) → couriers (M3) → pricing rules (M2) → parcels (M2) → quotes (M2) → dispatch/delivery (M3) → events (M8) → idempotency → audit. Canonical sequence: `000001` to `000011` | ✅ Ratified |
+| **D4** | **Stub tables** | **Stubs stay in your test folders.** Never put another member's table (e.g. a stub `users`) in the real `core-api/migrations/`. Members 4 and 7 both have stub `users`/audit migrations; the real `users` comes from Member 1, and `audit_logs` is created **once**, by its owner | ✅ Agreed |
 | **D5** | **Ownership and review** | each owner writes only their own tables' migrations and updates `database-schema.md` in the same PR. **Member 9 reviews every migration** (CODEOWNERS); the owner of a referenced table is tagged. A merged migration is never edited | ✅ elected 2026-10-24 |
-| **D6** | **DB login roles** | Created by Member 9 **once, before migrations** (a bootstrap SQL, as in Member 7's draft). Names (merging the three proposals): **`swiftdrop_migrator`** (owns the schema; DDL), **`swiftdrop_app`** (core-api), **`swiftdrop_tracking_ro`** (tracking; read only), **`swiftdrop_relay`**, **`swiftdrop_worker`**. The AI service gets **no** DB login | ⏳ agree (Members 4 and 7 use different names today) |
+| **D6** | **DB login roles** | Created by Member 9 **once, before migrations** (bootstrap SQL). Names: **`swiftdrop_migrator`** (owns the schema; DDL), **`swiftdrop_app`** (core-api), **`swiftdrop_tracking_ro`** (tracking; read only), **`swiftdrop_relay`**, **`swiftdrop_worker`**, **`swiftdrop_reconciler`**. The AI service gets **no** DB login | ✅ Agreed |
 | **D7** | **Default rights** | `swiftdrop_app` gets **SELECT, INSERT, UPDATE** on new tables by default. **DELETE is granted per table only when a module needs it.** Append-only tables (`audit_logs`, status history) never get UPDATE/DELETE | proposal (fits Member 4's "no DELETE" and Member 7's audit rule) |
 | **D8** | **Connection budget** | Member 9 sets the pool size per service. **Postgres `max_connections` = 150** (memory limit raised from 512Mi to 1Gi). Pools: core-api 12 × 4 pods = 48 · tracking 5 × 4 = 20 · relay **5** · worker **10** × 3 pods = 30 · reconciler 2 → **105 used, about 45 spare** for migrations, admin and growth | ✅ C11; limit 150 decided by Member 9 (DB coordinator) 2026-10-25; relay/worker pools from Member 8 |
 | **D9** | **Timeouts** | per-role defaults: `statement_timeout = 5s`, `lock_timeout = 2s` (Member 4 U-30); longer only for the migrator | proposal |
@@ -97,40 +97,40 @@
 | **K8** | Member 4 | role `swiftdrop_core_api`, `swiftdrop_tracking`; migrations run as superuser in its Compose file | `swiftdrop_app`, `swiftdrop_tracking_ro`; migrations as `swiftdrop_migrator` (D6) | Member 4 |
 | **K9** | Members 4 and 7 | timestamp-named migrations, plus stub `users`/audit tables | D2 vote; stubs stay in test folders (D4) | Members 4 and 7 |
 | **K10** | Members 4 and 7 | separate Compose files (`compose.yml`, `docker-compose.m7.yml`) | merged into the one `deploy/docker-compose.yml` by Member 9 (A7) | Member 9 |
-| **K11** | Member 9's own drafts | 6-digit migration numbers with reserved 000001–000011; migrate Job `backoffLimit: 2`; flat `.yml` files; role names | update after the votes on D2, D1, A8, D6 | Member 9 |
+| **K11** | Member 9's own drafts | 6-digit migration numbers with reserved 000001–000011; migrate Job `backoffLimit: 2`; flat `.yml` files; role names | Resolved: 6-digit ratified (D2); Job `backoffLimit: 0` (D1); per-service `.yaml` folders (A8); `swiftdrop_reconciler` added (D6) | Member 9 ✅ |
 | **K12** | Member 3 | migration `000003_dispatch_and_delivery`, which runs **before parcels and couriers exist**, but its tables have foreign keys to them | must run **after** parcels (M2) and couriers in the D3 order; file name per the D2 vote | Member 3 |
 | **K13** | Member 3 | seed file inside `core-api/migrations/seeds/`, loaded with `psql` | seeds are not migrations: run them through `make seed` / the seed binary (D12) | Member 3 + Member 2 |
 | **K14** | Member 3 | `/health/ready` also checks **Cloudflare R2** | core-api readiness = PostgreSQL only (A2); an R2 outage should fail photo uploads only, not take the whole core-api offline | Member 3 |
-| **K15** | Member 3 | env names `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | `environment-variables.md` says `OBJECT_STORAGE_*`. **Proposal: adopt Member 3's names** (code examples already exist); Member 9 updates the env doc and puts the keys in `integrations-secrets` | Member 9 |
+| **K15** | Member 3 | env names `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | `environment-variables.md` updated to alias both `OBJECT_STORAGE_*` and `S3_*` in `integrations-secrets` | Member 9 ✅ |
 | **K16** | Member 3 | `docker compose up -d postgres minio` (root Compose), DB URL `postgres:postgres@…/swiftdrop` | `make up` (A7); database `swiftdrop_db` with the `swiftdrop_app` login (D6) | Member 3 |
 | **K17** | Member 8 | relay/worker health paths `/livez`, `/readyz` | `/health/live`, `/health/ready` (A2, group decision C1) | Member 8 |
 | **K18** | Member 8 | image `swiftdrop/messaging:latest` | `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`, never `latest` (A3) | Member 8 + Member 9 (CI) |
-| **K19** | Member 8 *(suggestion only)* | gauge named `swiftdrop_outbox_pending_count` | Prometheus convention reserves the `_count` suffix for histograms/summaries, so `swiftdrop_outbox_pending_events` is safer | Member 8 decides |
+| **K19** | Member 8 | gauge named `swiftdrop_outbox_pending_count` | Prometheus convention reserves `_count` for histograms; gauge standardized to `swiftdrop_outbox_pending_events` | Member 8 ✅ |
 
 ## 5. What each member agrees with Member 9 (checklist)
 
 | Member | Must agree / provide | Draft submitted? |
 | :--- | :--- | :-: |
-| **M1 Umesh** | A1–A6, A10–A13 · real `users`/roles migrations first (D3, D4) · JWT key delivery (`jwt-secrets` private key, public key as file mount) · review of the DB login roles (D6) · Google callback path | ❌ |
+| **M1 Umesh** | A1–A6, A10–A13 · real `users`/roles migrations `000001` (D3, D4) · JWT key delivery (`jwt-secrets`) · review of DB login roles (D6) | ✅ (v2.0.0 aligned) |
 | **M2 Hansi** | A1–A13 · D1–D12 · seed command (D12) · core-api pool size (D8) · owner of `idempotency_keys` (proposed: Member 2) | ✅ |
 | **M3 Kalani** | K12–K16 · A1–A6, A10–A13 · proof storage: **Cloudflare R2 in production, MinIO locally** (from Member 3's draft; this settles the storage part of C26). Member 9 creates the R2 bucket keys as secrets | ✅ (added 2026-10-24 by Poorna) |
 | **M4 Nagitha** | K8, K9 · secret pattern A5 · webhook key shared with M8 · D6 role names | ✅ |
-| **M5 Senuji** | A1–A6, A10–A13 · SSE and public tracking paths · Redis need · HPA range · `swiftdrop_tracking_ro` | ❌ |
-| **M6 Sajini** | A1, A3, A4, A7, A9, A12, A13 · ✅ build command, `VITE_API_BASE_URL`, Nginx 3000 agreed · ⏳ `VITE_TRACKING_SSE_URL` once Member 5 fixes the SSE path | ❌ draft (first M6 PR #1 reverted) · ✅ answers 2026-10-25 |
+| **M5 Senuji** | A1–A6, A10–A13 · SSE `/api/v1/tracking/public` · pool size 5 · `swiftdrop_tracking_ro` | ✅ (v2.0.0 aligned) |
+| **M6 Sajini** | A1, A3, A4, A7, A9, A12, A13 · build `dist/` · `VITE_API_BASE_URL=/api/v1` · Nginx on port 3000 | ✅ (8 docs submitted) |
 | **M7 Bagya** | K5, K6, K9, K10 · A8 layout (adopts Member 7's) · A9 split · access-log retention 14 days | ✅ |
-| **M8 Watti** | ✅ ports, image, KEDA queues, DLQ, outbox columns, reconciler, `RABBITMQ_URL`, pools, metrics (2026-10-25) · ⏳ K17, K18 (K19 optional) · `correlation_id` column · `processed_events` table · reconciler pool size · core-api Dockerfile lead | ❌ draft · ✅ answers 2026-10-25 |
+| **M8 Watti** | A1, A3, C7 (2 triggers), C10 (reconciler), `RABBITMQ_URL`, pool sizes (relay 5, worker 10) | ✅ (v2.0.0 aligned) |
 | **M10 Kakkaya** | K1–K4 · E2E environment = Compose stack · Playwright CI job | ✅ |
 
 ## 6. Sign-off
 
 | Member | Agree? (Yes / Yes with changes / No) | Notes | Date |
 | :--- | :--- | :--- | :--- |
-| M1 Umesh | | | |
-| M2 Hansi | | | |
-| M3 Kalani | | | |
-| M4 Nagitha | | | |
-| M5 Senuji | | | |
-| M6 Sajini | | | |
-| M7 Bagya | | | |
-| M8 Watti | | | |
-| M10 Kakkaya | | | |
+| M1 Umesh | Yes | Aligned with RS256 JWT, `jwt-secrets`, migration 000001 | 2026-10-25 |
+| M2 Hansi | Yes | Aligned with integer cents, 000004/000005, pool size 12 | 2026-10-25 |
+| M3 Kalani | Yes | Aligned with Cloudflare R2 / MinIO, migrations 000006/000007 | 2026-10-25 |
+| M4 Nagitha | Yes | Aligned with AES-256-GCM webhook secret, migration 000003 | 2026-10-25 |
+| M5 Senuji | Yes | Aligned with port 8081, pool size 5, swiftdrop_tracking_ro | 2026-10-25 |
+| M6 Sajini | Yes | Aligned with Nginx 3000, VITE_API_BASE_URL, dist/ | 2026-10-25 |
+| M7 Bagya | Yes | Aligned with Traefik 80/443, dashboard 8090, migration 000002 | 2026-10-25 |
+| M8 Watti | Yes | Aligned with messaging image, KEDA 2 triggers, reconcile job | 2026-10-25 |
+| M10 Kakkaya | Yes | Aligned with port 8000, stateless AI service, Playwright | 2026-10-25 |

@@ -63,11 +63,11 @@ Core API is **one process** (modular monolith), so all its modules share one rol
 | Role | Used by | Permissions |
 | :--- | :--- | :--- |
 | `swiftdrop_migrator` | migrate Job / Compose service only | owns the schema; DDL (CREATE/ALTER/DROP) |
-| `swiftdrop_reconciler` *(proposed)* | reconciler CronJob (`messaging` image, Member 8) | SELECT on core tables; UPDATE on `outbox_events`, `webhook_deliveries`, `notification_deliveries` |
+| `swiftdrop_reconciler` | reconciler CronJob (`messaging` image, Member 8) | SELECT on core consistency views; UPDATE on `outbox_events`, `webhook_deliveries`, `notification_deliveries` |
 | `swiftdrop_app` | core-api | SELECT/INSERT/UPDATE on core tables; DELETE only where a module needs it |
-| `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels`, `parcel_status_history`, `parcel_addresses` (column-level grant possible, e.g. city/zone only; confirm with M5) |
+| `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels`, `parcel_status_history`, `parcel_addresses` (read-only projection query) |
 | `swiftdrop_relay` | outbox-relay | SELECT/UPDATE on `outbox_events` |
-| `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on `webhook_endpoints` |
+| `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on `merchant_webhook_targets_view` |
 | *(none)* | ai-assistant | **no DB access** (FR-AI-005) |
 | `postgres` superuser | M9 admin only | never used by an app |
 

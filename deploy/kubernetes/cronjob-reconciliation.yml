@@ -15,23 +15,30 @@ spec:
   failedJobsHistoryLimit: 5
   jobTemplate:
     spec:
-      backoffLimit: 2
+      backoffLimit: 0
       template:
         metadata:
           labels:
             app: swiftdrop-outbox-reconciler
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
           containers:
             - name: reconciler
-              image: swiftdrop/core-api:latest
+              image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest
               imagePullPolicy: IfNotPresent
-              command: ["/app/server", "reconcile", "--outbox-threshold=5m", "--delivery-timeout=24h"]
-              envFrom:
-                - configMapRef:
-                    name: core-api-config
-                - secretRef:
-                    name: core-api-secrets
+              command: ["/usr/local/bin/reconcile", "--stale-threshold=5m", "--batch-size=50"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secrets
+                      key: DATABASE_URL
+                - name: LOG_LEVEL
+                  value: "info"
               resources:
                 requests:
                   cpu: "50m"
