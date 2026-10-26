@@ -297,7 +297,7 @@ sequenceDiagram
 ### B.4 FastMCP SSE Transport Dual-Channel Architecture
 
 The FastMCP server (`mcp_server.py`) provides Model Context Protocol capabilities using Anthropic's official dual-channel HTTP/SSE transport pattern:
-- **Channel 1 (Downstream):** `GET /api/v1/ai/mcp/sse` establishes a persistent Server-Sent Events stream. The server emits an `endpoint` event containing a dedicated session URL (`/api/v1/ai/mcp/messages?session_id=<uuid>`).
+- **Channel 1 (Downstream):** `GET /api/v1/ai/mcp` establishes a persistent Server-Sent Events stream. The server emits an `endpoint` event containing a dedicated session URL (`/api/v1/ai/mcp/messages?session_id=<uuid>`).
 - **Channel 2 (Upstream):** Client sends JSON-RPC tool executions via standard HTTP `POST /api/v1/ai/mcp/messages?session_id=<uuid>`.
 - **Result Streaming:** The server executes the tool (via read-only Core API calls) and streams the JSON-RPC response back down Channel 1's open SSE connection.
 

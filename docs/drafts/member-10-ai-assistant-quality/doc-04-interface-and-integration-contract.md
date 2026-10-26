@@ -282,7 +282,7 @@ The AI Assistant service exposes two HTTP endpoints:
 ### 3.2 FastMCP Dual-Channel SSE Endpoints
 The AI Assistant exposes Anthropic Model Context Protocol (MCP) capabilities via Server-Sent Events (SSE) and HTTP POST:
 
-#### Channel 1 (Downstream): `GET /api/v1/ai/mcp/sse`
+#### Channel 1 (Downstream): `GET /api/v1/ai/mcp`
 - **Purpose:** Opens a persistent Server-Sent Events stream for external MCP clients (Claude Desktop, Cursor).
 - **Headers:** `Accept: text/event-stream`, optional `Authorization: Bearer <jwt_or_api_key>`
 - **Response Event (`endpoint`):**
@@ -346,7 +346,7 @@ flowchart TD
 
     subgraph Transport["Transport Layer"]
         STDIO["STDIO Transport (Local Child Process)"]
-        SSE["SSE Transport (Remote HTTP: /api/v1/ai/mcp/sse)"]
+        SSE["SSE Transport (Remote HTTP: /api/v1/ai/mcp)"]
     end
 
     subgraph MCPServer["FastMCP Server (services/ai-assistant/mcp_server.py)"]

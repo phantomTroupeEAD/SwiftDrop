@@ -31,7 +31,7 @@ This document serves as the authoritative blueprint for resolving all 8 audit fi
 | **5** | **H** | **Orphan Policy Endpoints & Database Tables** | `doc-01`, `doc-02`, `doc-03`, `doc-04`, `doc-05` | Defines `/system/policies` and `system_policies` table owned by no member. Eliminate orphan endpoints; ground company policy strictly via local embedded `company_policies.md` markdown hydrator (zero DB access). |
 | **6** | **M** | **Tool Names & Booking Prefill Route** | `doc-02`, `doc-04`, `doc-06` | Prefill link references `/customer/book` instead of frontend standard `/portal/book`. Tool names in helper summaries drift slightly from exact SRS FR-AI-007 specifications. |
 | **7** | **M** | **Environment Variables & Rate Limits** | `doc-04`, `doc-07`, `doc-08` | Inconsistent service token name (`INTERNAL_SERVICE_KEY` vs `AI_SERVICE_ROLE_TOKEN`); missing LLM config in env docs (`LLM_BASE_URL`, `LLM_API_KEY`); rate limits say 10/30 RPM vs standard 20 RPM matching Traefik. |
-| **8** | **L** | **Checklist Completion & Gateway Routing** | `README.md`, `team-handoff-guide` | Open checkboxes (`[ ]`) left in handoff guides. Confirm Traefik `PathPrefix('/api/v1/ai')` cleanly routes standard REST and MCP SSE traffic (`/api/v1/ai/mcp/sse`). |
+| **8** | **L** | **Checklist Completion & Gateway Routing** | `README.md`, `team-handoff-guide` | Open checkboxes (`[ ]`) left in handoff guides. Confirm Traefik `PathPrefix('/api/v1/ai')` cleanly routes standard REST and MCP traffic (`/api/v1/ai/mcp`). |
 | **9** | **H** | **MCP Client Authentication & Token Lifecycle** | `doc-04`, `doc-07`, `team-handoff-guide` | Short-lived 15-minute JWTs break developer experience in external MCP clients (Claude Desktop/Cursor). Avoid adding PAT workload to Member 1 by leveraging Member 4's `parcels:read` scoped API keys and React silent refresh. |
 | **10** | **M** | **MCP SSE Transport Dual-Channel Mechanics** | `doc-03`, `doc-04`, `doc-08` | Clarify how bidirectional request/response works without WebSockets by formalizing the MCP Dual-Channel pattern (downstream SSE stream paired with upstream HTTP POST). |
 
@@ -332,7 +332,7 @@ test('Verify asynchronous webhook dispatch and strict multi-tenant isolation', a
 ### 4.7 Issue 8: Gateway Prefix Verification & Review Checklist Resolution
 - **Problem:** Unchecked checklist boxes in handoff documents; need verification that Traefik gateway routes MCP SSE traffic.
 - **Remediation:**
-  1. Confirm Traefik configuration: `PathPrefix('/api/v1/ai')` correctly forwards all subpaths, including REST endpoints (`/api/v1/ai/assistant/chat`) and MCP SSE endpoints (`/api/v1/ai/mcp/sse`).
+  1. Confirm Traefik configuration: `PathPrefix('/api/v1/ai')` correctly forwards all subpaths, including REST endpoints (`/api/v1/ai/assistant/chat`) and MCP endpoints (`/api/v1/ai/mcp`).
   2. Mark all handoff and interface review checkboxes as completed (`[x]`) across `README.md` and `team-integration-and-handoff-guide.md`.
 
 ### 4.8 Issue 9 (Architectural Clarification): MCP Client Authentication, Token Lifecycle & Least Privilege
@@ -381,7 +381,7 @@ The official Model Context Protocol specification solves this over standard HTTP
 └────────────┬────────────┘                                └────────────┬────────────┘
              │                                                          │
              │ [Channel 1: Downstream SSE Stream]                       │
-             │ GET /api/v1/ai/mcp/sse                                   │
+             │ GET /api/v1/ai/mcp                                       │
              ├─────────────────────────────────────────────────────────>│
              │                                                          │
              │ 1. Server establishes SSE stream & emits session URL:    │
@@ -403,7 +403,7 @@ The official Model Context Protocol specification solves this over standard HTTP
 
 #### Step-by-Step Execution:
 1. **Downstream Channel Initialization:**
-   The client makes an HTTP GET request to `GET /api/v1/ai/mcp/sse` with `Accept: text/event-stream`. The server keeps this connection open and pushes down an `endpoint` event containing a unique session identifier:
+   The client makes an HTTP GET request to `GET /api/v1/ai/mcp` with `Accept: text/event-stream`. The server keeps this connection open and pushes down an `endpoint` event containing a unique session identifier:
    `data: /api/v1/ai/mcp/messages?session_id=7d4e9f1a-b3c2...`
 2. **Upstream Request Channel:**
    When the client needs to query capabilities (`tools/list`) or execute a tool (`tools/call`), it performs a standard HTTP `POST` to that session endpoint with a JSON-RPC 2.0 payload.

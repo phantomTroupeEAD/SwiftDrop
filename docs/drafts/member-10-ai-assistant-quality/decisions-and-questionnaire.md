@@ -346,7 +346,7 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 - **Context:** Standard Server-Sent Events (SSE) is unidirectional. How does an external AI agent send requests and receive responses without WebSockets?
 - **Ratified Decision:**
   - Implement Anthropic's official MCP Dual-Channel HTTP/SSE transport pattern:
-    - **Channel 1 (Downstream):** Persistent `GET /api/v1/ai/mcp/sse` emitting dedicated session URLs.
+    - **Channel 1 (Downstream):** Persistent `GET /api/v1/ai/mcp` emitting dedicated session URLs.
     - **Channel 2 (Upstream):** Standard HTTP `POST /api/v1/ai/mcp/messages?session_id=...` carrying JSON-RPC tool calls.
   - Streams results back down Channel 1. Seamlessly routed via Traefik `PathPrefix('/api/v1/ai')` without WebSocket upgrade complexity.
 
@@ -358,7 +358,7 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 | :--- | :--- |
 | **Stack** | Python 3.11, FastAPI, Pydantic v2, `httpx`, `pytest` |
 | **LLM Provider** | Universal OpenAI-Compatible (`AsyncOpenAI`): OpenRouter, NVIDIA NIM Builder, OpenAI, or Groq via `LLM_BASE_URL` + mock fallback for CI |
-| **Protocol** | Dual: HTTP REST `/api/v1/ai/chat` + FastMCP Dual-Channel SSE (`/api/v1/ai/mcp/sse`) |
+| **Protocol** | Dual: HTTP REST `/api/v1/ai/chat` + FastMCP Dual-Channel SSE (`/api/v1/ai/mcp`) |
 | **Data Access** | **Zero direct DB access**; strictly calls Core/Tracking REST APIs |
 | **State** | Stateless sessions with short-lived in-memory context cache |
 | **Tools (FR-AI-007)** | 1. `estimate_shipping_fee`, 2. `track_parcel_status`, 3. `get_my_active_parcels`, 4. `explain_company_policies` |
