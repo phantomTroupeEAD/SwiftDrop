@@ -1,10 +1,10 @@
 # Document 6 — Testing Strategy & Acceptance Specification
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/**/*_test.go`, `core-api/tests/`, CI workflow  
 > **Key Upstream Dependencies:** Member 1 (JWT test helper, users seed), Member 2 (parcel booking for integration tests), Member 8 (webhook worker for AT-012), Member 9 (CI runners, Compose), Member 10 (E2E coordination)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-31. New: U-32 … U-35 (see [§13](#13-new-open-questions)).
+> **Alignment Status:** All open questions U-01–U-35 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 

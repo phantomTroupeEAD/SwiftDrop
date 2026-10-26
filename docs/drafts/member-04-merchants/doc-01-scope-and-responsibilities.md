@@ -1,10 +1,10 @@
 # Document 1 — Module Scope & Responsibility Specification
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/`  
 > **Key Upstream Dependencies:** Member 1 (Auth, RBAC, audit), Member 2 (Parcel creation, Pricing), Member 7 (Admin approval UI, Gateway rate limits), Member 8 (Outbox, Webhook delivery), Member 9 (Secrets, deployment)  
-> **Open Questions / Needs Clarification:** See [Section 9](#9-assumptions-unresolved-decisions-and-documentation-conflicts) — 14 items, including table naming, merchant statuses (U-26), webhook secret storage, admin approval interface (U-10), and webhook event names.
+> **Alignment Status:** All 14 open dilemmas (U-01–U-14) authoritatively resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 
@@ -143,7 +143,7 @@ The module's language: **Merchant**, **Merchant Status**, **API Credential**, **
 The module owns:
 
 - The **Merchant** aggregate: identity, profile, status, version.
-- The **merchant status state machine** (proposed, pending U-26):
+- The **merchant status state machine** (U-02 resolved — statuses: `PENDING`, `APPROVED`, `REJECTED`, `SUSPENDED`, `DISABLED`):
 
 ```mermaid
 stateDiagram-v2
@@ -158,7 +158,7 @@ stateDiagram-v2
     DISABLED --> [*]
 ```
 
-  Only `APPROVED` merchants may authenticate with an API key, create orders, or create new API keys. Exact statuses are confirmed in Document 2 after U-26 is resolved.
+  Only `APPROVED` merchants may authenticate with an API key, create orders, or issue new API keys. `DISABLED` is a terminal state; `REJECTED` is also terminal.
 
 - **API credentials** belonging to a merchant (prefix, hash, label, scopes, expiry, revocation).
 - **Webhook endpoints** belonging to a merchant (URL, signing secret, subscribed event types, enabled flag).
@@ -280,9 +280,10 @@ Other modules must not:
 |---|---|---|
 | `merchants` | Member 4 | M7 via Go interface only; M2 references `merchants.id` by application ID |
 | `merchant_api_credentials` | Member 4 | None |
-| `webhook_endpoints` | Member 4 | M8 read-only (config fields) |
+| `webhook_endpoints` | Member 4 | M8 read-only via `merchant_webhook_targets` (view) |
+| `merchant_webhook_targets` | Member 4 | M8 worker reads via `swiftdrop_worker` role (SELECT only) |
 | `parcels` | Member 2 | M4 via M2 interface only |
-| `webhook_deliveries` | Member 8 | M4 none (future read interface) |
+| `webhook_deliveries` | Member 8 | M4 exposes read via `GET /merchants/me/webhooks/{id}/deliveries` |
 | `audit_logs` | Member 1 (shared writer) | M4 writes via shared helper |
 | `idempotency_keys` | Member 2 / shared | M4 passes key through; does not write directly |
 
@@ -303,10 +304,13 @@ Proposed route inventory (final paths and DTOs in Document 4; see U-05 for path 
 | `PATCH /api/v1/merchants/me/webhooks/{id}` | Update URL / events / enabled | Merchant admin (JWT) |
 | `POST /api/v1/merchants/me/webhooks/{id}/rotate-secret` | Rotate signing secret | Merchant admin (JWT) |
 | `DELETE /api/v1/merchants/me/webhooks/{id}` | Delete webhook endpoint | Merchant admin (JWT) |
+| `GET /api/v1/merchants/me/webhooks/{id}/deliveries` | View webhook delivery history | Merchant user (JWT) |
 | `POST /api/v1/merchant/orders` | Create parcel order (idempotent) | Merchant system (API key) |
-| `GET /api/v1/merchant/orders` | List own orders | Merchant system (API key) or merchant user (JWT) |
-| `GET /api/v1/merchant/orders/{id}` | Get own order | Merchant system (API key) or merchant user (JWT) |
-| Admin: list / approve / reject / suspend / reinstate / disable | Admin merchant management | Admin — route owned by M7 or M4 (U-10) |
+| `GET /api/v1/merchant/orders` | List own parcels | Merchant system (API key) or merchant user (JWT) |
+| `GET /api/v1/merchant/orders/{id}` | Get own parcel | Merchant system (API key) or merchant user (JWT) |
+| `GET /api/v1/admin/merchants` | List all merchants (admin) | Admin (JWT, role ADMIN) |
+| `GET /api/v1/admin/merchants/{id}` | Get merchant detail (admin) | Admin (JWT, role ADMIN) |
+| `PUT /api/v1/admin/merchants/{id}/status` | Approve/reject/suspend/reinstate/disable | Admin (JWT, role ADMIN) — **exact admin route pending M7 alignment** |
 
 ### 7.4 Queues and Events
 
@@ -367,26 +371,28 @@ Member 4 is responsible for steps 2–4 and 7. Member 2 owns steps 5–6. Member
 - A3. API keys are high-entropy random values (≥ 32 bytes), so a fast hash (SHA-256 / HMAC-SHA256 with pepper) is sufficient. Argon2id is not needed for random keys and would slow every API call.
 - A4. Merchant order creation reuses Member 2's parcel-creation use case. There is exactly one parcel-creation code path.
 
-### 9.2 Open Questions for Meeting 2
+### 9.2 Resolved Decisions (U-01 through U-14)
 
-| ID | Question | Current Conflict / Position | Needs |
-|---|---|---|---|
-| U-01 | **Table names** | Module `README.md` says `merchant_api_keys`, `webhook_subscriptions`. `database-schema.md` and SRS say `merchant_api_credentials`, `webhook_endpoints`. **Proposal:** use schema names and update README. | Team |
-| U-02 | **Merchant statuses** (= M7 U-26) | README: PENDING/APPROVED/SUSPENDED. Schema: + REJECTED. SRS FR-ADM-005: approve, reject, suspend, **disable**. **Proposal:** PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED; SUSPENDED → APPROVED allowed. | M7, team |
-| U-03 | **Webhook secret storage** | Schema and README say `secret_hash`. HMAC signing needs the original secret, so a hash cannot work. **Proposal:** store encrypted (AES-GCM) as `secret_ciphertext`; M8 decrypts at send time. | M8 |
-| U-04 | **Who generates the webhook secret** | `API.md` lets the merchant send `secret` in the request. **Proposal:** server generates `whsec_…` and returns it once. Do not accept merchant-chosen secrets. | M8, M6 |
-| U-05 | **Route naming** | SRS uses `/api/v1/merchant/orders`, `/api/v1/merchant/webhooks`. `API.md` uses `/api/v1/merchants/webhooks`. **Proposal:** `/api/v1/merchants/me/*` for self-service config, `/api/v1/merchant/orders` kept as the SRS integration path. | M6, M7 |
-| U-06 | **Webhook event names** | `webhook-security.md`: `parcel.created`, `parcel.delivery.failed`. `event-contracts.md`: `parcel.booked.v1`, `parcel.delivery_failed.v1`. `API.md`: `parcel.status_changed.v1`. **Proposal:** merchants subscribe to the `event-contracts.md` names. | M8 |
-| U-07 | **`merchant.webhook_dispatch.v1` producer** | Event catalog lists `internal/merchants` as producer, but it is triggered by the Event Worker. **Proposal:** M8 owns it, or remove it from the catalog if internal to the worker. | M8 |
-| U-08 | **How M8 reads webhook config** | Worker is a separate service; cannot call a Go interface. **Proposal:** M8 reads `webhook_endpoints` through a documented read-only DB role/view; M4 owns the schema. | M8, M9 |
-| U-09 | **Merchant lifecycle events** | Is any consumer interested in `merchant.approved.v1` (e.g. notification email)? If none, do not emit. | M8 |
-| U-10 | **Admin approval interface** (= M7 U-10) | M7 proposes admin endpoint → M4 Go interface, M4 writes status + audit in one transaction. **Proposal:** accept. | M7, M1 |
-| U-11 | **`version` column** | `database-schema.md` §conventions says `merchants` has `version`, but the ERD block omits it. **Proposal:** add `version integer not null default 1`. | DB coordinator |
-| U-12 | **Endpoint `DEGRADED` state** | `webhook-security.md` says endpoints become `DEGRADED` after retry exhaustion. That means M8 would write to M4's table. **Proposal:** M8 records health in its own table, or M4 exposes `MarkEndpointDegraded` via an approved path. | M8 |
-| U-13 | **Delivery history for merchants** | FR-MER-011 records attempts (M8). Should merchants see their delivery log in the dashboard? If yes, M8 provides the read API. | M8, M6 |
-| U-14 | **Rate limits** | SEC-007 requires limits on merchant API and webhook registration. **Proposal:** edge limit at gateway (M7) per API key prefix; app-level resource caps (max keys, max endpoints) in M4. | M7 |
+> All 14 dilemmas have been authoritatively resolved in `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3. Full resolutions repeated here for document completeness.
 
-Resolved decisions will be recorded in the team decision log and reflected in Documents 2–8.
+| ID | Question | **Authoritative Resolution** |
+|---|---|---|
+| **U-01** | Table naming | **`merchant_api_credentials`** and **`webhook_endpoints`** — canonical schema names adopted. |
+| **U-02** | Merchant lifecycle statuses | **`PENDING`, `APPROVED`, `REJECTED`, `SUSPENDED`, `DISABLED`**. `SUSPENDED` → `APPROVED` reinstatement allowed. `DISABLED` is terminal. |
+| **U-03** | Webhook secret storage | **Never hash**. Store `secret_ciphertext BYTEA` (AES-256-GCM, key `WEBHOOK_SECRET_ENCRYPTION_KEY`). Member 8 decrypts at dispatch time. |
+| **U-04** | Webhook secret generation | **Server-generated only**: `whsec_` + 32 cryptographically random bytes. Returned once. Merchants cannot supply their own secret. |
+| **U-05** | Route naming | Self-service: `/api/v1/merchants/me/*`. Admin: `/api/v1/admin/merchants/{id}/status`. B2B orders: **`/api/v1/merchant/parcels`**. |
+| **U-06** | Webhook event names | Versioned catalog: `parcel.booked.v1`, `parcel.picked_up.v1`, `parcel.in_transit.v1`, `parcel.out_for_delivery.v1`, `parcel.delivered.v1`, `parcel.delivery_failed.v1`, `parcel.returned.v1`. |
+| **U-07** | `merchant.webhook_dispatch.v1` producer | **Member 8 Event Worker** owns it. Removed from Member 4's domain event catalog. |
+| **U-08** | How Member 8 reads webhook config | Member 8 daemon connects via `swiftdrop_worker` PostgreSQL role and queries **`merchant_webhook_targets_view`** (SELECT only). |
+| **U-09** | Merchant lifecycle domain events | **Yes** — on admin approval, Member 4 commits `merchant.approved.v1` to `outbox_events` for Member 8's welcome email worker. |
+| **U-10** | Admin approval interface | Member 7 Admin UI calls `PUT /api/v1/admin/merchants/{id}/status`. Member 4 evaluates legal transitions, increments `version`, and writes audit in one transaction. |
+| **U-11** | `version` column | **`version INT NOT NULL DEFAULT 1 CHECK (version >= 1)`** added to `merchants` table. All updates use `WHERE id = $1 AND version = $2`. |
+| **U-12** | Endpoint `DEGRADED` state | Member 8 records delivery failures in `webhook_deliveries`. After threshold (50 consecutive), Member 8 emails the merchant. Member 4's config table is never mutated by Member 8. |
+| **U-13** | Delivery history access | Member 4 exposes `GET /api/v1/merchants/me/webhooks/{id}/deliveries`, delegating read queries to Member 8's `webhook_deliveries` table scoped by `merchant_id`. |
+| **U-14** | Rate limiting | Edge rate limits via Traefik (Member 7) keyed by `X-API-Key` prefix. App-level caps: max 5 active API keys, max 10 webhook endpoints per merchant (Member 4). |
+
+All decisions are binding and reflected in Documents 2–8.
 
 ---
 

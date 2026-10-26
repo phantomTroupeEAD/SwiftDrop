@@ -1,10 +1,10 @@
 # Document 8 — Implementation, Deployment & Operations Guide
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/` (runs inside the `core-api` process)  
 > **Key Upstream Dependencies:** Member 9 (Compose, Kubernetes, CI, secrets), Member 1 (JWT middleware, users, audit), Member 2 (parcel booking), Member 7 (gateway, admin routes), Member 8 (webhook delivery reads the view)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-42. New: U-43 … U-47 (see [§13](#13-new-open-questions)).
+> **Alignment Status:** All open questions U-01–U-47 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 
@@ -23,6 +23,8 @@
 | Area | Checks | Highlights |
 |---|---|---|
 | Health | 2 | `/livez`, `/readyz` with DB ping |
+
+> **Health path decision pending (2026-10-26 audit §4 #2):** SRS and Agreement A2 specify `/health/live`, `/health/ready`; but the authoritative `runbook.md`, `deployment-guide.md`, and AT-016 currently use `/livez`, `/readyz`. Member 4's demo stack uses `/livez`. **This will be aligned system-wide once the Tech Lead makes a binding decision.** Until then, Member 4 retains `/livez`/`/readyz`.
 | Application & approval | 10 | 409 on second application, 422 on bad phone, 403 non-admin, 409 invalid transition, 409 stale version |
 | API keys | 6 | ADR-003 format `sd_test_<8>_<32>`, `Cache-Control: no-store`, key rejected on management routes, query-string key ignored, tampered key 401, ambiguous credentials 400 |
 | Orders (Member 2 stand-in) | 4 | Idempotency: replay returns same parcel + `Idempotent-Replay: true`; different body 409 |
@@ -69,7 +71,7 @@ doc8-local/                                  # moves into the repo root layout
     │   ├── api/main.go        # server; `api -healthcheck` for Docker HEALTHCHECK
     │   ├── seed/main.go       # local demo users (refuses staging/production)
     │   └── devtoken/main.go   # local RS256 tokens (refuses production)
-    ├── migrations/            # 000010 stubs (M1/M7 tables) + Member 4 000100..000400
+    ├── migrations/            # stubs for M1/M7 tables + Member 4's 000003_create_merchants_and_credentials.up.sql
     └── internal/
         ├── merchants/
         │   ├── domain/          # pure Go (status machine, key format, SSRF policy, profile rules) + tests
@@ -101,7 +103,7 @@ The process **refuses to start** if any required value is missing or invalid, pr
 | `APP_ENV` | Enables local-only relaxations; production forces `sd_live_` | `local` |
 | `HTTP_ADDR` | Listen address | `:8080` |
 | `LOG_LEVEL` | Log level | `info` |
-| `DATABASE_URL` | PostgreSQL DSN (**secret**) | `postgres://swiftdrop:swiftdrop_dev@postgres:5432/swiftdrop_db?sslmode=disable` |
+| `DATABASE_URL` | PostgreSQL DSN (**secret**) | `postgres://swiftdrop_app:swiftdrop_dev@postgres:5432/swiftdrop_db?sslmode=disable` |
 | `JWT_PUBLIC_KEY_PEM` | Verify access tokens (PEM text or file path) | `/run/keys/jwt_public.pem` |
 
 ### 4.2 New for the merchants module (to add to `environment-variables.md` §2)
@@ -191,6 +193,8 @@ Starter suites from Document 6 (`doc6-tests/`) remain the reference for domain a
 | `GET /metrics` | Prometheus text | counters (§8.2) |
 
 `/metrics`, `/livez`, `/readyz` must **not** be routed through the public gateway (Member 7).
+
+> **Health path decision pending:** See §1.1 note above.
 
 ---
 

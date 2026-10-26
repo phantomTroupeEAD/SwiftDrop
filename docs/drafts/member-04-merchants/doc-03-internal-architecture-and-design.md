@@ -1,10 +1,10 @@
 # Document 3 — Internal Architecture & Design Specification
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/`  
-> **Key Upstream Dependencies:** Member 1 (JWT middleware, `RoleAssigner`, audit writer), Member 2 (`CreateParcel`, merchant order queries), Member 7 (admin module calls `AdminService`), Member 8 (`events.OutboxWriter`, worker reads webhook config), shared `internal/platform` (DB pool, transaction runner, HTTP helpers)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-19 from Documents 1–2. New: U-20 … U-23 (see [§14](#14-new-open-questions)).
+> **Key Upstream Dependencies:** Member 1 (JWT middleware, `RoleAssigner`, audit writer), Member 2 (`CreateParcel`, merchant order queries), Member 7 (admin module calls `AdminService`), Member 8 (`events.OutboxWriter`, worker reads webhook config via `merchant_webhook_targets` view), shared `internal/platform` (DB pool, transaction runner, HTTP helpers)  
+> **Alignment Status:** All open questions U-01–U-23 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 
@@ -184,7 +184,7 @@ Anti-boilerplate (AGENTS.md §4.2): all four layers are justified here because t
 |---|---|---|---|
 | **Merchant** | `Merchant` | `MerchantStatus`, `BusinessName`, `ContactInfo`, `Address`, `approvedBy/At`, `version` | Consistency boundary for status transitions and profile. Optimistic lock on `version`. |
 | **APICredential** | `APICredential` | `KeyPrefix`, `KeyHash`, `Label`, `ScopeSet`, `expiresAt`, `revokedAt` | Own lifecycle (create/revoke) independent of profile edits. Loading a merchant must not load all keys. Verification reads one credential by prefix, not the whole merchant. |
-| **WebhookEndpoint** | `WebhookEndpoint` | `WebhookURL`, `EventTypeSet`, `EncryptedSecret`, `enabled` | Own lifecycle; read by Member 8 independently; changes do not need the merchant version. |
+| **WebhookEndpoint** | `WebhookEndpoint` | `URL`, `EventTypeSet` (`subscribed_event_types`), `EncryptedSecret`, `Enabled` | Own lifecycle; read by Member 8 via `merchant_webhook_targets` view; changes do not need the merchant version. |
 
 **Cross-aggregate rules** (max keys, max endpoints, "merchant must be APPROVED", "disable revokes all keys") are enforced by the **application layer** inside one transaction, with `SELECT … FOR UPDATE` on the merchant row as the serialisation point. This is the standard DDD approach: one aggregate per transaction where possible, and explicit locking where a rule spans aggregates.
 

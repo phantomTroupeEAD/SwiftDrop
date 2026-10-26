@@ -1,10 +1,10 @@
 # Document 5 — Data & Persistence Specification
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/infrastructure/`, `core-api/migrations/`  
-> **Key Upstream Dependencies:** Member 1 (`users`, `audit_logs`), Member 2 (`parcels.merchant_id`, `idempotency_keys`), Member 8 (`webhook_deliveries` FK, worker DB role), Member 9 (DB roles, secrets), DB coordinator (migration ordering)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-27. New: U-28 … U-31 (see [§12](#12-new-open-questions)).
+> **Key Upstream Dependencies:** Member 1 (`users`, `audit_logs`), Member 2 (`parcels.merchant_id`, `idempotency_keys`), Member 8 (`webhook_deliveries` FK, worker DB role via `merchant_webhook_targets_view`), Member 9 (DB roles, secrets), DB coordinator (migration ordering)  
+> **Alignment Status:** All open questions U-01–U-31 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 This document references the system ERD in [`docs/architecture/database-schema.md`](../../architecture/database-schema.md) and only details Member 4's tables. [§10](#10-requested-changes-to-the-canonical-schema) lists the changes Member 4 asks the canonical schema to adopt.
 
@@ -51,10 +51,9 @@ erDiagram
     merchant_api_credentials {
         uuid id PK
         uuid merchant_id FK
-        char key_prefix UK "8 base62"
-        char key_hash "64 hex HMAC-SHA256"
-        smallint pepper_version
-        varchar label
+        varchar(16) key_prefix UK "sd_live_XXXXXXXX format"
+        varchar(64) key_hash UK "HMAC-SHA256 with pepper, hex"
+        varchar(64) label
         text_array scopes
         uuid created_by FK
         timestamptz created_at
@@ -65,10 +64,10 @@ erDiagram
     webhook_endpoints {
         uuid id PK
         uuid merchant_id FK
-        varchar url
+        varchar(2048) url
         bytea secret_ciphertext "AES-256-GCM"
         smallint secret_key_version
-        char secret_last4
+        char(4) secret_last4
         text_array subscribed_event_types
         boolean enabled
         uuid created_by FK
@@ -87,7 +86,7 @@ erDiagram
     }
 ```
 
-Plus one view: `merchant_webhook_targets` (enabled ∧ not deleted ∧ merchant APPROVED), read by Member 8.
+Plus one view: `merchant_webhook_targets` (enabled ∧ not deleted ∧ merchant APPROVED), read by Member 8 via `swiftdrop_worker` role.
 
 ---
 
@@ -100,7 +99,7 @@ Plus one view: `merchant_webhook_targets` (enabled ∧ not deleted ∧ merchant 
 | `id` | `uuid` | N | `gen_random_uuid()` | PK | DB std §3.1 |
 | `owner_user_id` | `uuid` | N | — | FK `users(id)` RESTRICT | Doc 2 A2 |
 | `business_name` | `varchar(150)` | N | — | trimmed length 2–150 | BR-M-01 |
-| `status` | `varchar(16)` | N | `'PENDING'` | IN (PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED) | Doc 2 §2.1, U-02 |
+| `status` | `varchar(32)` | N | `'PENDING'` | IN (PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED) | Doc 2 §2.1, U-02 resolved |
 | `status_reason` | `varchar(500)` | Y | — | Last reject/suspend/disable reason, for admin display. Full history in `audit_logs`. | BR-M-08 |
 | `contact_email` | `varchar(254)` | N | — | contains `@` (full validation in domain) | BR-M-02 |
 | `contact_phone` | `varchar(16)` | N | — | `^\+[1-9][0-9]{6,14}$` | BR-M-03 |
@@ -127,11 +126,10 @@ Address is `jsonb` (as in the canonical ERD) because merchant address is display
 | Column | Type | Null | Default | Constraint / Rule | Source rule |
 |---|---|---|---|---|---|
 | `id` | `uuid` | N | `gen_random_uuid()` | PK; exposed as `key_id` | — |
-| `merchant_id` | `uuid` | N | — | FK `merchants(id)` RESTRICT | Tenant |
-| `key_prefix` | `char(8)` | N | — | UNIQUE; `^[0-9A-Za-z]{8}$` | BR-K-02, DD-03 |
-| `key_hash` | `char(64)` | N | — | `^[0-9a-f]{64}$` = hex HMAC-SHA256 | BR-K-03, DD-02 |
-| `pepper_version` | `smallint` | N | `1` | Which pepper produced the hash (pepper rotation) | U-29 |
-| `label` | `varchar(60)` | N | — | trimmed 1–60; unique per merchant among non-revoked | BR-K-05 |
+| `merchant_id` | `uuid` | N | — | FK `merchants(id)` ON DELETE CASCADE | Tenant |
+| `key_prefix` | `varchar(16)` | N | — | UNIQUE; `sd_live_` (8 chars) + 8 hex chars | BR-K-02, DD-03, **Align §4.3** |
+| `key_hash` | `varchar(64)` | N | — | UNIQUE; hex HMAC-SHA256 with `API_KEY_PEPPER` | BR-K-03, DD-02, **Align §4.3** |
+| `label` | `varchar(64)` | N | — | trimmed 1–64; unique per merchant among non-revoked | BR-K-05 |
 | `scopes` | `text[]` | N | `{parcels:create,parcels:read}` | non-empty ⊆ `{parcels:create, parcels:read}` (ADR-003 names) | BR-K-07 |
 | `created_by` | `uuid` | N | — | FK `users(id)` RESTRICT | Audit |
 | `created_at` | `timestamptz` | N | `now()` | — | — |
@@ -154,14 +152,14 @@ Address is `jsonb` (as in the canonical ERD) because merchant address is display
 | Column | Type | Null | Default | Constraint / Rule | Source rule |
 |---|---|---|---|---|---|
 | `id` | `uuid` | N | `gen_random_uuid()` | PK; exposed as `webhook_id` | — |
-| `merchant_id` | `uuid` | N | — | FK `merchants(id)` RESTRICT | Tenant |
-| `url` | `varchar(2048)` | N | — | starts `http://` or `https://` (full SSRF policy in domain) | BR-W-02…06 |
+| `merchant_id` | `uuid` | N | — | FK `merchants(id)` ON DELETE CASCADE | Tenant |
+| `url` | `varchar(2048)` | N | — | starts `https://` (SSRF policy in domain; `http://` only in local dev) | BR-W-02…06 |
 | `secret_ciphertext` | `bytea` | N | — | AES-256-GCM `nonce‖ct‖tag`, ≥ 28 bytes | BR-W-10, DD-05 |
-| `secret_key_version` | `smallint` | N | — | Encryption key version | U-22 |
-| `secret_last4` | `char(4)` | N | — | Last 4 chars of plaintext secret, for UI identification only | — |
-| `subscribed_event_types` | `text[]` | N | — | non-empty; values validated against catalog in application (catalog lives in code, not DB) | BR-W-07, U-06 |
-| `enabled` | `boolean` | N | `true` | false when deleted | F-10 |
-| `created_by` | `uuid` | N | — | FK `users(id)` RESTRICT | Audit |
+| `secret_key_version` | `smallint` | N | — | Encryption key version; allows key rotation | U-22 |
+| `secret_last4` | `char(4)` | N | — | Last 4 chars of plaintext secret for UI hint only | — |
+| `subscribed_event_types` | `text[]` | N | — | non-empty; validated against catalog in application | BR-W-07, U-06 |
+| `enabled` | `boolean` | N | `true` | `false` when disabled or soft-deleted | F-10 |
+| `created_by` | `uuid` | N | — | FK `users(id)` ON DELETE RESTRICT | Audit |
 | `created_at` | `timestamptz` | N | `now()` | — | — |
 | `updated_at` | `timestamptz` | N | `now()` | — | — |
 | `deleted_at` | `timestamptz` | Y | — | soft delete; requires `enabled = false` | BR-W-12 |
@@ -176,6 +174,8 @@ Address is `jsonb` (as in the canonical ERD) because merchant address is display
 
 ### 3.4 View `merchant_webhook_targets`
 
+> **Naming note (2026-10-26 audit):** The canonical view name is `merchant_webhook_targets`. The alignment guide had proposed `merchant_webhook_targets_view`; the new system audit overruled this because Member 8's worker already references the shorter name in its implementation.
+
 | Column | From |
 |---|---|
 | `endpoint_id` | `webhook_endpoints.id` |
@@ -185,7 +185,7 @@ Address is `jsonb` (as in the canonical ERD) because merchant address is display
 | `subscribed_event_types` | `webhook_endpoints` |
 | `updated_at` | `webhook_endpoints` |
 
-Filter: `enabled AND deleted_at IS NULL AND merchants.status = 'APPROVED'`. Contract rules in [Doc 4 §10.3](./doc-04-interface-and-integration-contract.md#103-database-view-i-08).
+Filter: `enabled = TRUE AND deleted_at IS NULL AND merchants.status = 'APPROVED'`. Member 8's `swiftdrop_worker` role has `SELECT` on this view only. Contract rules in [Doc 4 §10.3](./doc-04-interface-and-integration-contract.md#103-database-view-i-08).
 
 ### 3.5 Why the check constraints duplicate domain rules
 
@@ -202,13 +202,13 @@ The domain layer is the primary enforcement point. DB constraints are a **second
 | `webhook_endpoints` | M4 | `merchants/infrastructure` only | M4; view | Code review |
 | `merchant_webhook_targets` | M4 | — | M8 worker (`swiftdrop_worker` SELECT) | DB grant |
 
-**Database roles (proposed, created by Member 9):**
+**Database roles (per Member 9 Agreement A5):**
 
 | Role | Used by | Rights on M4 objects |
 |---|---|---|
 | `swiftdrop_migrator` | Migration job | DDL on all |
-| `swiftdrop_core_api` | Core API process | SELECT/INSERT/UPDATE on the three tables; **no DELETE** on `merchants` and `merchant_api_credentials` (never hard-deleted by the app) |
-| `swiftdrop_worker` | M8 Event Worker | SELECT on `merchant_webhook_targets` only |
+| `swiftdrop_app` | Core API process | SELECT/INSERT/UPDATE on the three tables; **no DELETE** on `merchants` and `merchant_api_credentials` (never hard-deleted by the app) |
+| `swiftdrop_worker` | M8 Event Worker | SELECT on `merchant_webhook_targets` view only |
 | `swiftdrop_tracking` | M5 Tracking API | **none** |
 
 Since the Core API is one process, module-level isolation inside it is a code rule, not a DB rule (`domain-boundaries.md` §4.2). Separate DB roles isolate **services**.
@@ -229,31 +229,32 @@ Since the Core API is one process, module-level isolation inside it is a code ru
 
 ```mermaid
 flowchart LR
-    A["M1: users, roles, user_roles"] --> B["M4 000100: merchants"]
-    B --> C["M4 000200: merchant_api_credentials"]
-    B --> D["M4 000300: webhook_endpoints"]
-    B --> E["M2: parcels (merchant_id FK)"]
-    D --> F["M8: webhook_deliveries (endpoint_id FK)"]
-    D --> G["M4 000400: merchant_webhook_targets view"]
-    H["M9: DB roles"] -. "grant if role exists" .-> G
-    A --> I["M1/M7: audit_logs"]
+    A["000001_create_users_and_roles\n(Member 1)"] --> B["000002_create_delivery_zones\n(Member 7)"]
+    B --> C["000003_create_merchants_and_credentials\n(Member 4 — all tables + view)"]
+    C --> D["000004_create_pricing_rules\n(Member 2)"]
+    D --> E["000005_create_parcels_and_quotes\n(Member 2 — parcels.merchant_id FK)"]
+    E --> F["000006_create_couriers\n(Member 3)"]
+    F --> G["000007_create_dispatch_and_delivery\n(Member 3)"]
+    G --> H["000008_create_outbox_events\n(Member 8)"]
+    H --> I["000009_create_worker_dedup_and_webhooks\n(Member 8 — webhook_deliveries)"]
 ```
 
-| Order | Migration | Owner | Hard dependency |
+| Order | Migration file | Owner | Hard dependency |
 |---|---|---|---|
-| 1 | `users`, roles | M1 | — |
-| 2 | `…000100_create_merchants` | M4 | `users` |
-| 3 | `…000200_create_merchant_api_credentials` | M4 | `merchants`, `users` |
-| 4 | `…000300_create_webhook_endpoints` | M4 | `merchants`, `users` |
-| 5 | `parcels` | M2 | `merchants` (for `merchant_id` FK) |
-| 6 | `webhook_deliveries` | M8 | `webhook_endpoints` |
-| 7 | `…000400_create_merchant_webhook_targets_view` | M4 | `merchants`, `webhook_endpoints`; grant only if `swiftdrop_worker` exists |
+| 1 | `000001_create_users_and_roles.up.sql` | M1 | — |
+| 2 | `000002_create_delivery_zones.up.sql` | M7 | `users` |
+| **3** | **`000003_create_merchants_and_credentials.up.sql`** | **M4** | **`users` (owner_user_id, created_by, approved_by FKs)** |
+| 4 | `000004_create_pricing_rules.up.sql` | M2 | `delivery_zones` |
+| 5 | `000005_create_parcels_and_quotes.up.sql` | M2 | `merchants` (for `merchant_id` FK) |
+| 9 | `000009_create_worker_dedup_and_webhooks.up.sql` | M8 | `webhook_endpoints` (for `webhook_deliveries.endpoint_id` FK) |
 
 **Important for Member 2:** `parcels` cannot be created before `merchants`. Version numbers must reflect this (U-28).
 
-### 5.3 Version numbering (U-28)
+### 5.3 Migration naming — PENDING GROUP DECISION (D2/D3)
 
-Ten members adding migrations in parallel will collide with sequential numbers (`000005`). **Proposal:** timestamp versions `YYYYMMDDhhmmss` (golang-migrate supports this), with the DB coordinator reviewing order at merge. Draft files use `20261101000100…000400` as placeholders.
+> **Status (2026-10-26 audit):** The migration naming decision (D2) is **still open** — the audit confirms no binding vote has been recorded. Additionally, `000003` is **in collision** with Member 3's draft migrations. This must be resolved in the next group meeting before Member 4's migration file can be named.
+>
+> **Current proposal:** 6-digit sequential (`000003`) once the collision is resolved with M3. Until then, Member 4's draft retains the placeholder name `000003_create_merchants_and_credentials.up.sql` with the understanding that the final number may change.
 
 ### 5.4 Changing the schema later (expand → migrate → contract)
 
@@ -403,7 +404,7 @@ go run ./cmd/api seed merchants-demo
 
 | Seeded record | Values |
 |---|---|
-| Demo merchant user (from M1 seed) | `merchant.demo@swiftdrop.local` |
+| Demo merchant user (from M1 seed) | `merchant.demo@swiftdrop.com` |
 | Merchant | "SwiftDrop Demo Store", status `APPROVED`, approved by seeded admin |
 | API key | label `demo-local`; plaintext printed **once to stdout** on seed run; prefix `sd_test_` in local profile (U-30 key prefix per env) |
 | Webhook | `http://webhook-sink:8089/hooks` (local mock receiver, allowed because `WEBHOOK_ALLOW_HTTP=true` locally), events `parcel.booked.v1`, `parcel.delivered.v1` |

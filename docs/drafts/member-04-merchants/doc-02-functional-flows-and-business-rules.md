@@ -1,10 +1,10 @@
 # Document 2 — Functional Flows & Business Rules
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/`  
 > **Key Upstream Dependencies:** Member 1 (JWT, roles, audit), Member 2 (`CreateParcel`, merchant order queries, idempotency), Member 7 (admin UI, gateway), Member 8 (webhook delivery, event names)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-14 from [Document 1 §9](./doc-01-scope-and-responsibilities.md#9-assumptions-unresolved-decisions-and-documentation-conflicts). New in this document: U-15 … U-19 (see [§10](#10-new-open-questions)).
+> **Alignment Status:** All open questions U-01–U-19 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 
@@ -45,8 +45,6 @@
 
 ### 2.1 Merchant Status
 
-Proposed (pending U-02 / M7 U-26):
-
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: F-01 submit application
@@ -83,6 +81,8 @@ Any other transition → `409 MERCHANT_INVALID_TRANSITION`. `REJECTED` and `DISA
 | List / view own existing orders (JWT) | ❌ | ✅ | ✅ | ❌ | ✅ (read-only history) |
 | Register / edit webhooks | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Receive webhooks | ❌ | ✅ | ❌ (paused) | ❌ | ❌ |
+
+**Note on webhook delivery during suspension:** Events that occur while a merchant is `SUSPENDED` or an endpoint is disabled are **not** back-filled after reinstatement (U-19 resolved: no back-fill; FK stays `ON DELETE RESTRICT` via soft delete).
 
 ### 2.2 API Credential Status (derived, not stored as a column)
 
@@ -558,8 +558,8 @@ sequenceDiagram
     RL->>DB: poll outbox
     RL->>MQ: publish parcel.delivered.v1
     MQ->>WK: deliver message
-    WK->>DB: SELECT webhook_endpoints WHERE merchant_id AND enabled AND event in subscribed AND merchant APPROVED
-    Note over WK,DB: Read contract owned by M4 (U-08). Columns: id, url, secret_ciphertext, subscribed_event_types
+    WK->>DB: SELECT merchant_webhook_targets WHERE merchant_id AND enabled AND event in subscribed AND merchant APPROVED
+    Note over WK,DB: Read contract owned by M4 (U-08). Columns: endpoint_id, url, secret_ciphertext, subscribed_event_types
     WK->>WK: decrypt secret, sign, safe-dial (send-time SSRF check)
     WK->>MX: POST signed payload
     WK->>DB: INSERT webhook_deliveries (M8 table)
@@ -568,7 +568,7 @@ sequenceDiagram
 **Member 4's contract to Member 8:**
 1. Only endpoints with `enabled = true` and merchant `APPROVED` are eligible (BR-W-13).
 2. `subscribed_event_types` uses the exact event type strings from `event-contracts.md` (U-06).
-3. Secret is stored encrypted with `WEBHOOK_SECRET_ENCRYPTION_KEY` (U-03).
+3. Secret is stored encrypted with `WEBHOOK_SECRET_ENCRYPTION_KEY` (U-03 resolved).
 4. Schema changes to these columns follow expand/contract and are announced to Member 8.
 
 ---
@@ -701,7 +701,7 @@ Revoked key:
 | EC-08 | Merchant loses plaintext key (closed tab) | Cannot be recovered. Revoke and create a new one. |
 | EC-09 | Webhook URL `https://169.254.169.254/latest/meta-data` | `400 SSRF_PROHIBITED_URL`. |
 | EC-10 | Webhook hostname resolves to one public IP and one `10.x` IP | Rejected (BR-W-04 checks all addresses). |
-| EC-11 | Webhook disabled while Member 8 has retries pending | M8 should re-check `enabled` before each attempt and stop (to be confirmed with M8). |
+| EC-11 | Webhook disabled while Member 8 has retries pending | M8 re-checks `is_active` before each retry attempt and stops. Confirmed per U-12 resolution. |
 | EC-12 | Hostname is public at registration, later re-pointed to `127.0.0.1` (DNS rebinding) | Registration passes; Member 8's send-time safe dial blocks delivery. Defence in depth. |
 | EC-13 | URL `https://shop.lk:8443/hook` | `422 WEBHOOK_URL_INVALID` (non-standard port). |
 | EC-14 | URL with IDN / punycode host | Normalised to ASCII (punycode) before validation and storage. |
@@ -709,8 +709,8 @@ Revoked key:
 | EC-16 | Two keys with same label, one revoked | Allowed; label uniqueness applies only among active keys (BR-K-05). |
 | EC-17 | Expired key used | `401 API_KEY_EXPIRED`. |
 | EC-18 | `PENDING` merchant calls `POST /merchant/orders` with a guessed key | No key can exist (keys require APPROVED) → `401 API_KEY_INVALID`. |
-| EC-19 | Rejected applicant reapplies | Allowed as new row (pending U-16); old rejected row kept for audit. |
-| EC-20 | Same `merchant_reference` sent with two different idempotency keys | Pending U-18. Proposal: unique per merchant → second returns `409 MERCHANT_REFERENCE_DUPLICATE`. |
+| EC-19 | Rejected applicant reapplies | Allowed as new row (U-16 resolved: no cool-down for baseline); old rejected row kept for audit. |
+| EC-20 | Same `merchant_reference` sent with two different idempotency keys | U-18 resolved: nullable column on `parcels` (M2), partial unique index `(merchant_id, merchant_reference)`; second returns `409 MERCHANT_REFERENCE_DUPLICATE`. |
 
 ---
 

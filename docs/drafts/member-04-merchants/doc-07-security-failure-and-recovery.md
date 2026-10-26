@@ -1,10 +1,10 @@
 # Document 7 — Security, Failure & Recovery Specification
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/`  
 > **Key Upstream Dependencies:** Member 1 (JWT, RBAC, audit, ADR-003), Member 7 (gateway rate limits, admin UI escaping), Member 8 (send-time SSRF, signing, DLQ), Member 9 (secrets, network policy)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-35. New: U-36 … U-42 (see [§14](#14-new-open-questions)). **§2 lists conflicts with ADR-003 that must be resolved first.**
+> **Alignment Status:** All open questions U-01–U-42 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 This document **supplements** the shared security baseline — it does not redefine it:
 
@@ -42,7 +42,7 @@ While writing this document, Member 4's drafts (Docs 2–6) were compared agains
 | C-3 | Can API keys manage webhooks? | Implied yes (`webhooks:manage` scope) | No — keys only for orders; webhooks/keys managed via JWT (Doc 4 §3.1 rule 5) | Keep "no" for baseline: a leaked order key must not be able to redirect parcel data to an attacker URL. If needed later, add `webhooks:manage` as an opt-in scope, never default. → ⏳ Applied in M4 drafts; **ADR-003 amendment needed (M1)**. |
 | C-4 | Merchant identity for JWT callers | `tenant_id` claim in JWT (§3.2) | Look up merchant by `owner_user_id` every request (DD-12) | **Use the `tenant_id` claim** as the merchant ID (signed by M1, avoids a lookup), **but still check merchant status on every request** (one indexed PK read) so suspension is immediate. → ✅ **Applied** (DD-12 revised in Doc 3; Docs 2, 4, 5, OpenAPI updated). |
 | C-5 | Key hash algorithm | "Argon2id or salted SHA-256" (ADR §6.1); "salted hashes" (security-notes) | HMAC-SHA256 with secret pepper (DD-02) | Compatible: HMAC with a server-side pepper is a keyed hash, stronger than a stored salt for high-entropy keys. Record DD-02 as the chosen option in ADR-003. |
-| C-6 | Rate-limit route | `/api/v1/merchants/*` — 120/min per API key | Orders are at `/api/v1/merchant/orders` (SRS path) | Gateway rule must cover **both** `/api/v1/merchant/*` and `/api/v1/merchants/*` (U-36). |
+| C-6 | Rate-limit route | `/api/v1/merchants/*` — 120/min per API key | Orders are at `/api/v1/merchant/orders` (SRS path) | **Resolved:** Gateway rule covers **both** `/api/v1/merchant/*` and `/api/v1/merchants/*`. |
 | C-7 | SEC numbering | `security-notes.md` table numbers differ from SRS (e.g. its SEC-007 = crypto; SRS SEC-007 = rate limits) | Drafts cite SRS numbers | Re-number `security-notes.md` to match SRS (U-37). This document uses **SRS** numbers. |
 
 ---
@@ -55,7 +55,7 @@ While writing this document, Member 4's drafts (Docs 2–6) were compared agains
 |---|---|---|---|
 | `/merchants/applications` | JWT (any role) | M1 middleware | Creates merchant owned by `sub` |
 | `/merchants/me/**` | JWT, role `MERCHANT` | M1 middleware + M4 owner/tenant check | API key **rejected** (C-3) |
-| `/merchant/orders**` | `X-API-Key` **or** JWT `MERCHANT` | M4 `CredentialVerifier` / M1 | Both headers → 400 (U-25) |
+| `/merchant/orders**` | `X-API-Key` **or** JWT `MERCHANT` | M4 `CredentialVerifier` / M1 | Both headers → 400 (U-25 resolved) |
 | `/admin/merchants/**` | JWT, role `ADMIN` | M1 middleware in M7 handler, **re-checked** in `AdminService` | Defence in depth |
 | `merchants.AdminService` (Go) | `Actor.Role == ADMIN` | M4 | Never trust caller blindly |
 | `merchant_webhook_targets` view | DB role `swiftdrop_worker` | PostgreSQL | SELECT only |
