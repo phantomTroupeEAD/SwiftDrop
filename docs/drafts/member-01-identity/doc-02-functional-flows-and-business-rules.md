@@ -27,7 +27,7 @@
 - Email is not already registered in `users` table.
 
 #### Postconditions:
-- New `users` record inserted with `role = 'CUSTOMER'` and `is_active = true`.
+- New `users` record inserted with `role = 'CUSTOMER'` and `status = 'ACTIVE'`.
 - Password hashed with Argon2id and stored in `password_hash`.
 - `201 Created` returned with sanitized user profile (no password hash).
 
@@ -41,7 +41,7 @@
    - *Failure Path 1A (Conflict):* Email exists $\rightarrow$ Returns `409 Conflict` (`AUTH_EMAIL_ALREADY_EXISTS`).
 4. **Password Hashing:** Hasher computes Argon2id hash with random salt.
 5. **Persistence:** `UserRepository.Create(user)` commits user to PostgreSQL.
-6. **Response:** Returns `201 Created` with DTO `{ "id": "...", "email": "...", "full_name": "...", "role": "CUSTOMER" }`.
+6. **Response:** Returns `201 Created` with DTO `{ "data": { "id": "...", "email": "...", "full_name": "...", "role": "CUSTOMER" } }`.
 
 ```mermaid
 sequenceDiagram
@@ -63,7 +63,7 @@ sequenceDiagram
     Service->>Hasher: HashPassword(plaintext)
     Hasher-->>Service: argon2id_hash_string
     Service->>Repo: Save(newUser)
-    Repo->>DB: INSERT INTO users (id, email, password_hash, role, is_active) VALUES (...)
+    Repo->>DB: INSERT INTO users (id, email, password_hash, role, status) VALUES (...)
     DB-->>Repo: OK
     Service-->>Handler: User Entity
     Handler-->>Client: 201 Created (Sanitized User DTO)
@@ -74,30 +74,30 @@ sequenceDiagram
 ### 2.2 Workflow 2: User Login & Dual-Token Issuance
 
 #### Preconditions:
-- Registered user account exists and `is_active = true`.
+- Registered user account exists and `status = 'ACTIVE'`.
 
 #### Postconditions:
-- Short-lived JWT access token issued (15-minute expiry).
+- Short-lived RS256 JWT access token issued (15-minute expiry).
 - Cryptographically secure refresh token generated, hashed (SHA-256), and persisted in `refresh_tokens`.
-- Refresh token set in `HttpOnly`, `SameSite=Strict`, `Secure` cookie.
+- Refresh token set in `HttpOnly`, `SameSite=Strict`, `Secure` cookie (7 days for web users, 14 days for couriers per ADR-003).
 - Access token and user profile returned in response body.
 
 #### Flow Steps:
 1. **Submission:** Client calls `POST /api/v1/auth/login` with email and password.
 2. **Account Retrieval:** System queries `users` by normalized email.
    - *Failure Path 2A (Account Not Found):* System executes dummy password verification (to equalize execution time against timing attacks) and returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`).
-3. **Status Check:** If `is_active = false`:
-   - *Failure Path 2B (Suspended):* Return `403 Forbidden` (`AUTH_ACCOUNT_SUSPENDED`).
+3. **Status Check:** If `status != 'ACTIVE'`:
+   - *Failure Path 2B (Suspended / Deactivated):* Return `403 Forbidden` (`AUTH_ACCOUNT_SUSPENDED`).
 4. **Password Verification:** Hasher verifies submitted password against stored `password_hash`.
    - *Failure Path 2C (Mismatch):* Return `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`).
 5. **Token Generation:**
-   - Mints RS256/HS256 Access Token containing claims (`sub`, `email`, `role`, `tenant_id`, `iat`, `exp`).
+   - Mints RS256 Access Token containing claims (`sub`, `email`, `role`, `tenant_id`, `iat`, `exp`).
    - Generates 32-byte cryptographically random string for refresh token.
    - Computes SHA-256 hash of refresh token string.
    - Creates new session in `refresh_tokens` with unique `family_id` (UUIDv7).
 6. **Response Delivery:**
-   - Sets cookie: `swiftdrop_refresh_token=<raw_refresh_token>; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`.
-   - Returns `200 OK` with JSON `{ "access_token": "...", "expires_in": 900, "user": { ... } }`.
+   - Sets cookie: `swiftdrop_refresh_token=<raw_refresh_token>; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800` (for COURIER: `Max-Age=1209600` / 14 days per ADR-003).
+   - Returns `200 OK` with JSON `{ "data": { "access_token": "...", "expires_in": 900, "user": { ... } } }`.
 
 ---
 
@@ -175,7 +175,7 @@ sequenceDiagram
         alt User Exists with Same Email
             Core->>DB: INSERT INTO oauth_identities (user_id, provider, provider_subject)
         else Brand New Customer
-            Core->>DB: INSERT INTO users (email, full_name, role='CUSTOMER', is_active=true)
+            Core->>DB: INSERT INTO users (email, full_name, role='CUSTOMER', status='ACTIVE')
             Core->>DB: INSERT INTO oauth_identities (user_id, provider, provider_subject)
         end
     end
@@ -213,9 +213,9 @@ flowchart TD
 
 ### 3.1 User Account State Machine
 ```
-    [*] --> PENDING_VERIFICATION (Optional email verification phase)
+    [*] --> PENDING_VERIFICATION (Mandatory email verification phase per FR-IAM-001)
     PENDING_VERIFICATION --> ACTIVE (Email verified or Google OIDC login)
-    [*] --> ACTIVE (Standard local registration)
+    [*] --> ACTIVE (Standard verified registration)
     ACTIVE --> SUSPENDED (Administrator lock or excessive malicious activity)
     SUSPENDED --> ACTIVE (Administrator reinstatement)
     ACTIVE --> DEACTIVATED (User-requested account closure)
@@ -227,7 +227,7 @@ flowchart TD
 ```
     [*] --> ISSUED (Active single-use token in client cookie)
     ISSUED --> ROTATED (Presented for refresh; exchanged for child token in same family)
-    ROTATED --> EXPIRED (Passed 7-day maximum family lifetime)
+    ROTATED --> EXPIRED (Passed 7-day for web or 14-day for courier maximum family lifetime per ADR-003)
     ISSUED --> REVOKED (Explicit logout)
     ROTATED --> REVOKED (Detected token replay: entire family revoked immediately)
 ```
@@ -238,8 +238,8 @@ flowchart TD
 
 1. **Concurrent Registration Submissions:**
    - If two identical registration requests arrive simultaneously, the database `UNIQUE(email)` constraint acts as the synchronization gate. One succeeds; the second receives a database duplicate key violation and returns `409 Conflict`.
-2. **Concurrent Refresh Token Rotations:**
-   - If a frontend sends two refresh requests in rapid parallel succession (e.g. multi-tab race condition), the first request rotates the token successfully. The second request presents the rotated token.
-   - *Mitigation Grace Window:* A 10-second grace window allows near-simultaneous multi-tab refreshes to receive the newly minted access token without triggering an immediate fraud family revocation.
+2. **Concurrent Refresh Token Rotations & Instant Family Revocation:**
+   - In accordance with ADR-003 (RTR), refresh tokens are single-use only. Any presentation of an already rotated or revoked refresh token triggers **instant invalidation of the entire token family** (`family_id`).
+   - Frontends (SPA / Mobile) must serialize and deduplicate in-flight token refresh requests (e.g. TanStack Query / Axios refresh mutex) so only one refresh call executes when the access token expires.
 3. **Session Revocation on Password Change:**
    - When a user updates their password, all active refresh tokens belonging to that `user_id` are updated to `is_revoked = true` to force re-authentication across all devices.

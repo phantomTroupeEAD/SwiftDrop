@@ -34,20 +34,22 @@ The testing strategy for the Identity module follows the project-wide Testing Py
 | Test ID | Category | Scenario / Action | Precondition / Input | Expected Result | SRS / AT Trace |
 |:---|:---|:---|:---|:---|:---|
 | **TC-ID-01** | Unit | Valid Registration | Valid email, strong password, name | User aggregate created with role `CUSTOMER`, password hashed | FR-IAM-001, AT-001 |
-| **TC-ID-02** | Unit | Weak Password Rejection | Password `< 8` chars or missing uppercase/digit | Returns `ErrInvalidPassword` | SEC-001, SEC-006 |
+| **TC-ID-02** | Unit | Weak Password Rejection | Password `< 8` chars or missing uppercase/digit | Returns `ErrInvalidPassword` | SEC-002, SEC-006 |
 | **TC-ID-03** | Integration | Duplicate Email Collision | Register with existing email | DB constraint fails, returns `409 Conflict` | FR-IAM-001 |
-| **TC-ID-04** | Unit / Int | Successful Login | Correct email and password | Returns valid 15-min JWT + sets `swiftdrop_refresh_token` cookie | FR-IAM-003, AT-001 |
-| **TC-ID-05** | Security | Bad Password Handling | Invalid password provided | Returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) | SEC-001 |
-| **TC-ID-06** | Security | Non-Existent Account | Email not in database | Returns identical `401` error in identical response time | SEC-001, AT-004 |
-| **TC-ID-07** | Integration | Refresh Token Rotation | Valid refresh cookie presented | Returns fresh JWT + new refresh cookie; old token invalidated | ADR-003, SEC-004 |
+| **TC-ID-04** | Unit / Int | Successful Login | Correct email and password | Returns valid 15-min RS256 JWT + sets `swiftdrop_refresh_token` cookie | FR-IAM-003, AT-001 |
+| **TC-ID-05** | Security | Bad Password Handling | Invalid password provided | Returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) | SEC-002 |
+| **TC-ID-06** | Security | Non-Existent Account | Email not in database | Returns identical `401` error in identical response time | SEC-002, AT-004 |
+| **TC-ID-07** | Integration | Refresh Token Rotation | Valid refresh cookie presented | Returns fresh RS256 JWT + new refresh cookie; old token invalidated | ADR-003, SEC-004 |
 | **TC-ID-08** | Security | Refresh Token Reuse Attack | Present already rotated refresh token | Immediate 401; all tokens in `family_id` revoked | SEC-004 |
 | **TC-ID-09** | Unit | Middleware Valid Token | `Authorization: Bearer <valid_jwt>` | Context populated with `Principal` (`sub`, `role`) | FR-IAM-004, SEC-002 |
 | **TC-ID-10** | Security | Expired Token Presentation | JWT expired 1 minute ago | Request rejected with `401 Unauthorized` | FR-IAM-004, AT-001 |
 | **TC-ID-11** | Security | Role Guard Rejection | Customer calls `/api/v1/admin/users` | Middleware returns `403 Forbidden` (`AUTH_INSUFFICIENT_PERMISSIONS`) | SEC-002, AT-004 |
 | **TC-ID-12** | Integration | Google OIDC Success | Valid Google code and verified ID token | Account auto-provisioned or linked; JWT returned | FR-IAM-002, AT-014 |
 | **TC-ID-13** | Security | Google OIDC Nonce Mismatch | Forged ID token with tampered nonce | Callback rejected with `401 Unauthorized` | AT-014 |
-| **TC-ID-14** | Integration | Admin Role Promotion | Admin promotes customer to dispatcher | User role updated in DB to `DISPATCHER` | FR-ADM-004 |
-| **TC-ID-15** | Security | Non-Admin Role Tampering | Customer calls `PUT /admin/users/{id}/role` | Returns `403 Forbidden` | FR-ADM-004 |
+| **TC-ID-14** | Integration | Admin Role Promotion | Admin promotes customer to dispatcher | User role updated in DB to `DISPATCHER` | FR-ADM-006 |
+| **TC-ID-15** | Security | Non-Admin Role Tampering | Customer calls `PUT /admin/users/{id}/role` | Returns `403 Forbidden` | FR-ADM-006 |
+| **TC-ID-16** | Integration | Admin Suspend Account | Admin suspends user account | User status updated to `SUSPENDED`; login blocked | FR-IAM-007 |
+| **TC-ID-17** | Integration | Admin Revoke Sessions | Admin revokes user active sessions | All refresh tokens for user set to `is_revoked = true` | FR-IAM-009 |
 
 ---
 

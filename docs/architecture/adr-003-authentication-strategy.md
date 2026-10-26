@@ -29,14 +29,14 @@ We adopt a **Dual-Token Architecture with Encrypted HttpOnly Cookies for Interac
 | **Portal User (Web SPA)** | Short-Lived JWT Access Token | In-Memory (React AuthContext) | 15 Minutes | Expires naturally; refreshed via cookie |
 | **Portal Session Refresh** | Opaque Refresh Token | `HttpOnly`, `Secure`, `SameSite=Strict` Cookie | 7 Days | Single-use rotation; stored in DB session table |
 | **Courier Mobile Web** | Short-Lived JWT + Refresh Token | Encrypted local storage / HttpOnly Cookie | 15m / 14 Days | Session revocation in Core API |
-| **B2B Merchant API** | Hashed API Secret Key (`sk_live_...`) | HTTP Request Header (`X-API-Key`) | Up to 1 Year | Database revocation timestamp / active flag |
+| **B2B Merchant API** | Hashed API Secret Key (`sd_live_...`) | HTTP Request Header (`X-API-Key`) | Up to 1 Year | Database revocation timestamp / active flag |
 
 ---
 
 ## 3. JWT Access Token Design
 
 ### 3.1 Signing Algorithm & Key Management
-- **Algorithm:** Asymmetric **RS256** (RSA Signature with SHA-256) or **EdDSA** (Ed25519). Core API holds the private signing key. Tracking API and downstream microservices verify tokens using the published public key (`/.well-known/jwks.json`), eliminating cross-service database roundtrips for auth checks.
+- **Algorithm:** Asymmetric **RS256** (RSA Signature with SHA-256) or **EdDSA** (Ed25519). Core API holds the private signing key (`JWT_PRIVATE_KEY_PEM`). Tracking API and downstream microservices verify tokens using the published public key (`/.well-known/jwks.json`), eliminating cross-service database roundtrips for auth checks.
 - **Clock Skew Tolerance:** Maximum 60 seconds.
 
 ### 3.2 Token Claims Structure
@@ -45,14 +45,14 @@ Every access token payload strictly contains:
 ```json
 {
   "iss": "https://api.swiftdrop.io",
-  "sub": "usr_01HXYZ1234567890",
+  "sub": "0192e4a8-6b2a-7c91-9e12-3456789abcde",
   "role": "MERCHANT",
-  "tenant_id": "mrc_01HABC9876543210",
+  "tenant_id": "0192e4a8-7777-7c91-9e12-9876543210ab",
   "email": "logistics@vendor.com",
   "exp": 1729512900,
   "nbf": 1729512000,
   "iat": 1729512000,
-  "jti": "jwt_01HDEF1122334455"
+  "jti": "0192e4a8-9999-7c91-9e12-abcdef123456"
 }
 ```
 
@@ -85,6 +85,7 @@ HTTP middleware in `core-api/internal/platform/auth/` evaluates:
               SameSite=Strict; 
               Max-Age=604800
   ```
+  *(For couriers, Max-Age is 1209600 / 14 days)*.
   - `Path=/api/v1/auth`: Cookie is only sent to authentication refresh endpoints, reducing exposure across standard API calls.
   - `HttpOnly`: Inaccessible to client JavaScript.
   - `SameSite=Strict`: Immune to Cross-Site Request Forgery (CSRF).
@@ -99,10 +100,10 @@ HTTP middleware in `core-api/internal/platform/auth/` evaluates:
 ## 5. Google OAuth 2.0 / OpenID Connect (OIDC) Flow
 
 For social login and customer/merchant onboarding:
-1. **Initiation (`/api/v1/auth/oauth/google`):**
+1. **Initiation (`/api/v1/auth/google`):**
    - Core API generates a cryptographically random, signed `state` parameter and a SHA-256 `nonce` stored in a short-lived HTTP cookie.
    - Redirects user to Google OAuth consent screen requesting scopes `openid email profile`.
-2. **Callback (`/api/v1/auth/oauth/google/callback`):**
+2. **Callback (`/api/v1/auth/google/callback`):**
    - Core API verifies the returned `state` cookie to prevent CSRF.
    - Exchanges authorization code with Google token endpoint for an `id_token`.
    - Validates `id_token` signature, audience (`aud`), issuer (`iss`), and `nonce`.

@@ -34,7 +34,7 @@ core-api/internal/identity/
 │   ├── postgres_token_repo.go              # PostgreSQL implementation of TokenRepository
 │   ├── postgres_oauth_repo.go              # PostgreSQL implementation of OAuthRepository
 │   ├── argon2_hasher.go                    # Argon2id password hashing adapter
-│   ├── jwt_token_provider.go               # RS256 / HS256 JWT minting & verification engine
+│   ├── jwt_token_provider.go               # RS256 JWT minting, verification & JWKS engine
 │   └── google_oidc_client.go               # HTTP client for Google discovery & code exchange
 │
 └── transport/                              # TRANSPORT LAYER (HTTP, DTOs & Middleware)
@@ -57,10 +57,10 @@ core-api/internal/identity/
 | **Domain** | Domain Errors | Centralized sentinel errors (`ErrUserNotFound`, `ErrEmailAlreadyExists`, `ErrInvalidCredentials`, `ErrTokenReused`). |
 | **Application** | `AuthService` | Coordinates database transactions, invokes password hashing, generates token pairs, and logs audit events. |
 | **Application** | `OAuthService` | Orchestrates OIDC exchange, validates state/nonce, and handles account auto-provisioning. |
-| **Application** | Port Interfaces | Declarative boundaries (`UserRepository`, `TokenRepository`, `PasswordHasher`, `TokenProvider`). |
+| **Application** | Port Interfaces | Declarative boundaries (`UserRepository`, `TokenRepository`, `PasswordHasher`, `TokenProvider`, `RoleAssigner`, `AuditWriter`). |
 | **Infrastructure** | `PostgresUserRepository` | Translates application queries into parameterized SQL using `pgx/v5`. Implements optimistic locking where appropriate. |
 | **Infrastructure** | `Argon2Hasher` | Applies Argon2id cryptographic parameters ($m=65536, t=3, p=2$). |
-| **Infrastructure** | `JWTTokenProvider` | Handles cryptographic signing (RS256/HS256), claims parsing, JWKS validation, and clock skew tolerance. |
+| **Infrastructure** | `JWTTokenProvider` | Handles asymmetric cryptographic signing (RS256), claims parsing, JWKS hosting (`/.well-known/jwks.json`), and clock skew tolerance. |
 | **Transport** | `AuthMiddleware` | Extracts `Bearer` token from `Authorization` header, parses claims, injects `Principal` into `context.Context`. |
 | **Transport** | `RequireRole` | Validates that `context.Context` contains an authorized role before delegating to downstream handlers. |
 | **Transport** | HTTP Handlers | Decodes JSON, enforces request size caps, handles HTTP status code mappings. |
@@ -141,7 +141,8 @@ To comply with `.golangci.yml`, the following dependency rules are strictly enfo
 ### Linter Rule Enforcements:
 - Files in `domain/` **MUST NOT** import: `net/http`, `database/sql`, `github.com/jackc/pgx`, `github.com/golang-jwt/jwt`, or any internal transport/infrastructure packages.
 - Files in `application/` **MUST NOT** import `net/http` or transport DTOs.
-- Circular dependencies between `internal/identity` and other modules (`parcels`, `merchants`) are strictly prohibited. Downstream modules consume Identity via HTTP middleware or public Go interfaces.
+- Circular dependencies between `internal/identity` and other modules (`parcels`, `merchants`) are strictly prohibited. Downstream modules consume Identity via HTTP middleware or public Go interfaces (`RoleAssigner`, `AuditWriter`, `UserFinder`).
+- **Tenant Resolution Decoupling:** Identity does **not** call or import `internal/merchants`. During session refresh or login, tenant resolution is injected via caller-supplied claims or decoupled port interfaces (`TenantResolver`), completely eliminating inverted import dependencies.
 
 ---
 
@@ -154,7 +155,7 @@ To comply with `.golangci.yml`, the following dependency rules are strictly enfo
 3. **Decorator / Pipeline Pattern for HTTP Middleware:**
    - Standard Go HTTP middleware chaining (`AuthMiddleware(RequireRole(RoleAdmin)(handler))`) allows composable, reusable access guards across all monolith endpoints.
 4. **Token Family Lineage (Single-Use RTR):**
-   - Refresh tokens share a persistent `family_id`. When a token is rotated, its successor inherits the `family_id`. Any replay of a previous generation invalidates all tokens with that `family_id`.
+   - Refresh tokens share a persistent `family_id`. When a token is rotated, its successor inherits the `family_id`. Any replay of a previous generation invalidates all tokens with that `family_id` immediately without grace window.
 
 ---
 
@@ -175,7 +176,7 @@ To comply with `.golangci.yml`, the following dependency rules are strictly enfo
 | Decision Area | Selected Approach | Alternative Considered | Rationale & Trade-Off |
 |:---|:---|:---|:---|
 | **Token Architecture** | Dual-Token (JWT + HttpOnly Cookie) | Session ID stored in Redis | Redis session store adds operational dependency; JWT allows stateless horizontal scaling of Core and Tracking APIs. |
-| **JWT Algorithm** | Asymmetric RS256 / HS256 configurable | Stateful OAuth Server (Ory Hydra / Keycloak) | Separate identity server is over-engineered for course scope and increases container memory footprints on single VPS hosting. |
+| **JWT Algorithm** | Asymmetric RS256 Only (ADR-003) | Symmetric HS256 / OAuth Server | RS256 allows independent microservices (Tracking API) and edge gateway to verify tokens using public keys/JWKS without sharing signing private keys. |
 | **Password Hashing** | Argon2id | PBKDF2 / SHA-256 | Argon2id provides superior resistance against GPU/ASIC-based offline cracking attacks. |
 | **Google Login Flow** | Server-Side Code Exchange | Client-Side Google Token Relay | Server-side authorization code flow keeps client secret protected and allows direct cryptographic nonce and state verification. |
 
