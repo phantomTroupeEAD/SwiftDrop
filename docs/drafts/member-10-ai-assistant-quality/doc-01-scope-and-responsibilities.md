@@ -49,8 +49,8 @@ The **AI Delivery Assistant** solves this by:
    - Return structured `action` payloads (`NAVIGATE_BOOKING`, URL, `prefill_data`) so the React frontend can render 1-click interactive cards to navigate to `/portal/book` (with `/customer/book` supported as alias).
 5. **Knowledge Base Grounding & Dynamic Policy Synchronization:**
    - Ground general company inquiries (prohibited goods, standard SLA transit times, packaging rules) using authoritative markdown policy data (`company_policies.md`).
-   - **Dynamic System Configuration Overrides:** The assistant queries Member 7's approved `GET /api/v1/admin/system-configurations` endpoint (cached in-memory with a 5-minute TTL).
-   - **Dynamic Precedence Invariant:** Whenever operational thresholds, rates, or limits in `GET /api/v1/admin/system-configurations` conflict with text in `company_policies.md`, the live API configuration takes absolute precedence.
+   - **Dynamic System Settings Overrides:** The assistant queries Member 7's approved `GET /api/v1/admin/settings` endpoint (cached in-memory with a 5-minute TTL).
+   - **Dynamic Precedence Invariant:** Whenever operational thresholds, rates, or limits in `GET /api/v1/admin/settings` conflict with text in `company_policies.md`, the live API settings take absolute precedence.
 
 ---
 
@@ -154,7 +154,7 @@ Member 10 designs, implements, and maintains the automated End-to-End (E2E) test
 | Resource Category | Member 10 Exclusive Ownership | Shared / Upstream Ownership |
 | :--- | :--- | :--- |
 | **Source Code Directories** | `services/ai-assistant/`<br>`tests/e2e/` | `core-api/` (Members 1, 2, 3, 4, 7, 8)<br>`services/tracking/` (Member 5)<br>`web/` (Members 6, 7) |
-| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /api/v1/ai/mcp`<br>`POST /api/v1/ai/mcp/messages`<br>`GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2)<br>`/api/v1/admin/system-configurations` (Member 7) |
+| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /api/v1/ai/mcp`<br>`POST /api/v1/ai/mcp/messages`<br>`GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2)<br>`/api/v1/admin/settings` (Member 7) |
 | **Protocols & Interfaces** | FastMCP SSE Dual-Channel Protocol (`mcp_server.py`) | Traefik Ingress Gateway routing (Member 7/9) |
 | **Database Tables** | **NONE** (Zero database ownership) | PostgreSQL tables owned by Members 1, 2, 3, 4, 8 |
 | **Message Queues** | Read-only test listener on `swiftdrop.events.topic` | RabbitMQ broker & Outbox Relay (Member 8) |

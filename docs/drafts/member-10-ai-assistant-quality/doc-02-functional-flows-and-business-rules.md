@@ -114,13 +114,13 @@ sequenceDiagram
 
 ---
 
-### Flow A.4: Policy Knowledge Base Grounding & Dynamic System Configuration Overrides
+### Flow A.4: Policy Knowledge Base Grounding & Dynamic System Settings Overrides
 - **Actor:** SwiftDrop Customer / Assistant Service.
 - **Trigger:** Customer asks a policy question (e.g. prohibited items, packaging standards, COD limits, maximum weight).
 - **Workflow:**
   1. The AI Assistant loads its baseline knowledge from the version-controlled `company_policies.md` file.
-  2. The assistant periodically queries Core API's approved `GET /api/v1/admin/system-configurations` endpoint (cached in-memory with a 5-minute TTL) to fetch active operational thresholds (e.g. `max_parcel_weight_kg`, `max_cod_amount_cents`).
-  3. **Dynamic Precedence Invariant:** Whenever quantitative parameters in `GET /api/v1/admin/system-configurations` conflict with the static markdown text, the live API values override the static prose.
+  2. The assistant periodically queries Core API's approved `GET /api/v1/admin/settings` endpoint (cached in-memory with a 5-minute TTL) to fetch active operational thresholds (e.g. `parcels.max_weight_kg`, `parcels.max_cod_cents`).
+  3. **Dynamic Precedence Invariant:** Whenever quantitative parameters in `GET /api/v1/admin/settings` conflict with the static markdown text, the live API values override the static prose.
   4. The assistant grounds its answer in the authoritative combined context and cites live limits accurately.
 
 ---

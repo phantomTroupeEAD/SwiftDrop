@@ -330,7 +330,7 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 - **Ratified Decision:**
   - Delete all references to `system_policies` and orphan endpoints.
   - Ground baseline policy knowledge in version-controlled `company_policies.md`.
-  - Fetch dynamic operational thresholds via Member 7's approved `GET /api/v1/admin/system-configurations` endpoint (5-minute cache TTL).
+  - Fetch dynamic operational thresholds via Member 7's approved `GET /api/v1/admin/settings` endpoint (5-minute cache TTL).
   - **Dynamic Precedence Invariant:** Live API configuration values take absolute precedence over static text whenever thresholds, COD limits, or rules conflict.
 
 ### Decision 10.8: MCP Client Dual-Mode Authentication & Principle of Least Privilege (PoLP)
