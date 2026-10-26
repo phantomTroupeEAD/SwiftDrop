@@ -22,7 +22,7 @@ This document defines the data models, persistence boundaries, caching strategie
 | Service Tier | PostgreSQL Access Level | Tables Owned | Justification |
 | :--- | :--- | :--- | :--- |
 | **AI Assistant (`services/ai-assistant/`)** | **NONE (Zero DB Access)** | **None** | Strictly prohibited from opening PostgreSQL connections. Decoupled from database migrations and connection pool limits (`AGENTS.md`). |
-| **Core Monolith (`core-api/internal/admin`)** | Authoritative Persistence | `system_configurations` (Member 7) | Core API stores operational parameters (max weight, COD limits, fuel surcharges). |
+| **Core Monolith (`core-api/internal/admin`)** | Authoritative Persistence | `system_settings` (Member 7) | Core API stores operational parameters (max weight, COD limits, fuel surcharges). |
 
 ---
 
@@ -34,11 +34,11 @@ The AI Assistant owns **zero database tables** and does not require relational s
    - The authoritative qualitative policy guidelines (prohibited items, packaging regulations, claims workflows, liability caps) reside in `services/ai-assistant/knowledge/company_policies.md`.
    - The `PolicyContextHydrator` loads this static file into memory at service startup.
 
-2. **Live Dynamic Configuration Overrides:**
+2. **Live Dynamic Settings Overrides:**
    - Operational numbers and limits change dynamically during business operations. The assistant queries Core API's approved endpoint:
-     `GET /api/v1/admin/system-configurations` (cached in-memory with a 5-minute TTL).
+     `GET /api/v1/admin/settings` (cached in-memory with a 5-minute TTL).
    - **Dynamic Precedence Invariant:**
-     > *Whenever quantitative thresholds, rates, or limits in `GET /api/v1/admin/system-configurations` conflict with text in `company_policies.md`, the live API data takes absolute precedence.*
+     > *Whenever quantitative thresholds, rates, or limits in `GET /api/v1/admin/settings` conflict with text in `company_policies.md`, the live API data takes absolute precedence.*
 
 3. **In-Memory Injection Schema:**
    The hydrator synthesizes the base policy and live overrides into the LLM system prompt:
@@ -293,5 +293,5 @@ To verify Scenario 2 (Merchant API $\to$ RabbitMQ $\to$ Webhook dispatch) with v
 
 - [x] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` includes the test accounts in Section B.1 with matching passwords.
 - [x] **Member 2 & 7 (Pricing/Admin):** Confirm the zone IDs (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`) in the `delivery_zones` table.
-- [x] **Member 7 & 1 (Admin/Core API):** Operational system configurations are queried dynamically via `GET /api/v1/admin/system-configurations` to override static policy text.
+- [x] **Member 7 & 1 (Admin/Core API):** Operational system configurations are queried dynamically via `GET /api/v1/admin/settings` to override static policy text.
 - [x] **Member 8 & 9 (Events/DevOps):** Standalone `mock-webhook:9999` container integrated in `docker-compose.yml` with dev SSRF bypass flags.

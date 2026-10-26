@@ -207,28 +207,26 @@ flowchart LR
 
 ---
 
-### Endpoint 5: Operational System Configurations & Dynamic Overrides
+### Endpoint 5: Operational System Settings & Dynamic Overrides
 - **Consumed By:** AI Assistant Service Context Hydrator
-- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
-- **HTTP Method & Path:** `GET /api/v1/admin/system-configurations`
+- **Owner Service:** Member 7 — Admin Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `GET /api/v1/admin/settings`
 - **Authentication:** Required (`Authorization: Bearer <admin_or_service_token>`)
-- **Purpose:** Supplies live operational thresholds, weight limits, COD caps, and fuel surcharges to override static text in `company_policies.md`.
+- **Purpose:** Supplies live operational thresholds, weight limits, COD caps, and maintenance banners from the `system_settings` table to override static text in `company_policies.md`.
 
 #### Expected Success Response (`200 OK`)
 ```json
 {
   "data": {
-    "max_parcel_weight_kg": 25.0,
-    "max_cod_amount_cents": 3500000,
-    "fuel_surcharge_percentage": 4.5,
-    "sla_express_hours": 24,
-    "same_day_cutoff": "14:00",
-    "updated_at": "2026-10-26T10:00:00Z"
+    "parcels.max_weight_kg": 25.0,
+    "parcels.max_cod_cents": 3500000,
+    "ops.board_refresh_seconds": 30,
+    "ops.maintenance_banner": ""
   }
 }
 ```
 
-> **Dynamic Precedence Invariant:** Whenever operational quantities, rates, or limits in `GET /api/v1/admin/system-configurations` conflict with text in `company_policies.md`, the live API configuration takes absolute precedence.
+> **Dynamic Precedence Invariant:** Whenever operational quantities, rates, or limits in `GET /api/v1/admin/settings` conflict with text in `company_policies.md`, the live API settings take absolute precedence.
 
 ---
 
@@ -562,6 +560,6 @@ The containerized test artifact exposes the following endpoints for automated E2
 - [x] **Member 2 (Pricing):** Standardized on `POST /api/v1/pricing/quotes` with integer `fee_cents`.
 - [x] **Member 4 (Merchants):** Standardized on singular `POST /api/v1/merchant/orders` and `parcels:read` scoped API keys for external MCP clients.
 - [x] **Member 5 (Tracking):** Confirmed public endpoint `GET /api/v1/tracking/public/{trackingNumber}` masks PII.
-- [x] **Member 7 (Gateway/Admin):** Confirmed Traefik `PathPrefix('/api/v1/ai')` routes REST and MCP SSE; live configurations queried via `GET /api/v1/admin/system-configurations`.
+- [x] **Member 7 (Gateway/Admin):** Confirmed Traefik `PathPrefix('/api/v1/ai')` routes REST and MCP; live system settings queried via `GET /api/v1/admin/settings`.
 - [x] **Member 8 (Events):** Event names aligned to `parcel.booked.v1`; queue `q.webhooks.dispatcher`; DLQ `swiftdrop.dlq`; compressed retries via `WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`; SSRF test flags `WEBHOOK_ALLOW_INSECURE_HTTP=true` and `WEBHOOK_ALLOWED_HOSTS=mock-webhook,localhost`.
 - [x] **Member 9 (DevOps):** Standalone `mock-webhook:9999` container added to Compose; `make up` and `make seed` standardized.

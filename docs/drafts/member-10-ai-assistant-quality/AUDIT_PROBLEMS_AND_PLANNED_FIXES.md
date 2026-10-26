@@ -236,9 +236,9 @@ test('Verify asynchronous webhook dispatch and strict multi-tenant isolation', a
 
 3. **Dynamic API Configuration & Precedence Rule (Live Overrides):**
    - Static markdown files can become outdated if operational rules change during runtime. Therefore, the `PolicyContextHydrator` also queries Member 7's approved Core API endpoint:
-     `GET /api/v1/admin/system-configurations` (cached in-memory with a 5-minute TTL).
+     `GET /api/v1/admin/settings` (cached in-memory with a 5-minute TTL).
    - **Strict Conflict Resolution Invariant:**
-     > **Rule:** *When any numerical threshold, rate, status, or limit in `GET /api/v1/admin/system-configurations` contradicts the text in `company_policies.md`, the live API data takes absolute precedence.*
+     > **Rule:** *When any numerical threshold, rate, status, or limit in `GET /api/v1/admin/settings` contradicts the text in `company_policies.md`, the live API data takes absolute precedence.*
 
 #### Concrete Example of Conflict Resolution:
 - **Static File (`company_policies.md`):**
@@ -247,7 +247,7 @@ test('Verify asynchronous webhook dispatch and strict multi-tenant isolation', a
   - Maximum allowable weight for domestic courier parcels is 30.0 kg.
   - Cash on Delivery (COD) limit: LKR 50,000.
   ```
-- **Live Core API Response (`GET /api/v1/admin/system-configurations`):**
+- **Live Core API Response (`GET /api/v1/admin/settings`):**
   ```json
   {
     "data": {
@@ -425,7 +425,7 @@ The following table maps the planned changes to each target file in `docs/drafts
 | :--- | :--- |
 | `doc-01-scope-and-responsibilities.md` | - Remove orphan `system_policies` table references.<br>- Clarify pure markdown policy hydration from `company_policies.md`.<br>- Confirm zero-database access invariant. |
 | `doc-02-functional-flows-and-business-rules.md` | - Update sequence diagrams: replace `POST /api/v1/merchants/orders` with `POST /api/v1/merchant/orders`.<br>- Update event names: replace `parcel.created` with `parcel.booked.v1`.<br>- Update queue names: `q.webhooks.dispatcher` and `swiftdrop.dlq`.<br>- Add multi-tenant webhook sequence with Merchant Alpha, Beta, and Chaos. |
-| `doc-03-internal-architecture-and-design.md` | - Remove `/api/v1/system/policies` hydrator arrow; ground hydrator directly from `company_policies.md` with dynamic live overrides from `GET /api/v1/admin/system-configurations`.<br>- Add `mock-webhook:9999` multi-tenant architecture and HTML dashboard component diagram.<br>- Document MCP SSE Dual-Channel architecture (Channel 1 downstream SSE, Channel 2 upstream HTTP POST). |
+| `doc-03-internal-architecture-and-design.md` | - Remove `/api/v1/system/policies` hydrator arrow; ground hydrator directly from `company_policies.md` with dynamic live overrides from `GET /api/v1/admin/settings`.<br>- Add `mock-webhook:9999` multi-tenant architecture and HTML dashboard component diagram.<br>- Document MCP SSE Dual-Channel architecture (Channel 1 downstream SSE, Channel 2 upstream HTTP POST). |
 | `doc-04-interface-and-integration-contract.md` | - Delete Endpoint 5 (`/api/v1/system/policies` and `/api/v1/admin/policies*`).<br>- Document `mock-webhook` receiver endpoints (`/webhooks/merchant-alpha`, `/webhooks/merchant-beta`, `/webhooks/merchant-chaos`, `GET /dashboard`, `GET /api/events`).<br>- Standardize environment variables (`AI_SERVICE_ROLE_TOKEN`, `LLM_*`).<br>- Document Dual-Mode Authentication (JWT for web portal, `parcels:read` scoped API keys for external MCP clients). |
 | `doc-05-data-and-persistence.md` | - Expand §B.3 to formally document the `mock-webhook` service specification, in-memory event schema, multi-tenant signing secrets, and HTML dashboard layout.<br>- Remove `system_policies` from Core Monolith table lists. |
 | `doc-06-testing-strategy-and-acceptance.md` | - Update Suite 2 (Scenario 2) to incorporate the multi-tenant webhook isolation test case.<br>- Document compressed retry timing (`WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`).<br>- Update CI commands to `make up` and `make seed`, listing the full 10-service topology. |

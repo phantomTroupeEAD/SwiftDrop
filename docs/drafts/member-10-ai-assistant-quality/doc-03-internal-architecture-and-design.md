@@ -84,7 +84,7 @@ flowchart TD
     subgraph ContextPrep["Context Assembly"]
         Hydrator["ContextHydrator"]
         LocalFile["company_policies.md (Base Knowledge)"] --> Hydrator
-        CoreAPI_Rules["Core API: GET /api/v1/admin/system-configurations<br/>(Live Dynamic Overrides - Highest Priority)"] --> Hydrator
+        CoreAPI_Rules["Core API: GET /api/v1/admin/settings<br/>(Live Dynamic Overrides - Highest Priority)"] --> Hydrator
     end
     
     Hydrator --> Orchestrator
@@ -122,7 +122,7 @@ Even though the AI Assistant is a stateless conversational layer, it rigorously 
    - `ActionPayload`: Structured UI navigation instruction (`action_type`, `url`, `prefill_data`).
    - `TariffQuote`: Value object holding base fare, weight surcharge, currency, and zone identifiers.
 3. **Domain Service — `ContextHydrator`:**
-   - Stateless domain service responsible for synthesizing static markdown policies (`company_policies.md`) with dynamic operational rules fetched from Core API (`GET /api/v1/admin/system-configurations`) into a coherent, delimiter-wrapped system prompt, enforcing the dynamic precedence rule.
+   - Stateless domain service responsible for synthesizing static markdown policies (`company_policies.md`) with dynamic operational rules fetched from Core API (`GET /api/v1/admin/settings`) into a coherent, delimiter-wrapped system prompt, enforcing the dynamic precedence rule.
 4. **Repository / Store Interface — `SessionStore`:**
    - Abstract interface for session persistence. Implemented via `InMemoryLRUSessionStore` with thread-safe locks and background TTL eviction.
 
