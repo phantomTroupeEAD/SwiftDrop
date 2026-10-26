@@ -35,23 +35,23 @@ spec:
             - {name: http, containerPort: 8080}
           envFrom:
             - configMapRef: {name: core-api-config}
-            - secretRef: {name: postgres-credentials}
+            - secretRef: {name: postgres-secrets}       # DATABASE_URL for swiftdrop_app (Member 9 A5)
           volumeMounts:
             - {name: jwt-public-key, mountPath: /run/keys, readOnly: true}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits: {memory: 256Mi}   # no CPU limit: avoids throttling; HPA uses the request
-          startupProbe:
-            httpGet: {path: /livez, port: http}
+          startupProbe:                            # health paths: Member 9 A2
+            httpGet: {path: /health/live, port: http}
             periodSeconds: 2
             failureThreshold: 15
           readinessProbe:
-            httpGet: {path: /readyz, port: http}   # checks the database
+            httpGet: {path: /health/ready, port: http}   # checks PostgreSQL only (A2)
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 2
           livenessProbe:
-            httpGet: {path: /livez, port: http}    # process only: a DB outage must NOT restart pods
+            httpGet: {path: /health/live, port: http}    # process only: a DB outage must NOT restart pods
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3

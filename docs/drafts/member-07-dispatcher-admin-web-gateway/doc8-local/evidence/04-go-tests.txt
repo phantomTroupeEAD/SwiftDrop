@@ -1,13 +1,14 @@
-cd core-api && TEST_DATABASE_URL="postgres://swiftdrop_app:app_dev_only@localhost:5432/swiftdrop_db?sslmode=disable" go test -race -count=1 -cover ./...
+cd core-api && TEST_DATABASE_URL="postgres://swiftdrop_app:app_dev_only@localhost:5432/swiftdrop_db?sslmode=disable" TEST_CLEANUP_DATABASE_URL="postgres://swiftdrop_migrator:migrator_dev_only@localhost:5432/swiftdrop_db?sslmode=disable" go test -race -count=1 -cover ./...
 	swiftdrop.local/m7/core-api/cmd/api		coverage: 0.0% of statements
 	swiftdrop.local/m7/core-api/cmd/devtoken		coverage: 0.0% of statements
 	swiftdrop.local/m7/core-api/cmd/seed		coverage: 0.0% of statements
-ok  	swiftdrop.local/m7/core-api/internal/admin/application	1.017s	coverage: 15.3% of statements
-ok  	swiftdrop.local/m7/core-api/internal/admin/domain	1.023s	coverage: 94.5% of statements
-ok  	swiftdrop.local/m7/core-api/internal/admin/infrastructure	1.113s	coverage: 51.5% of statements
+ok  	swiftdrop.local/m7/core-api/internal/admin/application	1.017s	coverage: 13.3% of statements
+ok  	swiftdrop.local/m7/core-api/internal/admin/domain	1.021s	coverage: 98.1% of statements
+ok  	swiftdrop.local/m7/core-api/internal/admin/infrastructure	1.203s	coverage: 55.9% of statements
 	swiftdrop.local/m7/core-api/internal/admin/transport		coverage: 0.0% of statements
+ok  	swiftdrop.local/m7/core-api/internal/merchants	1.158s	coverage: 96.3% of statements
 ?   	swiftdrop.local/m7/core-api/internal/platform/apperr	[no test files]
-ok  	swiftdrop.local/m7/core-api/internal/platform/auth	1.796s	coverage: 59.2% of statements
-ok  	swiftdrop.local/m7/core-api/internal/platform/config	1.018s	coverage: 85.3% of statements
+ok  	swiftdrop.local/m7/core-api/internal/platform/auth	1.620s	coverage: 59.2% of statements
+ok  	swiftdrop.local/m7/core-api/internal/platform/config	1.017s	coverage: 84.4% of statements
 	swiftdrop.local/m7/core-api/internal/platform/obs		coverage: 0.0% of statements
-ok  	swiftdrop.local/m7/core-api/internal/platform/web	1.023s	coverage: 100.0% of statements
+ok  	swiftdrop.local/m7/core-api/internal/platform/web	1.020s	coverage: 98.4% of statements

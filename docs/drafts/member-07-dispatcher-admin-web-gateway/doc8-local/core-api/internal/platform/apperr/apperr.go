@@ -13,6 +13,7 @@ var (
 	ErrConcurrentConflict = errors.New("concurrent modification")
 	ErrPrefixConflict     = errors.New("postal prefix conflict")
 	ErrZoneCodeTaken      = errors.New("zone code taken")
+	ErrZoneNotFound       = errors.New("zone not found")
 	ErrReasonRequired     = errors.New("reason required")
 	ErrBusy               = errors.New("busy, try again")
 	ErrUnavailable        = errors.New("dependency unavailable")

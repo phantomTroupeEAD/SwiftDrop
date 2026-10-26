@@ -9,33 +9,44 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"swiftdrop.local/m7/core-api/internal/admin/application"
+	"swiftdrop.local/m7/core-api/internal/merchants"
 	"swiftdrop.local/m7/core-api/internal/platform/apperr"
 	"swiftdrop.local/m7/core-api/internal/platform/obs"
 	"swiftdrop.local/m7/core-api/internal/platform/web"
 )
 
 type Handlers struct {
-	Svc     *application.Service
-	Metrics *obs.Metrics
+	Svc          *application.Service
+	Metrics      *obs.Metrics
+	Merchants    merchants.AdminService   // Member 4's facade (Doc 1 R-02)
+	Reports      application.ReportReader // Members 2 and 3 read interfaces
+	ReportSource string                   // shown in the report so stand-in data is never mistaken for real data
 }
 
-// Register mounts every admin route behind RequireRole(ADMIN). There is no admin
-// route without the guard (Doc 7 B-01).
+// Register mounts every admin route behind RequireRole. There is no admin route
+// without the guard (Doc 7 B-01). Only GET /api/v1/zones is public (Doc 1 R-18).
 func (h *Handlers) Register(mux *http.ServeMux) {
+	mux.Handle(obs.Route("GET /api/v1/zones", http.HandlerFunc(h.publicZones)))
+	reports := web.RequireRole(web.RoleAdmin, web.RoleDispatcher) // Doc 1 R-16
+	mux.Handle(obs.Route("GET /api/v1/admin/reports/deliveries", reports(http.HandlerFunc(h.deliveryReport))))
 	admin := web.RequireRole(web.RoleAdmin)
 	routes := map[string]http.HandlerFunc{
-		"GET /api/v1/admin/zones":               h.listZones,
-		"POST /api/v1/admin/zones":              h.createZone,
-		"GET /api/v1/admin/zones/{id}":          h.getZone,
-		"PATCH /api/v1/admin/zones/{id}":        h.updateZone,
-		"PATCH /api/v1/admin/zones/{id}/status": h.setStatus,
-		"GET /api/v1/admin/settings":            h.listSettings,
-		"PUT /api/v1/admin/settings/{key}":      h.updateSetting,
-		"GET /api/v1/admin/audit-logs":          h.listAudit,
+		"GET /api/v1/admin/merchants":                h.listMerchants,
+		"GET /api/v1/admin/merchants/{id}":           h.getMerchant,
+		"POST /api/v1/admin/merchants/{id}/{action}": h.changeMerchantStatus,
+		"GET /api/v1/admin/zones":                    h.listZones,
+		"POST /api/v1/admin/zones":                   h.createZone,
+		"GET /api/v1/admin/zones/{id}":               h.getZone,
+		"PATCH /api/v1/admin/zones/{id}":             h.updateZone,
+		"PATCH /api/v1/admin/zones/{id}/status":      h.setStatus,
+		"GET /api/v1/admin/settings":                 h.listSettings,
+		"PUT /api/v1/admin/settings/{key}":           h.updateSetting,
+		"GET /api/v1/admin/audit-logs":               h.listAudit,
 	}
 	for pattern, fn := range routes {
 		mux.Handle(obs.Route(pattern, admin(fn)))
@@ -203,4 +214,155 @@ func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, 200, rows)
+}
+
+var postalCodePattern = regexp.MustCompile(`^[0-9]{5}$`)
+
+// publicZones lists enabled zones for booking forms, or finds the zone of one
+// postal code. No sign-in; only id, code and name are shown (Doc 1 R-18).
+func (h *Handlers) publicZones(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	if pc, ok := r.URL.Query()["postal_code"]; ok {
+		if len(pc) != 1 || !postalCodePattern.MatchString(pc[0]) {
+			h.fail(w, r, fmt.Errorf("%w: postal_code must be 5 digits", apperr.ErrValidation))
+			return
+		}
+		z, err := h.Svc.Store.ZoneForPostalCode(r.Context(), pc[0])
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		replyCached(w, z)
+		return
+	}
+	zs, err := h.Svc.Store.ListPublicZones(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if zs == nil {
+		zs = []application.PublicZone{}
+	}
+	replyCached(w, zs)
+}
+
+func replyCached(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+}
+
+func (h *Handlers) deliveryReport(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rep, err := h.Svc.DeliveryReport(r.Context(), h.Reports, h.ReportSource, q.Get("from"), q.Get("to"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	reply(w, 200, rep)
+}
+
+// ---- Merchant admin: route and role check here, rules in Member 4's module ----
+
+var merchantActions = map[string]string{"approve": "APPROVE", "reject": "REJECT", "suspend": "SUSPEND", "reinstate": "REINSTATE", "disable": "DISABLE"}
+
+var merchantStatuses = map[string]bool{"PENDING": true, "APPROVED": true, "REJECTED": true, "SUSPENDED": true, "DISABLED": true}
+
+// merchantFail passes Member 4's error codes through unchanged (their OpenAPI).
+func (h *Handlers) merchantFail(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, merchants.ErrNotFound):
+		web.WriteCode(w, r, 404, "MERCHANT_NOT_FOUND", "Merchant not found")
+	case errors.Is(err, merchants.ErrVersionConflict):
+		h.Metrics.Inc("admin_conflicts_total", "Admin writes refused by a conflict.", "kind", "merchant_version")
+		web.WriteCode(w, r, 409, "MERCHANT_VERSION_CONFLICT", "Someone else changed this merchant. Reload and try again")
+	case errors.Is(err, merchants.ErrInvalidTransition):
+		web.WriteCode(w, r, 409, "MERCHANT_INVALID_TRANSITION", "This action is not allowed in the merchant's current status")
+	case errors.Is(err, merchants.ErrReasonRequired):
+		web.WriteError(w, r, apperr.ErrReasonRequired)
+	case errors.Is(err, merchants.ErrValidation):
+		web.WriteError(w, r, apperr.ErrValidation)
+	default:
+		h.fail(w, r, err)
+	}
+}
+
+func (h *Handlers) listMerchants(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := merchants.ListFilter{Query: strings.TrimSpace(q.Get("q"))}
+	if s := q.Get("status"); s != "" {
+		if !merchantStatuses[s] {
+			h.fail(w, r, fmt.Errorf("%w: unknown status", apperr.ErrValidation))
+			return
+		}
+		f.Status = &s
+	}
+	if len(f.Query) > 100 {
+		h.fail(w, r, fmt.Errorf("%w: q is at most 100 characters", apperr.ErrValidation))
+		return
+	}
+	page, okP := intParam(q.Get("page"), 1, 1, 10000)
+	per, okS := intParam(q.Get("per_page"), 20, 1, 100)
+	if !okP || !okS {
+		h.fail(w, r, fmt.Errorf("%w: page must be 1 or more and per_page 1 to 100", apperr.ErrValidation))
+		return
+	}
+	res, err := h.Merchants.ListMerchants(r.Context(), f, merchants.Page{Number: page, Size: per})
+	if err != nil {
+		h.merchantFail(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": res.Items, "meta": map[string]int{"page": page, "per_page": per, "total": res.Total}})
+}
+
+func intParam(s string, def, lo, hi int) (int, bool) {
+	if s == "" {
+		return def, true
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil && n >= lo && n <= hi
+}
+
+func (h *Handlers) getMerchant(w http.ResponseWriter, r *http.Request) {
+	m, err := h.Merchants.GetMerchant(r.Context(), r.PathValue("id"))
+	if err != nil {
+		h.merchantFail(w, r, err)
+		return
+	}
+	reply(w, 200, m)
+}
+
+type merchantStatusInput struct {
+	ExpectedVersion int    `json:"expected_version"`
+	Reason          string `json:"reason,omitempty"`
+}
+
+func (h *Handlers) changeMerchantStatus(w http.ResponseWriter, r *http.Request) {
+	action, ok := merchantActions[r.PathValue("action")]
+	if !ok {
+		web.WriteError(w, r, apperr.ErrNotFound)
+		return
+	}
+	var in merchantStatusInput
+	if err := decode(w, r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.ExpectedVersion < 1 {
+		h.fail(w, r, fmt.Errorf("%w: expected_version is required", apperr.ErrValidation))
+		return
+	}
+	a := actor(r)
+	m, err := h.Merchants.ChangeStatus(r.Context(), merchants.ChangeStatusCommand{
+		MerchantID: r.PathValue("id"), Action: action, ExpectedVersion: in.ExpectedVersion, Reason: in.Reason,
+		Actor: merchants.Actor{UserID: a.ID, Role: a.Role, RequestID: a.RequestID, ClientIP: a.IP, UserAgent: a.UserAgent},
+	})
+	if err != nil {
+		h.merchantFail(w, r, err)
+		return
+	}
+	h.changed("MERCHANT_" + action) // Member 4 writes the audit row in its own transaction
+	reply(w, 200, m)
 }

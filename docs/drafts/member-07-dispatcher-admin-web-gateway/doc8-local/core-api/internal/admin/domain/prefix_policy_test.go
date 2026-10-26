@@ -6,15 +6,15 @@ import "testing"
 func TestPrefixOverlapPolicy(t *testing.T) {
 	p := func(s string) PostalPrefix { x, _ := NewPostalPrefix(s); return x }
 	existing := []PrefixOwner{
-		{Prefix: p("00300"), ZoneCode: "ZONE_COLOMBO_CENTRAL"},
-		{Prefix: p("20000"), ZoneCode: "ZONE_KANDY"},
-		{Prefix: p("00400"), ZoneCode: "ZONE_COLOMBO_SOUTH"},
+		{Prefix: p("00300"), ZoneID: "ZONE_COLOMBO_CENTRAL"},
+		{Prefix: p("20000"), ZoneID: "ZONE_KANDY"},
+		{Prefix: p("00400"), ZoneID: "ZONE_COLOMBO_SOUTH"},
 	}
 	pol := PrefixOverlapPolicy{}
 
 	t.Run("exact duplicate in another zone clashes", func(t *testing.T) {
 		c := pol.Clashes("ZONE_COLOMBO_SOUTH", []PostalPrefix{p("00300")}, existing)
-		if len(c) != 1 || c[0].Existing.ZoneCode != "ZONE_COLOMBO_CENTRAL" {
+		if len(c) != 1 || c[0].Existing.ZoneID != "ZONE_COLOMBO_CENTRAL" {
 			t.Fatalf("got %+v", c)
 		}
 	})

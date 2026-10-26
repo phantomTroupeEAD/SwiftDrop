@@ -4,9 +4,11 @@
 > **Author:** Member 7 — Dispatcher/Admin UI, Courier Web, Traefik Gateway  
 > **Target Module / Location:** `web/src/features/dispatcher-admin/` (ops + courier screens), `core-api/internal/admin/` (admin module), `deploy/gateway/traefik/` (gateway)  
 > **Key Upstream Dependencies:** Member 1 (Auth, RBAC, JWT), Member 2 (Parcels, Pricing), Member 3 (Dispatch, Delivery), Member 4 (Merchants), Member 5 (Tracking SSE), Member 8 (Outbox, events), Member 9 (Compose, Kubernetes)  
-> **Open Questions / Needs Clarification:** U-18 to U-27 in section 12: deliver and fail endpoints, failure reason codes, auto RETURNED after 3rd fail, reattempt with new courier, courier status values, Idempotency-Key on other POSTs, POD upload method, merchant REJECTED/DISABLED
+> **Open Questions / Needs Clarification:** Section 12. The 26 Oct review closed U-18 to U-23, U-25 to U-27 (Member 3 and Member 4 contracts). Still open: U-24 (Idempotency-Key on the remaining writes) and the new U-67 (assignment status name)
 
-**Module:** Dispatcher/Admin/Courier Frontend, Admin Backend Module & API Gateway (Member 7) **Project:** SwiftDrop Parcel Delivery & Courier Management System **Based on:** Document 1 v3 (Module Scope), SRS v1.0 (sections 4, 5, 6.2), ADR-001, ADR-003, ADR-004, domain-boundaries.md, database-schema.md, api-conventions.md, sequence-diagrams.md, security-notes.md, web/README.md, deploy/gateway/ and the module API.md and README.md files **Status:** Draft v2 (adds diagrams to every flow that had none; text and rules unchanged from v1). Items marked **\[TBD\]** wait for a teammate or a team decision. Open questions reuse the U-xx numbers from Document 1 section 11.3; new ones start at U-18 (section 12). **Date:** 24 October 2026
+**Module:** Dispatcher/Admin/Courier Frontend, Admin Backend Module & API Gateway (Member 7) **Project:** SwiftDrop Parcel Delivery & Courier Management System **Based on:** Document 1 v4 (Module Scope), Member 3 Doc 4, Member 4 Doc 4 and OpenAPI, Member 9 team agreements, SRS v1.0 (sections 4, 5, 6.2), ADR-001, ADR-003, ADR-004, domain-boundaries.md, database-schema.md, api-conventions.md, sequence-diagrams.md, security-notes.md, web/README.md, deploy/gateway/ and the module API.md and README.md files **Status:** Draft v3 (applies the 26 October docs audit). Items marked **\[TBD\]** wait for a teammate or a team decision. Decisions R-01 to R-20 are listed in Document 1 section 11.4. **Date:** 26 October 2026
+
+> **What changed in v3.** Sections 4 to 8 now use Member 3's dispatch, courier and delivery endpoints (cancel, reschedule, start-run, proof-photo, complete, failed) and Member 4's merchant admin routes; the reassign, reattempt and return endpoints are gone. Zones have a text id and no money. Reports use `/admin/reports/deliveries` for ADMIN and DISPATCHER. A public zone list (A-06) was added. Gateway flows use the security-notes.md limits and CORS, strip `X-Tenant-ID`, and use `X-Request-ID`.
 
 ## 1. How to read this document
 
@@ -39,7 +41,7 @@ Important reminder from Document 1: my screens and the gateway **show and route*
 
 | Actor | Role in JWT | Uses | Notes |
 | --- | --- | --- | --- |
-| Dispatcher | DISPATCHER | `/ops/dispatch`, `/ops/couriers` | Assigns parcels, reviews failed deliveries |
+| Dispatcher | DISPATCHER | `/ops/dispatch`, `/ops/couriers`, `/ops/failed-deliveries`, `/ops/reports` | Assigns parcels, schedules reattempts, reads reports |
 | Administrator | ADMIN | All `/ops/*` screens | Everything a dispatcher can do, plus merchants, users, zones, pricing, reports |
 | Courier | COURIER | `/courier/*` on a phone | Sees only own tasks |
 | Core API modules | none (system) | Identity (M1), Parcels and Pricing (M2), Dispatch and Delivery (M3), Merchants (M4), Admin (M7 shared) | Make every business decision |
@@ -81,10 +83,11 @@ flowchart LR
 | T-06 | A merchant applies or a merchant must be stopped | Admin | F-08 |
 | T-07 | A new staff member joins, changes job or leaves | Admin | F-09 |
 | T-08 | The business opens a new area or changes delivery prices | Admin | F-10, F-11, A-01, A-02 |
-| T-09 | Management wants delivery numbers for a period | Admin (dispatcher \[TBD U-02\]) | F-12, A-03 |
+| T-09 | Management wants delivery numbers for a period | Admin, dispatcher | F-12, A-03 |
 | T-10 | An incident or dispute needs an audit trail check | Admin | F-13, A-04 |
 | T-11 | A parcel has wrong status data and must be fixed | Admin | F-14 \[TBD U-08\] |
 | T-12 | Courier starts the day, collects, delivers or fails a delivery | Courier | C-01 to C-05 |
+| T-16 | A booking form needs the list of zones, or the zone for a postal code | Member 6's screens | A-06 |
 | T-13 | Any HTTP request reaches the system | Any client | G-01 to G-05 |
 | T-14 | A teammate needs a new route or limit | Members 1 to 10 | G-06 |
 | T-15 | Gateway config is changed and deployed | Member 7, Member 9 | G-07 |
@@ -101,7 +104,8 @@ These rules apply to every flow in sections 5 and 6. Flows do not repeat them.
 | R-API-02 | Every protected call sends `Authorization: Bearer <access token>`. The token is read from memory only | \[Repo\] ADR-003 4.1 |
 | R-API-03 | The client never sends who the user is (actor id, role) in the body. The backend reads it from the token | \[Repo\] security-notes 1, INV-03 |
 | R-API-04 | The client sends only the fields listed in the API contract. It never sends a target status chosen by the user, except where the contract has an action field | INV-03 |
-| R-API-05 | Every POST that creates or changes something sends `Idempotency-Key: <uuid-v4>` (rules in 3.3) | \[Repo\] web/README 4. Backend support outside booking \[TBD U-24\] |
+| R-API-05 | Every POST that creates or changes something sends `Idempotency-Key: <uuid-v4>` (rules in 3.3). Backends that do not list it simply ignore it | \[Repo\] web/README 4; Member 3 lists it on assignments and complete (U-24 for the rest) |
+| R-API-09 | The client never sends `X-Tenant-ID`, `X-User-ID` or `X-User-Role`; it sends `X-Request-ID` when it has one | Doc 1 R-11, R-15 |
 | R-API-06 | Responses use the standard envelope: `data` for success, `error.code`, `error.message`, `error.correlation_id`, `error.details[]` for errors | \[Repo\] api-conventions 2 |
 | R-API-07 | Money arrives as integer cents in LKR and is shown with `formatLKR(cents)`. The screen never adds, multiplies or rounds money | \[Repo\] web/README 5, INV-13 |
 | R-API-08 | Times arrive in UTC. Screens show them in Sri Lanka time (Asia/Colombo, UTC+05:30) | \[Repo\] database-schema 3.5 |
@@ -195,21 +199,21 @@ flowchart LR
 
 These state machines belong to other modules. I copy them here so my screens show the right buttons. If a module changes its machine, this section must be updated.
 
-### 4.1 Parcel lifecycle (owner: Member 2) \[Repo\] domain-boundaries.md 3
+### 4.1 Parcel lifecycle (owner: Member 2; dispatch steps by Member 3) \[Repo\] domain-boundaries.md 3, Member 3 Doc 4
+
+The arrows below are the ones my screens can trigger through Member 3's endpoints (Doc 1 R-01).
 
 ```mermaid
 stateDiagram-v2
     [*] --> CREATED: Booked by customer or merchant
     CREATED --> ASSIGNED: Dispatcher assigns courier (F-04)
-    CREATED --> CANCELLED: Sender or admin cancels
-    ASSIGNED --> PICKED_UP: Courier scans parcel (C-02)
-    ASSIGNED --> CANCELLED: Dispatcher or admin cancels, reason required
-    PICKED_UP --> IN_TRANSIT: Courier or hub scan
-    IN_TRANSIT --> OUT_FOR_DELIVERY: Dispatcher or final courier starts run (C-03)
-    OUT_FOR_DELIVERY --> DELIVERED: Courier records proof (C-04)
-    OUT_FOR_DELIVERY --> ATTEMPT_FAILED: Courier reports failure (C-05)
-    ATTEMPT_FAILED --> OUT_FOR_DELIVERY: Dispatcher approves reattempt, attempts below 3 (F-06)
-    ATTEMPT_FAILED --> RETURNED: Dispatcher returns parcel (F-06)
+    CREATED --> CANCELLED: Sender cancels
+    ASSIGNED --> CREATED: Dispatcher cancels assignment (F-05)
+    ASSIGNED --> OUT_FOR_DELIVERY: Courier starts run (C-03)
+    OUT_FOR_DELIVERY --> DELIVERED: Courier completes with proof (C-04)
+    OUT_FOR_DELIVERY --> ATTEMPT_FAILED: Courier reports failure, attempts below 3 (C-05)
+    OUT_FOR_DELIVERY --> RETURNED: 3rd failure or REFUSED_BY_RECIPIENT, automatic (C-05)
+    ATTEMPT_FAILED --> ASSIGNED: Dispatcher schedules reattempt (F-06)
     DELIVERED --> [*]
     RETURNED --> [*]
     CANCELLED --> [*]
@@ -217,29 +221,27 @@ stateDiagram-v2
 
 **Permitted transitions and which of my screens can ask for them**
 
-| From | To | Who may ask | My screen and button | Endpoint |
+| From | To | Who may ask | My screen and button | Endpoint (Member 3 Doc 4) |
 | --- | --- | --- | --- | --- |
-| CREATED | ASSIGNED | Dispatcher, admin | Dispatch board, "Assign" | `POST /api/v1/dispatch/assignments` \[Repo\] |
-| CREATED | CANCELLED | Sender, admin | Not on my screens \[TBD U-08\] | not documented |
-| ASSIGNED | CANCELLED | Dispatcher, admin | Dispatch board, "Cancel" \[TBD\] | not documented |
-| ASSIGNED | PICKED\_UP | Assigned courier | Courier task, "Picked up" (after scan) | \[TBD U-27\] |
-| PICKED\_UP | IN\_TRANSIT | Courier, hub operator | Courier task, "In transit" | \[TBD U-27\] |
-| IN\_TRANSIT | OUT\_FOR\_DELIVERY | Dispatcher, final courier | Courier task, "Start delivery" | \[TBD U-27\] |
-| OUT\_FOR\_DELIVERY | DELIVERED | Assigned courier | POD screen, "Confirm delivery" | \[TBD U-18\] |
-| OUT\_FOR\_DELIVERY | ATTEMPT\_FAILED | Assigned courier | Courier task, "Delivery failed" | \[TBD U-19\] |
-| ATTEMPT\_FAILED | OUT\_FOR\_DELIVERY | Dispatcher (admin \[TBD U-07\]) | Failed-delivery review, "Reattempt" | Requested from M2/M3 |
-| ATTEMPT\_FAILED | RETURNED | Dispatcher, hub operator | Failed-delivery review, "Return to sender" | Requested from M2/M3 |
+| CREATED | ASSIGNED | Dispatcher, admin | Dispatch board, "Assign" | `POST /api/v1/dispatch/assignments` (3.5) |
+| ASSIGNED | CREATED (assignment CANCELLED) | Dispatcher, admin | Dispatch board, "Unassign" or first half of "Reassign" | `POST /api/v1/dispatch/assignments/{id}/cancel` (3.6) |
+| ASSIGNED | OUT\_FOR\_DELIVERY | Assigned courier | Courier task, "Start run" (one or many) | `POST /api/v1/courier/parcels/{id}/start-run`, `POST /api/v1/courier/runs/start-batch` (3.10, 3.11) |
+| OUT\_FOR\_DELIVERY | DELIVERED | Assigned courier | POD screen, "Confirm delivery" | `POST /api/v1/deliveries/{id}/complete` (3.13) |
+| OUT\_FOR\_DELIVERY | ATTEMPT\_FAILED or RETURNED | Assigned courier | Courier task, "Delivery failed" | `POST /api/v1/deliveries/{id}/failed` (3.14) |
+| ATTEMPT\_FAILED | ASSIGNED | Dispatcher, admin | Failed-delivery review, "Schedule reattempt" | `POST /api/v1/dispatch/parcels/{id}/reschedule` (3.7) |
+| CREATED | CANCELLED | Sender | Not on my screens | Member 2 |
 
 **Rules for my screens**
 
 - A button is shown only when the parcel's current status allows that transition in the table above. This is for usability only (INV-01). The backend still checks.
 - DELIVERED, RETURNED and CANCELLED are final. No action buttons are shown for them.
-- Every status change must be one database transaction that updates `parcels`, adds a row to `parcel_status_history` and adds an `outbox_events` row \[Repo\] database-schema 3.4. My screens never see a "half done" change.
+- There is **no** dispatcher "Return" button. Member 3 sets RETURNED itself after the 3rd failed attempt or a refusal (BR-ATM-004).
+- Every status change is one database transaction that updates `parcels`, adds a row to `parcel_status_history` and adds an `outbox_events` row \[Repo\] database-schema 3.4. My screens never see a "half done" change.
 - A rejected (illegal) transition creates no history and no event (SRS AT-007). The screen shows the error and refreshes.
 
-**Known conflict:** dispatch README rule 2 says a parcel can be **assigned** when it is CREATED **or ATTEMPT\_FAILED**, but the state machine has no ATTEMPT\_FAILED to ASSIGNED arrow. So it is not clear how a reattempt with a **different** courier works **\[TBD U-22\]**.
+**Known gap (not mine to decide):** Member 3's start-run goes from ASSIGNED straight to OUT\_FOR\_DELIVERY, while domain-boundaries.md also has PICKED\_UP and IN\_TRANSIT. The docs audit (decision 6) asks Members 2 and 3 to settle the path. My screens show whatever status the API returns, including PICKED\_UP and IN\_TRANSIT, so no screen change is needed either way.
 
-### 4.2 Delivery attempt and failed-delivery decision (owners: Members 2 and 3) \[Repo\] ADR-004
+### 4.2 Delivery attempt and failed-delivery decision (owner: Member 3) \[Repo\] ADR-004, Member 3 Doc 2
 
 A **delivery attempt** is a separate record from the parcel status. An attempt row is never changed after it is written (ADR-004 section 2).
 
@@ -247,92 +249,82 @@ A **delivery attempt** is a separate record from the parcel status. An attempt r
 stateDiagram-v2
     [*] --> OUT_FOR_DELIVERY
     OUT_FOR_DELIVERY --> DELIVERED: Attempt outcome SUCCESS with proof
-    OUT_FOR_DELIVERY --> ATTEMPT_FAILED: Attempt outcome FAILED, attempt_count + 1
-    state Review <<choice>>
-    ATTEMPT_FAILED --> Review: Dispatcher opens failed-delivery review
-    Review --> OUT_FOR_DELIVERY: attempt_count below 3 and reason allows reattempt
-    Review --> RETURNED: attempt_count is 3, or reason is terminal, or dispatcher decides
+    state Count <<choice>>
+    OUT_FOR_DELIVERY --> Count: Attempt outcome FAILED
+    Count --> RETURNED: attempt 3, or REFUSED_BY_RECIPIENT
+    Count --> ATTEMPT_FAILED: otherwise
+    ATTEMPT_FAILED --> ASSIGNED: Dispatcher schedules reattempt (same or new courier)
     DELIVERED --> [*]
     RETURNED --> [*]
 ```
 
-**Failure reason codes and what the review screen suggests** \[Repo\] ADR-004 section 4
+**Failure reason codes** (Member 3 BR-ATM-001, same list as ADR-004) and what the review screen suggests
 
-| Reason code | Reattempt allowed? | Suggested button on review screen |
+| Reason code | What Member 3 does | Review screen |
 | --- | --- | --- |
-| RECIPIENT\_UNAVAILABLE | Yes | Reattempt (default) |
-| CUSTOMER\_REQUESTED\_RESCHEDULE | Yes | Reattempt (default) |
-| ACCESS\_RESTRICTED | Yes | Reattempt (default) |
-| INVALID\_ADDRESS | No, address must be fixed first | Reattempt disabled with text "Address must be corrected first" **\[TBD: who edits the address and with which endpoint\]** |
-| REFUSED\_BY\_RECIPIENT | No, immediate return | Return to sender (default) |
-| DAMAGED\_IN\_TRANSIT | No, hold for inspection | Return to sender, or no action until inspected **\[TBD with M3\]** |
-| OTHER | Dispatcher decides | Both buttons; the note (at least 15 characters) is shown in full |
+| RECIPIENT\_UNAVAILABLE | ATTEMPT\_FAILED (RETURNED on the 3rd) | "Schedule reattempt" (default) |
+| CUSTOMER\_REQUESTED\_RESCHEDULE | Same | "Schedule reattempt" with a date and time window |
+| ACCESS\_RESTRICTED | Same | "Schedule reattempt" |
+| INVALID\_ADDRESS | Same | Reattempt shown with the warning "Check the address first" **\[TBD: who corrects an address, U-08\]** |
+| REFUSED\_BY\_RECIPIENT | RETURNED at once | Read only: "Returned to sender (refused)" |
+| DAMAGED\_IN\_TRANSIT | Same as the first three | "Schedule reattempt", with the note shown in full |
+| OTHER (note of at least 15 characters) | Same as the first three | Note shown in full |
 
-The "suggested" button is a hint only. The backend decides if the action is valid.
-
-**Known conflicts:**
-
-- delivery/README.md lists different codes (INCORRECT\_ADDRESS, PREMISES\_INACCESSIBLE, RECIPIENT\_REJECTED). I follow ADR-004 because it is an accepted decision record **\[TBD U-20\]**.
-- delivery/README.md rule 3 says the 3rd failure moves the parcel to RETURNED **automatically**. ADR-004 says a dispatcher reviews and returns it. The delivery API also answers `next_action: REATTEMPT_SCHEDULED`, which suggests automatic scheduling **\[TBD U-21\]**. Until decided, the review screen handles both cases: if the parcel is already RETURNED it shows "Returned automatically after 3 failed attempts" and no buttons.
+The "suggested" button is a hint only. The backend decides if the action is valid; a 4th attempt is refused with 400 `MAX_ATTEMPTS_EXCEEDED`.
 
 ### 4.3 Courier assignment (owner: Member 3)
 
-`courier_assignments.status` values are ASSIGNED, ACCEPTED, REJECTED, COMPLETED, CANCELLED \[Repo\] database-schema. The API does not yet expose accept or reject **\[TBD U-23\]**.
+The API returns assignment `status` values `ASSIGNED` (active) and `CANCELLED` (Member 3 Doc 4 3.5 and 3.6). Member 3's table design uses `ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED` (Member 3 Doc 5); Member 3 must make the two match **\[TBD U-67\]**. My screens show the API value as text and never compute it. There is no courier accept or reject step.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ASSIGNED: Dispatcher assigns (F-04)
-    ASSIGNED --> ACCEPTED: Courier accepts [TBD U-23]
-    ASSIGNED --> REJECTED: Courier rejects [TBD U-23]
-    ASSIGNED --> CANCELLED: Dispatcher reassigns or cancels (F-05)
-    ACCEPTED --> CANCELLED: Dispatcher reassigns (F-05)
-    ACCEPTED --> COMPLETED: Parcel reaches DELIVERED or RETURNED
-    ASSIGNED --> COMPLETED: Parcel reaches DELIVERED or RETURNED (if no accept step)
-    REJECTED --> [*]
+    [*] --> ASSIGNED: Dispatcher assigns (F-04) or reschedules (F-06)
+    ASSIGNED --> CANCELLED: Dispatcher cancels with reason (F-05)
+    ASSIGNED --> COMPLETED: Parcel reaches DELIVERED, ATTEMPT_FAILED or RETURNED
     CANCELLED --> [*]
     COMPLETED --> [*]
 ```
 
-**Rules** \[Repo\] SRS 5.3, dispatch README 2
+**Rules** \[Repo\] SRS 5.3, Member 3 Doc 2
 
 - A parcel has **at most one active** assignment at a time.
-- A courier cannot have more active assignments than their maximum capacity (default 25).
-- Only couriers who are active and on shift can get new work. Disabled couriers get none.
-- Reassignment keeps the old assignment row (it becomes CANCELLED) and records who did it and why.
-- "Active workload" must have a written definition from Member 3 (SRS 5.3). Until then, the board shows the `active_assignments` number from the API as is **\[TBD U-23\]**.
+- A courier cannot have more active assignments than their vehicle capacity (MOTORCYCLE 25, VAN 60, TRUCK 120).
+- Only couriers who are ON\_SHIFT can get new work (400 `COURIER_NOT_ON_SHIFT`).
+- Reassignment keeps the old assignment row (CANCELLED with `cancellation_reason`) and creates a new one (BR-DSP-005).
+- "Active workload" is Member 3's `active_assignments` number; the board shows it as is.
 
 ### 4.4 Courier operational status (owner: Member 3)
 
-The schema says AVAILABLE, BUSY, OFF\_DUTY. The board API example says ON\_SHIFT **\[TBD U-23\]**. The fleet screen shows whatever value the API returns, as text, and never computes it.
+Values: OFF\_SHIFT, ON\_SHIFT, ON\_BREAK, SUSPENDED (Member 3 Doc 4 3.8). The courier changes their own shift with `POST /api/v1/courier/shift`; a suspended courier gets 403 `COURIER_SUSPENDED`. The fleet screen shows the value as text and never computes it.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> OFF_DUTY
-    OFF_DUTY --> AVAILABLE: Shift starts
-    AVAILABLE --> BUSY: Has active work [TBD how computed]
-    BUSY --> AVAILABLE: Work finished
-    AVAILABLE --> OFF_DUTY: Shift ends
-    BUSY --> OFF_DUTY: Shift ends [TBD allowed with open tasks?]
+    [*] --> OFF_SHIFT
+    OFF_SHIFT --> ON_SHIFT: Courier starts shift
+    ON_SHIFT --> ON_BREAK: Courier takes a break
+    ON_BREAK --> ON_SHIFT: Break ends
+    ON_SHIFT --> OFF_SHIFT: Courier ends shift
+    ON_BREAK --> OFF_SHIFT: Courier ends shift
+    OFF_SHIFT --> SUSPENDED: Management suspends
+    SUSPENDED --> OFF_SHIFT: Management lifts suspension
 ```
 
-### 4.5 Merchant account (owner: Member 4)
-
-Repo statuses: PENDING, APPROVED, SUSPENDED (merchants README). SRS adds REJECTED and FR-ADM-005 adds "disable" **\[TBD U-26\]**.
+### 4.5 Merchant account (owner: Member 4) \[Repo\] Member 4 Doc 2 2.1 and OpenAPI
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: Merchant applies
-    PENDING --> APPROVED: Admin approves
-    PENDING --> REJECTED: Admin rejects, reason required [TBD U-26]
-    APPROVED --> SUSPENDED: Admin suspends, reason required
-    SUSPENDED --> APPROVED: Admin reinstates [TBD U-26]
-    APPROVED --> DISABLED: Admin disables [TBD U-26]
-    SUSPENDED --> DISABLED: Admin disables [TBD U-26]
+    PENDING --> APPROVED: approve
+    PENDING --> REJECTED: reject, reason required
+    APPROVED --> SUSPENDED: suspend, reason required
+    SUSPENDED --> APPROVED: reinstate
+    APPROVED --> DISABLED: disable, reason required
+    SUSPENDED --> DISABLED: disable, reason required
     REJECTED --> [*]
     DISABLED --> [*]
 ```
 
-**Rules:** every change writes an `audit_logs` row (action for example `MERCHANT_APPROVED`) \[Repo\] SRS FR-IAM-009, database-schema. A merchant that is not APPROVED cannot create orders (SRS AT-011). That check is done by Member 4, not by my screen.
+**Rules:** each action is `POST /api/v1/admin/merchants/{id}/{action}` with `expected_version`; reject, suspend and disable also need `reason` (5 to 500 characters). Disable revokes all API keys and turns off all webhooks. Every change writes an `audit_logs` row (for example `MERCHANT_APPROVED`) in the same transaction \[Repo\] SRS FR-IAM-009. A merchant that is not APPROVED cannot create orders (SRS AT-011). That check is done by Member 4, not by my screen.
 
 ### 4.6 Delivery zone and pricing rule (owners: admin module and Member 2)
 
@@ -346,7 +338,7 @@ stateDiagram-v2
 
 - A zone or rule is never deleted. It is disabled (database-schema 3.1, soft deletes only).
 - Pricing rules have a `version` and `effective_from` / `effective_to`. Editing a rule that is already in use should create a **new version**, so old quotes keep their rule version (SRS 5.2, pricing\_quotes stores `rule_version_id`) **\[TBD U-14: Member 2 to confirm "edit makes new version"\]**.
-- Field name for on/off: `active` in admin API.md, `enabled` in database-schema and Member 2's proposal **\[TBD U-13\]**. I use `enabled` in the screen model and map it.
+- The on/off field is `enabled` for both zones and rules (database-schema.md). Zones carry no money; any per-zone charge is a pricing rule (Doc 1 R-04).
 
 ### 4.7 Staff session in the browser (UI state only)
 
@@ -382,7 +374,7 @@ On page reload the in-memory token is gone. The app calls refresh once at start;
   - A3 Google sign-in: staff use email and password only **\[TBD with M1: may staff use Google?\]**.
 - **Failure flows:**
   - E1 Wrong password: 401 `AUTH_INVALID_CREDENTIALS`. Show "Email or password is wrong." Do not say which one.
-  - E2 Too many tries: 429. Show the wait message. The limit is 5 per minute per IP, burst 3 \[Repo\] security-notes 3; it is not yet in the gateway file (U-06).
+  - E2 Too many tries: 429. Show the wait message. The limit is 5 per minute per IP, burst 3 \[Repo\] security-notes 3; the repo gateway file lacks it and my proposed file adds it (G-02).
   - E3 Server down: show safe error with "Try again".
 - **Postconditions:** token in memory, refresh cookie set, role-based menu shown. Nothing stored in localStorage or sessionStorage (INV-11).
 - **Rules:** menu items are hidden by role for usability only (INV-01). Courier token storage differs in ADR-003 **\[TBD U-01\]**; until decided, couriers use the same in-memory rule as staff.
@@ -481,17 +473,17 @@ sequenceDiagram
 - **Trigger:** T-02; dispatcher opens `/ops/dispatch` or the 30-second timer fires. **Actors:** dispatcher or admin; Dispatch module (M3).
 - **Preconditions:** signed in as DISPATCHER or ADMIN.
 - **Main flow:**
-  1. Dispatcher picks a zone (default: last zone used in this browser tab, else the first zone in the list).
-  2. Screen calls `GET /api/v1/dispatch/board?zone_code=ZONE_1` \[Repo\].
-  3. Screen shows two panels: **Unassigned parcels** (tracking number, weight, city, age since created) and **Couriers** (name, status, load bar `active_assignments / max_capacity`).
-  4. Couriers at full capacity are shown with the text "Full" and greyed out, but still listed.
+  1. Dispatcher picks a zone. The zone picker is **required**, because Member 3's board needs `zone_id` (default: last zone used in this browser tab, else the first enabled zone from `GET /api/v1/admin/zones` or the public `GET /api/v1/zones`).
+  2. Screen calls `GET /api/v1/dispatch/board?zone_id=ZONE_COLOMBO_01` (Member 3 Doc 4 3.4).
+  3. Screen shows the `summary` line (unassigned parcels, couriers on shift, fleet capacity used) and two panels: **Parcels** (tracking number, weight, city, age, and `attempt_count` for ATTEMPT\_FAILED parcels) and **Couriers** (name, employee code, vehicle, shift status, load bar `active_assignments / max_capacity`).
+  4. Couriers with `capacity_available` 0 are shown with the text "Full" and greyed out, but still listed.
 - **Alternate flows:**
-  - A1 No unassigned parcels: empty state "No parcels waiting in this zone."
-  - A2 No active couriers: empty state "No couriers on shift in this zone." Assign buttons are disabled.
-  - A3 Parcels in ATTEMPT\_FAILED: shown in a separate "Needs review" tab that opens F-06 **\[TBD: does the board API return them, or a separate list?\]**.
-- **Failure flows:** 403 for a COURIER who types the address; 500 shows error with "Try again"; the last good data stays on screen with the label "Last updated hh:mm" when a timed refresh fails.
+  - A1 No parcels: empty state "No parcels waiting in this zone."
+  - A2 No couriers on shift: empty state "No couriers on shift in this zone." Assign buttons are disabled.
+  - A3 Parcels in ATTEMPT\_FAILED: the board returns them too (`status=ATTEMPT_FAILED` filter); they get a "Needs review" badge that opens F-06.
+- **Failure flows:** 400 if `zone_id` is missing or unknown (the picker prevents this); 403 for a COURIER who types the address; 500 shows error with "Try again"; the last good data stays on screen with the label "Last updated hh:mm" when a timed refresh fails.
 - **Postconditions:** none (read only).
-- **Rules:** the screen does not sort couriers by "best choice" or suggest one. That would be a business decision **\[TBD: Member 3 may add auto-suggest later\]**. Sorting by name or by load is allowed because it is display only.
+- **Rules:** the screen does not sort couriers by "best choice" or suggest one. That would be a business decision for Member 3. Sorting by name or by load is allowed because it is display only.
 
 **Figure F-03 Loading the board**
 
@@ -502,13 +494,13 @@ sequenceDiagram
     participant UI as Dispatch board
     participant GW as Traefik
     participant DSP as Core API dispatch (M3)
-    D->>UI: Open /ops/dispatch, pick zone
-    UI->>GW: GET /api/v1/dispatch/board?zone_code=ZONE_1
+    D->>UI: Open /ops/dispatch, pick zone (required)
+    UI->>GW: GET /api/v1/dispatch/board?zone_id=ZONE_COLOMBO_01
     GW->>DSP: forward
-    DSP-->>UI: 200 unassigned parcels and couriers with load
-    UI->>D: Show two panels
+    DSP-->>UI: 200 summary, parcels and couriers with load
+    UI->>D: Show summary and two panels
     loop Every 30 seconds (proposed)
-        UI->>GW: GET /api/v1/dispatch/board
+        UI->>GW: GET /api/v1/dispatch/board?zone_id=ZONE_COLOMBO_01
         alt OK
             GW-->>UI: 200 fresh data
         else Fails
@@ -521,25 +513,26 @@ sequenceDiagram
 ### F-04 Assign a parcel to a courier (M7-UI-02, M7-UI-05)
 
 - **Trigger:** dispatcher picks a parcel and a courier and presses "Assign". **Actors:** dispatcher or admin; Dispatch module (M3); Parcels module (M2).
-- **Preconditions:** parcel is shown as unassigned; courier is shown as on shift and not full. (The backend checks both again.)
+- **Preconditions:** parcel is shown as CREATED or ATTEMPT\_FAILED; courier is shown as ON\_SHIFT and not full. (The backend checks both again.)
 - **Main flow:**
-  1. Dispatcher selects a parcel, then a courier. A confirm box shows "Assign SD-20261021-04921 to Bob Miller (8/25)?".
-  2. Client creates an Idempotency-Key and sends `POST /api/v1/dispatch/assignments` with `{ "parcel_id", "courier_id" }` \[Repo\].
-  3. Backend (M3) checks role, parcel status, courier status and capacity, then in one transaction creates the assignment, moves the parcel to ASSIGNED (through the Parcel aggregate, M2), writes history and the `parcel.assigned.v1` outbox event.
-  4. Backend returns 200 with `assignment_id`, `assigned_at`, `assigned_by`.
-  5. Screen shows "Assigned", refreshes the board. The parcel leaves the unassigned list and the courier load goes up by 1.
+  1. Dispatcher selects a parcel, then a courier. A confirm box shows "Assign SD-20261024-04921 to Bob Miller (3/25)?".
+  2. Client creates an Idempotency-Key and sends `POST /api/v1/dispatch/assignments` with `{ "parcel_id", "courier_id" }` (Member 3 Doc 4 3.5).
+  3. Backend (M3) checks role, parcel status, courier shift and capacity, then in one transaction creates the assignment, moves the parcel to ASSIGNED (through the Parcel aggregate, M2), writes history and the `parcel.assigned.v1` outbox event.
+  4. Backend returns 200 with `assignment_id`, `status: "ASSIGNED"`, `assigned_by`, `assigned_at`.
+  5. Screen shows "Assigned", refreshes the board. The parcel leaves the list and the courier load goes up by 1.
 - **Alternate flows:**
-  - A1 Assign several parcels to one courier: done as separate requests one by one, each with its own key. If one fails, the others are not undone; the screen lists which ones failed **\[Proposed; no bulk endpoint exists\]**.
+  - A1 Assign several parcels to one courier: done as separate requests one by one, each with its own key. If one fails, the others are not undone; the screen lists which ones failed (no bulk assign endpoint exists).
 - **Failure flows:**
 
 | Response | Meaning | Screen action |
 | --- | --- | --- |
-| 400 `PARCEL_NOT_ELIGIBLE_FOR_ASSIGNMENT` | Parcel is no longer CREATED (someone else assigned it, or it was cancelled) | "This parcel can no longer be assigned. The board has been refreshed." |
+| 400 `PARCEL_NOT_ELIGIBLE_FOR_ASSIGNMENT` | Parcel is no longer CREATED or ATTEMPT\_FAILED | "This parcel can no longer be assigned. The board has been refreshed." |
+| 400 `COURIER_NOT_ON_SHIFT` | Courier went off shift or on break | "Bob Miller is not on shift." Refresh |
 | 409 `COURIER_CAPACITY_EXCEEDED` | Courier is full | "Bob Miller has reached maximum capacity (25)." Refresh |
-| 409 concurrent change (`ErrConcurrentConflict`) | Parcel version changed during the request | "Someone else changed this parcel. Please check and try again." Refresh |
+| 409 `PARCEL_ALREADY_ASSIGNED` | Another dispatcher assigned it first | "Someone else assigned this parcel." Refresh |
 | 404 | Parcel or courier no longer exists | "Parcel or courier not found." Refresh |
 | 403 | Not allowed | Permission message, no retry |
-| Network error or 5xx | Unknown if it worked | "Try again" with **same key**. If the backend does not support keys here (U-24), the retry returns 400 not eligible, and the screen then refreshes and shows the real result |
+| Network error or 5xx | Unknown if it worked | "Try again" with the **same key** (Member 3 accepts `Idempotency-Key` here) |
 
 - **Postconditions (success):** parcel ASSIGNED, exactly one active assignment, history row with actor DISPATCHER, outbox event written. **(failure):** nothing changed.
 - **Rules:** FR-ADM-002, FR-ADM-003, SRS 5.3. The screen never sends `assigned_by`; the backend takes it from the token.
@@ -559,29 +552,29 @@ sequenceDiagram
     GW->>DSP: forward with JWT and key
     DSP->>DSP: Check role DISPATCHER or ADMIN
     DSP->>DB: BEGIN, lock courier row, count active assignments
-    alt Courier full
-        DSP-->>UI: 409 COURIER_CAPACITY_EXCEEDED
+    alt Courier full or off shift
+        DSP-->>UI: 409 COURIER_CAPACITY_EXCEEDED or 400 COURIER_NOT_ON_SHIFT
         UI->>GW: GET /dispatch/board (refresh)
-    else Parcel not CREATED or version changed
-        DSP-->>UI: 400 or 409
+    else Parcel not eligible or already assigned
+        DSP-->>UI: 400 or 409 PARCEL_ALREADY_ASSIGNED
         UI->>GW: GET /dispatch/board (refresh)
     else OK
         DSP->>PA: Assign(parcel, courier, actor)
         PA->>DB: UPDATE parcels WHERE version matches, INSERT history, INSERT outbox parcel.assigned.v1
         DSP->>DB: INSERT courier_assignments, COMMIT
-        DSP-->>UI: 200 assignment
+        DSP-->>UI: 200 assignment, status ASSIGNED
         UI->>D: Show Assigned, refresh board
     end
 ```
 
-The "lock courier row" step is how Member 3 can stop two parallel assignments from both passing the capacity check. **\[TBD: Member 3 to confirm the locking method\]**.
+The "lock courier row" step is how Member 3 stops two parallel assignments from both passing the capacity check (Member 3 Doc 3).
 
 **Figure F-04b Assign button on screen**
 
 ```mermaid
 flowchart TD
     A["Pick parcel"] --> B["Pick courier"]
-    B --> C{"Courier shown as Full?"}
+    B --> C{"Courier shown as Full or not on shift?"}
     C -- "Yes" --> C2["Assign disabled for this courier"]
     C -- "No" --> D["Confirm box"]
     D --> E["Send with new Idempotency-Key"]
@@ -593,21 +586,23 @@ flowchart TD
 ```
 
 
-### F-05 Reassign a courier (M7-UI-03) \[TBD U-07\]
+### F-05 Reassign a courier (M7-UI-03)
 
-- **Trigger:** T-03. **Actors:** dispatcher or admin; Dispatch module.
-- **Preconditions:** parcel has an active assignment and is not yet DELIVERED, RETURNED or CANCELLED. Allowed statuses for reassignment are **\[TBD U-07\]** (probably ASSIGNED, maybe ATTEMPT\_FAILED, maybe OUT\_FOR\_DELIVERY).
-- **Main flow (proposed):**
+- **Trigger:** T-03. **Actors:** dispatcher or admin; Dispatch module (M3).
+- **Preconditions:** parcel is ASSIGNED (not yet OUT\_FOR\_DELIVERY). There is no separate reassign endpoint: reassignment is **cancel, then assign** (Member 3 BR-DSP-005).
+- **Main flow:**
   1. Dispatcher opens the parcel and presses "Reassign".
-  2. Picks a new courier and must type a reason (proposed minimum 10 characters) **\[Proposed\]**.
-  3. Client sends the reassign request with an Idempotency-Key **\[TBD: endpoint; Doc 1 A-03 assumes the assignment endpoint with a reason\]**.
-  4. Backend ends the old assignment (CANCELLED), creates a new one, writes history with actor and reason, writes an event.
-  5. Board refreshes; the old courier's load goes down, the new one's goes up.
-- **Failure flows:** same as F-04, plus "parcel already picked up" type errors defined by Member 3.
-- **Postconditions:** old assignment kept as history; one active assignment (SRS 5.3).
-- **Edge case:** if the old courier marks PICKED\_UP at the same moment as the reassignment, only one request can win (parcel version check). The loser gets 409 and the screen refreshes.
+  2. Picks a new courier and must type a reason (`cancellation_reason`, required).
+  3. Client sends `POST /api/v1/dispatch/assignments/{assignment_id}/cancel` with `{ "cancellation_reason" }`.
+  4. Backend ends the old assignment (`status: "CANCELLED"`, `ended_at`), the parcel goes back to the board, the old courier's load goes down.
+  5. Client then sends `POST /api/v1/dispatch/assignments` for the new courier with a new Idempotency-Key (same as F-04).
+  6. Board refreshes.
+- **Alternate flow:** A1 "Unassign" only: steps 1 to 4 without choosing a new courier.
+- **Failure flows:** 404 `ASSIGNMENT_NOT_FOUND`; 409 `ASSIGNMENT_ALREADY_CLOSED` (the courier already started the run or someone else cancelled) then refresh. If step 3 works and step 5 fails (new courier full), the parcel stays on the board unassigned and the screen says so, so the dispatcher can pick another courier.
+- **Postconditions:** old assignment kept as history with the reason; at most one active assignment (SRS 5.3).
+- **Edge case:** if the courier starts the run at the same moment, only one request can win. The loser gets 409 and the screen refreshes.
 
-**Figure F-05 Reassign (proposed, endpoint TBD U-07)**
+**Figure F-05 Reassign = cancel, then assign**
 
 ```mermaid
 sequenceDiagram
@@ -615,64 +610,64 @@ sequenceDiagram
     actor D as Dispatcher
     participant UI as Dispatch board
     participant DSP as Core API dispatch (M3)
-    participant PA as Parcel aggregate (M2)
     participant DB as PostgreSQL
     D->>UI: Reassign, pick new courier, type reason
-    UI->>DSP: Reassign request [TBD U-07] with Idempotency-Key
-    DSP->>DB: BEGIN, check parcel status and new courier capacity
-    DSP->>DB: Old assignment set CANCELLED, keep row
-    DSP->>DB: INSERT new assignment
-    DSP->>PA: Record reassignment with actor and reason
-    PA->>DB: INSERT history and outbox event, COMMIT
-    DSP-->>UI: 200
-    UI->>D: Show new courier, refresh board
+    UI->>DSP: POST /dispatch/assignments/{id}/cancel with cancellation_reason
+    alt Already closed
+        DSP-->>UI: 409 ASSIGNMENT_ALREADY_CLOSED
+        UI->>D: Refresh board, show current state
+    else Cancelled
+        DSP->>DB: Old assignment CANCELLED, parcel back on board, history and outbox
+        DSP-->>UI: 200 status CANCELLED
+        UI->>DSP: POST /dispatch/assignments (new courier, new Idempotency-Key)
+        alt New courier OK
+            DSP-->>UI: 200 status ASSIGNED
+            UI->>D: Show new courier, refresh board
+        else New courier full or off shift
+            DSP-->>UI: 409 or 400
+            UI->>D: Parcel is unassigned, pick another courier
+        end
+    end
 ```
 
 
-### F-06 Failed-delivery review: reattempt or return (M7-UI-06)
+### F-06 Failed-delivery review and reattempt (M7-UI-06)
 
-- **Trigger:** T-04. **Actors:** dispatcher (admin \[TBD U-07\]); Parcels (M2) and Delivery (M3).
+- **Trigger:** T-04. **Actors:** dispatcher or admin; Dispatch and Delivery (M3).
 - **Preconditions:** parcel is ATTEMPT\_FAILED.
 - **Main flow:**
-  1. Dispatcher opens "Needs review" and picks a parcel.
-  2. Screen loads `GET /api/v1/parcels/{id}` \[Repo\] and the attempt list **\[TBD: attempts endpoint\]**. It shows: "Attempt 1 of 3 failed", reason code with a readable label, courier note, time, and courier name.
-  3. Screen shows the suggested action from the table in 4.2.
-  4. Dispatcher presses **Reattempt** (optionally choosing a courier, U-22) or **Return to sender** and may add a note.
-  5. Client sends the request with an Idempotency-Key **\[TBD: endpoint, requested from M2/M3\]**.
-  6. Backend checks `attempt_count < 3` for reattempt, changes status, writes history and an event.
-  7. Screen shows the result and removes the parcel from "Needs review".
+  1. Dispatcher opens `/ops/failed-deliveries` (or the "Needs review" badge on the board) and picks a parcel.
+  2. Screen loads `GET /api/v1/deliveries/parcels/{id}` (Member 3 Doc 4 3.15). It shows: "Attempt 1 of 3 failed", reason code with a readable label, courier note, time and courier.
+  3. Dispatcher presses **Schedule reattempt**, picks the same or a new on-shift courier (`target_courier_id`), a date (`scheduled_date`), a time window (`preferred_time_window`) and may add `dispatch_notes`.
+  4. Client sends `POST /api/v1/dispatch/parcels/{id}/reschedule` with an Idempotency-Key.
+  5. Backend checks the status and attempt count, moves the parcel to ASSIGNED with the chosen courier, writes history and an event.
+  6. Screen shows "Reattempt scheduled for 25 Oct, afternoon" and removes the parcel from the list.
 - **Alternate flows:**
-  - A1 Third failure: Reattempt button is disabled with "Maximum 3 attempts reached". Only Return is offered.
-  - A2 Already RETURNED automatically (U-21): read-only view.
-  - A3 INVALID\_ADDRESS: Reattempt disabled until the address is fixed **\[TBD who fixes it\]**.
-- **Failure flows:** 409 `PARCEL_INVALID_TRANSITION` (another dispatcher already decided) then refresh and show the new status; 403 if role not allowed.
-- **Postconditions:** parcel OUT\_FOR\_DELIVERY (reattempt) or RETURNED (final). Attempt records are unchanged.
+  - A1 Parcel already RETURNED (3rd failure or refusal, set automatically by Member 3): read-only view "Returned to sender", no buttons.
+  - A2 INVALID\_ADDRESS: the button stays, with the warning "Check the address first" (U-08).
+- **Failure flows:** 400 `MAX_ATTEMPTS_EXCEEDED` (should not happen, because the 3rd failure already returns the parcel) then refresh; 409 `INVALID_STATE_FOR_RESCHEDULE` (another dispatcher already scheduled it) then refresh; 400 `COURIER_NOT_ON_SHIFT` or 409 `COURIER_CAPACITY_EXCEEDED` for the chosen courier; 403 if role not allowed.
+- **Postconditions:** parcel ASSIGNED to the chosen courier, or unchanged on error. Attempt records are never changed.
 
 ```mermaid
 flowchart TD
-    A["Parcel in ATTEMPT_FAILED appears in Needs review"] --> B["Dispatcher opens parcel"]
-    B --> C{"Already RETURNED by system? (U-21)"}
-    C -- "Yes" --> Z["Show read-only: returned after 3 attempts"]
-    C -- "No" --> D{"attempt_count = 3?"}
-    D -- "Yes" --> R["Offer Return only"]
-    D -- "No" --> E{"Reason code"}
-    E -- "RECIPIENT_UNAVAILABLE, CUSTOMER_REQUESTED_RESCHEDULE, ACCESS_RESTRICTED" --> F["Suggest Reattempt"]
-    E -- "INVALID_ADDRESS" --> G["Reattempt disabled until address fixed [TBD]"]
-    E -- "REFUSED_BY_RECIPIENT" --> R
-    E -- "DAMAGED_IN_TRANSIT" --> H["Suggest Return or hold [TBD M3]"]
-    E -- "OTHER" --> I["Show note, offer both"]
-    F --> J["Dispatcher confirms"]
+    A["Parcel with ATTEMPT_FAILED or RETURNED in the list"] --> B["Dispatcher opens parcel, load attempt history"]
+    B --> C{"Status"}
+    C -- "RETURNED" --> Z["Read only: returned to sender"]
+    C -- "ATTEMPT_FAILED" --> E{"Reason code"}
+    E -- "INVALID_ADDRESS" --> G["Show warning: check address first"]
+    E -- "OTHER" --> I["Show note in full"]
+    E -- "Other codes" --> F["Suggest Schedule reattempt"]
+    G --> J["Pick courier, date and time window"]
     I --> J
-    H --> J
-    R --> J
-    J --> K["Send request with Idempotency-Key"]
+    F --> J
+    J --> K["POST reschedule with Idempotency-Key"]
     K --> L{"Backend result"}
-    L -- "200" --> M["Show new status, remove from list"]
-    L -- "409" --> N["Someone else decided: refresh"]
+    L -- "200" --> M["Show scheduled, remove from list"]
+    L -- "409 or 400" --> N["Show message, refresh"]
     L -- "403" --> O["Permission message"]
 ```
 
-**Figure F-06b Reattempt or return sequence (endpoint TBD)**
+**Figure F-06b Reattempt sequence**
 
 ```mermaid
 sequenceDiagram
@@ -680,21 +675,21 @@ sequenceDiagram
     actor D as Dispatcher
     participant UI as Review screen
     participant GW as Traefik
-    participant CORE as Core API parcels and delivery (M2, M3)
+    participant M3 as Core API dispatch and delivery (M3)
     participant DB as PostgreSQL
-    D->>UI: Open parcel in Needs review
-    UI->>GW: GET /api/v1/parcels/{id} and attempts [TBD]
-    GW->>CORE: forward
-    CORE-->>UI: status ATTEMPT_FAILED, attempt 1 of 3, reason, note
-    D->>UI: Press Reattempt or Return
-    UI->>GW: Decision [TBD endpoint] with Idempotency-Key
-    GW->>CORE: forward
-    CORE->>DB: BEGIN, check role, status and attempt_count
+    D->>UI: Open parcel in /ops/failed-deliveries
+    UI->>GW: GET /api/v1/deliveries/parcels/{id}
+    GW->>M3: forward
+    M3-->>UI: status ATTEMPT_FAILED, attempt 1 of 3, reason, note
+    D->>UI: Schedule reattempt (courier, date, window)
+    UI->>GW: POST /api/v1/dispatch/parcels/{id}/reschedule with Idempotency-Key
+    GW->>M3: forward
+    M3->>DB: BEGIN, check role, status and attempt_count
     alt Allowed
-        CORE->>DB: UPDATE parcels, INSERT history, INSERT outbox, COMMIT
-        CORE-->>UI: 200 new status
-    else Already decided or not allowed
-        CORE-->>UI: 409 PARCEL_INVALID_TRANSITION
+        M3->>DB: UPDATE parcels to ASSIGNED, INSERT assignment, history, outbox, COMMIT
+        M3-->>UI: 200 status ASSIGNED, scheduled_date
+    else Already scheduled or limit reached
+        M3-->>UI: 409 INVALID_STATE_FOR_RESCHEDULE or 400 MAX_ATTEMPTS_EXCEEDED
         UI->>GW: Reload parcel
     end
 ```
@@ -702,14 +697,14 @@ sequenceDiagram
 
 ### F-07 Fleet screen (M7-UI-07)
 
-- **Trigger:** T-05. **Actors:** dispatcher, admin; Dispatch module.
+- **Trigger:** T-05. **Actors:** dispatcher, admin; Dispatch module (M3).
 - **Preconditions:** signed in as DISPATCHER or ADMIN.
-- **Main flow:** open `/ops/couriers`; list couriers with status, vehicle type, current zone, load and shift; filter by zone and status.
-- **Alternate flow:** "availability toggle" (web/README) lets a dispatcher mark a courier off duty **\[TBD: endpoint and whether a courier with open tasks may be set OFF\_DUTY\]**.
+- **Main flow:** open `/ops/couriers`; the screen calls `GET /api/v1/dispatch/couriers` with optional filters `zone_id`, `status` (ON\_SHIFT, OFF\_SHIFT, ON\_BREAK, SUSPENDED) and `vehicle_type`; it lists name, employee code, phone, vehicle, capacity, shift status, zone and load. Clicking a courier opens `GET /api/v1/dispatch/couriers/{id}`.
+- **Alternate flow:** A1 "Add courier": a form sends `POST /api/v1/dispatch/couriers` with `user_id`, `employee_code`, `vehicle_type`, `max_capacity`, `current_zone_id` (the user account must already exist with role COURIER, from Member 1). Errors: 400 `INVALID_VEHICLE_TYPE`, 409 `COURIER_PROFILE_EXISTS`.
 - **Failure flows:** standard (3.2).
-- **Rules:** no fleet endpoints exist yet (Doc 1 section 9, Requested). Built on example data until Member 3 confirms (Doc 1 A-04).
+- **Rules:** shift changes are made by the courier (`POST /api/v1/courier/shift`), not by the dispatcher. Member 3 has no dispatcher endpoint to suspend a courier; that is a request to Member 3 if the team wants it.
 
-**Figure F-07 Fleet screen (endpoints requested)**
+**Figure F-07 Fleet screen**
 
 ```mermaid
 sequenceDiagram
@@ -717,66 +712,74 @@ sequenceDiagram
     actor D as Dispatcher
     participant UI as Fleet screen
     participant DSP as Core API dispatch (M3)
-    D->>UI: Open /ops/couriers
-    UI->>DSP: List couriers [TBD endpoint]
-    DSP-->>UI: Couriers with status, vehicle, zone, load
-    D->>UI: Set courier off duty
-    UI->>DSP: Availability change [TBD] with Idempotency-Key
-    alt Allowed
-        DSP-->>UI: 200 new status
-    else Courier has open tasks [TBD rule]
-        DSP-->>UI: 409 or 422 with reason
+    D->>UI: Open /ops/couriers, set filters
+    UI->>DSP: GET /api/v1/dispatch/couriers?zone_id=&status=&vehicle_type=
+    DSP-->>UI: Couriers with shift status, vehicle, zone, load
+    D->>UI: Add courier
+    UI->>DSP: POST /api/v1/dispatch/couriers
+    alt Created
+        DSP-->>UI: 201 profile, status OFF_SHIFT
+    else Bad vehicle or profile exists
+        DSP-->>UI: 400 INVALID_VEHICLE_TYPE or 409 COURIER_PROFILE_EXISTS
     end
     UI->>DSP: Reload list
 ```
 
 
-### F-08 Merchant approval (M7-UI-08, M7-AD-04)
+### F-08 Merchant list, detail and status actions (M7-UI-08, M7-AD-05)
 
-- **Trigger:** T-06. **Actors:** admin; Merchants module (M4); admin module.
+- **Trigger:** T-06. **Actors:** admin; admin module (my routes); Merchants module (M4, `merchants.AdminService`).
 - **Preconditions:** signed in as ADMIN.
 - **Main flow:**
-  1. Admin opens `/ops/merchants` (proposed route), default filter PENDING.
-  2. Admin opens one application and checks company name, registration number, contact.
-  3. Admin presses Approve (or Reject, Suspend, Disable where 4.5 allows). Reject, Suspend and Disable need a reason **\[Proposed: minimum 10 characters\]**.
-  4. Client sends the action with an Idempotency-Key **\[TBD: endpoints requested from M4\]**.
-  5. Backend changes status, writes `audit_logs` (actor, previous and new state, IP, request id).
-  6. Screen shows the new status and refreshes.
-- **Failure flows:** 409 if the merchant status changed meanwhile (another admin acted); 422 if the move is not allowed (for example PENDING to SUSPENDED).
-- **Postconditions:** new status saved and audited. If APPROVED, the merchant can create orders and API keys; if SUSPENDED or DISABLED, M4 rejects their API calls (AT-011).
+  1. Admin opens `/ops/merchants`. The screen calls `GET /api/v1/admin/merchants?status=PENDING&q=&page=1&per_page=20` and shows a table with business name, contact email, status and `version`.
+  2. Admin opens one merchant (`/ops/merchants/:id`, `GET /api/v1/admin/merchants/{id}`) and checks the business details.
+  3. The screen shows only the buttons the state machine in 4.5 allows: Approve and Reject for PENDING; Suspend and Disable for APPROVED; Reinstate and Disable for SUSPENDED; none for REJECTED or DISABLED.
+  4. Admin presses a button. Reject, Suspend and Disable open a reason box (5 to 500 characters).
+  5. Client sends `POST /api/v1/admin/merchants/{id}/{approve|reject|suspend|reinstate|disable}` with `{ "expected_version": 3, "reason": "..." }`.
+  6. My admin route checks role ADMIN, validates the body and calls `merchants.AdminService.ChangeStatus` with the actor (user id, role, request id, client IP, user agent). Member 4 checks the move, saves the new status with the version check and writes the `audit_logs` row in the same transaction.
+  7. Screen shows the new status and refreshes.
+- **Failure flows:** 409 if `expected_version` is stale (another admin acted): reload and show the current status; 422 if the move is not allowed (for example PENDING to SUSPENDED) or the reason is too short; 404 unknown merchant.
+- **Postconditions:** new status saved and audited. If APPROVED, the merchant can create orders and API keys; if SUSPENDED or DISABLED, Member 4 rejects their API calls at once (AT-011); DISABLED also revokes keys and webhooks.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor A as Admin
-    participant UI as Merchant approval screen
+    participant UI as Merchant screens
     participant GW as Traefik
-    participant M4 as Core API merchants (M4)
-    participant AUD as Audit log (admin, shared)
+    participant ADM as Admin routes (M7)
+    participant M4 as merchants.AdminService (M4)
     participant DB as PostgreSQL
-    A->>UI: Press Approve
-    UI->>GW: POST approve [TBD path] with Idempotency-Key
-    GW->>M4: forward
-    M4->>M4: Check role ADMIN and current status PENDING
-    M4->>DB: BEGIN, UPDATE merchants WHERE version matches
-    M4->>AUD: Write MERCHANT_APPROVED audit row
-    AUD->>DB: INSERT audit_logs
-    M4->>DB: COMMIT
-    M4-->>UI: 200 status APPROVED
-    UI->>A: Show Approved
+    A->>UI: Open /ops/merchants
+    UI->>GW: GET /api/v1/admin/merchants?status=PENDING
+    GW->>ADM: forward
+    ADM->>M4: ListMerchants(filter, page)
+    M4-->>UI: data and meta
+    A->>UI: Open merchant, press Suspend, type reason
+    UI->>GW: POST /api/v1/admin/merchants/{id}/suspend {expected_version, reason}
+    GW->>ADM: forward
+    ADM->>ADM: Require ADMIN, validate body
+    ADM->>M4: ChangeStatus(SUSPEND, version, reason, actor)
+    M4->>DB: BEGIN, UPDATE merchants WHERE version matches, INSERT audit_logs, outbox, COMMIT
+    alt OK
+        M4-->>UI: 200 merchant, status SUSPENDED
+    else Stale version or move not allowed
+        M4-->>UI: 409 or 422
+        UI->>GW: Reload merchant
+    end
 ```
 
 ### F-09 User and role management (M7-UI-09)
 
 - **Trigger:** T-07. **Actors:** admin; Identity module (M1).
-- **Preconditions:** signed in as ADMIN. Endpoints requested from M1 (Doc 1 section 9).
+- **Preconditions:** signed in as ADMIN. Endpoints requested from M1 (Doc 1 section 9, U-66).
 - **Main flow:** list users with filters; open one; change role (one of ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER) or disable the account; reason required; backend audits it (FR-IAM-009).
 - **Rules (proposed, backend enforces):**
   - An admin cannot disable their own account or remove their own ADMIN role (prevents lock-out). **\[Proposed; M1 to confirm\]**
   - The last active ADMIN cannot be removed. **\[Proposed; M1 to confirm\]**
   - A disabled user's sessions are ended so they cannot keep working with a refresh token. **\[TBD with M1\]**
   - Changing a role takes effect at the user's next token (within 15 minutes) unless M1 revokes sessions. The screen says so. **\[TBD with M1\]**
-  - Making a user a COURIER also needs a courier profile (vehicle, capacity) in the dispatch module. **\[TBD: M1 and M3 to agree who creates it\]**
+  - Making a user a COURIER also needs a courier profile (vehicle, capacity): the admin then adds it on the fleet screen with `POST /api/v1/dispatch/couriers` (F-07).
 - **Failure flows:** 409 email already used; 422 rule broken (for example self-disable); 403.
 - **Postconditions:** role or status changed and audited.
 
@@ -795,7 +798,7 @@ flowchart TD
     G -- "Yes" --> H["End user sessions [TBD M1]"]
     G -- "No" --> I["Role used from next token, within 15 min"]
     F --> J{"New role COURIER?"}
-    J -- "Yes" --> K["Courier profile needed in dispatch [TBD M1 and M3]"]
+    J -- "Yes" --> K["Add courier profile on fleet screen (F-07)"]
 ```
 
 
@@ -806,26 +809,26 @@ Screen side of backend flow A-01.
 - **Trigger:** T-08. **Actors:** admin; admin module.
 - **Preconditions:** signed in as ADMIN.
 - **Main flow:**
-  1. Admin opens `/ops/zones` and sees the zone list (code, name, enabled, number of postal codes, surcharge).
-  2. Admin presses "New zone" and fills code, name, surcharge and postal code prefixes.
-  3. Screen does simple form checks only (required fields, code format, postal code is digits) to help the user. The backend repeats all checks.
-  4. Client sends `POST /api/v1/admin/zones` with an Idempotency-Key \[Repo\].
+  1. Admin opens `/ops/zones` and sees the zone list (id, code, name, enabled, number of postal prefixes).
+  2. Admin presses "New zone" and fills the zone id (for example `ZONE_GALLE_01`, fixed forever), short code (for example `GLE-01`), name, optional description and postal code prefixes.
+  3. Screen does simple form checks only (required fields, id and code format, prefixes are 3 to 5 digits) to help the user. The backend repeats all checks.
+  4. Client sends `POST /api/v1/admin/zones` with an Idempotency-Key.
   5. On 201 the list refreshes.
-- **Alternate flows:** edit zone, enable or disable zone **\[Proposed by M2: PATCH /admin/zones/{id} and /{id}/status\]**.
-- **Failure flows:** postal code already in another zone shows the conflicting zone name (from `error.details`); zone code taken; surcharge invalid.
-- **Rules:** surcharge is entered as rupees and cents in the form but sent in the format the API agrees on. Today API.md uses the string "3.50", which breaks the integer-cents rule **\[TBD U-03\]**. The screen does not do any fee calculation with it.
+- **Alternate flows:** edit zone (`PATCH /api/v1/admin/zones/{id}` with `version`); enable or disable zone (`PATCH /api/v1/admin/zones/{id}/status` with `version` and `reason`). The id cannot be edited.
+- **Failure flows:** postal prefix overlaps another zone: the message names the conflicting zone (from `error.details`); zone id or code taken; stale `version` (someone else saved first).
+- **Rules:** there is **no money field** on the zone form. A charge for a zone is set on the pricing screen (F-11) as a Member 2 pricing rule (Doc 1 R-04).
 
 **Figure F-10 Zone form on screen**
 
 ```mermaid
 flowchart TD
-    A["Admin fills zone form"] --> B{"Simple checks pass? required, code format, digits"}
+    A["Admin fills zone form: id, code, name, prefixes"] --> B{"Simple checks pass? required, id and code format, 3 to 5 digits"}
     B -- "No" --> C["Show field hint, stay on form"]
     B -- "Yes" --> D["POST /api/v1/admin/zones with key"]
     D --> E{"Result"}
     E -- "201" --> F["Refresh zone list"]
-    E -- "409 postal code" --> G["Show conflicting zone name, keep input"]
-    E -- "409 zone code" --> H["Show code already used"]
+    E -- "409 postal prefix" --> G["Show conflicting zone name, keep input"]
+    E -- "409 id or code" --> H["Show id or code already used"]
     E -- "422" --> I["Show field errors"]
 ```
 
@@ -867,37 +870,38 @@ sequenceDiagram
 ```
 
 
-### F-12 Reports (M7-UI-12, M7-AD-02)
+### F-12 Reports (M7-UI-12, M7-AD-03)
 
 Screen side of A-03.
 
-- **Trigger:** T-09. **Actors:** admin (dispatcher \[TBD U-02\]); admin module.
-- **Main flow:** pick a date range (default last 7 days) and optional zone; call `GET /api/v1/admin/reports/operational?from=…&to=…&zone=…` \[Repo\]; show total parcels, delivered, failed attempts, first-attempt rate, average delivery time.
+- **Trigger:** T-09. **Actors:** admin or dispatcher (SRS 6.2: "Admin/authorized dispatcher"); admin module.
+- **Main flow:** pick a date range (default last 7 days); call `GET /api/v1/admin/reports/deliveries?from=…&to=…` (SRS 6.2 name, Doc 1 R-16); show deliveries per day, delivered, failed attempts, returned, and the success and failure rate for the period (FR-ADM-008).
 - **Rules:** values are shown exactly as returned. The screen does not recompute percentages (INV-02). "97.2%" is shown as "97.2%".
-- **Failure flows:** `from` after `to` gives 422; range too long **\[TBD: maximum range\]**; empty period shows zeros with "No parcels in this period".
+- **Failure flows:** `from` after `to` gives 422; range longer than `reports.max_range_days` (setting, default 92) gives 422; empty period shows zeros with "No parcels in this period".
 
 **Figure F-12 Reports screen**
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor A as Admin
+    actor A as Admin or dispatcher
     participant UI as Reports screen
     participant GW as Traefik
     participant ADM as Core API admin
-    A->>UI: Pick dates and zone
+    A->>UI: Pick dates
     UI->>UI: Block from after to
-    UI->>GW: GET /api/v1/admin/reports/operational?from&to&zone
+    UI->>GW: GET /api/v1/admin/reports/deliveries?from&to
     GW->>ADM: forward
-    ADM-->>UI: 200 numbers
+    ADM->>ADM: Require ADMIN or DISPATCHER
+    ADM-->>UI: 200 numbers per day and totals
     UI->>A: Show numbers exactly as returned
 ```
 
 
-### F-13 Audit log explorer (M7-UI-12, M7-AD-03)
+### F-13 Audit log explorer (M7-UI-12, M7-AD-04)
 
 - **Trigger:** T-10. **Actors:** admin; admin module (A-04).
-- **Main flow:** filter by date, actor, action, target type and target id; page through results (20 per page, max 100) \[Repo\] api-conventions 2.2; open one entry to see previous and new state.
+- **Main flow:** open `/ops/audit`; filter by date, actor, action, `target_type` and `target_id`; page through results (20 per page, max 100) \[Repo\] api-conventions 2.2; open one entry to see `previous_state`, `new_state`, `reason`, `client_ip` and `request_id`.
 - **Rules:** read only. No edit or delete buttons exist anywhere (INV-12). Personal data in `previous_state` and `new_state` is shown only to ADMIN **\[TBD with M1: masking rules for audit views\]**.
 
 **Figure F-13 Audit explorer**
@@ -910,7 +914,7 @@ sequenceDiagram
     participant ADM as Core API admin
     participant DB as PostgreSQL
     A->>UI: Set filters
-    UI->>ADM: GET audit query [TBD path] page=1 per_page=20
+    UI->>ADM: GET /api/v1/admin/audit-logs?page=1&per_page=20
     ADM->>DB: SELECT from audit_logs, newest first
     ADM-->>UI: 200 data and meta
     A->>UI: Next page or open one entry
@@ -950,18 +954,18 @@ Couriers work on phones, often on slow or broken connections. Extra rules:
 | ID | Rule |
 | --- | --- |
 | R-CR-01 | Big buttons, one action per screen, works at 360 px width |
-| R-CR-02 | Every status button sends an Idempotency-Key and keeps it for retries (3.3) |
-| R-CR-03 | There is **no offline queue**. If the network is down, the screen says "No connection. Your update was not sent." and keeps the form so the courier can press "Try again" later **\[Proposed; offline mode not in scope\]** |
+| R-CR-02 | Every action that Member 3 marks idempotent sends an Idempotency-Key and keeps it for retries (3.3) |
+| R-CR-03 | There is **no offline queue**. If the network is down, the screen says "No connection. Your update was not sent." and keeps the form so the courier can press "Try again" later (offline mode is not in scope) |
 | R-CR-04 | After any 409 the task is reloaded and the courier sees the real status (SRS FR-COU-006) |
-| R-CR-05 | A courier only ever sees their own tasks. If they open another parcel's address, the backend returns 403 and the screen shows "This task is not assigned to you" |
-| R-CR-06 | Gateway rate limit for `/api/v1/courier/*` is per IP, not per user (Doc 1 M7-GW-02, U-06) |
+| R-CR-05 | A courier only ever sees their own tasks. If they open another courier's parcel, the backend returns 403 `NOT_ASSIGNED_COURIER` and the screen shows "This task is not assigned to you" |
+| R-CR-06 | The courier limit of 60 requests per minute per user is enforced by the backend; the gateway only has per-IP limits (Doc 1 R-13) |
 
-### C-01 Courier task list
+### C-01 Courier task list and shift
 
-- **Trigger:** courier opens `/courier/tasks`. **Actors:** courier; Delivery/Dispatch (M3).
-- **Main flow:** call the task list **\[TBD: `GET /api/v1/courier/deliveries` in SRS 6.2, not in API.md\]**; show today's pickups and deliveries grouped by status, with tracking number, area and recipient name (FR-COU-001, FR-COU-002).
-- **Alternate flows:** no tasks shows "No tasks for today"; pull to refresh.
-- **Failure flows:** standard.
+- **Trigger:** courier opens `/courier/tasks`. **Actors:** courier; Dispatch and Delivery (M3).
+- **Main flow:** call `GET /api/v1/courier/parcels` (Member 3 Doc 4 3.9; the server scopes it to the signed-in courier); show the shift status and today's parcels grouped by status, with tracking number, recipient name, phone, street, city, weight and handling notes (FR-COU-001, FR-COU-002). A shift switch sends `POST /api/v1/courier/shift` with `ON_SHIFT`, `ON_BREAK` or `OFF_SHIFT`.
+- **Alternate flows:** no parcels shows "No tasks for today"; pull to refresh.
+- **Failure flows:** 403 `COURIER_SUSPENDED` on the shift switch shows "Your account is suspended. Contact your dispatcher."; otherwise standard.
 
 **Figure C-01 Courier task list**
 
@@ -970,45 +974,42 @@ sequenceDiagram
     autonumber
     actor C as Courier phone
     participant GW as Traefik
-    participant DEL as Core API delivery and dispatch (M3)
-    C->>GW: GET /api/v1/courier/deliveries [TBD]
-    GW->>DEL: forward with courier JWT
-    DEL->>DEL: Only tasks assigned to this courier
-    DEL-->>C: 200 pickups and deliveries
+    participant M3 as Core API dispatch and delivery (M3)
+    C->>GW: POST /api/v1/courier/shift ON_SHIFT
+    GW->>M3: forward with courier JWT
+    M3-->>C: 200 status ON_SHIFT
+    C->>GW: GET /api/v1/courier/parcels
+    GW->>M3: forward with courier JWT
+    M3->>M3: Only parcels assigned to this courier
+    M3-->>C: 200 shift status and parcels
     C->>C: Group by status, show list
 ```
 
 
-### C-02 Pickup with barcode scan
+### C-02 Collect the parcel (barcode check on the phone)
 
-- **Trigger:** courier is at the sender with an ASSIGNED parcel.
-- **Main flow:** courier presses "Scan", scans the label (or types the tracking number: scan is simulated per web/README); screen compares the scanned number with the task **only to warn** "This label does not match this task"; courier confirms; client sends the picked-up update with a key **\[TBD U-27\]**; backend checks the courier is assigned and status is ASSIGNED, then sets PICKED\_UP.
-- **Failure flows:** 409 parcel was reassigned or cancelled meanwhile: "This task has changed. It has been reloaded."; 403 not assigned.
-- **Rule:** the scan check on the phone is a convenience. The backend's check is the real one (domain-boundaries 3.1: "barcode/QR scan match").
+- **Trigger:** courier collects an ASSIGNED parcel at the depot or sender.
+- **Main flow:** courier presses "Scan", scans the label (or types the tracking number; scanning is simulated per web/README); the screen compares the scanned number with the task **only to warn** "This label does not match this task". There is no separate pickup call: collecting and starting the run is one step in Member 3's design (C-03).
+- **Rule:** the scan check on the phone is a convenience. The backend's assignment check is the real one.
 
-**Figure C-02 Pickup on the phone**
+**Figure C-02 Label check on the phone**
 
 ```mermaid
 flowchart TD
-    A["Courier at sender, task ASSIGNED"] --> B["Scan label or type number"]
+    A["Courier has parcel, task ASSIGNED"] --> B["Scan label or type number"]
     B --> C{"Matches task?"}
     C -- "No" --> D["Warn: label does not match"] --> B
-    C -- "Yes" --> E["Press Picked up"]
-    E --> F["Send update with key [TBD U-27]"]
-    F --> G{"Result"}
-    G -- "200" --> H["Task shows PICKED_UP"]
-    G -- "409" --> I["Task changed, reload"]
-    G -- "403" --> J["Not your task"]
-    G -- "Network error" --> K["Not sent, Try again with same key"] --> F
+    C -- "Yes" --> E["Ready to start run (C-03)"]
 ```
 
 
-### C-03 Start delivery run
+### C-03 Start the delivery run
 
-- **Trigger:** courier leaves for final delivery (IN\_TRANSIT to OUT\_FOR\_DELIVERY).
-- **Main flow:** courier presses "Start delivery"; client sends update with a key **\[TBD U-27: who triggers this, the courier or the dispatcher; dispatch README says "courier marks run started"\]**; parcel becomes OUT\_FOR\_DELIVERY; event `parcel.out_for_delivery.v1`.
+- **Trigger:** courier leaves with one or more ASSIGNED parcels.
+- **Main flow:** for one parcel, the courier presses "Start run" and the client sends `POST /api/v1/courier/parcels/{id}/start-run` with `depot_hub_code` and optional `notes`; for the whole list, "Start run for all" sends `POST /api/v1/courier/runs/start-batch` with `parcel_ids` (Member 3 Doc 4 3.10, 3.11). Each parcel becomes OUT\_FOR\_DELIVERY; event `parcel.out_for_delivery.v1`.
+- **Failure flows:** 403 `NOT_ASSIGNED_COURIER` (one of the parcels was reassigned) then reload; 409 `INVALID_STATE_TRANSITION` then reload; 400 `EMPTY_PARCEL_LIST` cannot happen because the button needs at least one parcel.
 
-**Figure C-03 Start delivery run**
+**Figure C-03 Start the delivery run**
 
 ```mermaid
 sequenceDiagram
@@ -1018,11 +1019,12 @@ sequenceDiagram
     participant DSP as Core API dispatch (M3)
     participant PA as Parcel aggregate (M2)
     participant DB as PostgreSQL
-    C->>GW: Start delivery [TBD U-27] with key
+    C->>GW: POST /api/v1/courier/runs/start-batch {parcel_ids, depot_hub_code}
     GW->>DSP: forward
-    DSP->>PA: Move IN_TRANSIT to OUT_FOR_DELIVERY
+    DSP->>DSP: Check every parcel is assigned to this courier and ASSIGNED
+    DSP->>PA: Move each parcel to OUT_FOR_DELIVERY
     PA->>DB: UPDATE parcels, INSERT history, INSERT outbox parcel.out_for_delivery.v1, COMMIT
-    DSP-->>C: 200 OUT_FOR_DELIVERY
+    DSP-->>C: 200 total_started and parcels
 ```
 
 
@@ -1032,24 +1034,24 @@ sequenceDiagram
 - **Preconditions:** parcel is OUT\_FOR\_DELIVERY and assigned to this courier.
 - **Main flow:**
   1. Courier opens `/courier/tasks/:id/pod`.
-  2. Takes a photo and/or captures a signature on screen, types the name of the person who received it, optional note.
-  3. Screen checks the photo size. If above 10 MB it is resized on the phone first **\[Proposed: resize to about 1600 px wide, JPEG\]**.
-  4. Photo is uploaded **\[TBD U-25: upload method, either multipart through Core API within the 10 MB gateway limit, or a pre-signed URL to object storage as security-notes 7 suggests\]**.
-  5. Client sends the complete-delivery request with the proof reference and an Idempotency-Key **\[TBD U-18: `POST /api/v1/deliveries/{parcel_id}/complete` (delivery API.md) or `POST /api/v1/courier/parcels/{id}/deliver` (sequence-diagrams.md)\]**.
-  6. Backend checks courier, status and proof; in one transaction writes `delivery_attempts` (SUCCESS), sets DELIVERED, writes history and `parcel.delivered` event \[Repo\] sequence-diagrams 3.
+  2. Captures a signature on screen and types the name of the person who received it (`received_by_name`), optional photo and note.
+  3. If there is a photo above 10 MB it is resized on the phone first (about 1600 px wide, JPEG).
+  4. If there is a photo, it is uploaded first: `POST /api/v1/deliveries/{id}/proof-photo`, multipart field `photo` (JPEG, PNG or WebP, maximum 10 MB). The answer holds `proof_attachment_url`.
+  5. Client sends `POST /api/v1/deliveries/{id}/complete` with `proof_type`, `signature_data`, `received_by_name`, `notes`, `latitude`, `longitude` and an Idempotency-Key (Member 3 Doc 4 3.13).
+  6. Backend checks courier, status and proof; in one transaction writes `delivery_attempts` (SUCCESS), sets DELIVERED, writes history and the `parcel.delivered.v1` event.
   7. Screen shows "Delivered" and goes back to the list.
-- **Alternate flows:** signature only, photo only, or OTP (schema allows OTP) **\[TBD: which proof types are required\]**.
 - **Failure flows:**
 
 | Response | Screen action |
 | --- | --- |
-| 400 `MISSING_DELIVERY_PROOF` | "Please add a photo or signature." |
+| 400 `MISSING_DELIVERY_PROOF` | "Please add a signature or photo." |
+| 422 `RECIPIENT_NAME_REQUIRED` | "Please type who received the parcel." |
 | 403 `NOT_ASSIGNED_COURIER` | "This task is not assigned to you." Reload list |
 | 409 `INVALID_STATE_FOR_DELIVERY` | "This parcel is not out for delivery any more." Reload |
-| 413 | "Photo too large." Resize and retry |
-| Upload succeeded, complete call timed out | "Try again" sends the same proof reference and **same key**. No second photo upload |
+| 400 `INVALID_FILE_TYPE_OR_SIZE` or 413 | "Photo too large or wrong type." Resize and retry |
+| Photo uploaded, complete call timed out | "Try again" sends the complete call again with the **same key**. No second photo upload |
 
-- **Postconditions:** parcel DELIVERED (final). Proof stored privately; only a reference in PostgreSQL (FR-COU-007). Public tracking shows "Delivered - Proof Verified" with no image (api-conventions 5).
+- **Postconditions:** parcel DELIVERED (final). Proof stored privately; only a reference in PostgreSQL (FR-COU-007, SEC-012). Public tracking never shows the image (SEC-009).
 
 ```mermaid
 sequenceDiagram
@@ -1060,37 +1062,41 @@ sequenceDiagram
     participant PA as Parcel aggregate (M2)
     participant DB as PostgreSQL
     participant TRK as Tracking API (M5)
-    C->>C: Capture photo and signature, resize if over 10 MB
-    C->>GW: Upload photo [TBD U-25]
-    GW->>DEL: forward (10 MB limit on Core API route)
-    DEL-->>C: proof reference
-    C->>GW: POST complete delivery [TBD U-18] with Idempotency-Key
+    C->>C: Capture signature and name, optional photo resized under 10 MB
+    opt Photo taken
+        C->>GW: POST /api/v1/deliveries/{id}/proof-photo (multipart)
+        GW->>DEL: forward (10 MB limit on the upload route)
+        DEL-->>C: proof_attachment_url
+    end
+    C->>GW: POST /api/v1/deliveries/{id}/complete with Idempotency-Key
     GW->>DEL: forward with courier JWT
     DEL->>DB: BEGIN, SELECT parcel FOR UPDATE
     DEL->>DEL: Check assigned courier, status OUT_FOR_DELIVERY, proof present
     DEL->>DB: INSERT delivery_attempts SUCCESS
     DEL->>PA: MarkDelivered
-    PA->>DB: UPDATE parcels, INSERT history, INSERT outbox parcel.delivered, COMMIT
+    PA->>DB: UPDATE parcels, INSERT history, INSERT outbox parcel.delivered.v1, COMMIT
     DEL-->>C: 200 DELIVERED
-    Note over DB,TRK: Outbox relay publishes event and Tracking API pushes a masked update to live viewers
+    Note over DB,TRK: Outbox relay publishes the event and Tracking API pushes a masked update to live viewers
 ```
 
 **Figure C-04b Proof screen on the phone**
 
 ```mermaid
 flowchart TD
-    A["Open POD screen"] --> B["Take photo and or signature, enter receiver name"]
-    B --> C{"Photo over 10 MB?"}
+    A["Open POD screen"] --> B["Signature and receiver name, optional photo"]
+    B --> P{"Photo taken?"}
+    P -- "No" --> H
+    P -- "Yes" --> C{"Photo over 10 MB?"}
     C -- "Yes" --> D["Resize on phone"] --> E
-    C -- "No" --> E["Upload photo [TBD U-25]"]
+    C -- "No" --> E["POST proof-photo"]
     E --> F{"Upload OK?"}
     F -- "No" --> G["Show error, Try again"] --> E
-    F -- "Yes" --> H["Send complete delivery with proof reference and key"]
+    F -- "Yes" --> H["POST complete with key"]
     H --> I{"Result"}
     I -- "200" --> J["Delivered, back to list"]
-    I -- "400 missing proof" --> B
+    I -- "400 or 422" --> B
     I -- "409 or 403" --> K["Reload task"]
-    I -- "Timeout" --> L["Try again with same reference and key, no new upload"] --> H
+    I -- "Timeout" --> L["Try again with same key, no new upload"] --> H
 ```
 
 
@@ -1099,15 +1105,15 @@ flowchart TD
 - **Trigger:** courier cannot deliver.
 - **Preconditions:** parcel OUT\_FOR\_DELIVERY and assigned to this courier.
 - **Main flow:**
-  1. Courier presses "Delivery failed".
-  2. Picks one reason from the ADR-004 list (7 codes). For OTHER, a note of at least 15 characters is required; the counter shows how many are left.
-  3. Optional: share location (GPS) if the courier allows it **\[TBD: required or optional?\]**.
-  4. Client sends the failure with an Idempotency-Key **\[TBD U-19: `POST /api/v1/courier/parcels/{id}/fail-attempt` (ADR-004) or `POST /api/v1/deliveries/{parcel_id}/failed` (delivery API.md); field names `failure_reason_code` and `failure_note` (schema) or `reason_code` and `notes` (API.md)\]**.
-  5. Backend writes an attempt row (FAILED), increases `attempt_count` in the same transaction, sets ATTEMPT\_FAILED, writes `parcel.delivery_failed.v1` event \[Repo\] ADR-004 section 5.
-  6. Screen shows "Attempt 1 of 3 recorded. The dispatcher will decide the next step." and removes it from active tasks.
-- **Failure flows:** 422 note too short or unknown reason; 409 parcel no longer OUT\_FOR\_DELIVERY; network error then "Try again" with the same key.
-- **Postconditions:** one new FAILED attempt row, attempt count +1, parcel ATTEMPT\_FAILED (or RETURNED if U-21 is "automatic" and this was attempt 3). Customer gets a masked message; merchant gets a webhook (ADR-004 section 6).
-- **Rule:** the courier cannot reschedule. There is no "try again later" button for the courier (ADR-004 3.1 rule 4).
+  1. Courier presses "Delivery failed" (`/courier/tasks/:id/fail`).
+  2. Picks one reason from Member 3's list (7 codes, section 4.2). For OTHER, a note of at least 15 characters is required; the counter shows how many are left.
+  3. Location is sent if the courier allows it.
+  4. Client sends `POST /api/v1/deliveries/{id}/failed` with `{ "reason_code", "notes", "latitude", "longitude" }` (Member 3 Doc 4 3.14).
+  5. Backend writes an attempt row (FAILED) and, in the same transaction, sets ATTEMPT\_FAILED, or RETURNED on the 3rd attempt or for REFUSED\_BY\_RECIPIENT; it writes the `parcel.delivery_failed.v1` (or `parcel.returned.v1`) event.
+  6. Screen reads `attempt_number`, `max_attempts`, `status` and `next_action` from the answer and shows either "Attempt 1 of 3 recorded. The dispatcher will schedule the next try." or "Parcel will be returned to the sender."
+- **Failure flows:** 400 `INVALID_FAILURE_REASON`; 422 `FAILURE_NOTE_TOO_SHORT`; 409 parcel no longer OUT\_FOR\_DELIVERY; network error then "Try again". Member 3 does not list an Idempotency-Key for this call, so a retry after a timeout may answer 409 (the first call worked); the screen then reloads and shows the real status.
+- **Postconditions:** one new FAILED attempt row; parcel ATTEMPT\_FAILED or RETURNED. Customer gets a masked message; merchant gets a webhook (ADR-004 section 6).
+- **Rule:** the courier cannot reschedule. Only a dispatcher can (F-06; ADR-004 3.1 rule 4).
 
 ```mermaid
 sequenceDiagram
@@ -1118,15 +1124,20 @@ sequenceDiagram
     participant PA as Parcel aggregate (M2)
     participant DB as PostgreSQL
     actor D as Dispatcher board
-    C->>GW: POST fail-attempt [TBD U-19] reason and note, Idempotency-Key
+    C->>GW: POST /api/v1/deliveries/{id}/failed {reason_code, notes, latitude, longitude}
     GW->>DEL: forward
     DEL->>DEL: Check courier assigned, reason valid, note 15+ chars if OTHER
     DEL->>DB: BEGIN, INSERT delivery_attempts FAILED
     DEL->>PA: RecordFailedAttempt(reason, courier)
-    PA->>DB: UPDATE parcels attempt_count + 1, status ATTEMPT_FAILED, INSERT history, INSERT outbox, COMMIT
-    DEL-->>C: 200 attempt 1 of 3
-    D->>GW: Board refresh (timer)
-    GW-->>D: Parcel now in Needs review (F-06)
+    alt Attempt 3 or REFUSED_BY_RECIPIENT
+        PA->>DB: UPDATE parcels RETURNED, INSERT history, INSERT outbox, COMMIT
+        DEL-->>C: 200 status RETURNED, next_action RETURN_TO_SENDER
+    else Attempts left
+        PA->>DB: UPDATE parcels ATTEMPT_FAILED, INSERT history, INSERT outbox, COMMIT
+        DEL-->>C: 200 attempt 1 of 3, status ATTEMPT_FAILED
+        D->>GW: Board refresh (timer)
+        GW-->>D: Parcel now marked Needs review (F-06)
+    end
 ```
 
 **Figure C-05b Failure form on the phone**
@@ -1137,52 +1148,54 @@ flowchart TD
     B --> C{"Reason is OTHER?"}
     C -- "Yes" --> D{"Note 15 or more characters?"}
     D -- "No" --> E["Show characters left, block Send"] --> D
-    D -- "Yes" --> F["Send with key"]
+    D -- "Yes" --> F["POST /deliveries/{id}/failed"]
     C -- "No" --> F
     F --> G{"Result"}
-    G -- "200" --> H["Show attempt N of 3, dispatcher decides next"]
-    G -- "422" --> B
+    G -- "200 ATTEMPT_FAILED" --> H["Show attempt N of 3, dispatcher schedules next"]
+    G -- "200 RETURNED" --> H2["Show parcel goes back to sender"]
+    G -- "400 or 422" --> B
     G -- "409" --> I["Reload task"]
-    G -- "Network error" --> J["Not sent, Try again with same key"] --> F
+    G -- "Network error" --> J["Not sent, Try again"] --> F
 ```
 
 
 ## 7. Admin backend module flows (`core-api/internal/admin/`)
 
-These are the backend flows I own together with Members 1 and 4 (U-10: which Go code I write is still open). Every endpoint requires the ADMIN role \[Repo\] admin README 2.
+These are the backend flows of the admin module. I write all of its Go code (Doc 1 section 2.3). Every `/admin/*` endpoint requires ADMIN, except the delivery report, which also allows DISPATCHER (Doc 1 R-16). `GET /api/v1/zones` needs no sign-in (R-18).
 
 ### A-01 Create or update a delivery zone
 
-- **Trigger:** `POST /api/v1/admin/zones` (create) or the proposed PATCH (edit).
+- **Trigger:** `POST /api/v1/admin/zones` (create), `PATCH /api/v1/admin/zones/{id}` (edit) or `PATCH /api/v1/admin/zones/{id}/status` (enable or disable).
 - **Preconditions:** caller has a valid JWT with role ADMIN.
 - **Main flow (create):**
   1. Auth middleware checks the token and role. Not ADMIN gives 403.
-  2. Idempotency middleware checks `Idempotency-Key` (scope `USER:<admin id>`, operation `POST /admin/zones`). Replay returns the saved 201.
-  3. Validate input: `zone_code` required, unique, upper case letters, digits and underscore **\[Proposed format\]**; `name` required, 1 to 100 characters **\[Proposed\]**; surcharge not negative **\[format TBD U-03\]**; `postal_code_prefixes` at least one, digits only, no duplicates in the list.
-  4. `BEGIN` transaction.
-  5. Insert into `delivery_zones` (enabled = true).
-  6. Insert each prefix into `zone_postal_codes`. A **unique constraint on the prefix** makes the database reject a prefix that is already used by another zone.
-  7. Insert an `audit_logs` row (action `ZONE_CREATED`, new state, IP, request id) **\[Proposed action name\]**.
+  2. Idempotency middleware checks `Idempotency-Key` (scope `USER:<admin id>`, operation `POST /admin/zones`). Replay returns the saved 201 **\[shared idempotency table, U-24, U-39\]**.
+  3. Validate input: `id` required, `^ZONE_[A-Z0-9_]{2,27}$` (for example `ZONE_COLOMBO_01`); `code` required, `^[A-Z0-9_-]{2,32}$` (for example `CMB-01`); `name` required, 1 to 120 characters; `description` optional; `boundary_polygon` optional GeoJSON; `postal_code_prefixes` at least one, 3 to 5 digits each, no two in the list overlapping. There is no money field (R-04).
+  4. `BEGIN` transaction; take the advisory lock for prefix changes (`pg_advisory_xact_lock`), so two admins cannot add overlapping prefixes at the same moment.
+  5. Insert into `delivery_zones` (enabled = true, version = 1).
+  6. Check that no new prefix overlaps a prefix of another zone (`a LIKE b || '%' OR b LIKE a || '%'`), then insert each prefix into `zone_postal_codes`.
+  7. Insert an `audit_logs` row: `action` `ZONE_CREATED`, `target_type` `DELIVERY_ZONE`, `target_id` the zone id, `new_state`, `actor_id`, `actor_role`, `client_ip`, `user_agent`, `request_id` (R-05).
   8. Save the idempotency record. `COMMIT`.
   9. Return 201 with the zone.
 - **Failure flows:**
 
-| Case | Response (proposed codes) |
+| Case | Response |
 | --- | --- |
 | Missing or bad field | 422 `VALIDATION_FAILED` with `details[]` per field |
-| Zone code already exists | 409 `ZONE_CODE_ALREADY_EXISTS` |
-| Postal prefix already in another zone | 409 `ZONE_POSTAL_CODE_CONFLICT`, details name the prefix and the other zone code |
+| Zone id or code already exists | 409 `ZONE_CODE_ALREADY_EXISTS` |
+| Postal prefix overlaps another zone | 409 `ZONE_POSTAL_CODE_CONFLICT`, details name the prefix and the other zone id |
+| Stale `version` on edit | 409 `CONCURRENT_MODIFICATION` |
+| Lock wait over 2 s | 503 `TRY_AGAIN` |
 | Same key, different body | 409 `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` |
 | Not ADMIN | 403 `ACCESS_DENIED` |
-| Database error | 500 with correlation id, transaction rolled back, nothing saved |
+| Database error | 500 with the request id, transaction rolled back, nothing saved |
 
 - **Postconditions:** zone and all its prefixes saved together, or nothing saved. One audit row.
 - **Rules:**
-  - Postal code uniqueness (admin README rule 3). **\[TBD: does "conflicting" mean exact same prefix only, or also overlapping prefixes such as "627" and "62701"? Proposed: forbid both, check with a query inside the transaction.\]**
-  - Disabling a zone does not change parcels already booked. New quotes for that zone are refused by Member 2's pricing **\[TBD with M2\]**.
-  - Zone changes are not published as events (I publish nothing, X-08). If pricing caches zones, Member 2 must reload them **\[TBD with M2\]**.
-  - Zone schema differs between admin README (base surcharge, active) and database-schema.md (enabled, boundary polygon, no surcharge) **\[TBD U-13\]**.
-- **Concurrency:** two admins add the same prefix to two zones at the same time. Both pass validation, but the unique constraint lets only one commit; the other gets 409 `ZONE_POSTAL_CODE_CONFLICT`. Editing a zone uses a `version` column with the same optimistic check as parcels **\[Proposed: `delivery_zones` has no version column today\]**; a stale edit gets 409 and the screen reloads.
+  - The zone `id` never changes, because Members 2 and 3 store it in `pricing_rules` and `couriers` (R-03).
+  - A zone is never deleted, only disabled. Disabling a zone does not change parcels already booked; whether new quotes are refused is Member 2's rule.
+  - Zone changes are not published as events (I publish nothing, X-08) **\[U-32\]**.
+- **Concurrency:** two admins add overlapping prefixes to two zones at the same time. The advisory lock makes the second wait; it then sees the first one's prefix and gets 409. Editing uses the `version` column (`UPDATE … WHERE id = $1 AND version = $2`); a stale edit gets 409 and the screen reloads.
 
 ```mermaid
 sequenceDiagram
@@ -1192,22 +1205,22 @@ sequenceDiagram
     participant GW as Traefik
     participant ADM as Core API admin
     participant DB as PostgreSQL
-    A->>UI: Save new zone
+    A->>UI: Save new zone ZONE_GALLE_01
     UI->>GW: POST /api/v1/admin/zones with Idempotency-Key
-    GW->>ADM: forward (CORS, 10 MB limit)
+    GW->>ADM: forward (CORS, 1 MB JSON limit)
     ADM->>ADM: Check JWT role ADMIN
     ADM->>DB: Look up idempotency key
     alt Key seen with same body
         ADM-->>UI: 201 saved response, Idempotent-Replay true
     else New key
-        ADM->>ADM: Validate fields
-        ADM->>DB: BEGIN, INSERT delivery_zones, INSERT zone_postal_codes
-        alt Prefix already used
-            DB-->>ADM: unique violation
+        ADM->>ADM: Validate id, code, name, prefixes
+        ADM->>DB: BEGIN, advisory lock, INSERT delivery_zones
+        ADM->>DB: Any overlapping prefix in another zone?
+        alt Overlap found
             ADM->>DB: ROLLBACK
             ADM-->>UI: 409 ZONE_POSTAL_CODE_CONFLICT
         else OK
-            ADM->>DB: INSERT audit_logs, INSERT idempotency_keys, COMMIT
+            ADM->>DB: INSERT zone_postal_codes, INSERT audit_logs, INSERT idempotency_keys, COMMIT
             ADM-->>UI: 201 zone
         end
     end
@@ -1222,12 +1235,12 @@ flowchart TD
     B -- "Yes" --> C{"Key seen before?"}
     C -- "Same body" --> R["Return saved response"]
     C -- "Different body" --> X2["409 key mismatch"]
-    C -- "New" --> D{"Fields valid?"}
+    C -- "New" --> D{"Fields valid? id, code, name, prefixes"}
     D -- "No" --> X3["422 with details"]
-    D -- "Yes" --> E["BEGIN transaction"]
-    E --> F{"Zone code free?"}
+    D -- "Yes" --> E["BEGIN, advisory lock"]
+    E --> F{"Zone id and code free?"}
     F -- "No" --> X4["ROLLBACK, 409 code exists"]
-    F -- "Yes" --> G{"All prefixes free?"}
+    F -- "Yes" --> G{"No prefix overlaps another zone?"}
     G -- "No" --> X5["ROLLBACK, 409 postal conflict"]
     G -- "Yes" --> H["Insert zone, prefixes, audit row, key record"]
     H --> I["COMMIT, 201"]
@@ -1236,10 +1249,10 @@ flowchart TD
 
 ### A-02 System settings (`system_settings`)
 
-- **Trigger:** admin changes a runtime switch **\[TBD: no endpoint or screen defined; which settings exist is not decided\]**.
-- **Rules (proposed):** only known keys may be set (no free keys); each change writes an audit row with old and new value; secrets are never stored here (X-10).
+- **Trigger:** `GET /api/v1/admin/settings` and `PUT /api/v1/admin/settings/{key}` with `{ "value", "version", "reason" }`.
+- **Rules:** only allowlisted keys may be set (`reports.max_range_days`, `ops.board_refresh_seconds`, `ops.maintenance_banner`); each value is checked against its rule; each change writes an audit row with `previous_state` and `new_state`; secrets are never stored here (X-10).
 
-**Figure A-02 Change a setting (proposed)**
+**Figure A-02 Change a setting**
 
 ```mermaid
 sequenceDiagram
@@ -1247,24 +1260,23 @@ sequenceDiagram
     actor A as Admin
     participant ADM as Core API admin
     participant DB as PostgreSQL
-    A->>ADM: Change setting [TBD endpoint] with key
-    ADM->>ADM: Check ADMIN and key is in allowed list
-    ADM->>DB: BEGIN, read old value, UPDATE system_settings
-    ADM->>DB: INSERT audit_logs with old and new value, COMMIT
+    A->>ADM: PUT /api/v1/admin/settings/{key} {value, version, reason}
+    ADM->>ADM: Check ADMIN, key in allowlist, value valid
+    ADM->>DB: BEGIN, read old value, UPDATE system_settings WHERE version matches
+    ADM->>DB: INSERT audit_logs with previous_state and new_state, COMMIT
     ADM-->>A: 200
 ```
 
 
-### A-03 Operational report query
+### A-03 Delivery report query
 
-- **Trigger:** `GET /api/v1/admin/reports/operational` \[Repo\].
-- **Main flow:** check ADMIN; validate `from` and `to` (dates, `from` not after `to`); read only queries over parcels, attempts and history through approved read models **\[TBD: admin module may only read its own tables (domain-boundaries 4.2). Reading other modules' data needs a Go interface from those modules or a reporting view; agree with M2 and M3\]**; return the numbers.
-- **Definitions to agree** **\[TBD with M2, M3\]**:
-  - "Day" boundaries: proposed Sri Lanka time (00:00 to 23:59 Asia/Colombo), converted to UTC for the query.
-  - `first_attempt_delivery_rate` = delivered on attempt 1 / all parcels that reached a final status in the period.
-  - `average_delivery_time_hours` = from CREATED to DELIVERED.
-  - Percent is sent as a string ("97.2%") in API.md. Proposed: send a number and let the screen format it **\[TBD\]**.
-- **Failure flows:** 422 bad dates; 403 not ADMIN (or allowed dispatcher, U-02).
+- **Trigger:** `GET /api/v1/admin/reports/deliveries?from=&to=` (SRS 6.2 name, R-16).
+- **Main flow:** check ADMIN or DISPATCHER; validate `from` and `to` (dates, `from` not after `to`, range at most `reports.max_range_days`); read counts through read-only Go interfaces of the parcels and delivery modules (the admin module may only read its own tables, domain-boundaries 4.2) **\[TBD: Members 2 and 3 to expose `ReportReader` interfaces\]**; return deliveries per day, delivered, failed attempts, returned, success rate and failure rate (FR-ADM-008).
+- **Definitions:**
+  - "Day" boundaries: Sri Lanka time (00:00 to 23:59 Asia/Colombo), converted to UTC for the query.
+  - Success rate = delivered / parcels that reached DELIVERED or RETURNED in the period. Failure rate = failed attempts / all attempts in the period.
+  - Rates are sent as numbers (for example `0.972`); the screen formats them.
+- **Failure flows:** 422 bad dates or range too long; 403 for other roles.
 - **Idempotency:** read only, safe to repeat.
 
 **Figure A-03 Report query in the backend**
@@ -1274,12 +1286,12 @@ sequenceDiagram
     autonumber
     participant UI as Reports screen
     participant ADM as Core API admin
-    participant RD as Read interfaces of parcels and delivery [TBD]
+    participant RD as Read interfaces of parcels and delivery (M2, M3)
     participant DB as PostgreSQL
-    UI->>ADM: GET /admin/reports/operational
-    ADM->>ADM: Check role, validate dates
-    ADM->>ADM: Turn Sri Lanka dates into UTC range (proposed)
-    ADM->>RD: Counts for range and zone
+    UI->>ADM: GET /admin/reports/deliveries?from&to
+    ADM->>ADM: Check ADMIN or DISPATCHER, validate dates and range
+    ADM->>ADM: Turn Sri Lanka dates into UTC range
+    ADM->>RD: Counts per day for range
     RD->>DB: Read-only queries
     RD-->>ADM: Counts
     ADM->>ADM: Work out rates, safe when total is 0
@@ -1289,37 +1301,69 @@ sequenceDiagram
 
 ### A-04 Audit log query
 
-- **Trigger:** audit explorer (F-13). Endpoint requested.
-- **Rules:** `GET` only. No update or delete endpoint exists, and the database user for the app should have no UPDATE or DELETE right on `audit_logs` **\[Proposed; check with M9\]**. Results are paginated and sorted newest first. Kept at least 2 years (database-schema retention).
+- **Trigger:** `GET /api/v1/admin/audit-logs` (F-13), ADMIN only.
+- **Rules:** `GET` only. No update or delete endpoint exists, the app role `swiftdrop_app` has no UPDATE or DELETE right on `audit_logs` (Member 9 D7), and a trigger blocks both. Results are paginated and sorted newest first. Kept at least 2 years (database-schema retention, U-41).
 
 **Figure A-04 Why audit rows cannot change**
 
 ```mermaid
 flowchart LR
     A["Admin module code"] -->|"INSERT and SELECT only"| T[("audit_logs")]
-    B["Any UPDATE or DELETE"] -.->|"no endpoint, no database right (proposed)"| T
+    B["Any UPDATE or DELETE"] -.->|"no endpoint, no database right, trigger raises error"| T
 ```
 
 
-### A-05 Merchant approval (with Member 4)
+### A-05 Merchant admin routes (with Member 4)
 
-The admin module README lists "ApproveMerchant" as its use case, but merchant status lives in the merchants table owned by Member 4. **Proposed split:** the admin endpoint checks ADMIN, then calls Member 4's Go interface (not HTTP, domain-boundaries 4.1) which changes the status and writes the audit row in the same transaction (F-08 diagram). **\[TBD U-10\]**
+Merchant status lives in Member 4's `merchants` table. My admin module hosts the HTTP routes `/api/v1/admin/merchants/**` and calls Member 4's Go interface `merchants.AdminService` (not HTTP, domain-boundaries 4.1). Member 4 changes the status and writes the audit row in the same transaction (F-08 diagram; Member 4 Doc 4 section 4, decision U-10).
 
-**Figure A-05 Proposed split for merchant approval**
+| My route | Calls |
+| --- | --- |
+| `GET /api/v1/admin/merchants?status=&q=&page=&per_page=` | `AdminService.ListMerchants(filter, page)` |
+| `GET /api/v1/admin/merchants/{id}` | `AdminService.GetMerchant(id)` |
+| `POST /api/v1/admin/merchants/{id}/approve` and `/reinstate` | `AdminService.ChangeStatus` with `expected_version` |
+| `POST /api/v1/admin/merchants/{id}/reject`, `/suspend`, `/disable` | `AdminService.ChangeStatus` with `expected_version` and `reason` (5 to 500 characters) |
+
+My handler does only: role check (ADMIN), JSON decode with unknown fields refused, the length checks above, building the `Actor` (user id, role, request id, client IP, user agent) from the token and request, and mapping Member 4's errors to HTTP (not found 404, stale version 409, move not allowed 422).
+
+**Figure A-05 Merchant status change**
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant H as Admin HTTP handler
-    participant UC as ApproveMerchant use case (admin)
-    participant MI as Merchants Go interface (M4)
+    participant H as Admin HTTP handler (M7)
+    participant MI as merchants.AdminService (M4)
     participant DB as PostgreSQL
-    H->>UC: Approve(merchant id, admin from token)
-    UC->>MI: ChangeStatus(id, APPROVED, actor, reason)
+    H->>H: Require ADMIN, decode {expected_version, reason}
+    H->>MI: ChangeStatus(id, APPROVE, version, reason, actor)
     MI->>DB: BEGIN, UPDATE merchants WHERE version matches
-    MI->>DB: INSERT audit_logs MERCHANT_APPROVED, COMMIT
-    MI-->>UC: new status
-    UC-->>H: 200
+    MI->>DB: INSERT audit_logs MERCHANT_APPROVED, outbox, COMMIT
+    MI-->>H: merchant summary
+    H-->>H: 200 {data: merchant}
+```
+
+
+### A-06 Public zone list (new, R-18)
+
+- **Trigger:** `GET /api/v1/zones` from Member 6's booking form, or `GET /api/v1/zones?postal_code=00300` to find the zone for an address.
+- **Main flow:** no sign-in needed; read enabled zones only and return `id`, `code` and `name` (no prefixes list, no audit data); with `postal_code`, return the one zone whose prefix is the longest match, or 404 `ZONE_NOT_FOUND`. The answer carries `Cache-Control: public, max-age=300`.
+- **Rules:** read only; same gateway limits as any `/api/v1` call; the field set is fixed so private data can never leak (SEC-009 style).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Booking form (M6)
+    participant GW as Traefik
+    participant ADM as Core API admin
+    participant DB as PostgreSQL
+    B->>GW: GET /api/v1/zones?postal_code=00300
+    GW->>ADM: forward (no token needed)
+    ADM->>DB: SELECT enabled zone with the longest matching prefix
+    alt Found
+        ADM-->>B: 200 {data: {id, code, name}}
+    else None
+        ADM-->>B: 404 ZONE_NOT_FOUND
+    end
 ```
 
 
@@ -1330,27 +1374,34 @@ sequenceDiagram
 - **Trigger:** any HTTP request (T-13).
 - **Main flow:**
   1. Production: Cloudflare receives the request (HTTPS), then sends it to Traefik on 443 using the origin certificate. Local: request hits Traefik on port 80.
-  2. Traefik entrypoint trusts forwarded headers only from the listed private and Cloudflare IP ranges \[Repo\] traefik.yml.
-  3. Traefik picks the router. With no explicit priority, Traefik gives longer rules higher priority, so the order is:
+  2. Traefik restores the real client IP only when the sender is a trusted proxy (Cloudflare and private ranges) \[Repo\] traefik.yml.
+  3. Traefik picks the router. The table is my proposed file (Doc 7 section 14), which replaces the four repo routers:
 
-| Order | Rule | Service | Middlewares |
+| Router | Rule | Service | Middlewares |
 | --- | --- | --- | --- |
-| 1 | `PathPrefix(/api/v1/tracking)` | tracking-api:8081 | CORS, tracking rate limit |
-| 2 | `PathPrefix(/api/v1/ai)` | ai-assistant:8000 | CORS (AI limit missing, U-06) |
-| 3 | `PathPrefix(/api/v1)` | core-api:8080 | CORS, 10 MB upload limit |
-| 4 | `PathPrefix(/)` | web:3000 | none |
+| tracking-stream | `^/api/v1/tracking/public/[^/]+/stream$` or `^/api/v1/tracking/[^/]+/stream$` (priority 100) | tracking-api:8081 | strip identity headers, security headers, CORS, tracking limit, 5 open streams per IP |
+| tracking | `/api/v1/tracking` and `/api/v1/tracking/…` | tracking-api:8081 | strip identity headers, security headers, CORS, tracking limit |
+| ai-stream | `/api/v1/ai/mcp/sse` | ai-assistant:8000 | strip identity headers, security headers, CORS, 5 open streams per IP (no buffering) |
+| ai | `/api/v1/ai` and `/api/v1/ai/…` | ai-assistant:8000 | strip identity headers, security headers, CORS, AI limit, 1 MB body |
+| login | `/api/v1/auth/login` | core-api:8080 | strip identity headers, security headers, CORS, login limit, 1 MB body |
+| merchant-api | `/api/v1/merchant/…` | core-api:8080 | strip identity headers, security headers, CORS, merchant limit, 1 MB body |
+| upload | `^/api/v1/deliveries/[^/]+/proof-photo$` | core-api:8080 | strip identity headers, security headers, CORS, 10 MB body |
+| core-api | `/api/v1` | core-api:8080 | strip identity headers, security headers, CORS, 1 MB body |
+| api-catchall | `/api` (priority 2) | core-api:8080 (answers 404 JSON) | strip identity headers, security headers, 1 MB body |
+| frontend | `/` (priority 1) | web:3000 | security headers, CSP |
 
   4. Middlewares run in order; if one stops the request (429, 413, CORS preflight) the service is never called.
   5. The service answers. Traefik passes the status code and headers back unchanged, including 401 and 403 (M7-GW-10).
 - **Rules:**
   - R-GW-01 The gateway never reads or checks tokens or API keys (D-03, INV-04).
   - R-GW-02 Every public path goes to exactly one service (INV-06).
-  - R-GW-03 No retry middleware on any route that accepts POST, PUT or PATCH. A gateway retry could send a change twice. **\[Proposed\]**
-  - R-GW-04 No Core API path may start with `/api/v1/tracking` or `/api/v1/ai`, because PathPrefix matches by text and the tracking or AI router would take it. **\[Proposed rule for all teams\]**
+  - R-GW-03 No retry middleware on any route. A gateway retry could send a change twice.
+  - R-GW-04 No Core API path may start with `/api/v1/tracking` or `/api/v1/ai`; the exact-prefix rules above also stop `/api/v1/trackingX` from reaching the tracking service.
+  - R-GW-05 The AI route is `/api/v1/ai/*` (Member 10's `/api/v1/ai/chat`). The SRS line `/api/v1/assistant/chat` is to be updated by the Tech Lead (Doc 1 R-17).
 - **Edge cases:**
-  - `/api/v2/anything` or `/api/foo` does not match `/api/v1`, so it falls to the frontend and returns the web page with 200 instead of a 404. **Proposed fix:** add a router `PathPrefix(/api)` that returns 404 JSON. **\[TBD with M9\]**
-  - `/health/live`, `/health/ready`, `/metrics` are not under `/api/v1`, so they fall to the frontend, not to core-api. Good, but the smoke test must prove it (INV-05). If a service ever puts health under `/api/v1/...`, it becomes public; R-GW-04 style rule needed.
-  - The dashboard (`api.insecure: true`) must be off in production (M7-GW-06).
+  - `/api/v2/anything` is caught by the `/api` catch-all and gets a 404 JSON from core-api, not the web page.
+  - `/health/live`, `/health/ready` and `/metrics` are not under `/api`, so they fall to the web app, never to a backend (INV-05, Member 9 A2). Tested by the gateway checks.
+  - The dashboard is only on the internal port 8090 with `insecure: false` (Doc 1 R-10).
 
 ```mermaid
 flowchart TD
@@ -1359,34 +1410,48 @@ flowchart TD
     B -- "No" --> E["Traefik web :80"]
     D --> F["Restore client IP if sender is trusted"]
     E --> F
-    F --> G{"Path starts with"}
-    G -- "/api/v1/tracking" --> H["CORS, tracking rate limit"] --> H2["tracking-api :8081"]
-    G -- "/api/v1/ai" --> I["CORS [AI limit TBD]"] --> I2["ai-assistant :8000"]
-    G -- "/api/v1" --> J["CORS, 10 MB limit"] --> J2["core-api :8080"]
+    F --> G{"Path"}
+    G -- "tracking stream" --> H0["Tracking limit, 5 streams per IP"] --> H2["tracking-api :8081"]
+    G -- "/api/v1/tracking" --> H["Tracking limit 30/min burst 10"] --> H2
+    G -- "/api/v1/ai" --> I["AI limit 10/min burst 2"] --> I2["ai-assistant :8000"]
+    G -- "/api/v1/auth/login" --> L["Login limit 5/min burst 3"] --> J2["core-api :8080"]
+    G -- "/api/v1/merchant/" --> M["Merchant limit 120/min burst 20"] --> J2
+    G -- "proof-photo upload" --> U["10 MB limit"] --> J2
+    G -- "/api/v1 other" --> J["1 MB JSON limit"] --> J2
+    G -- "/api other" --> N["core-api answers 404 JSON"]
     G -- "anything else" --> K["web :3000"]
     H -- "limit hit" --> X["429"]
-    J -- "body over 10 MB" --> Y["413"]
+    J -- "body over 1 MB" --> Y["413"]
 ```
 
 ### G-02 Rate limiting
 
 - **Trigger:** a request on a route with a rate limit middleware.
-- **Main flow:** Traefik keeps a token bucket per client. Tracking today: average 30 per minute, burst 50 \[Repo\] (security-notes says burst 10, U-15). If a token is free the request passes; if not, 429.
+- **Main flow:** Traefik keeps a token bucket per client IP. If a token is free the request passes; if not, 429 with `Retry-After`.
+- **Numbers** (security-notes.md section 3, SRS SEC-007, Doc 1 R-13):
+
+| Route | Gateway limit per client IP | Per-user or per-key limit (backend) |
+| --- | --- | --- |
+| `/api/v1/auth/login` | 5 per minute, burst 3 | none |
+| `/api/v1/tracking/…` | 30 per minute, burst 10; 5 open streams | none |
+| `/api/v1/merchant/…` | 120 per minute, burst 20 | 120 per minute per API key (Member 4) |
+| `/api/v1/ai/…` | 10 per minute, burst 2 | 10 per minute per user (Member 10) |
+| `/api/v1/courier/…` | none at the gateway | 60 per minute per user, burst 15 (U-50) |
+
 - **Rules and edge cases:**
-  - **Which IP is counted.** By default Traefik's rate limit counts the address of the direct sender. Behind Cloudflare that is a Cloudflare server, so many users could share one bucket. The middleware must set `sourceCriterion` (for example the `CF-Connecting-IP` header, or an `ipStrategy` depth) so the real visitor is counted. **\[Proposed; must be tested, ADR-001 unchecked item\]**
-  - **Per pod.** Each Traefik replica has its own bucket. With 3 replicas a client may get up to 3 times the limit (ADR-001 section 3). Numbers are set with that in mind.
-  - **Per user limits** in security-notes (courier, AI) cannot be done at the gateway because it does not read tokens. They become per IP here, and per user in the backend (U-06).
-  - Proposed limits still to add: login 5 per minute burst 3; merchant API 120 per minute burst 20 (per IP here, per key in backend); courier 60 per minute burst 15; AI 10 per minute burst 2 \[security-notes 3, U-06\].
-  - Example: a phone network that puts many couriers behind one public IP (carrier NAT) could hit the courier limit together. **\[TBD: check during testing; may need a higher per-IP number\]**
+  - **Which IP is counted.** Behind Cloudflare the direct sender is a Cloudflare server, so every middleware sets `sourceCriterion.ipStrategy.depth: 1` (the right-most `X-Forwarded-For` entry, which Cloudflare writes). A client cannot reset its bucket by adding fake entries on the left (Doc 7 GS-05b) **\[U-46: depth changes if another proxy is added\]**.
+  - **Per pod.** Each Traefik replica has its own bucket. With 3 replicas a client may get up to 3 times the limit (ADR-001 section 3).
+  - **Per-user limits** cannot be done at the gateway because it does not read tokens. They live in the backends.
+  - Example: a phone network that puts many users behind one public IP (carrier NAT) could share a bucket. Watch 429 counts during testing.
 
 **Figure G-02 Rate limit decision**
 
 ```mermaid
 flowchart TD
-    A["Request on a limited route"] --> B["Find client key: real IP from sourceCriterion (proposed)"]
+    A["Request on a limited route"] --> B["Client key: right-most X-Forwarded-For entry (depth 1)"]
     B --> C{"Token left in this pod's bucket?"}
     C -- "Yes" --> D["Take one token, pass to service"]
-    C -- "No" --> E["429 Too Many Requests"]
+    C -- "No" --> E["429 Too Many Requests with Retry-After"]
     F["Tokens refill at average rate, up to burst"] --> C
 ```
 
@@ -1395,7 +1460,7 @@ flowchart TD
 
 - **Trigger:** browser sends `OPTIONS` with an `Origin` header from a different site.
 - **Main flow:** if the origin is in the allowlist, Traefik answers with the allowed methods and headers and the browser sends the real request; otherwise no CORS headers are sent and the browser blocks it.
-- **Rules:** if the team chooses one domain with paths (U-11, my recommendation), the web app is same-origin and needs no CORS at all; CORS then only matters for other origins. Header list and max age differences with security-notes (X-Request-ID, X-Tenant-ID, 3600 vs 86400, credentials) are Doc 1 M7-GW-04 items **\[TBD U-09\]**. Wildcard `*` origin with credentials is never allowed (SEC-014).
+- **Rules (security-notes.md section 4, SRS SEC-013):** origins `https://swiftdrop.io`, `https://app.swiftdrop.io`, `https://portal.swiftdrop.io`, `http://localhost:3000`, `http://127.0.0.1:3000`; methods GET, POST, PUT, PATCH, DELETE, OPTIONS; headers `Authorization, Content-Type, X-API-Key, Idempotency-Key, X-Request-ID`; exposed `X-Request-ID, Content-Length`; credentials allowed; max age 86400. `X-Tenant-ID` is not allowed, because the client never sends it (R-15). A wildcard `*` origin is never used. With paths on one domain (A9) the web app is same-origin, so CORS matters only for other origins.
 
 **Figure G-03 CORS preflight**
 
@@ -1407,7 +1472,7 @@ sequenceDiagram
     participant S as Service
     B->>GW: OPTIONS with Origin and wanted headers
     alt Origin in allowlist
-        GW-->>B: 204 with allowed methods, headers, max age
+        GW-->>B: 204 with allowed methods, headers, max age 86400
         B->>GW: Real request
         GW->>S: forward
         S-->>B: answer with CORS headers
@@ -1421,8 +1486,8 @@ sequenceDiagram
 ### G-04 Live tracking stream (SSE) through the gateway
 
 - **Trigger:** a browser opens the tracking stream (Member 6's screen; I own only the route).
-- **Main flow:** request matches the tracking router; no buffering middleware is applied on that route, so events flow at once; the Tracking API sends a heartbeat comment (20 s proposed by M5, 15 s in ADR-002, U-17) so Cloudflare and Traefik do not close an idle connection; the client reconnects automatically if the stream drops.
-- **Rules:** the path is not agreed (U-16); limits proposed 30 lookups per minute and 5 open streams per IP (Doc 1 D-10). Traefik's rate limit counts requests, not open connections, so "5 streams per IP" needs a different tool (Traefik `inFlightReq` middleware) **\[Proposed\]**. Entry point timeouts must not cut long streams **\[to be verified in the SSE test\]**.
+- **Main flow:** the request matches the tracking-stream router (`/api/v1/tracking/public/{trackingNumber}/stream`, or `/api/v1/tracking/{trackingNumber}/stream` when signed in); no buffering middleware is on that route, so events flow at once; the Tracking API sends a `:keepalive` comment every 15 seconds so Cloudflare (100 s idle limit) and Traefik do not close an idle connection; the client reconnects automatically if the stream drops.
+- **Rules:** limits are 30 lookups per minute (burst 10) and 5 open streams per IP. Traefik's rate limit counts requests, not open connections, so "5 streams per IP" uses the `inFlightReq` middleware. The entry point `writeTimeout` stays 0 so long streams are not cut (Doc 7 GS-19). The AI MCP stream `/api/v1/ai/mcp/sse` gets the same treatment.
 
 **Figure G-04 SSE stream through the gateway**
 
@@ -1433,36 +1498,37 @@ sequenceDiagram
     participant CF as Cloudflare
     participant GW as Traefik
     participant TRK as Tracking API (M5)
-    W->>CF: GET stream path [TBD U-16]
+    W->>CF: GET /api/v1/tracking/public/SD-20261024-04921/stream
     CF->>GW: forward
-    GW->>GW: Tracking router, rate limit, no buffering
+    GW->>GW: Stream router, rate limit, 5 streams per IP, no buffering
     GW->>TRK: open stream
     TRK-->>W: 200 text/event-stream, current milestone
-    loop Every 20 s or 15 s (U-17)
-        TRK-->>W: heartbeat comment
+    loop Every 15 s
+        TRK-->>W: keepalive comment
     end
     TRK-->>W: milestone event when status changes
-    Note over W,TRK: If the link drops, the browser reconnects by itself
+    Note over W,TRK: If the link drops, the browser reconnects and reloads the current state (FR-TRK-005)
 ```
 
 
 ### G-05 Upload size limit
 
-- **Trigger:** a request body to the Core API route.
-- **Main flow:** the buffering middleware reads the body; above 10 MB (10485760 bytes) it answers 413 and the Core API is never called.
-- **Rules:** JSON bodies are limited to 1 MB by the backend (SEC-006), photos to 10 MB. The courier screen resizes photos before upload (C-04). Tracking and AI routes have no size limit middleware **\[TBD: add a small limit to AI\]**.
+- **Trigger:** a request body to a Core API route.
+- **Main flow:** the buffering middleware reads the body. On the photo upload route (`/api/v1/deliveries/{id}/proof-photo`, Member 3) the limit is 10 MB; on every other `/api` route it is 1 MB (SEC-006). Above the limit it answers 413 and the Core API is never called.
+- **Rules:** the courier screen resizes photos before upload (C-04). Member 3 also checks type and size again (SEC-012). The AI route has the 1 MB limit; the streaming routes have none because they carry no request body.
 
 **Figure G-05 Upload size check**
 
 ```mermaid
 flowchart TD
-    A["Request to /api/v1"] --> B["Buffering middleware reads body"]
-    B --> C{"Body over 10485760 bytes?"}
-    C -- "Yes" --> D["413, Core API never called"]
+    A["Request to /api"] --> B{"Photo upload route?"}
+    B -- "Yes" --> C{"Body over 10 MB?"}
+    B -- "No" --> D{"Body over 1 MB?"}
+    C -- "Yes" --> X["413, Core API never called"]
+    D -- "Yes" --> X
     C -- "No" --> E["Forward to core-api"]
-    E --> F{"JSON over 1 MB? (backend, SEC-006)"}
-    F -- "Yes" --> G["Backend rejects"]
-    F -- "No" --> H["Normal handling"]
+    D -- "No" --> E
+    E --> F["Backend checks type and fields again"]
 ```
 
 
@@ -1507,11 +1573,11 @@ flowchart TD
 ```
 
 
-### G-08 Correlation ID \[TBD U-09\]
+### G-08 Request ID (`X-Request-ID`)
 
-Proposed: if a request has `X-Request-ID`, keep it; if not, the gateway adds one, so the Core API can put it in logs, in `audit_logs.request_id` and in `error.correlation_id`. Header name and whether Traefik or Core API creates it are not decided.
+Decided (Member 9 A10, security-notes.md 4, Doc 1 R-11): the header is `X-Request-ID`. The gateway passes it on unchanged and allows it in CORS. Traefik v3.1 has no built-in middleware that creates one, so when it is missing the first service creates it (core-api's request middleware does). Every service logs it as `request_id`, writes it to `audit_logs.request_id`, returns it in `error.correlation_id` and in the `X-Request-ID` response header, and the outbox copies it to `correlation_id`. The alignment guide's `X-Correlation-ID` is not used.
 
-**Figure G-08 Correlation ID (proposed)**
+**Figure G-08 Request ID**
 
 ```mermaid
 sequenceDiagram
@@ -1520,12 +1586,12 @@ sequenceDiagram
     participant GW as Traefik
     participant CORE as Core API
     C->>GW: Request, maybe with X-Request-ID
+    GW->>CORE: forward unchanged
     alt Header missing
-        GW->>GW: Add new X-Request-ID [TBD U-09]
+        CORE->>CORE: Create a new id
     end
-    GW->>CORE: forward with X-Request-ID
-    CORE->>CORE: Put id in logs and audit_logs.request_id
-    CORE-->>C: Response, error.correlation_id = same id
+    CORE->>CORE: Put id in logs, audit_logs.request_id, outbox correlation_id
+    CORE-->>C: Response with X-Request-ID, error.correlation_id = same id
 ```
 
 
@@ -1533,22 +1599,22 @@ sequenceDiagram
 
 | Situation | Who protects | Expected behaviour | Status |
 | --- | --- | --- | --- |
-| Dispatcher double-clicks Assign | Button disable (UI) + Idempotency-Key + parcel status check (M3) | One assignment. Second press does nothing or gets the saved response | Key support \[TBD U-24\] |
-| Two dispatchers assign the same parcel | Parcel `version` optimistic lock (M2) | One wins; other gets 400 not eligible or 409; screen refreshes | \[Repo\] database-schema 3.3 |
-| Two parcels assigned to a courier with 1 slot left | Courier row lock or count check in one transaction (M3) | One wins; other gets 409 COURIER\_CAPACITY\_EXCEEDED | Method \[TBD M3\] |
-| Reassign while courier picks up | Parcel version | One wins; loser 409 | \[Repo\] |
-| Two dispatchers decide on the same failed parcel | Parcel version and status check | Second gets 409 PARCEL\_INVALID\_TRANSITION | \[Repo\] |
-| Courier presses Delivered, network drops, presses again | Same Idempotency-Key + status check | One delivery record; second call returns saved response or 409 INVALID\_STATE\_FOR\_DELIVERY, which the screen treats as "already delivered" after reload | Key support \[TBD U-24\] |
-| Courier reports a failure twice (retry) | Same key | One attempt row, attempt count +1 only once | Key support \[TBD U-24\] |
-| Admin saves a zone twice | Idempotency-Key + unique zone code | One zone | \[Proposed\] A-01 |
-| Two admins add the same postal prefix | Unique constraint on prefix | One commits; other 409 | \[Proposed\] |
-| Two admins edit the same zone or rule | Version column | Second gets 409 and reloads | \[Proposed\]; no version column yet |
-| Two admins act on the same merchant | Merchant `version` (M4) | Second gets 409 | \[Repo\] merchants have version |
-| Many 401s at once | Single shared refresh in API client | One refresh call; no "token reuse" logout | \[Proposed\] F-02 |
+| Dispatcher double-clicks Assign | Button disable (UI) + Idempotency-Key + parcel status check (M3) | One assignment. Second press gets the saved response | Agreed: Member 3 takes `Idempotency-Key` on assignments |
+| Two dispatchers assign the same parcel | Parcel `version` optimistic lock (M2) and unique active assignment (M3) | One wins; other gets 409 PARCEL\_ALREADY\_ASSIGNED; screen refreshes | Member 3 Doc 4 3.5 |
+| Two parcels assigned to a courier with 1 slot left | Courier row lock and count check in one transaction (M3) | One wins; other gets 409 COURIER\_CAPACITY\_EXCEEDED | Member 3 |
+| Reassign while the courier starts the run | Assignment status check | One wins; loser gets 409 ASSIGNMENT\_ALREADY\_CLOSED or INVALID\_STATE\_TRANSITION | Member 3 |
+| Two dispatchers reschedule the same failed parcel | Parcel status check | Second gets 409 INVALID\_STATE\_FOR\_RESCHEDULE | Member 3 Doc 4 3.7 |
+| Courier presses Delivered, network drops, presses again | Same Idempotency-Key + status check | One delivery record; second call returns the saved response | Agreed: Member 3 takes `Idempotency-Key` on complete |
+| Courier reports a failure twice (retry) | Status check (no key listed by Member 3) | One attempt row; the retry gets 409 and the screen reloads | Member 3 (U-24 for a key) |
+| Admin saves a zone twice | Idempotency-Key + unique zone id and code | One zone | Mine, A-01 |
+| Two admins add overlapping postal prefixes | Advisory lock + overlap check in the transaction | One commits; other 409 | Mine, A-01 |
+| Two admins edit the same zone or setting | `version` column | Second gets 409 and reloads | Mine, A-01, A-02 |
+| Two admins act on the same merchant | `expected_version` (M4) | Second gets 409 | Member 4 OpenAPI |
+| Many 401s at once | Single shared refresh in API client | One refresh call; no "token reuse" logout | Mine, F-02 |
 | Same key reused with different body | Backend | 409 IDEMPOTENCY\_KEY\_PAYLOAD\_MISMATCH | \[Repo\] api-conventions 4 |
-| Gateway retry duplicates a POST | No retry middleware on write routes | Never happens | \[Proposed\] R-GW-03 |
-| Event delivered twice to a worker | Member 8 consumers | No double effect | \[Repo\]; not my module |
-| Report requested many times | Read only | Safe to repeat | \[Repo\] |
+| Gateway retry duplicates a POST | No retry middleware on any route | Never happens | Mine, R-GW-03 |
+| Event delivered twice to a worker | Member 8 consumers | No double effect | Not my module |
+| Report requested many times | Read only | Safe to repeat | Mine |
 
 **Figure 9.1 Two dispatchers assign the same parcel**
 
@@ -1566,7 +1632,7 @@ sequenceDiagram
     CORE-->>D1: 200 assigned
     CORE->>DB: UPDATE parcels WHERE id = P AND version = 3 (for Ayesha)
     DB-->>CORE: 0 rows
-    CORE-->>D2: 409 or 400 not eligible
+    CORE-->>D2: 409 PARCEL_ALREADY_ASSIGNED
     D2->>CORE: Refresh board, P is gone
 ```
 
@@ -1579,7 +1645,7 @@ sequenceDiagram
     actor C as Courier phone
     participant CORE as Core API delivery
     participant DB as PostgreSQL
-    C->>CORE: Complete delivery, key K1
+    C->>CORE: POST /deliveries/{id}/complete, key K1
     CORE->>DB: Save delivery and key K1 response, COMMIT
     CORE--xC: Answer lost (network drop)
     C->>CORE: Try again, same key K1
@@ -1593,13 +1659,12 @@ sequenceDiagram
 
 ### 10.1 Worked example: one normal day
 
-1. 08:55 Sri Lanka time. Nimal (dispatcher) signs in. Board for ZONE\_COLOMBO\_01 shows 12 unassigned parcels and 4 couriers. Kasun (courier) is at 8/25.
+1. 08:55 Sri Lanka time. Nimal (dispatcher) signs in and picks ZONE\_COLOMBO\_01. The board shows 12 parcels and 4 couriers on shift. Kasun (courier, motorcycle) is at 8/25.
 2. 09:00. Nimal assigns SD-20261024-04921 (2.5 kg, Colombo 03) to Kasun. Board shows Kasun 9/25.
-3. 10:15. Kasun scans the label at the merchant's shop. Parcel PICKED\_UP.
-4. 13:40. Kasun starts the delivery run. Parcel OUT\_FOR\_DELIVERY.
-5. 14:05. Nobody is home. Kasun picks RECIPIENT\_UNAVAILABLE. Phone shows "Attempt 1 of 3 recorded". Customer gets "We were unable to deliver your package today due to Recipient Unavailable".
-6. 14:06. On the next board refresh the parcel appears in "Needs review". Nimal presses Reattempt for tomorrow. Parcel OUT\_FOR\_DELIVERY again; attempt rows stay as they were.
-7. Next day 11:20. Delivery succeeds. Kasun takes a photo (6 MB, resized to about 1 MB) and the recipient signs. Parcel DELIVERED. Public tracking shows "Delivered - Proof Verified" without the photo.
+3. 13:40. Kasun scans the label at the depot and presses "Start run for all". His 9 parcels are OUT\_FOR\_DELIVERY.
+4. 14:05. Nobody is home. Kasun picks RECIPIENT\_UNAVAILABLE. Phone shows "Attempt 1 of 3 recorded". Customer gets a masked message.
+5. 14:06. On the next board refresh the parcel has a "Needs review" badge. Nimal schedules a reattempt for tomorrow afternoon with Kasun. Parcel ASSIGNED again; the attempt row stays as it was.
+6. Next day 11:20. Kasun starts the run again; delivery succeeds. He takes a photo (6 MB, resized to about 1 MB), the recipient signs, and he types the recipient's name. Parcel DELIVERED. Public tracking shows "Delivered" without the photo.
 
 **Figure 10.1 The worked example as a timeline**
 
@@ -1611,13 +1676,12 @@ sequenceDiagram
     participant S as SwiftDrop
     actor R as Recipient
     N->>S: 09:00 Assign SD-20261024-04921 to Kasun
-    K->>S: 10:15 Scan, PICKED_UP
-    K->>S: 13:40 Start run, OUT_FOR_DELIVERY
+    K->>S: 13:40 Start run for all, OUT_FOR_DELIVERY
     K->>S: 14:05 Failed, RECIPIENT_UNAVAILABLE
     S-->>R: Masked message about failed attempt
-    N->>S: 14:06 Reattempt approved
-    K->>S: Next day 11:20 Photo and signature
-    S-->>R: Delivered, Proof Verified
+    N->>S: 14:06 Reschedule for tomorrow afternoon
+    K->>S: Next day start run, photo, signature, name
+    S-->>R: Delivered
 ```
 
 
@@ -1627,24 +1691,26 @@ sequenceDiagram
 | --- | --- | --- |
 | E-01 | Courier at 25/25 is chosen | 409 COURIER\_CAPACITY\_EXCEEDED; screen says so and refreshes |
 | E-02 | Parcel cancelled by sender while dispatcher has the board open | Assign returns 400 not eligible; parcel disappears after refresh |
-| E-03 | Third failed attempt | Reattempt disabled; only Return offered (or already RETURNED, U-21) |
-| E-04 | OTHER reason with a 10-character note | Phone blocks submit and shows "5 more characters needed"; backend also rejects with 422 |
-| E-05 | Courier opens a task link from a colleague's phone | 403; "This task is not assigned to you" |
-| E-06 | Photo of 14 MB | Phone resizes before upload; if resizing fails, 413 from gateway and the message to retake |
+| E-03 | Third failed attempt | Member 3 sets RETURNED at once; the review screen is read only |
+| E-04 | OTHER reason with a 10-character note | Phone blocks submit and shows "5 more characters needed"; backend also rejects with 422 FAILURE\_NOTE\_TOO\_SHORT |
+| E-05 | Courier opens a task link from a colleague's phone | 403 NOT\_ASSIGNED\_COURIER; "This task is not assigned to you" |
+| E-06 | Photo of 14 MB | Phone resizes before upload; if resizing fails, 413 from the gateway and the message to retake |
 | E-07 | Access token expires during a long form | Save press gets 401; F-02 refreshes; save is repeated once with the same key; user sees success |
-| E-08 | Refresh cookie expired (7 days, or 14 for couriers, U-01) | Sent to login with "Your session has ended" |
+| E-08 | Refresh cookie expired | Sent to login with "Your session has ended" |
 | E-09 | Customer types `/ops/dispatch` | Route guard shows "Not allowed"; any API call returns 403 |
 | E-10 | Postal prefix 00300 already in ZONE\_COLOMBO\_03 | 409 naming ZONE\_COLOMBO\_03; form keeps the input |
 | E-11 | Admin tries to disable their own account | 422 from M1 (proposed rule) |
 | E-12 | Report with `from` = 2026-10-31, `to` = 2026-10-01 | 422; screen also prevents choosing it |
-| E-13 | Report period with no parcels | Zeros and "No parcels in this period"; no division-by-zero error (backend returns 0 or null for rates, \[TBD\]) |
-| E-14 | 40 couriers behind one mobile network IP | May hit the per-IP courier limit; seen as 429 "Please wait" (G-02) |
-| E-15 | Request to `/api/v2/parcels` | Today returns the web page (200). Proposed fix in G-01 |
-| E-16 | Request to `/metrics` from the internet | Must not reach core-api (served by web or 404); smoke test proves it |
+| E-13 | Report period with no parcels | Zeros and "No parcels in this period"; rates are 0, never a division error |
+| E-14 | 40 users behind one mobile network IP | May share a per-IP limit; seen as 429 "Please wait" (G-02) |
+| E-15 | Request to `/api/v2/parcels` | 404 JSON from core-api through the `/api` catch-all (G-01) |
+| E-16 | Request to `/metrics` or `/health/ready` from the internet | Never reaches core-api (served by web); smoke test proves it |
 | E-17 | Board timer refresh fails (Wi-Fi drop) | Last data stays with "Last updated 09:42"; no error pop-up every 30 s |
 | E-18 | Dispatcher opens the same parcel in two browser tabs and acts in both | Second action gets 409 and the tab refreshes |
 | E-19 | Merchant suspended while their API client is sending orders | Orders after the commit are rejected by M4 (AT-011); orders already created stay |
-| E-20 | Pricing rule edited while a customer holds a 15-minute quote | Quote keeps its old rule version (SRS 5.2); the edit applies to new quotes only \[TBD U-14\] |
+| E-20 | Pricing rule edited while a customer holds a 15-minute quote | Quote keeps its old rule version (SRS 5.2); the edit applies to new quotes only (U-14) |
+| E-21 | Two admins press Approve on the same merchant | One 200; the other 409 (stale `expected_version`), reload shows APPROVED |
+| E-22 | Booking form asks for the zone of postal code 99999 | `GET /api/v1/zones?postal_code=99999` gives 404 ZONE\_NOT\_FOUND; the form says "We do not deliver to this postal code yet" |
 
 ## 11. Preconditions, postconditions and invariants (cross-check)
 
@@ -1654,67 +1720,66 @@ All flows must keep the invariants from Document 1 section 6 (INV-01 to INV-13).
 | --- | --- | --- |
 | INV-01 Hiding a button is not security | F-01, F-03 to F-14, C-01 to C-05 | Backend 403 is tested for every action with a wrong role |
 | INV-02 UI never invents state or prices | F-03, F-06, F-11, F-12 | Refresh after every action; numbers shown as returned |
-| INV-03 UI never sends actor or arbitrary status | F-04 to F-14, C-02 to C-05 | Only contract fields sent; no free status field |
+| INV-03 UI never sends actor or arbitrary status | F-04 to F-14, C-01 to C-05 | Only contract fields sent; no free status field; no `X-Tenant-ID` |
 | INV-04 Gateway makes no permission decisions | G-01 to G-05 | No auth middleware in Traefik |
 | INV-05 Internal endpoints not public | G-01 | Smoke tests for health, metrics, dashboard |
-| INV-07 SSE not buffered or cut | G-04 | No buffering on tracking route; SSE test |
+| INV-07 SSE not buffered or cut | G-04 | No buffering on stream routes; SSE test |
 | INV-11 Tokens in memory only | F-01, F-02 | No storage APIs used for tokens |
-| INV-12 Audit logs never edited | A-04, F-13 | Read-only endpoints; no UPDATE/DELETE grant (proposed) |
-| INV-13 Money from integer cents | F-10, F-11 | `formatLKR`; no arithmetic on fees |
+| INV-12 Audit logs never edited | A-04, F-13 | Read-only endpoints; no UPDATE/DELETE grant; trigger |
+| INV-13 Money from integer cents | F-11 | `formatLKR`; no arithmetic on fees; zones carry no money |
 
-Business rules from other modules that these flows rely on (not mine to enforce): one active assignment per parcel, capacity 25 default, only on-shift couriers, maximum 3 attempts, only the assigned courier records delivery or failure, proof required for DELIVERED, attempt rows immutable, status changes atomic with history and outbox.
+Business rules from other modules that these flows rely on (not mine to enforce): one active assignment per parcel, vehicle capacity (25, 60, 120), only on-shift couriers, maximum 3 attempts with automatic return, only the assigned courier records delivery or failure, proof required for DELIVERED, attempt rows immutable, status changes atomic with history and outbox.
 
 ## 12. Open questions
 
-Document 1 questions U-01 to U-17 still apply. These flows depend most on U-01 (courier token storage), U-02 (who sees reports), U-03 (surcharge format), U-06 (rate limits), U-07 (reassignment and who approves reattempt), U-08 (parcel correction), U-09 (correlation ID, CORS), U-10 (who writes admin Go code), U-11 (paths or subdomains), U-13 (zone model), U-14 (pricing overlaps and versions), U-15 to U-17 (tracking limits, SSE path, heartbeat).
+Status after the 26 October review (decisions R-01 to R-20 in Doc 1 section 11.4):
 
-New questions found while writing this document:
+| ID | Question | Decide with | Status |
+| --- | --- | --- | --- |
+| U-18 | Complete-delivery endpoint | Member 3 | **Closed**: `POST /api/v1/deliveries/{id}/complete` (R-01) |
+| U-19 | Failed-attempt endpoint and field names | Member 3 | **Closed**: `POST /api/v1/deliveries/{id}/failed` with `reason_code`, `notes` (R-01) |
+| U-20 | Reason code list | Members 2, 3 | **Closed**: Member 3's 7 codes, same as ADR-004 |
+| U-21 | After the 3rd failure | Members 2, 3 | **Closed**: automatic RETURNED (Member 3 BR-ATM-004) |
+| U-22 | Reattempt with a different courier | Members 2, 3 | **Closed**: reschedule with `target_courier_id`, ATTEMPT\_FAILED to ASSIGNED |
+| U-23 | Courier status values, workload, accept step | Member 3 | **Closed**: OFF\_SHIFT, ON\_SHIFT, ON\_BREAK, SUSPENDED; `active_assignments`; no accept step |
+| U-24 | `Idempotency-Key` on other writes | Members 1 to 4, 8 | Partly closed: Member 3 takes it on assignments and complete. Still open for failed attempt, reschedule, merchant and user actions |
+| U-25 | POD photo upload method | Members 3, 9 | **Closed**: multipart `POST /deliveries/{id}/proof-photo`, 10 MB |
+| U-26 | Merchant statuses | Member 4 | **Closed**: PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED, with reinstate (R-02) |
+| U-27 | Courier status-update endpoint | Members 2, 3 | **Closed**: start-run and start-batch; PICKED\_UP and IN\_TRANSIT depend on the team's state path decision (section 4.1) |
+| U-67 | Member 3's API says assignment status `ASSIGNED`, its table says `ACTIVE`. Pick one | Member 3 | New |
 
-| ID | Question | Decide with |
-| --- | --- | --- |
-| U-18 | Complete-delivery endpoint: `POST /api/v1/deliveries/{parcel_id}/complete` (delivery API.md) or `POST /api/v1/courier/parcels/{id}/deliver` (sequence-diagrams.md)? | Member 3 |
-| U-19 | Failed-attempt endpoint: `POST /api/v1/courier/parcels/{id}/fail-attempt` (ADR-004) or `POST /api/v1/deliveries/{parcel_id}/failed` (delivery API.md)? Field names `failure_reason_code`/`failure_note` or `reason_code`/`notes`? | Member 3 |
-| U-20 | Reason code list: ADR-004 (7 codes) or delivery README (4 different codes)? I follow ADR-004 | Members 2, 3 |
-| U-21 | After the 3rd failure: automatic RETURNED (delivery README) or dispatcher decides (ADR-004)? What does `next_action: REATTEMPT_SCHEDULED` mean? | Members 2, 3 |
-| U-22 | How does a reattempt with a different courier work, since there is no ATTEMPT\_FAILED to ASSIGNED transition but dispatch README allows assigning ATTEMPT\_FAILED parcels? | Members 2, 3 |
-| U-23 | Courier status values (AVAILABLE/BUSY/OFF\_DUTY vs ON\_SHIFT), definition of active workload, and is there a courier accept/reject step (ACCEPTED/REJECTED in courier\_assignments)? | Member 3 |
-| U-24 | Will the backend accept `Idempotency-Key` on assignment, reattempt/return, pickup, delivery, failed attempt, merchant and user actions, and zone saves? api-conventions only requires it for booking and merchant orders | Members 1 to 4, Member 8 |
-| U-25 | POD photo upload: multipart through Core API (10 MB gateway limit) or pre-signed URL to object storage? Which proof types are required (photo, signature, OTP)? | Members 3, 9 |
-| U-26 | Merchant statuses: add REJECTED and DISABLED? Can SUSPENDED go back to APPROVED? | Member 4 |
-| U-27 | Courier status-update endpoint for PICKED\_UP, IN\_TRANSIT and OUT\_FOR\_DELIVERY, and who starts OUT\_FOR\_DELIVERY (courier or dispatcher) | Members 2, 3 |
+Still open from Doc 1: U-01, U-04, U-06, U-08, U-14, U-63 to U-66.
 
 **Figure 12.1 Who must answer the open questions**
 
 ```mermaid
 flowchart LR
-    M3["Member 3"] --- Q1["U-07 U-18 U-19 U-22 U-23 U-25 U-27"]
-    M2["Member 2"] --- Q2["U-03 U-04 U-13 U-14 U-20 U-21"]
-    M1["Member 1"] --- Q3["U-01 U-02 U-06 U-10"]
-    M4["Member 4"] --- Q4["U-10 U-26"]
-    M5["Member 5"] --- Q5["U-15 U-16 U-17"]
-    M9["Member 9"] --- Q6["U-09 U-11 U-12 U-25"]
-    ALL["Members 1 to 4 and 8"] --- Q7["U-24"]
-    LEAD["Team lead or group"] --- Q8["U-08 U-11"]
+    M3["Member 3"] --- Q1["U-24 U-67"]
+    M2["Member 2"] --- Q2["U-04 U-08 U-14 U-65"]
+    M1["Member 1"] --- Q3["U-01 U-06 U-64 U-66"]
+    M6["Member 6"] --- Q4["U-63"]
+    LEAD["Team lead"] --- Q5["U-08 U-64"]
 ```
 
 
 ## 13. Traceability
 
-| Requirement | Flows |
+| Requirement (SRS IDs) | Flows |
 | --- | --- |
-| FR-ADM-001, FR-ADM-004 | F-03 |
+| FR-ADM-001, FR-ADM-004 | F-03, F-07 |
 | FR-ADM-002, FR-ADM-003 | F-04, F-05, section 9 |
-| FR-ADM-005 | F-08, A-05 |
-| FR-ADM-006, FR-IAM-009 | F-09 |
-| FR-ADM-007 | F-10, F-11, A-01 |
+| FR-ADM-005, FR-IAM-009 | F-08, A-05 |
+| FR-ADM-006, FR-IAM-007 | F-09 |
+| FR-ADM-007 | F-10, F-11, A-01, A-06 |
 | FR-ADM-008 | F-12, A-03 |
 | FR-ADM-009, FR-LIFE-007 | F-13, F-14, A-04 |
 | FR-COU-001 to FR-COU-007 | C-01 to C-05 |
+| FR-LIFE-002, FR-LIFE-006 | section 4.1, F-06, C-05 |
 | ADR-003 | F-01, F-02 |
 | ADR-004 | F-06, C-05, section 4.2 |
-| ADR-001, SEC-014, SEC-015 | G-01 to G-08 |
+| ADR-001, SEC-006, SEC-007, SEC-013, SEC-015, SEC-017 | G-01 to G-08 |
 | SRS 5.3, 5.4 | section 4.3, section 9 |
-| AT-007, AT-011 | section 4.1, F-08 |
+| AT-007, AT-011, AT-013 | section 4.1, F-08, section 9 |
 
 ## 14. Sign-off
 

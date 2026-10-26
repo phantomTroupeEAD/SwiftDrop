@@ -48,8 +48,8 @@ func mapPG(err error) error {
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) {
 		switch {
-		case pe.Code == "23505" && pe.ConstraintName == "delivery_zones_code_key":
-			return apperr.ErrZoneCodeTaken
+		case pe.Code == "23505" && (pe.ConstraintName == "delivery_zones_code_key" || pe.ConstraintName == "delivery_zones_pkey"):
+			return apperr.ErrZoneCodeTaken // the id or the short code is already used
 		case pe.Code == "23505" && pe.ConstraintName == "zone_postal_codes_pkey":
 			return apperr.ErrPrefixConflict // last safety net behind the overlap check
 		case pe.Code == "23514":
@@ -73,49 +73,54 @@ func (x *tx) LockZonePrefixes(ctx context.Context) error {
 }
 
 func (x *tx) OtherZonePrefixes(ctx context.Context, exceptZoneID string) ([]domain.PrefixOwner, error) {
-	rows, err := x.t.Query(ctx, `SELECT p.prefix, z.code FROM zone_postal_codes p JOIN delivery_zones z ON z.id = p.zone_id
-		WHERE p.zone_id <> $1::uuid`, exceptZoneID)
+	rows, err := x.t.Query(ctx, `SELECT prefix, zone_id FROM zone_postal_codes WHERE zone_id <> $1`, exceptZoneID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []domain.PrefixOwner
 	for rows.Next() {
-		var p, code string
-		if err := rows.Scan(&p, &code); err != nil {
+		var p, zoneID string
+		if err := rows.Scan(&p, &zoneID); err != nil {
 			return nil, err
 		}
 		pp, _ := domain.NewPostalPrefix(p)
-		out = append(out, domain.PrefixOwner{Prefix: pp, ZoneCode: code})
+		out = append(out, domain.PrefixOwner{Prefix: pp, ZoneID: zoneID})
 	}
 	return out, rows.Err()
 }
 
-func (x *tx) InsertZone(ctx context.Context, z *domain.Zone, actorID string) error {
-	_, err := x.t.Exec(ctx, `INSERT INTO delivery_zones (id, code, name, base_surcharge_cents, enabled, version, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`, z.ID(), z.Code().String(), z.Name(), z.Surcharge().Cents(), z.Enabled(), z.Version(), actorID)
+func (x *tx) InsertZone(ctx context.Context, z *domain.Zone) error {
+	_, err := x.t.Exec(ctx, `INSERT INTO delivery_zones (id, code, name, description, enabled, version)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)`, z.ID().String(), z.Code().String(), z.Name(), z.Description(), z.Enabled(), z.Version())
 	if err != nil {
 		return err
 	}
-	return x.writePrefixes(ctx, z, actorID)
+	return x.writePrefixes(ctx, z)
 }
 
-func (x *tx) writePrefixes(ctx context.Context, z *domain.Zone, actorID string) error {
-	if _, err := x.t.Exec(ctx, "DELETE FROM zone_postal_codes WHERE zone_id = $1", z.ID()); err != nil {
+func (x *tx) writePrefixes(ctx context.Context, z *domain.Zone) error {
+	if _, err := x.t.Exec(ctx, "DELETE FROM zone_postal_codes WHERE zone_id = $1", z.ID().String()); err != nil {
 		return err
 	}
 	for _, p := range z.Prefixes() {
-		if _, err := x.t.Exec(ctx, "INSERT INTO zone_postal_codes (prefix, zone_id, created_by) VALUES ($1, $2, $3)", p.String(), z.ID(), actorID); err != nil {
+		if _, err := x.t.Exec(ctx, "INSERT INTO zone_postal_codes (prefix, zone_id) VALUES ($1, $2)", p.String(), z.ID().String()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-const zoneCols = "id::text, code, name, base_surcharge_cents, enabled, version"
+const zoneCols = "z.id, z.code, z.name, COALESCE(z.description, ''), z.enabled, z.version"
 
-func scanZone(row pgx.Row) (id, code, name string, cents int64, enabled bool, version int, err error) {
-	err = row.Scan(&id, &code, &name, &cents, &enabled, &version)
+type zoneRow struct {
+	id, code, name, description string
+	enabled                     bool
+	version                     int
+}
+
+func scanZone(row pgx.Row) (r zoneRow, err error) {
+	err = row.Scan(&r.id, &r.code, &r.name, &r.description, &r.enabled, &r.version)
 	return
 }
 
@@ -123,22 +128,18 @@ func loadZone(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, id string, forUpdate bool) (*domain.Zone, error) {
-	sql := "SELECT " + zoneCols + " FROM delivery_zones WHERE id = $1::uuid"
+	sql := "SELECT " + zoneCols + " FROM delivery_zones z WHERE z.id = $1"
 	if forUpdate {
 		sql += " FOR UPDATE"
 	}
-	zid, code, name, cents, enabled, version, err := scanZone(q.QueryRow(ctx, sql, id))
+	zr, err := scanZone(q.QueryRow(ctx, sql, id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, apperr.ErrNotFound
-	}
-	var pe *pgconn.PgError
-	if errors.As(err, &pe) && pe.Code == "22P02" { // not a uuid
 		return nil, apperr.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.Query(ctx, "SELECT prefix FROM zone_postal_codes WHERE zone_id = $1 ORDER BY prefix", zid)
+	rows, err := q.Query(ctx, "SELECT prefix FROM zone_postal_codes WHERE zone_id = $1 ORDER BY prefix", zr.id)
 	if err != nil {
 		return nil, err
 	}
@@ -146,18 +147,19 @@ func loadZone(ctx context.Context, q interface {
 	if err != nil {
 		return nil, err
 	}
-	return restore(zid, code, name, cents, enabled, version, ps), nil
+	return restore(zr, ps), nil
 }
 
-func restore(id, code, name string, cents int64, enabled bool, version int, ps []string) *domain.Zone {
-	zc, _ := domain.NewZoneCode(code)
-	m, _ := domain.NewLKR(cents)
+// restore trusts the database CHECK constraints, which match the domain rules.
+func restore(r zoneRow, ps []string) *domain.Zone {
+	id, _ := domain.NewZoneID(r.id)
+	zc, _ := domain.NewZoneCode(r.code)
 	pp := make([]domain.PostalPrefix, 0, len(ps))
 	for _, p := range ps {
 		x, _ := domain.NewPostalPrefix(p)
 		pp = append(pp, x)
 	}
-	return domain.Restore(id, zc, name, m, pp, enabled, version)
+	return domain.Restore(id, zc, r.name, r.description, pp, r.enabled, r.version)
 }
 
 func (x *tx) LoadZone(ctx context.Context, id string) (*domain.Zone, error) {
@@ -165,17 +167,17 @@ func (x *tx) LoadZone(ctx context.Context, id string) (*domain.Zone, error) {
 }
 
 // SaveZone is the optimistic lock: it only changes the row if nobody else did.
-func (x *tx) SaveZone(ctx context.Context, z *domain.Zone, expectedVersion int, actorID string) error {
-	tag, err := x.t.Exec(ctx, `UPDATE delivery_zones SET name = $1, base_surcharge_cents = $2, enabled = $3, version = $4,
-		updated_by = $5, updated_at = now() WHERE id = $6 AND version = $7`,
-		z.Name(), z.Surcharge().Cents(), z.Enabled(), z.Version(), actorID, z.ID(), expectedVersion)
+func (x *tx) SaveZone(ctx context.Context, z *domain.Zone, expectedVersion int) error {
+	tag, err := x.t.Exec(ctx, `UPDATE delivery_zones SET code = $1, name = $2, description = NULLIF($3, ''), enabled = $4, version = $5,
+		updated_at = now() WHERE id = $6 AND version = $7`,
+		z.Code().String(), z.Name(), z.Description(), z.Enabled(), z.Version(), z.ID().String(), expectedVersion)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return apperr.ErrConcurrentConflict
 	}
-	return x.writePrefixes(ctx, z, actorID)
+	return x.writePrefixes(ctx, z)
 }
 
 func (x *tx) LoadSetting(ctx context.Context, key string) (application.Setting, error) {
@@ -228,24 +230,45 @@ func (s *Store) ListZones(ctx context.Context) ([]*domain.Zone, error) {
 
 func (s *Store) listZones(ctx context.Context) ([]*domain.Zone, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+zoneCols+`, COALESCE(array_agg(p.prefix ORDER BY p.prefix) FILTER (WHERE p.prefix IS NOT NULL), '{}')
-		FROM delivery_zones z LEFT JOIN zone_postal_codes p ON p.zone_id = z.id GROUP BY z.id ORDER BY z.code`)
+		FROM delivery_zones z LEFT JOIN zone_postal_codes p ON p.zone_id = z.id GROUP BY z.id ORDER BY z.id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []*domain.Zone
 	for rows.Next() {
-		var id, code, name string
-		var cents int64
-		var enabled bool
-		var version int
+		var r zoneRow
 		var ps []string
-		if err := rows.Scan(&id, &code, &name, &cents, &enabled, &version, &ps); err != nil {
+		if err := rows.Scan(&r.id, &r.code, &r.name, &r.description, &r.enabled, &r.version, &ps); err != nil {
 			return nil, err
 		}
-		out = append(out, restore(id, code, name, cents, enabled, version, ps))
+		out = append(out, restore(r, ps))
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) ListPublicZones(ctx context.Context) ([]application.PublicZone, error) {
+	rows, err := s.Pool.Query(ctx, "SELECT id, code, name FROM delivery_zones WHERE enabled ORDER BY name")
+	if err != nil {
+		return nil, mapPG(err)
+	}
+	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (application.PublicZone, error) {
+		var z application.PublicZone
+		return z, r.Scan(&z.ID, &z.Code, &z.Name)
+	})
+	return out, mapPG(err)
+}
+
+// ZoneForPostalCode picks the longest prefix that starts the postal code. Overlaps
+// are blocked on write, so there is at most one, but ORDER BY keeps it safe.
+func (s *Store) ZoneForPostalCode(ctx context.Context, postalCode string) (application.PublicZone, error) {
+	var z application.PublicZone
+	err := s.Pool.QueryRow(ctx, `SELECT z.id, z.code, z.name FROM zone_postal_codes p JOIN delivery_zones z ON z.id = p.zone_id
+		WHERE z.enabled AND $1 LIKE p.prefix || '%' ORDER BY length(p.prefix) DESC LIMIT 1`, postalCode).Scan(&z.ID, &z.Code, &z.Name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return z, apperr.ErrZoneNotFound
+	}
+	return z, mapPG(err)
 }
 
 func (s *Store) GetZone(ctx context.Context, id string) (*domain.Zone, error) {

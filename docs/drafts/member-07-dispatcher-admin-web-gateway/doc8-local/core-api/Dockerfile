@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # core-api image (the admin module is part of it). Build from the repo root:
 #   docker build -f core-api/Dockerfile -t ghcr.io/<org>/swiftdrop/core-api:<git-sha> core-api
-# Rules: pinned versions, no "latest", non-root 10001, read-only root FS (SEC-012).
+# Rules: pinned versions, no "latest", non-root 10001, read-only root FS (SEC-016).
 
 FROM golang:1.22.12-alpine3.21 AS build
 WORKDIR /src

@@ -51,9 +51,15 @@ L=$(for i in $(seq 1 8); do code -X POST -H 'X-Forwarded-For: 203.0.113.20' "$GW
 check GS-06 "8 quick logins from one visitor: some get 429" yes "$([ "$L" -gt 0 ] && echo yes || echo no)"
 head -c 2097152 /dev/zero > "$WORK/2mb"; head -c 9437184 /dev/zero > "$WORK/9mb"; head -c 11534336 /dev/zero > "$WORK/11mb"
 check GS-07 "2 MB body to a JSON route (/admin/zones) is refused with 413" 413 "$(code -X POST --data-binary @"$WORK/2mb" "$GW/api/v1/admin/zones")"
-check GS-08 "9 MB photo upload passes, 11 MB is refused" "200 413" "$(code -X POST --data-binary @"$WORK/9mb" "$GW/api/v1/courier/parcels/p1/deliver") $(code -X POST --data-binary @"$WORK/11mb" "$GW/api/v1/courier/parcels/p1/deliver")"
+check GS-08 "9 MB proof photo passes, 11 MB is refused (Member 3 path)" "200 413" "$(code -X POST --data-binary @"$WORK/9mb" "$GW/api/v1/deliveries/d1/proof-photo") $(code -X POST --data-binary @"$WORK/11mb" "$GW/api/v1/deliveries/d1/proof-photo")"
 S=$(for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w '%{http_code}\n' -m 6 -H 'X-Forwarded-For: 203.0.113.30' "$GW/api/v1/tracking/public/SD-5/stream" & done; wait)
 check GS-09 "6 open SSE streams from one visitor: exactly 1 refused (limit 5)" 1 "$(echo "$S" | grep -c 429)"
+S=$(for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w '%{http_code}\n' -m 6 -H 'X-Forwarded-For: 203.0.113.31' "$GW/api/v1/tracking/SD-7/stream" & done; wait)
+check GS-09b "signed-in stream path gets the same stream router (1 of 6 refused)" 1 "$(echo "$S" | grep -c 429)"
+A=$(for i in 1 2 3 4 5; do code -H 'X-Forwarded-For: 203.0.113.40' "$GW/api/v1/ai/chat"; echo; done | grep -c 429)
+check GS-20 "5 quick AI calls from one visitor: some get 429 (10/min, burst 2)" yes "$([ "$A" -gt 0 ] && echo yes || echo no)"
+M=$(for i in $(seq 1 30); do code -H 'X-Forwarded-For: 203.0.113.50' "$GW/api/v1/merchant/orders"; echo; done | grep -c 429)
+check GS-21 "30 quick merchant API calls: some 429 (120/min, burst 20); /merchants (web) not limited" "yes 200" "$([ "$M" -gt 0 ] && echo yes || echo no) $(code -H 'X-Forwarded-For: 203.0.113.50' "$GW/api/v1/merchants/me")"
 
 echo "== Identity headers and CORS =="
 E=$(curl -s -H 'Authorization: Bearer abc.def' -H 'X-Tenant-ID: mrc_other' -H 'X-User-Role: ADMIN' "$GW/api/v1/parcels")
@@ -61,6 +67,9 @@ check GS-10 "client-sent X-Tenant-ID and X-User-Role are removed before core-api
 check GS-10b "Authorization header still reaches core-api unchanged" "Bearer abc.def" "$(echo "$E" | j 'd["headers"].get("authorization")')"
 P=$(curl -s -D - -o /dev/null -X OPTIONS -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: x-request-id' "$GW/api/v1/admin/zones" | tr -d '\r' | sed -n 's/^access-control-allow-headers: //Ip')
 check GS-11 "CORS allows X-Request-ID (security-notes 4) and not X-Tenant-ID" "yes no" "$(echo "$P" | grep -qi x-request-id && echo yes || echo no) $(echo "$P" | grep -qi x-tenant-id && echo yes || echo no)"
+O=$(curl -s -D - -o /dev/null -H 'Origin: http://localhost:5173' "$GW/api/v1/admin/zones" | tr -d '\r' | sed -n 's/^access-control-allow-origin: //Ip')
+X=$(curl -s -D - -o /dev/null -H 'Origin: http://127.0.0.1:3000' "$GW/api/v1/admin/zones" | tr -d '\r' | sed -n 's/^access-control-expose-headers: //Ip')
+check GS-11b "CORS: :5173 not allowed; exposed headers exactly X-Request-ID, Content-Length" "none X-Request-ID,Content-Length" "${O:-none} $X"
 check GS-12 "Traefik dashboard API is NOT reachable on open port 8080" no "$(curl -s -m 2 http://127.0.0.1:8080/api/rawdata | grep -q '"routers"' && echo yes || echo no)"
 
 echo "== Dependency failure =="

@@ -1,4 +1,4 @@
-# [Proposed] Doc 7 hardened version of deploy/gateway/traefik/traefik.yml
+# [Proposed] hardened static config (Doc 7). Same file is used locally and in Docker Compose.
 # Traefik Static Configuration (SwiftDrop Gateway)
 # Version: 3.x
 

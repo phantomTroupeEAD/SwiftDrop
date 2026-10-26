@@ -1,39 +1,63 @@
 bash scripts/demo.sh
-== Health (direct to the pod, never through the gateway) ==
-PASS  DEMO-01  GET :8080/livez
-PASS  DEMO-02  GET :8080/readyz shows the database
-PASS  DEMO-03  /readyz is not public through the gateway
+== Health (direct to the pod, never through the gateway; Member 9 A2) ==
+PASS  DEMO-01  GET :8080/health/live
+PASS  DEMO-02  GET :8080/health/ready shows the database
+PASS  DEMO-03  /health/ready is not public through the gateway
 == Access control ==
 PASS  DEMO-04  no token: 401
 PASS  DEMO-05  courier token: 403
 PASS  DEMO-06  tampered token: 401
 PASS  DEMO-07  admin token: 7 seeded zones
-== Zone rules ==
-PASS  DEMO-08  create ZONE_MATARA: version 1, LKR cents
-PASS  DEMO-09  same code again: 409 ZONE_CODE_ALREADY_EXISTS
-PASS  DEMO-10  prefix 003 overlaps Colombo 00300: 409
-PASS  DEMO-11  surcharge as a decimal string: 400
-PASS  DEMO-12  unknown field (created_by) refused: 400
-PASS  DEMO-13  surcharge change without reason: 422
-PASS  DEMO-14  surcharge change with reason: version 2
-PASS  DEMO-15  stale version 1 after that: 409
-PASS  DEMO-16  disable zone with reason: enabled false
-PASS  DEMO-17  setting not on allowlist: 422
-PASS  DEMO-18  board refresh setting to 45 s
+== Public zone list for booking forms (no sign-in, Doc 1 R-18) ==
+PASS  DEMO-08  6 enabled zones, only id, code, name
+PASS  DEMO-09  postal code 00300 is in ZONE_COLOMBO_01
+PASS  DEMO-10  postal code in a disabled zone: 404
+PASS  DEMO-11  bad postal code: 422
+PASS  DEMO-12  cacheable for 5 minutes
+== Zone rules (text id, no money) ==
+PASS  DEMO-13  create ZONE_MATARA_01: version 1, no money fields
+PASS  DEMO-14  same id again: 409
+PASS  DEMO-15  same short code, other id: 409
+PASS  DEMO-16  prefix 003 overlaps Colombo 00300: 409
+PASS  DEMO-17  lower-case id refused: 422
+PASS  DEMO-18  a surcharge field is refused (fees are pricing rules): 400
+PASS  DEMO-19  unknown field (created_by) refused: 400
+PASS  DEMO-20  rename and new short code: version 2
+PASS  DEMO-21  stale version 1 after that: 409
+PASS  DEMO-22  disable without reason: 422
+PASS  DEMO-23  disable zone with reason: enabled false
+PASS  DEMO-24  setting not on allowlist: 422
+PASS  DEMO-25  board refresh setting to 45 s
+== Merchant admin (my routes, Member 4's rules; local stand-in for Member 4) ==
+PASS  DEMO-26  dispatcher cannot list merchants: 403
+PASS  DEMO-27  admin list: 2 merchants, page meta
+PASS  DEMO-28  status filter PENDING: Ceylon Tea Shop
+PASS  DEMO-29  approve with expected_version 1: APPROVED v2
+PASS  DEMO-30  same old version again: 409 (Member 4 code)
+PASS  DEMO-31  suspend without reason: 422
+PASS  DEMO-32  suspend, then reinstate
+PASS  DEMO-33  reject an APPROVED merchant: 409
+PASS  DEMO-34  unknown action: 404
+== Delivery report (ADMIN and DISPATCHER, Doc 1 R-16) ==
+PASS  DEMO-35  dispatcher may read the report
+PASS  DEMO-36  report says its data is a stand-in
+PASS  DEMO-37  courier may not: 403
+PASS  DEMO-38  range over reports.max_range_days (92): 422
 == Audit trail ==
-PASS  DEMO-19  4 audit rows, newest first
-PASS  DEMO-20  audit row has reason and request id
-PASS  DEMO-21  app role cannot UPDATE audit_logs
-PASS  DEMO-22  even the owner cannot DELETE (trigger)
+PASS  DEMO-39  4 audit rows, newest first
+PASS  DEMO-40  audit row has reason and request id
+PASS  DEMO-41  app role cannot UPDATE audit_logs
+PASS  DEMO-42  even the migrator cannot DELETE (trigger)
+PASS  DEMO-43  app role cannot DELETE a zone (D7)
 == Gateway behaviour ==
-PASS  DEMO-23  /api/v2/zones: JSON 404 from core-api
-PASS  DEMO-24  /ops/zones served by web (SPA stand-in)
-PASS  DEMO-25  AI service not running: 502, rest fine
-PASS  DEMO-26  X-Request-ID sent by client comes back
+PASS  DEMO-44  /api/v2/zones: JSON 404 from core-api
+PASS  DEMO-45  /ops/zones served by web (SPA stand-in)
+PASS  DEMO-46  AI service not running: 502, rest fine
+PASS  DEMO-47  X-Request-ID sent by client comes back
 == Observability ==
-PASS  DEMO-27  metrics count admin changes
-PASS  DEMO-28  metrics count conflicts by kind
-PASS  DEMO-29  access log line is JSON with route and request id
-PASS  DEMO-30  no token or password in logs
+PASS  DEMO-48  metrics count admin changes
+PASS  DEMO-49  metrics count conflicts by kind
+PASS  DEMO-50  access log line is JSON with route and request id
+PASS  DEMO-51  no token or password in logs
 
-Summary: 30 passed, 0 failed
+Summary: 51 passed, 0 failed

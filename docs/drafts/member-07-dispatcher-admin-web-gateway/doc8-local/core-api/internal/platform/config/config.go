@@ -83,9 +83,8 @@ func Load(getenv func(string) string) (Config, error) {
 	if c.DBMinIdleConns > c.DBMaxOpenConns {
 		errs = append(errs, fmt.Errorf("DB_MAX_IDLE_CONNS cannot be more than DB_MAX_OPEN_CONNS"))
 	}
-	if c.AppEnv == "production" && strings.Contains(c.DatabaseURL, "sslmode=disable") {
-		errs = append(errs, fmt.Errorf("DATABASE_URL must not use sslmode=disable in production"))
-	}
+	// sslmode=disable is allowed: inside the cluster the database is on the private
+	// network (alignment guide 3.5). A database outside the cluster needs sslmode=require.
 	if c.RequestTimeout >= 30*time.Second {
 		errs = append(errs, fmt.Errorf("HTTP_REQUEST_TIMEOUT_SECONDS must be below the gateway's 30 s"))
 	}

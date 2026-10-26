@@ -1,6 +1,6 @@
 # Runs migrations once per release, BEFORE the new Deployment rolls out (deployment-guide step 7).
 # Image = migrate tool + this release's SQL (core-api/Dockerfile.migrate), same git SHA as core-api.
-# Uses the OWNER role; core-api itself runs as the app role.
+# Uses the swiftdrop_migrator role (Member 9 D6); core-api itself runs as swiftdrop_app.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -22,7 +22,7 @@ spec:
           args: ["-database", "$(MIGRATE_DATABASE_URL)", "up"]
           env:
             - name: MIGRATE_DATABASE_URL
-              valueFrom: {secretKeyRef: {name: postgres-owner-credentials, key: MIGRATE_DATABASE_URL}}
+              valueFrom: {secretKeyRef: {name: postgres-migrator-secrets, key: MIGRATE_DATABASE_URL}}   # Member 9 A5
           resources:
             requests: {cpu: 50m, memory: 32Mi}
             limits: {memory: 128Mi}
