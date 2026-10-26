@@ -74,16 +74,29 @@ flowchart TD
 
 | Requirement ID | Domain Area | Test Case IDs | Test Level | Verification Objective |
 | :--- | :--- | :--- | :--- | :--- |
-| **FR-PAR-001** | Booking Details | `TC-BKG-001`, `TC-BKG-002` | API / DB Integration | Captures dimensions, weights, and JSONB addresses. |
+| **FR-PAR-001** | Booking Details | `TC-BKG-001`, `TC-BKG-002` | API / DB Integration | Captures dimensions, weights, and address snapshots. |
 | **FR-PAR-002** | Pricing Quote | `TC-PRC-001` to `TC-PRC-011`| Unit / API Integration | Computes complete tariff, Option A threshold, divisor 6000, 7 bands, 15m price freeze. |
 | **FR-PAR-003** | Accepted Price | `TC-PRC-010`, `TC-BKG-007` | Database Integration | Persists immutable rule version and LKR cents snapshot. |
 | **FR-PAR-004** | Tracking Number | `TC-TRK-001`, `TC-TRK-002` | Unit / DB Integration | Crockford Base32 format `SD-YYYYMMDD-XXXXXX`; unique. |
 | **FR-PAR-005** | Input Validation | `TC-VAL-001`, `TC-VAL-002` | Unit / API Integration | Rejects weights $> 30$ kg, dimensions $> 150$ cm (422). |
-| **FR-PAR-006** | Idempotency | `TC-IDM-001`, `TC-IDM-002` | API / DB Integration | Key replay returns cached 201; payload mismatch returns 409. |
+| **FR-PAR-006** | Idempotency | `TC-IDM-001`, `TC-IDM-002` | API / DB Integration | Key replay with `caller_scope` returns cached 201; payload mismatch returns 409. |
 | **FR-PAR-007** | Caller Scoping | `TC-SEC-001`, `TC-SEC-002` | Security Integration | Prevents IDOR cross-tenant access to foreign parcels. |
 | **FR-PAR-008** | Booking Receipt | `TC-READ-003` | API Integration | Receipt reflects stored price snapshot, not current tariff. |
-| **FR-PAR-009** | Public Privacy | `TC-SEC-003` | Security Integration | Public tracking redacts recipient phone, street address, notes. |
-| **FR-LIFE-001-004**| Lifecycle Machine | `TC-LCY-001` to `TC-LCY-006`| Unit / DB Integration | Enforces 9 states, max 3 attempts, atomic outbox commit. |
+| **FR-PAR-009** | Public Privacy | `TC-SEC-002` | Security Integration | Public tracking redacts recipient phone, street address, notes. |
+| **FR-LIFE-001** | Status Progression | `TC-LCY-001` | Unit / API Integration | Enforces canonical progression through 9 aggregate states. |
+| **FR-LIFE-002** | Tracking Visibility | `TC-LCY-001`, `TC-SEC-002` | API Integration | Authoritative state updates reflected in tracking milestones. |
+| **FR-LIFE-003** | Transition Auth | `TC-SEC-004` | Security Integration | Enforces actor permissions per lifecycle state transition. |
+| **FR-LIFE-004** | Proof of Delivery | `TC-LCY-001` | Domain Integration | Delivery completion requires valid POD attachment (Member 3). |
+| **FR-LIFE-005** | Duplicate Transition | `TC-LCY-002` | Unit / DB Integration | Idempotent handling / rejection of duplicate status transitions. |
+| **FR-LIFE-006** | Failure Reason Code| `TC-LCY-003` | API / DB Integration | Failed delivery attempts capture standardized reason codes. |
+| **FR-LIFE-007** | Audited Corrections| `TC-LCY-006` | DB Integration | Dispatcher corrections logged immutably in status history. |
+| **FR-ADM-007** | Tariff Admin API | `TC-PRC-012` | API Integration | Candidate REST CRUD for tariff rule configuration (M2 for M7). |
+| **SEC-004** | Auth Token Verify | `TC-SEC-001` | Security Integration | Rejects missing/expired/invalid JWT bearer tokens (401). |
+| **SEC-006** | RBAC Enforcement | `TC-SEC-004` | Security Integration | Rejects unauthorized role access to mutating endpoints (403). |
+| **SEC-007** | Tenant Isolation | `TC-SEC-001` | Security Integration | Prevents cross-customer and cross-merchant data leakage. |
+| **SEC-008** | Input Sanitization | `TC-VAL-001`, `TC-VAL-002` | Unit / API Integration | Enforces strict bounds on weight, dimensions, and text fields. |
+| **SEC-009** | Idempotency Replay | `TC-IDM-001`, `TC-IDM-002` | API / DB Integration | Protects against duplicate billing/booking on network retries. |
+| **SEC-015** | PII Masking | `TC-SEC-002` | Security Integration | Public tracking redacts recipient contact name, phone, address. |
 
 ---
 
@@ -269,6 +282,23 @@ flowchart TD
 - **Action:** Dispatcher/system triggers return process.
 - **Assertions:** Status transitions to terminal `RETURNED`. No further delivery reattempts allowed.
 
+#### `TC-LCY-005`: Parcel Booking Cancellation
+- **Objective:** Verify customer/merchant cancellation prior to courier pickup.
+- **Setup:** Parcel in `CREATED` status.
+- **Action:** Authenticated resource owner calls `POST /api/v1/parcels/{id}/cancel`.
+- **Assertions:**
+  - HTTP 200 OK returned; status becomes `CANCELLED`.
+  - Immutable entry appended to `parcel_status_history` with `reason_code = 'CUSTOMER_CANCELLED'`.
+  - Outbox event `parcel.cancelled.v1` committed atomically.
+  - Attempting to cancel a parcel in `PICKED_UP` or `IN_TRANSIT` fails with HTTP 409 Conflict (`INVALID_STATE_TRANSITION`).
+
+#### `TC-LCY-006`: Status History Integrity & Deletion Protection
+- **Objective:** Verify that status transitions record complete audit metadata and direct deletion is blocked.
+- **Setup:** Parcel transitioned through multiple states.
+- **Assertions:**
+  - Each `parcel_status_history` record stores `actor_role`, `reason_code`, optional `note`, and `parcel_version`.
+  - Executing `DELETE FROM parcels WHERE id = $1` is rejected with a foreign key violation (`ON DELETE RESTRICT`) to preserve regulatory history.
+
 ---
 
 ### 5.5 Security, Authorization & Privacy (`TC-SEC-*`)
@@ -284,6 +314,13 @@ flowchart TD
 - **Assertions:**
   - `status`, `tracking_number`, `pickup_city`, `dropoff_city` are present.
   - `recipient_phone`, `recipient_name`, `address_line1`, `price_cents`, and `special_instructions` are completely absent.
+
+#### `TC-SEC-004`: Role-Based Access Control (RBAC Enforcement)
+- **Objective:** Enforce role privileges across mutating operations.
+- **Cases:**
+  - Customer attempts to call `POST /api/v1/admin/pricing-rules` $\implies$ HTTP 403 Forbidden.
+  - Courier attempts to transition parcel from `CREATED` directly to `DELIVERED` $\implies$ HTTP 409 Conflict.
+  - Unauthenticated request with missing/expired JWT $\implies$ HTTP 401 Unauthorized.
 
 ---
 
@@ -322,14 +359,15 @@ go test -v -tags=integration ./internal/parcels/infrastructure/...
 | Testing Topic | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Monetary Validation** | Allowed float fee checks | Exact integer LKR cents comparison | Engineering Standards v1.0 Section 6 |
-| **Pricing Model & Complete Tariff** | General estimation tests | Fixed complete tariff `tariff(pickup, dropoff, band)`; no separate base/per-kg/distance fees | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Volumetric Policy & Divisor (6000)** | Divisor 5000 / arbitrary calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`current_time >= expires_at` enforced on backend) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Address Verification** | Tested `parcel_addresses` child table | Tests JSONB snapshots on `parcels` | Database Schema Standards |
-| **Failure Semantics** | Tested terminal `FAILED` | Tested transient `ATTEMPT_FAILED` (max 3) vs `RETURNED` | ADR-004 Failed Delivery Semantics |
+| **Pricing Model & Complete Tariff** | General estimation tests | Fixed complete tariff `tariff(pickup, dropoff, band)`; no separate base/per-kg/distance fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (6000)** | Divisor 5000 / arbitrary calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`current_time >= expires_at` enforced on backend) | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Address Verification** | Tested `parcel_addresses` child table | Dual Specification: tests JSONB snapshots on `parcels` and aligns with `parcel_addresses` child table | Architecture Alignment Item |
+| **Failure Semantics** | Tested terminal `FAILED` | Tested transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
+| **History Deletion Protection** | Unverified / cascade | Tested `ON DELETE RESTRICT` preventing deletion of parcels with status history | Engineering Standards & Audit |
 | **Migration Testing** | Unnumbered migrations | Explicit testing of `000004`, `000005`, `000010` | Database Migration Baseline |
-| **Tariff Administration** | Mixed ownership tests | Admin write UI & workflow owned by M7; M2 tests calculation engine & lookup | Coordinated Boundary |
+| **Tariff Administration** | Mixed ownership tests | Admin write UI & workflow owned by M7; M2 tests candidate calculation engine & lookup endpoints | Coordinated Boundary |
 | **Receipt File Format** | Tested arbitrary PDF output | M2 tests JSON snapshot; M6 tests rendering | `PENDING TEAM CONFIRMATION` |
 
 ### 7.1 Pricing Policy Dependency & Test Suite Impact Analysis

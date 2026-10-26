@@ -42,7 +42,7 @@ PostgreSQL is the single authoritative source of truth for all parcel, pricing, 
 | `parcel_status_history` | Member 2 | Append-only via Member 2 State Machine | Chronological audit queries |
 | `pricing_rules` | Member 2 / Admin | Evaluated by Member 2; Admin writes (M7/M1) | Internal pricing use cases |
 | `pricing_quotes` | Member 2 | Created by `POST /api/v1/pricing/quotes` | Validated by booking use case |
-| `idempotency_keys` | Member 2 / Platform | Written upon mutating HTTP requests | Scoped by `(key, caller_id)` |
+| `idempotency_keys` | Member 2 / Platform | Written upon mutating HTTP requests | Scoped by `(key, caller_scope)` |
 | `outbox_events` | Member 8 (Schema) | Written by Member 2 within PostgreSQL Tx | Polled and published by Member 8 relay |
 
 ---
@@ -165,21 +165,41 @@ CREATE INDEX idx_parcels_tracking_number ON parcels (tracking_number);
 
 CREATE TABLE IF NOT EXISTS parcel_status_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+    parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE RESTRICT,
     from_status VARCHAR(32),
     to_status VARCHAR(32) NOT NULL,
     actor_id UUID,
     actor_role VARCHAR(32) NOT NULL,
-    reason TEXT,
+    reason_code VARCHAR(64),
+    note TEXT,
     parcel_version INT NOT NULL,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_parcel_status_history_timeline ON parcel_status_history (parcel_id, occurred_at ASC);
+
+-- Candidate Child Table: parcel_addresses (Dual Specification per database-schema.md)
+-- Maintained for architecture alignment if normalized address persistence is adopted.
+CREATE TABLE IF NOT EXISTS parcel_addresses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE RESTRICT,
+    address_type VARCHAR(16) NOT NULL CHECK (address_type IN ('PICKUP', 'DROPOFF')),
+    contact_name VARCHAR(128) NOT NULL,
+    contact_phone VARCHAR(32) NOT NULL,
+    address_line1 VARCHAR(255) NOT NULL,
+    address_line2 VARCHAR(255),
+    city VARCHAR(128) NOT NULL,
+    postal_code VARCHAR(16) NOT NULL,
+    zone_id VARCHAR(64) NOT NULL,
+    instructions TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_parcel_address_type UNIQUE (parcel_id, address_type)
+);
 ```
 
 ```sql
 -- Down Migration: 000005_create_parcels_and_quotes.down.sql
+DROP TABLE IF EXISTS parcel_addresses;
 DROP TABLE IF EXISTS parcel_status_history;
 DROP TABLE IF EXISTS parcels;
 ```
@@ -194,7 +214,7 @@ Creates `idempotency_keys` table for request deduplication across the API.
 
 CREATE TABLE IF NOT EXISTS idempotency_keys (
     key VARCHAR(255) NOT NULL,
-    caller_id VARCHAR(64) NOT NULL,
+    caller_scope VARCHAR(64) NOT NULL,
     operation VARCHAR(64) NOT NULL,
     request_hash CHAR(64) NOT NULL,
     response_status INT NOT NULL,
@@ -202,7 +222,7 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     resource_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (key, caller_id)
+    PRIMARY KEY (key, caller_scope)
 );
 
 CREATE INDEX idx_idempotency_keys_expiry ON idempotency_keys (expires_at);
@@ -282,8 +302,37 @@ Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, weight_band
 | `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Quote creation timestamp in UTC. |
 | `accepted_parcel_id` | `UUID` | Yes | `NULL` | Optional parcel ID that consumed this quote (enforces single-use consumption policy). |
 
-### 4.4 JSONB Address Schemas (`pickup_address`, `dropoff_address`)
-Addresses are embedded directly into `parcels` to guarantee snapshot isolation:
+### 4.4 Table: `parcel_status_history`
+
+| Column Name | Data Type | Nullable | Default | Description & Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | No | `gen_random_uuid()` | History record primary key. |
+| `parcel_id` | `UUID` | No | None | References `parcels.id` with `ON DELETE RESTRICT` to preserve auditability. |
+| `from_status` | `VARCHAR(32)` | Yes | `NULL` | Previous lifecycle state (`NULL` for initial `CREATED`). |
+| `to_status` | `VARCHAR(32)` | No | None | New lifecycle state after transition. |
+| `actor_id` | `UUID` | Yes | `NULL` | ID of authenticated user or staff member initiating change. |
+| `actor_role` | `VARCHAR(32)` | No | None | Security role (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`, `SYSTEM`). |
+| `reason_code` | `VARCHAR(64)` | Yes | `NULL` | Standardized reason code (e.g., `RECIPIENT_UNAVAILABLE`, `CUSTOMER_CANCELLED`). |
+| `note` | `TEXT` | Yes | `NULL` | Operational narrative or courier remarks (strictly excluded from public tracking). |
+| `parcel_version` | `INT` | No | None | Version of parcel aggregate at the time of history recording. |
+| `occurred_at` | `TIMESTAMPTZ` | No | `NOW()` | Audit timestamp in UTC. |
+
+### 4.5 Table: `idempotency_keys`
+
+| Column Name | Data Type | Nullable | Default | Description & Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| `key` | `VARCHAR(255)` | No | None | Client-supplied idempotency key (header value); part of composite PK. |
+| `caller_scope` | `VARCHAR(64)` | No | None | Caller scope prefix (`USER:<uuid>` or `MERCHANT:<uuid>`); part of composite PK. |
+| `operation` | `VARCHAR(64)` | No | None | Target operation name (e.g., `CreateParcel`, `CreateMerchantOrder`). |
+| `request_hash` | `CHAR(64)` | No | None | SHA-256 hexadecimal hash of normalized request JSON body. |
+| `response_status` | `INT` | No | None | HTTP status code returned upon first successful processing (e.g., 201). |
+| `response_body` | `JSONB` | No | None | Cached HTTP JSON response body returned on replay. |
+| `resource_id` | `UUID` | Yes | `NULL` | ID of created resource (e.g., `parcels.id`). |
+| `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Record creation timestamp. |
+| `expires_at` | `TIMESTAMPTZ` | No | None | Expiration boundary (`created_at + INTERVAL '24 hours'`). |
+
+### 4.6 Address Persistence: JSONB Snapshots vs Child Table (Dual Specification)
+In Member 2's implementation baseline, addresses are embedded directly into `parcels` as immutable JSONB snapshots (`pickup_address`, `dropoff_address`) to guarantee snapshot isolation without joins:
 
 ```json
 {
@@ -297,6 +346,8 @@ Addresses are embedded directly into `parcels` to guarantee snapshot isolation:
   "instructions": "Ring intercom 3B"
 }
 ```
+
+*Architecture Alignment Notice:* Per `docs/architecture/database-schema.md`, a normalized child table `parcel_addresses` is also specified across system documentation. Member 2 documents both as a Dual Specification pending final architecture review, ensuring that whether stored as JSONB or in `parcel_addresses`, the data elements, zone mappings, and immutability invariants remain identical.
 
 ---
 
@@ -316,7 +367,7 @@ sequenceDiagram
     Caller->>H: POST /api/v1/parcels (Idempotency-Key)
     H->>U: Execute(cmd)
     U->>DB: BEGIN TRANSACTION
-    U->>DB: Check idempotency_keys (key, caller_id) FOR UPDATE
+    U->>DB: Check idempotency_keys (key, caller_scope) FOR UPDATE
     alt Key exists with matching hash
         U->>DB: ROLLBACK
         U-->>H: Return cached 201 response
@@ -356,19 +407,20 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 
 | Data Item | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
-| **Address Model** | Child table `parcel_addresses` | JSONB snapshots on `parcels` | Database Schema Standards & Audit |
+| **Address Model** | Child table `parcel_addresses` | Dual Specification: JSONB snapshots on `parcels` vs child table `parcel_addresses` per `database-schema.md` | Architecture Alignment Item |
 | **Monetary Type** | Float / Arbitrary Decimal | `BIGINT` integer cents, `LKR` | Engineering Standards v1.0 Section 6 |
-| **Migration Files** | Unnumbered / arbitrary names | `000004`, `000005`, `000010` | Database Migration Baseline |
+| **Migration Files** | Unnumbered / arbitrary names | `000004`, `000005`, `000010` (co-designed specifications) | Database Migration Baseline |
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
 | **Tracking Number** | Arbitrary text format | `SD-YYYYMMDD-XXXXXX` (Crockford Base32) | SRS FR-PAR-004 & Audit |
 | **Quote Persistence** | Optional / unpersisted | Persisted in `pricing_quotes` table | Engineering Standards & Audit |
-| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg formula | Complete tariff per zone-pair and weight band: `tariff(pickup, dest, band)`; no separate base/per-kg/distance fees. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Volumetric Policy & Divisor (6000)** | Unspecified weight calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)`. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Idempotency Model** | Module-local vs duplicate | Canonical `idempotency_keys` table (24h TTL) | Engineering Standards v1.0 Section 7 |
-| **Failure States** | Unclear `FAILED` state | Transient `ATTEMPT_FAILED` (max 3), `RETURNED` | ADR-004 Failed Delivery Semantics |
-| **Tariff Admin Rights** | Unassigned | Admin write UI & workflow owned by M7; calculation engine owned by M2 | Coordinated Boundary |
+| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg formula | Complete tariff per zone-pair and weight band: `tariff(pickup, dest, band)`; no separate base/per-kg/distance fees. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (6000)** | Unspecified weight calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Idempotency Model** | Module-local vs duplicate | Canonical `idempotency_keys` table with `caller_scope` (24h TTL) | Engineering Standards v1.0 & API Conventions |
+| **Failure States** | Unclear `FAILED` state | Transient `ATTEMPT_FAILED` (max 3), terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
+| **Status History Deletion Policy** | Unspecified / Cascade | `ON DELETE RESTRICT` on `parcel_status_history` to protect regulatory audit records | Engineering Standards & Audit |
+| **Tariff Admin Rights** | Unassigned | Admin write UI & workflow owned by M7; candidate REST endpoints served by M2 | Coordinated Boundary |
 | **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 6.1 Pricing Policy Dependency & Persistence Impact Analysis
@@ -387,6 +439,6 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 1. **Clean Migration Execution:** Running `migrate -path migrations -database $DB_URL up` builds the complete database without syntax or constraint errors.
 2. **Reversible Migrations:** Running down migrations (`000010`, `000005`, `000004`) cleanly removes all objects without leftover artifacts.
 3. **Financial Precision:** Insertion of fractional cents is prevented by integer typing (`BIGINT`); fees are exactly computed and stored.
-4. **Referential Integrity:** Deleting a parcel cascades to its `parcel_status_history` rows; deleting an active pricing rule referenced by historical parcels is blocked (`ON DELETE RESTRICT`).
+4. **Referential Integrity & History Protection:** Deleting a parcel with associated history entries is strictly prevented (`ON DELETE RESTRICT`) to protect regulatory audit and financial records; deleting an active pricing rule referenced by historical parcels is blocked (`ON DELETE RESTRICT`).
 5. **Snapshot Isolation:** Modifying a user's address in the `users` table does not alter existing `parcels.pickup_address` JSONB records.
 6. **Transaction Atomicity:** Outbox event insertion and parcel persistence commit or roll back together under all failure scenarios.

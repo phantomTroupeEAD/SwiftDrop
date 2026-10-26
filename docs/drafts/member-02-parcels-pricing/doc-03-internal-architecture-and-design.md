@@ -462,14 +462,15 @@ erDiagram
         varchar to_status
         uuid actor_id
         varchar actor_role
-        text reason
+        varchar reason_code
+        text note
         timestamptz occurred_at
         int parcel_version
     }
 
     idempotency_keys {
         varchar key PK
-        varchar caller_id PK
+        varchar caller_scope
         varchar operation
         char request_hash
         int response_status
@@ -509,16 +510,19 @@ Authoritative business store for parcel aggregate roots.
 - `price_cents` (`BIGINT`, NOT NULL): Total charged complete delivery fee in integer cents.
 - `pricing_rule_id` (`VARCHAR(64)`, NOT NULL): Identifier of rule used.
 - `pricing_rule_version` (`INT`, NOT NULL): Version of rule used for historical traceability.
-- `pickup_address` (`JSONB`, NOT NULL): Immutable pickup address and contact snapshot.
-- `dropoff_address` (`JSONB`, NOT NULL): Immutable dropoff address and contact snapshot.
+- `pickup_address` (`JSONB`, NOT NULL): Immutable pickup address and contact snapshot (or child table foreign key if normalized model ratified).
+- `dropoff_address` (`JSONB`, NOT NULL): Immutable dropoff address and contact snapshot (or child table foreign key if normalized model ratified).
 - `attempt_count` (`INT`, NOT NULL, DEFAULT `0`): Current number of failed delivery attempts (ADR-004).
 - `max_attempts` (`INT`, NOT NULL, DEFAULT `3`): Maximum allowed delivery attempts before return.
 - `version` (`INT`, NOT NULL, DEFAULT `1`): Optimistic concurrency control counter.
 - `created_at`, `updated_at` (`TIMESTAMPTZ`, NOT NULL): Audit timestamps.
 
-#### 6.2.2 `pickup_address` and `dropoff_address` JSONB Schemas
-To ensure that customer profile edits never retroactively alter historical shipment contracts, addresses are stored directly on the `parcels` table as immutable JSONB snapshots:
+#### 6.2.2 Address Model Specifications (Dual Specification Pending Ratification)
+To preserve point-in-time snapshot immutability, Member 2 specifies two compatible models:
+1. **Embedded JSONB Snapshots (Proposed by Member 2):** Stored directly on `parcels` as `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL`, eliminating relational joins and shielding historical orders from retroactive profile edits.
+2. **Normalized Child Table (`parcel_addresses`, Authoritative per `database-schema.md`):** Child table keyed by `(id UUID PK, parcel_id UUID FK, address_type VARCHAR(32), contact_name, contact_phone, address_line1, address_line2, city, postal_code, zone_id FK)` with foreign key `ON DELETE RESTRICT`.
 
+*JSONB Address Snapshot Schema Example:*
 ```json
 {
   "contact_name": "Kasun Perera",
@@ -545,9 +549,9 @@ Persists generated delivery quotes for 15 minutes to guarantee price stability d
 - `created_at` (`TIMESTAMPTZ`, NOT NULL): Quote generation timestamp.
 
 #### 6.2.4 `idempotency_keys` Table
-Ensures safe request retries without duplicate parcel creation.
+Ensures safe request retries without duplicate parcel creation. Keyed by client token and caller scope without a foreign key to `users` to permit merchant tenant scopes.
 - `key` (`VARCHAR(255)`, PK): Client-provided token.
-- `caller_id` (`VARCHAR(64)`, PK): Authenticated customer ID or merchant tenant ID (enforces caller isolation).
+- `caller_scope` (`VARCHAR(64)`, NOT NULL): Authenticated customer or merchant scope (e.g., `'USER:<uuid>'` or `'MERCHANT:<uuid>'`).
 - `operation` (`VARCHAR(64)`, NOT NULL): Operation identifier (e.g., `'BOOK_PARCEL'`).
 - `request_hash` (`CHAR(64)`, NOT NULL): SHA-256 hash of normalized request body.
 - `response_status` (`INT`, NOT NULL): Cached HTTP status code (e.g., 201).
@@ -555,6 +559,19 @@ Ensures safe request retries without duplicate parcel creation.
 - `resource_id` (`UUID`, NULLABLE): ID of created parcel.
 - `created_at` (`TIMESTAMPTZ`, NOT NULL): Initial request timestamp.
 - `expires_at` (`TIMESTAMPTZ`, NOT NULL): Expiration timestamp (`created_at + INTERVAL '24 hours'`).
+
+#### 6.2.5 `parcel_status_history` Table
+Authoritative append-only audit log of all parcel status transitions.
+- `id` (`UUID`, PK): History record identifier.
+- `parcel_id` (`UUID`, FK, NOT NULL): References `parcels.id` with `ON DELETE RESTRICT`.
+- `from_status` (`VARCHAR(32)`, NULLABLE): Status prior to transition (NULL on creation).
+- `to_status` (`VARCHAR(32)`, NOT NULL): New status confirmed by aggregate.
+- `actor_id` (`UUID`, NULLABLE): Authenticated user ID.
+- `actor_role` (`VARCHAR(32)`, NOT NULL): Role of actor (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`).
+- `reason_code` (`VARCHAR(64)`, NULLABLE): Standardized failure/cancellation code.
+- `note` (`TEXT`, NULLABLE): Operational internal note (strictly redacted from public tracking).
+- `parcel_version` (`INT`, NOT NULL): Version number of parcel after transition.
+- `occurred_at` (`TIMESTAMPTZ`, NOT NULL): UTC timestamp of event.
 
 ---
 
@@ -654,17 +671,18 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 
 | Architectural Topic | Pre-Audit Draft State | Post-Audit Aligned Decision | Authoritative Source / Status |
 | :--- | :--- | :--- | :--- |
-| **Pricing Endpoint & Quote Persistence** | Ambiguous (`/estimate` vs `/quotes`) | Standardized on `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes`. | Aligned with Member 10 / Team Standards |
-| **Pricing Model & Tariffs** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Fixed complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands. Retrieval interface owned by M2; admin UI owned by M7. | Member 2 Baseline |
-| **Volumetric Threshold & Divisor (6000)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cm³/kg for $> 1$ kg; 30 kg max limits. | Member 2 Baseline |
-| **Quote Validity Window (15m)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | Member 2 Baseline |
+| **Pricing Endpoint & Quote Persistence** | Ambiguous (`/estimate` vs `/quotes`) | Standardized on canonical `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes`. | Aligned with Member 10 / Team Standards |
+| **Pricing Model & Tariffs** | Complete tariff proposal vs legacy formula | Fixed complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands proposed by Member 2. `docs/contracts/pricing-rules.md` specifies base fee + surcharge + multipliers. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Threshold & Divisor (6000)** | Divisor 5000 vs 6000 | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cm³/kg for $> 1$ kg; 30 kg max limits. Differs from divisor 5000 in `pricing-rules.md`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Quote Validity Window (15m)** | Arbitrary TTL | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** |
 | **Monetary Data Type** | Floating-point / arbitrary decimal | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
-| **Address Data Model** | Child table `parcel_addresses` | Immutable `pickup_address` & `dropoff_address` JSONB on `parcels` | Database Schema Standards & Audit |
+| **Address Data Model** | Normalized child table vs JSONB snapshots | Member 2 proposes immutable `pickup_address` & `dropoff_address` JSONB on `parcels`; `database-schema.md` defines relational child table `parcel_addresses`. Both models documented. | **PENDING TEAM RATIFICATION (Dual Specification)** |
 | **Tracking Number Format** | Unspecified / numeric | `SD-YYYYMMDD-XXXXXX` (Crockford Base32, uppercase) | Aligned with Member 5 & SRS FR-PAR-004 |
-| **Delivery Failure Lifecycle** | Vague `FAILED` terminal state | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
-| **Idempotency Persistence** | Unspecified / duplicate table ideas | Canonical `idempotency_keys` table (24h TTL, SHA-256 hash) | Engineering Standards v1.0 Section 7 |
-| **Tariff Administration** | Mixed Member 2 / Member 7 claims | Admin write endpoints owned by Member 7 / Member 1 | `PENDING TEAM CONFIRMATION` |
+| **Delivery Failure Lifecycle** | Vague `FAILED` terminal state | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED`. Generic `FAILED` state removed. | ADR-004 Failed Delivery Semantics |
+| **Idempotency Persistence** | Table with FK to `users` | Canonical `idempotency_keys` table with `caller_scope` (24h TTL, SHA-256 hash). No FK to `users` to permit merchant tenant scopes. | Engineering Standards v1.0 Section 7 |
+| **Tariff Administration** | Mixed Member 2 / Member 7 claims | Member 2 provides `/api/v1/admin/pricing-rules` REST CRUD endpoints; Member 7 owns Admin UI screens and workflows. | Coordinated Boundary / SRS FR-ADM-007 |
 | **Receipt Presentation Format** | Undecided JSON vs PDF rendering | Member 2 returns JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
+| **Arithmetic Baseline Discrepancy** | 55000 vs 51000 at baseline 8000 | Old formula in `pricing-rules.md` yields 51000 cents ($35000 + 2 \times 8000$); older draft used rate 10000 yielding 55000 cents; new proposed complete tariff Band 4 uses illustrative 55000 cents. | **UNRESOLVED / PENDING RATIFICATION** |
 
 ### 9.1 Pricing Policy Dependency & Impact Analysis (If Pricing Rules Change)
 

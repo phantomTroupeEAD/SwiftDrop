@@ -179,7 +179,8 @@ Retrieves the append-only audit trail of parcel status transitions.
       "to_status": "CREATED",
       "actor_id": "usr-8812c9b4-3312-4aa8-b112-998877665544",
       "actor_role": "CUSTOMER",
-      "reason": "Initial customer booking confirmation",
+      "reason_code": "CUSTOMER_BOOKING",
+      "note": "Initial customer booking confirmation",
       "occurred_at": "2026-10-25T14:32:00Z",
       "parcel_version": 1
     }
@@ -219,3 +220,39 @@ Retrieves the financial receipt snapshot for a booking, using the immutable acce
   "payment_status": "PAID"
 }
 ```
+
+---
+
+## 6. Cancel Parcel Booking
+Cancels a parcel booking prior to courier pickup. Cancellation is strictly allowed only while parcel is in `CREATED` status.
+
+- **Method / Path:** `POST /api/v1/parcels/{id}/cancel`
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `ADMIN`)
+- **Headers:**
+  - `Authorization: Bearer <jwt>`
+  - `Content-Type: application/json`
+
+### Request Body (Optional)
+```json
+{
+  "reason_code": "CUSTOMER_CANCELLED",
+  "note": "Sender cancelled booking before courier dispatch."
+}
+```
+
+### Success Response (`200 OK`)
+```json
+{
+  "id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "status": "CANCELLED",
+  "version": 2,
+  "updated_at": "2026-10-25T14:40:00Z"
+}
+```
+
+### Error Responses
+- `401 Unauthorized`: Missing or invalid Bearer token.
+- `403 Forbidden`: Authenticated user does not own this parcel.
+- `404 Not Found`: Parcel not found or not visible to caller.
+- `409 Conflict`: `INVALID_STATE_TRANSITION` — Parcel has already been picked up or dispatched (`status != 'CREATED'`).

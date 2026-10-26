@@ -70,11 +70,11 @@ A successful booking must result in:
 1. One persisted parcel record with a stable internal UUIDv4 identifier.
 2. One unique, non-guessable public tracking number in canonical format `SD-YYYYMMDD-XXXXXX`.
 3. An initial status of `CREATED` within the authoritative 9-state parcel lifecycle.
-4. Immutable booking-time pickup and drop-off address snapshots stored directly on the `parcels` table as `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL`.
+4. Immutable booking-time pickup and drop-off address snapshots stored directly on the `parcels` table as `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL` (with the normalized child table `parcel_addresses` documented as candidate relational model per `database-schema.md` pending team ratification).
 5. A stored accepted-price snapshot (`price_cents` in LKR minor units, `currency = 'LKR'`, and `pricing_rule_version_id`).
-6. An initial audit record in `parcel_status_history` recording the transition to `CREATED` with UTC timestamp and actor identity.
+6. An initial audit record in `parcel_status_history` recording the transition to `CREATED` with UTC timestamp, actor ID, actor role (`actor_role`), `reason_code = NULL`, `note`, and `parcel_version = 1`.
 7. A domain integration event (`parcel.booked.v1`) written to the `outbox_events` table within the same PostgreSQL transaction.
-8. A cached idempotency record in `idempotency_keys` keyed by `(key, caller_scope)` with a 24-hour expiration.
+8. A cached idempotency record in `idempotency_keys` keyed by `key` and `caller_scope` with a 24-hour expiration.
 9. A booking response returning the parcel ID, tracking number, status `CREATED`, and accepted fee breakdown.
 
 If any portion of the database transaction fails, the entire transaction rolls back cleanly, leaving no partial parcel, history, outbox, or idempotency state.
@@ -181,6 +181,14 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
   - Chargeable weight: $\max(8.00, 32.00) = 32.00\text{ kg}$.
   - Result: **Rejected** with HTTP `422 Unprocessable Entity` (`PARCEL_LIMITS_EXCEEDED`) because the chargeable weight ($32.00\text{ kg}$) exceeds the proposed $30.00\text{ kg}$ maximum limit.
 
+> [!NOTE]
+> **Arithmetic Baseline & Pricing Formula Clarification (Audit Resolution):**
+> An arithmetic discrepancy noted in the system audit involves an intra-zone 2.5 kg delivery (55000 vs 51000 cents at baseline 8000 cents/kg):
+> - Under the legacy formula in `docs/contracts/pricing-rules.md` Table 4, Metro $\to$ Metro defines base fee 35000 cents and additional rate 8000 cents/kg: $35000 + \lceil 2.5 - 1.0 \rceil \times 8000 = 35000 + (2 \times 8000) = 51000\text{ cents}$ (LKR 510.00).
+> - An earlier draft example assumed an additional rate of 10000 cents/kg, yielding $35000 + (2 \times 10000) = 55000\text{ cents}$.
+> - Under Member 2's proposed complete-tariff schedule, delivery fees are looked up directly as a single complete tariff per zone pair and weight band (e.g. Band 4: $2 < W \le 5\text{ kg}$), with 55000 cents used as an illustrative flat Band 4 rate.
+> - Because team ratification of the complete-tariff schedule versus the legacy formula is still pending, the specific formula and numerical examples remain **provisional and unresolved** pending formal team decision. Commercial rates will be populated in database seed fixtures and never hardcoded into domain logic.
+
 ## UML Sequence Diagram
 
 ![UML Sequence Diagram — Delivery Fee Estimate](./Document2-Functional-Flows-Business-Rules-Revised_assets/Delivery%20Fee%20Estimate%20Sequence%20Diagram.png)
@@ -208,7 +216,7 @@ An authenticated customer confirms a delivery booking. The system supports two d
 5. The application layer generates a unique tracking number in the canonical format `SD-YYYYMMDD-XXXXXX`.
 6. Within a single PostgreSQL transaction:
    - Inserts row into `parcels` with initial status `CREATED`, `pickup_address` JSONB snapshot, `dropoff_address` JSONB snapshot, `price_cents`, `currency = 'LKR'`, `pricing_rule_id`, `pricing_rule_version`, `version = 1`, and `attempt_count = 0`.
-   - Inserts initial status audit row into `parcel_status_history` (`from_status = NULL`, `to_status = 'CREATED'`, `actor_id = caller_id`, `actor_role = 'CUSTOMER'`, `parcel_version = 1`).
+   - Inserts initial status audit row into `parcel_status_history` (`from_status = NULL`, `to_status = 'CREATED'`, `actor_id = caller_id`, `actor_role = 'CUSTOMER'`, `reason_code = NULL`, `note = 'Initial customer booking confirmation'`, `parcel_version = 1`).
    - Marks the quote as consumed in `pricing_quotes` (`accepted_parcel_id = parcel.id`) if quoted booking.
    - Inserts integration event `parcel.booked.v1` into `outbox_events`.
    - Stores the execution outcome in `idempotency_keys` with a 24-hour expiration (`expires_at = NOW() + 24 hours`).
@@ -330,21 +338,46 @@ Public tracking is different: it returns only the approved privacy-safe subset, 
 
 If the receipt format, eligibility rules, or downloadable file type are not yet approved, they remain open interface decisions. The module must not claim that a PDF format is mandatory unless the team/SRS explicitly confirms it.
 
-# 8. Parcel Lifecycle and Status-History Rules
+## 7.4 Functional Flow E — Cancel Parcel Booking
 
-## 8.1 Baseline Lifecycle
+### Trigger
+A customer, authorized merchant, or dispatcher/administrator requests cancellation of a previously booked parcel before it has been collected by a courier.
 
-The SRS defines the following baseline lifecycle:
+### Preconditions
+1. The parcel must be in either `CREATED` or `ASSIGNED` status.
+2. The caller must be authenticated and authorized:
+   - Senders (`CUSTOMER` or `MERCHANT`) may cancel parcels they own while status is `CREATED`.
+   - Dispatchers or Administrators (`DISPATCHER` or `ADMIN`) may cancel parcels in `CREATED` or `ASSIGNED` status.
+3. Parcels in `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, or any terminal state cannot be cancelled.
 
-CREATED → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED
+### Main Success Flow
+1. Caller submits `POST /api/v1/parcels/{id}/cancel` with optional `reason_code` and `note`.
+2. Transport handler validates caller JWT claims and extracts caller identity and role.
+3. The application use case (`CancelParcelUseCase`) executes within a PostgreSQL transaction:
+   - Loads the `Parcel` aggregate with current `version`.
+   - Validates caller authorization against parcel ownership and current status.
+   - Invokes `parcel.Cancel(actorID, actorRole, reasonCode, note)`.
+   - Aggregate evaluates invariants: rejects if status $\notin \{\text{CREATED}, \text{ASSIGNED}\}$.
+   - Sets `status = 'CANCELLED'` and increments `version = version + 1`.
+   - Appends an audit record to `parcel_status_history` (`from_status = previous_status`, `to_status = 'CANCELLED'`, `actor_id`, `actor_role`, `reason_code`, `note`, `parcel_version`).
+   - Inserts integration event `parcel.cancelled.v1` into `outbox_events`.
+   - Updates `parcels` with OCC version check (`WHERE id = $1 AND version = $2`).
+4. Database transaction commits atomically.
+5. Returns HTTP `200 OK` with the updated parcel representation (`status: "CANCELLED"`).
+6. Outbox Relay publishes `parcel.cancelled.v1` to RabbitMQ for notification workers and downstream listeners.
 
-The SRS states that FAILED is a terminal outcome for a delivery attempt or parcel only according to the approved operational policy. A failed attempt may be retried by an authorized dispatcher/courier workflow; if retries are allowed, model the attempt outcome separately from the final parcel lifecycle rather than silently reopening a terminal parcel.
+### Alternate & Failure Flows
+- **Parcel already collected (`PICKED_UP` or later):** Rejected with HTTP `409 Conflict` (`PARCEL_NOT_CANCELLABLE`).
+- **Unauthorized caller:** Rejected with HTTP `403 Forbidden`.
+- **Concurrent modification:** If the parcel is concurrently dispatched or collected, OCC detects version mismatch and returns HTTP `409 Conflict` (`VERSION_CONFLICT`).
 
 # 8. Parcel Lifecycle and Status-History Rules
 
 ## 8.1 Authoritative 9-State Lifecycle State Machine
 
 The parcel lifecycle is governed exclusively by the `Parcel` aggregate root in `core-api/internal/parcels/domain/`. No external service or direct SQL statement may alter parcel status.
+
+Per **ADR-004** and `docs/architecture/domain-boundaries.md`, the generic `FAILED` state has been removed from the authoritative parcel lifecycle. An unsuccessful delivery attempt is captured on the attempt entity in `delivery_attempts` (managed by Member 3), while the parcel aggregate transitions to transient `ATTEMPT_FAILED`. A third failed attempt transitions the parcel to terminal `RETURNED`.
 
 The authoritative state machine consists of 9 distinct operational states:
 
