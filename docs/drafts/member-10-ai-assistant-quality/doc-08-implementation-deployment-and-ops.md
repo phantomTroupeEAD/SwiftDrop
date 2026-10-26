@@ -39,9 +39,8 @@ This document provides a complete operations, deployment, configuration, and tro
 | `TEST_MODE` | No | `false` | When `true` or key unset, enables offline deterministic `MockLLMClient` for CI builds. |
 | `CORE_API_URL` | Yes | `http://core-api:8080` | Internal network URL for Core API Modular Monolith. |
 | `TRACKING_API_URL`| Yes | `http://tracking-api:8081` | Internal network URL for Tracking Service. |
-| `INTERNAL_SERVICE_KEY`| Yes| `dev-internal-secret-key-123` | Shared secret header (`X-Internal-Service-Key`) for policy cache refresh. |
-| `AI_RATE_LIMIT_ANONYMOUS_RPM` | No | `10` | Max chat requests per minute per IP for anonymous users. |
-| `AI_RATE_LIMIT_AUTHENTICATED_RPM`| No | `30` | Max chat requests per minute per user ID for authenticated JWT users. |
+| `AI_SERVICE_ROLE_TOKEN`| Yes| `dev-internal-secret-key-123` | Shared secret token (`Authorization: Bearer <token>`) for internal calls (fallback: `INTERNAL_SERVICE_KEY`). |
+| `AI_RATE_LIMIT_RPM` | No | `20` | Max chat requests per minute per IP/user matching Traefik edge rate limiter. |
 | `AI_SESSION_TTL_MINUTES` | No | `15` | In-memory session context expiration window in minutes. |
 | `AI_SESSION_MAX_ACTIVE` | No | `50` | Maximum concurrent active conversational sessions retained in memory. |
 | `POLICY_CACHE_TTL_MINUTES` | No | `30` | Background cache expiration time for company policies. |
@@ -160,7 +159,8 @@ ai-assistant:
     - LLM_MODEL=${LLM_MODEL:-meta-llama/llama-3.1-70b-instruct}
     - CORE_API_URL=http://core-api:8080
     - TRACKING_API_URL=http://tracking-api:8081
-    - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:-dev-internal-secret-key-123}
+    - AI_SERVICE_ROLE_TOKEN=${AI_SERVICE_ROLE_TOKEN:-dev-internal-secret-key-123}
+    - AI_RATE_LIMIT_RPM=20
   ports:
     - "8000:8000"
   depends_on:
@@ -168,6 +168,22 @@ ai-assistant:
     - tracking-api
   networks:
     - swiftdrop-network
+
+mock-webhook:
+  image: python:3.11-slim
+  container_name: swiftdrop-mock-webhook
+  command: python -m http.server 9999
+  volumes:
+    - ./tests/e2e/mock-webhook-receiver:/app
+  working_dir: /app
+  ports:
+    - "9999:9999"
+  networks:
+    - swiftdrop-network
+  environment:
+    - PORT=9999
+    - ALPHA_SECRET=whsec_alpha_test_secret_32_bytes_len!
+    - BETA_SECRET=whsec_beta_test_secret_32_bytes_leng!
 ```
 
 ---
@@ -311,6 +327,6 @@ pytest tests/e2e/api/ -v
 
 ## 4. Review Checklist for Team Meeting 2
 
-- [ ] **Member 9 (DevOps):** Confirm inclusion of `services/ai-assistant` on port `8000` in `docker-compose.yml` and Traefik routing rules.
-- [ ] **Member 9 (DevOps):** Confirm `playwright install chromium` step is included in `.github/workflows/ci.yml`.
-- [ ] **All Members (1–9):** Ensure services can be spun up cleanly with a single command: `docker compose up -d` before running `pytest tests/e2e/ -v`.
+- [x] **Member 9 (DevOps):** Confirm inclusion of `services/ai-assistant` on port `8000` and `mock-webhook` on port `9999` in `docker-compose.yml` and Traefik routing rules (`PathPrefix('/api/v1/ai')`).
+- [x] **Member 9 (DevOps):** Confirm `playwright install chromium` step is included in `.github/workflows/ci.yml`.
+- [x] **All Members (1–9):** Ensure full topology spins up cleanly with standard Makefile targets: `make up` followed by `make seed` before running `pytest tests/e2e/ -v`.

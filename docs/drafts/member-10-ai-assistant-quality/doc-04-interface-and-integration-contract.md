@@ -207,102 +207,28 @@ flowchart LR
 
 ---
 
-### Endpoint 5: Company Policies & Operational Rules (Dynamic Knowledge Base)
-- **Consumed By:** AI Assistant Service Context Hydrator & React Public Portal
-- **Owner Service:** Member 7 / Member 1 — Admin & System Context (`core-api/internal/admin`)
-- **HTTP Method & Path:** `GET /api/v1/system/policies`
-- **Authentication:** None (Public / Internal Service)
-- **Purpose:** Supplies active company rules, prohibited goods, transit SLAs, and operating hours for prompt grounding.
+### Endpoint 5: Operational System Configurations & Dynamic Overrides
+- **Consumed By:** AI Assistant Service Context Hydrator
+- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `GET /api/v1/admin/system-configurations`
+- **Authentication:** Required (`Authorization: Bearer <admin_or_service_token>`)
+- **Purpose:** Supplies live operational thresholds, weight limits, COD caps, and fuel surcharges to override static text in `company_policies.md`.
 
 #### Expected Success Response (`200 OK`)
 ```json
 {
   "data": {
-    "version": "v1.4",
-    "updated_at": "2026-10-23T10:00:00Z",
-    "operating_hours": "Monday - Saturday 08:00 - 18:00",
+    "max_parcel_weight_kg": 25.0,
+    "max_cod_amount_cents": 3500000,
+    "fuel_surcharge_percentage": 4.5,
+    "sla_express_hours": 24,
     "same_day_cutoff": "14:00",
-    "max_delivery_attempts": 3,
-    "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids, explosives, and fireworks...\n\n## 2. Packaging Guidelines\n- Maximum weight per parcel: 30 kg...\n\n## 3. Delivery SLAs\n- Western Province: 1 business day..."
+    "updated_at": "2026-10-26T10:00:00Z"
   }
 }
 ```
 
----
-
-### Endpoint 6: Admin View Policy Specification
-- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
-- **HTTP Method & Path:** `GET /api/v1/admin/policies`
-- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
-- **Headers:** `Accept: application/json`
-
-#### Expected Success Response (`200 OK`)
-```json
-{
-  "data": {
-    "version": "v1.4",
-    "updated_at": "2026-10-23T10:00:00Z",
-    "updated_by": "usr_admin_001",
-    "operating_hours": "Monday - Saturday 08:00 - 18:00",
-    "same_day_cutoff": "14:00",
-    "max_delivery_attempts": 3,
-    "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids..."
-  }
-}
-```
-
----
-
-### Endpoint 7: Admin Edit Policy Text & Rules
-- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
-- **HTTP Method & Path:** `PUT /api/v1/admin/policies`
-- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
-- **Headers:** `Content-Type: application/json`
-
-#### Expected Request Body
-```json
-{
-  "operating_hours": "Monday - Saturday 08:00 - 18:00",
-  "same_day_cutoff": "14:00",
-  "max_delivery_attempts": 3,
-  "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids, chemicals, cash...\n\n## 2. Packaging Guidelines\n- Maximum weight: 30 kg..."
-}
-```
-
-#### Expected Success Response (`200 OK`)
-```json
-{
-  "data": {
-    "message": "Company policy and operational rules updated successfully",
-    "version": "v1.5",
-    "updated_at": "2026-10-24T00:55:00Z"
-  }
-}
-```
-
----
-
-### Endpoint 8: Admin Upload Entire New Policy File (.md)
-- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
-- **HTTP Method & Path:** `POST /api/v1/admin/policies/upload`
-- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
-- **Headers:** `Content-Type: multipart/form-data`
-
-#### Expected Request
-- Form Field: `file` (Markdown file, e.g., `company_policies_v2.md`, max size 2 MB)
-
-#### Expected Success Response (`200 OK`)
-```json
-{
-  "data": {
-    "message": "New policy document uploaded and activated successfully",
-    "filename": "company_policies_v2.md",
-    "file_size_bytes": 4820,
-    "version": "v2.0",
-    "updated_at": "2026-10-24T00:55:00Z"
-  }
-}
-```
+> **Dynamic Precedence Invariant:** Whenever operational quantities, rates, or limits in `GET /api/v1/admin/system-configurations` conflict with text in `company_policies.md`, the live API configuration takes absolute precedence.
 
 ---
 
@@ -333,7 +259,7 @@ The AI Assistant service exposes two HTTP endpoints:
     "action": {
       "type": "NAVIGATE_BOOKING",
       "label": "Book this Delivery",
-      "url": "/customer/book?origin=WESTERN_ZONE&dest=CENTRAL_ZONE&weight=2.5&fee=650.00",
+      "url": "/portal/book?origin=WESTERN_ZONE&dest=CENTRAL_ZONE&weight=2.5&fee=650.00",
       "prefill_data": {
         "origin_zone": "WESTERN_ZONE",
         "destination_zone": "CENTRAL_ZONE",
@@ -348,24 +274,51 @@ The AI Assistant service exposes two HTTP endpoints:
 
 #### Error Envelopes
 - `400 Bad Request`: Message empty or exceeds maximum character length (1,000 chars).
-- `429 Too Many Requests`: Rate limit exceeded (`AI_RATE_LIMIT_ANONYMOUS_RPM` or `AI_RATE_LIMIT_AUTHENTICATED_RPM`).
+- `429 Too Many Requests`: Rate limit exceeded (Default: 20 requests/minute matching Traefik ingress limiter).
 - `503 Service Unavailable`: LLM provider unreachable (safe graceful failure envelope).
 
 ---
 
-### 3.2 Cache Invalidation Webhook: `POST /api/v1/ai/admin/refresh-knowledge`
-- **Purpose:** Called by Core API whenever an Admin edits or uploads a new policy to immediately invalidate the AI service's in-memory policy cache.
-- **Authentication:** Internal Secret Header (`X-Internal-Service-Key: <secret>`)
-- **Headers:** `Content-Type: application/json`
+### 3.2 FastMCP Dual-Channel SSE Endpoints
+The AI Assistant exposes Anthropic Model Context Protocol (MCP) capabilities via Server-Sent Events (SSE) and HTTP POST:
 
-#### Request Payload
-```json
-{
-  "event": "POLICY_UPDATED",
-  "version": "v1.5",
-  "timestamp": "2026-10-24T00:55:00Z"
-}
-```
+#### Channel 1 (Downstream): `GET /api/v1/ai/mcp/sse`
+- **Purpose:** Opens a persistent Server-Sent Events stream for external MCP clients (Claude Desktop, Cursor).
+- **Headers:** `Accept: text/event-stream`, optional `Authorization: Bearer <jwt_or_api_key>`
+- **Response Event (`endpoint`):**
+  ```http
+  event: endpoint
+  data: /api/v1/ai/mcp/messages?session_id=7d4e9f1a-b3c2-4a55-9128-48b29f0c1122
+  ```
+
+#### Channel 2 (Upstream): `POST /api/v1/ai/mcp/messages?session_id=<uuid>`
+- **Purpose:** Receives JSON-RPC 2.0 tool requests (`tools/list`, `tools/call`).
+- **Headers:** `Content-Type: application/json`
+- **Payload Example:**
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "estimate_shipping_fee",
+      "arguments": {
+        "weight_kg": 3.0,
+        "destination_zone_id": "ZONE_CP_KANDY",
+        "dimensions": { "length_cm": 30, "width_cm": 20, "height_cm": 10 },
+        "service_type": "STANDARD"
+      }
+    }
+  }
+  ```
+- **Delivery:** FastMCP executes the read-only Core API tool call and streams the JSON-RPC response back down Channel 1's open SSE connection.
+
+---
+
+### 3.3 Cache Flush / Admin Flush: `POST /api/v1/ai/admin/refresh-knowledge`
+- **Purpose:** Optional endpoint for administrators or integration tests to manually flush in-memory policy and configuration caches.
+- **Authentication:** Internal Service Token Header (`Authorization: Bearer <AI_SERVICE_ROLE_TOKEN>`)
+- **Headers:** `Content-Type: application/json`
 
 #### Success Response (`200 OK`)
 ```json
@@ -464,89 +417,79 @@ flowchart TD
 
 ### 4.3 Exposed Tool Manifests (JSON-RPC Schema)
 
-The FastMCP server exposes 5 tools conforming to the official Model Context Protocol schema:
+The FastMCP server exposes the 4 official tools mandated by SRS **FR-AI-007** conforming to the Model Context Protocol schema:
 
 ```json
 [
   {
-    "name": "track_parcel",
-    "description": "Look up public tracking milestones for a specific SwiftDrop tracking number. Does not require login.",
+    "name": "estimate_shipping_fee",
+    "description": "Calculate authoritative delivery fee between zones based on weight, dimensions, and service type. Does not require login.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "weight_kg": {
+          "type": "number",
+          "description": "Package gross weight in kilograms"
+        },
+        "destination_zone_id": {
+          "type": "string",
+          "description": "Destination zone ID (e.g., ZONE_COLOMBO, ZONE_KANDY)"
+        },
+        "dimensions": {
+          "type": "object",
+          "properties": {
+            "length_cm": { "type": "number" },
+            "width_cm": { "type": "number" },
+            "height_cm": { "type": "number" }
+          }
+        },
+        "service_type": {
+          "type": "string",
+          "enum": ["STANDARD", "EXPRESS"],
+          "default": "STANDARD"
+        }
+      },
+      "required": ["weight_kg", "destination_zone_id"]
+    }
+  },
+  {
+    "name": "track_parcel_status",
+    "description": "Look up public, sanitized tracking milestone history for a tracking number. Does not require login.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "tracking_number": {
           "type": "string",
-          "description": "Public tracking number (e.g. SD-20261021-04921)"
+          "description": "Tracking number (e.g. SD-20261026-00001)"
         }
       },
       "required": ["tracking_number"]
     }
   },
   {
-    "name": "estimate_shipping_fee",
-    "description": "Calculate estimated delivery fee between two delivery zones based on weight and dimensions. Does not require login.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "origin_zone": {
-          "type": "string",
-          "description": "Origin delivery zone (e.g., WESTERN_ZONE, CENTRAL_ZONE, SOUTHERN_ZONE)"
-        },
-        "destination_zone": {
-          "type": "string",
-          "description": "Destination delivery zone"
-        },
-        "weight_kg": {
-          "type": "number",
-          "description": "Package gross weight in kilograms"
-        },
-        "length_cm": { "type": "number" },
-        "width_cm": { "type": "number" },
-        "height_cm": { "type": "number" }
-      },
-      "required": ["origin_zone", "destination_zone", "weight_kg"]
-    }
-  },
-  {
     "name": "get_my_active_parcels",
-    "description": "Retrieve active in-flight parcels for the authenticated customer. Requires active login session or SWIFTDROP_AUTH_TOKEN.",
+    "description": "Retrieve in-flight active parcels for the authenticated customer or merchant. Requires Bearer JWT or parcels:read scoped API key.",
     "inputSchema": {
       "type": "object",
       "properties": {}
     }
   },
   {
-    "name": "get_my_deliveries",
-    "description": "Retrieve past completed or failed delivery history for the authenticated customer. Requires active login session.",
+    "name": "explain_company_policies",
+    "description": "Query company shipping rules, prohibited goods, packaging guidelines, COD limits, and claims procedures.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "status_filter": {
+        "topic_or_query": {
           "type": "string",
-          "enum": ["DELIVERED", "FAILED", "RETURNED"]
-        }
-      }
-    }
-  },
-  {
-    "name": "login_to_swiftdrop",
-    "description": "Authenticate as a SwiftDrop user directly through MCP chat to unlock personal delivery history tools.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "email": {
-          "type": "string",
-          "description": "User email (e.g. customer.a@swiftdrop.lk)"
-        },
-        "password": {
-          "type": "string",
-          "description": "User password"
+          "description": "Policy topic (e.g. 'prohibited items', 'packaging rules', 'cash on delivery limit')"
         }
       },
-      "required": ["email", "password"]
+      "required": ["topic_or_query"]
     }
   }
 ]
+```
 ```
 
 ---
@@ -598,8 +541,27 @@ To enable full-stack browser E2E testing with **Playwright** without flakiness f
 
 ---
 
-## 6. Open Questions for Team Meeting 2
+### 5.5 Multi-Tenant Mock Webhook Receiver Endpoints (`mock-webhook:9999`)
 
-1. **Member 2 (Pricing):** Please confirm the zone enum identifiers (e.g., `ZONE_COLOMBO_01` vs `ZONE_KANDY_01`) and whether `POST /api/v1/pricing/quotes` expects dimensions as individual floats with integer cents outputs.
-2. **Member 5 (Tracking):** Please confirm that `GET /api/v1/tracking/public/{trackingNumber}` redacts recipient street address and phone number at the API level as specified in `docs/contracts/api-conventions.md`.
-3. **Members 6 & 7 (Frontend):** Please confirm adoption of the `data-testid` attributes listed in Section 5 so our automated Playwright E2E test suite can run reliably without breaking on CSS refactors.
+The containerized test artifact exposes the following endpoints for automated E2E testing and live demo verification:
+
+| Method | Path | Caller | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/webhooks/merchant-alpha` | Event Worker | Receives CloudEvents for Merchant Alpha (`whsec_alpha_...`). Responds `200 OK`. |
+| `POST` | `/webhooks/merchant-beta` | Event Worker | Receives CloudEvents for Merchant Beta (`whsec_beta_...`). Responds `200 OK`. |
+| `POST` | `/webhooks/merchant-chaos` | Event Worker | Injected failure endpoint. Responds `500 Internal Error` to verify worker retry backoff and DLQ routing (`swiftdrop.dlq`). |
+| `GET` | `/dashboard` | Browser | Auto-refreshing visual HTML dashboard rendering captured events, HMAC verification badges, and isolation status. |
+| `GET` | `/api/events` | Playwright Runner | Returns JSON array of all captured events across all tenants. |
+| `GET` | `/api/merchants/{id}/events` | Playwright Runner | Returns JSON array of events scoped to a specific tenant for programmatic isolation assertions. |
+| `POST` | `/api/reset` | Test Runner Fixture | Clears captured events and resets counters between test suites. |
+
+---
+
+## 6. Review Checklist & Open Questions
+
+- [x] **Member 2 (Pricing):** Standardized on `POST /api/v1/pricing/quotes` with integer `fee_cents`.
+- [x] **Member 4 (Merchants):** Standardized on singular `POST /api/v1/merchant/orders` and `parcels:read` scoped API keys for external MCP clients.
+- [x] **Member 5 (Tracking):** Confirmed public endpoint `GET /api/v1/tracking/public/{trackingNumber}` masks PII.
+- [x] **Member 7 (Gateway/Admin):** Confirmed Traefik `PathPrefix('/api/v1/ai')` routes REST and MCP SSE; live configurations queried via `GET /api/v1/admin/system-configurations`.
+- [x] **Member 8 (Events):** Event names aligned to `parcel.booked.v1`; queue `q.webhooks.dispatcher`; DLQ `swiftdrop.dlq`; compressed retries via `WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`; SSRF test flags `WEBHOOK_ALLOW_INSECURE_HTTP=true` and `WEBHOOK_ALLOWED_HOSTS=mock-webhook,localhost`.
+- [x] **Member 9 (DevOps):** Standalone `mock-webhook:9999` container added to Compose; `make up` and `make seed` standardized.

@@ -61,7 +61,7 @@ sequenceDiagram
     participant ChatAPI as AI Assistant (/api/v1/ai/chat)
     participant LLM as External LLM (OpenRouter/NVIDIA)
     participant CorePrice as Core Pricing API (/api/v1/pricing/quotes)
-    participant WebUI as React Booking Wizard (/customer/book)
+    participant WebUI as React Booking Wizard (/portal/book)
 
     Customer->>ChatAPI: POST /api/v1/ai/chat {"message": "How much for 2.5kg from Colombo to Kandy?"}
     ChatAPI->>LLM: Prompt + User Message + Tools [estimate_shipping_fee]
@@ -79,7 +79,7 @@ sequenceDiagram
     ChatAPI-->>Customer: 200 OK {message: "...", action: {type: "NAVIGATE_BOOKING", prefill_data: {...}}}
     
     Customer->>WebUI: Clicks "Book this Delivery" (data-testid="ai-chat-action-btn")
-    Note over WebUI: Form mounts at /customer/book with prefilled inputs
+    Note over WebUI: Form mounts at /portal/book with prefilled inputs (alias /customer/book)
 ```
 
 ---
@@ -114,15 +114,14 @@ sequenceDiagram
 
 ---
 
-### Flow A.4: Dynamic Policy Synchronization & Admin Upload
-- **Actor:** SwiftDrop Operations Admin.
-- **Trigger:** Admin updates operating hours or uploads an entirely new markdown policy document.
+### Flow A.4: Policy Knowledge Base Grounding & Dynamic System Configuration Overrides
+- **Actor:** SwiftDrop Customer / Assistant Service.
+- **Trigger:** Customer asks a policy question (e.g. prohibited items, packaging standards, COD limits, maximum weight).
 - **Workflow:**
-  1. Admin navigates to `/admin/policies` and edits text or uploads `company_policies.md`.
-  2. Admin clicks **"Publish Policy Changes"** $\to$ Core API saves markdown in PostgreSQL table `system_policies`.
-  3. Core API calls `POST /api/v1/ai/admin/refresh-knowledge` on the AI Assistant service.
-  4. The AI Assistant invalidates its cached policy context and immediately fetches the new version via `GET /api/v1/system/policies`.
-  5. Subsequent customer queries immediately reflect the new policy rules without restarting any containers.
+  1. The AI Assistant loads its baseline knowledge from the version-controlled `company_policies.md` file.
+  2. The assistant periodically queries Core API's approved `GET /api/v1/admin/system-configurations` endpoint (cached in-memory with a 5-minute TTL) to fetch active operational thresholds (e.g. `max_parcel_weight_kg`, `max_cod_amount_cents`).
+  3. **Dynamic Precedence Invariant:** Whenever quantitative parameters in `GET /api/v1/admin/system-configurations` conflict with the static markdown text, the live API values override the static prose.
+  4. The assistant grounds its answer in the authoritative combined context and cites live limits accurately.
 
 ---
 
@@ -162,7 +161,7 @@ sequenceDiagram
     Web->>Auth: POST /api/v1/auth/login
     Auth-->>Web: 200 OK { token: "jwt_..." }
     
-    Customer->>Web: Navigate to /customer/book
+    Customer->>Web: Navigate to /portal/book (alias /customer/book)
     Customer->>Web: Selects WESTERN_ZONE -> CENTRAL_ZONE, enters 2.5 kg
     Customer->>Web: Clicks [data-testid="booking-estimate-btn"]
     Web->>Price: POST /api/v1/pricing/quotes
@@ -194,22 +193,25 @@ sequenceDiagram
     participant Relay as Outbox Relay Daemon (Member 8)
     participant Broker as RabbitMQ Topic Exchange (Member 8)
     participant Worker as Event Worker (Member 8)
-    participant MockWeb as Mock Webhook Receiver (Member 10 Test Server)
+    participant MockWeb as Mock Webhook Container (:9999)
 
-    TestRunner->>MerchAPI: POST /api/v1/merchants/orders (Header: X-API-Key: test_key_123)
-    MerchAPI->>DB: Atomically commits Parcel record + Outbox event (parcel.created)
+    TestRunner->>MerchAPI: POST /api/v1/merchant/orders (Header: X-API-Key: test_key_alpha)
+    MerchAPI->>DB: Atomically commits Parcel record + Outbox event (parcel.booked.v1)
     MerchAPI-->>TestRunner: 201 Created { tracking_number: "SD-MERCH-001" }
     
     Relay->>DB: Polls unpublished outbox records
     Relay->>Broker: Publishes CloudEvent to swiftdrop.events.topic
-    Broker->>Worker: Delivers to queue swiftdrop.webhooks.orders
+    Broker->>Worker: Delivers to queue q.webhooks.dispatcher
     
-    Worker->>MockWeb: POST to merchant webhook URL with Header: X-SwiftDrop-Signature
-    Note over MockWeb: Simulates HTTP 500 Failure on first attempt
-    Worker->>Worker: Applies exponential backoff retry (Attempt 2 -> Attempt 3)
-    Note over MockWeb: Responds 200 OK on retry
+    Worker->>MockWeb: POST http://mock-webhook:9999/webhooks/merchant-alpha (Header: X-SwiftDrop-Signature)
+    Note over MockWeb: Verifies HMAC using Alpha secret, logs to memory, renders to /dashboard
+    MockWeb-->>Worker: 200 OK
     Worker->>DB: Marks webhook delivery as SUCCESS
-    TestRunner->>TestRunner: Asserts webhook payload received and signature verified
+    
+    Note over TestRunner,MockWeb: Multi-Tenant Isolation Check:
+    TestRunner->>MockWeb: GET /api/merchants/mer_beta/events
+    MockWeb-->>TestRunner: 200 OK [] (Zero events leaked to Beta)
+    TestRunner->>TestRunner: Asserts Beta event count == 0 [ISOLATION VERIFIED]
 ```
 
 ---

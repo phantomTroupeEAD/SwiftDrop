@@ -83,8 +83,8 @@ flowchart TD
     
     subgraph ContextPrep["Context Assembly"]
         Hydrator["ContextHydrator"]
-        LocalFile["company_policies.md"] --> Hydrator
-        CoreAPI_Rules["Core API: GET /api/v1/system/policies"] --> Hydrator
+        LocalFile["company_policies.md (Base Knowledge)"] --> Hydrator
+        CoreAPI_Rules["Core API: GET /api/v1/admin/system-configurations<br/>(Live Dynamic Overrides - Highest Priority)"] --> Hydrator
     end
     
     Hydrator --> Orchestrator
@@ -122,7 +122,7 @@ Even though the AI Assistant is a stateless conversational layer, it rigorously 
    - `ActionPayload`: Structured UI navigation instruction (`action_type`, `url`, `prefill_data`).
    - `TariffQuote`: Value object holding base fare, weight surcharge, currency, and zone identifiers.
 3. **Domain Service — `ContextHydrator`:**
-   - Stateless domain service responsible for synthesizing static markdown policies (`company_policies.md`) with dynamic operational rules fetched from Core API into a coherent, delimiter-wrapped system prompt.
+   - Stateless domain service responsible for synthesizing static markdown policies (`company_policies.md`) with dynamic operational rules fetched from Core API (`GET /api/v1/admin/system-configurations`) into a coherent, delimiter-wrapped system prompt, enforcing the dynamic precedence rule.
 4. **Repository / Store Interface — `SessionStore`:**
    - Abstract interface for session persistence. Implemented via `InMemoryLRUSessionStore` with thread-safe locks and background TTL eviction.
 
@@ -263,29 +263,43 @@ classDiagram
 
 ### B.3 Headless Async Testing Architecture (Scenario 2: Outbox & Webhooks)
 
-Testing asynchronous flows requires verifying that events properly traverse the transactional outbox, RabbitMQ, and the Event Worker:
+Testing asynchronous flows requires verifying that events properly traverse the transactional outbox, RabbitMQ, and the Event Worker, with complete multi-tenant isolation and visual proof:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant TestRunner as Pytest Runner
-    participant MockServer as Local Webhook Receiver (Port 9999)
+    participant TestRunner as Pytest Runner (Member 10)
+    participant MockServer as Mock Webhook Container (:9999)
     participant CoreAPI as Core API Monolith
     participant Broker as RabbitMQ Bus
+    participant Worker as Event Worker (Member 8)
 
-    TestRunner->>MockServer: Start async HTTP receiver fixture
-    TestRunner->>CoreAPI: POST /api/v1/merchants/orders
+    TestRunner->>MockServer: POST /api/reset (Flushes event cache)
+    TestRunner->>CoreAPI: POST /api/v1/merchant/orders (Header: X-API-Key: test_key_alpha)
     Note over CoreAPI: Atomically commits parcel & outbox event
     
     TestRunner->>Broker: Polls swiftdrop.events.topic queue
-    Note over TestRunner: Asserts CloudEvent parcel.created published within 3s
+    Note over TestRunner: Asserts CloudEvent parcel.booked.v1 published within 3s
     
-    TestRunner->>CoreAPI: PATCH /api/v1/courier/deliveries/.../status {status: "IN_TRANSIT"}
-    Note over CoreAPI: Outbox -> Relay -> Worker -> Dispatches Webhook
+    Broker->>Worker: Delivers to q.webhooks.dispatcher
+    Worker->>MockServer: POST http://mock-webhook:9999/webhooks/merchant-alpha (Header: X-SwiftDrop-Signature)
+    Note over MockServer: Verifies HMAC-SHA256, stores event, renders to /dashboard
+    MockServer-->>Worker: 200 OK
     
-    MockServer-->>TestRunner: Webhook received! Header: X-SwiftDrop-Signature
-    TestRunner->>TestRunner: Computes HMAC-SHA256 with merchant secret & asserts signature match
+    Note over TestRunner,MockServer: Multi-Tenant Isolation Check:
+    TestRunner->>MockServer: GET /api/merchants/mer_beta/events
+    MockServer-->>TestRunner: 200 OK [] (Zero events leaked to Beta)
+    TestRunner->>TestRunner: Asserts Beta event count == 0 [ISOLATION VERIFIED]
 ```
+
+---
+
+### B.4 FastMCP SSE Transport Dual-Channel Architecture
+
+The FastMCP server (`mcp_server.py`) provides Model Context Protocol capabilities using Anthropic's official dual-channel HTTP/SSE transport pattern:
+- **Channel 1 (Downstream):** `GET /api/v1/ai/mcp/sse` establishes a persistent Server-Sent Events stream. The server emits an `endpoint` event containing a dedicated session URL (`/api/v1/ai/mcp/messages?session_id=<uuid>`).
+- **Channel 2 (Upstream):** Client sends JSON-RPC tool executions via standard HTTP `POST /api/v1/ai/mcp/messages?session_id=<uuid>`.
+- **Result Streaming:** The server executes the tool (via read-only Core API calls) and streams the JSON-RPC response back down Channel 1's open SSE connection.
 
 ---
 
@@ -296,13 +310,14 @@ sequenceDiagram
 | **LLM Orchestration** | Standard `AsyncOpenAI` SDK with universal base URL | LangChain / LlamaIndex | LangChain introduces massive dependency churn, slow startup times, and complex abstractions for a service with only 4 tools. Direct SDK is fast, stable, and transparent. |
 | **Session State** | In-memory LRU with client context fallback | Redis Cluster / PostgreSQL | Redis adds infrastructure overhead and deployment complexity. PostgreSQL violates DDD monolith boundaries. In-memory LRU is stateless, blazing fast, and horizontally scalable. |
 | **Browser E2E Testing** | Playwright Python (`pytest-playwright`) | Playwright (TypeScript) / Cypress | Unifying E2E browser tests under Python allows 100% shared fixtures (`conftest.py`) with backend API tests, runs via a single `pytest` command, and eliminates `node_modules` overhead for Member 10 while retaining full Playwright trace/video recording. |
-| **Async Broker Testing** | Pytest with `pika` & embedded HTTP receiver | Manual inspection via RabbitMQ UI | Automated verification of outbox and webhook HMAC signatures guarantees reproducible grading without manual steps. |
+| **Async Broker Testing** | Containerized `mock-webhook:9999` with HTML Dashboard | Ephemeral localhost socket / CLI logs | Standalone container with multi-tenant endpoints and live dashboard visualizes dispatches, HMAC verification, and DLQ retries directly for live demo grading (15-mark rubric). |
+| **MCP Protocol Transport** | Dual-Channel SSE + HTTP POST (`FastMCP`) | WebSockets / STDIO only | WebSockets require stateful proxying and protocol upgrade handling in Traefik. SSE + POST works over ordinary HTTP, supports standard `Authorization` headers, and traverses enterprise firewalls with zero friction. |
 
 ---
 
 ## 3. Review Checklist for Team Meeting 2
 
-- [ ] **Member 1 (Auth):** Confirm that the JWT payload contains `sub`, `role`, and `tenant_id` claims matching the Pydantic schemas in `domain/models.py`.
-- [ ] **Member 2 (Parcels/Pricing):** Review the `infrastructure/core_api_client.py` endpoint mappings for `/api/v1/pricing/quotes` and `/api/v1/parcels`.
-- [ ] **Members 6 & 7 (Frontend):** Confirm that the Page Object Model selectors in Section B.2 align with the agreed `data-testid` attributes.
-- [ ] **Member 9 (DevOps):** Confirm that the Dockerfile multi-stage build, non-root `USER 10001:10001`, and port `8000` integrate seamlessly into `docker-compose.yml`.
+- [x] **Member 1 (Auth):** Confirm that the JWT payload contains `sub`, `role`, and `tenant_id` claims matching the Pydantic schemas in `domain/models.py`.
+- [x] **Member 2 (Parcels/Pricing):** Review the `infrastructure/core_api_client.py` endpoint mappings for `/api/v1/pricing/quotes` and `/api/v1/parcels`.
+- [x] **Members 6 & 7 (Frontend):** Confirm that the Page Object Model selectors in Section B.2 align with the agreed `data-testid` attributes.
+- [x] **Member 9 (DevOps):** Confirm that the Dockerfile multi-stage build, non-root `USER 10001:10001`, and port `8000` integrate seamlessly into `docker-compose.yml`.
