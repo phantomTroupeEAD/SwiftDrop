@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 4 â€” Interface & Integration Contract
+## Document 4 — Interface & Integration Contract
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Integration Contract (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
@@ -11,7 +11,7 @@
 
 ## 1. Purpose and Authority
 
-This document defines the authoritative external and inter-module interface contracts for Member 2 â€” **Parcel Management & Pricing** in the SwiftDrop Parcel Delivery & Courier Management System. It establishes explicit HTTP route contracts, JSON payload DTOs, query parameters, header requirements, authorization rules, idempotency semantics, transactional outbox contracts, and public tracking privacy masking rules.
+This document defines the authoritative external and inter-module interface contracts for Member 2 — **Parcel Management & Pricing** in the SwiftDrop Parcel Delivery & Courier Management System. It establishes explicit HTTP route contracts, JSON payload DTOs, query parameters, header requirements, authorization rules, idempotency semantics, transactional outbox contracts, and public tracking privacy masking rules.
 
 ### 1.1 Source Baseline & Alignment
 - **SwiftDrop SRS v1.0:** Core functional requirements (FR-PAR-001 through FR-PAR-009, FR-LIFE-001 through FR-LIFE-004).

@@ -1,4 +1,4 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
 # Functional Flows & Business Rules
 
@@ -33,12 +33,12 @@ The module does not own courier assignment, proof-of-delivery storage, the Track
 | Customer | Requests a fee estimate | Submits parcel and route/service inputs; receives a quote result or validation error. |
 | Customer | Confirms a booking | Submits booking details and the selected/accepted quote reference; receives booking confirmation. |
 | Approved merchant client | Creates a delivery order through the merchant API | Merchant integration validates the merchant and tenant context, then invokes the agreed parcel-creation capability. |
-| Member 1 â€” Identity & Access | An authenticated request reaches the Core API | Supplies verified caller identity/role context; Member 2 enforces resource ownership within its use cases. |
-| Member 3 â€” Dispatch & Couriers | A parcel is assigned or an operational status update is requested | Uses agreed parcel identifiers and lifecycle contracts; assignment and delivery-attempt execution remain Member 3 responsibilities. |
-| Member 5 â€” Tracking API | A tracking/history read is requested | Reads authoritative parcel/status data through the agreed read interface or approved database access pattern. It does not define a second lifecycle. |
-| Member 6 â€” Frontend | Booking, estimate, history, or receipt UI needs data | Calls the published API contract; frontend calculations are display-only and not authoritative. |
-| Member 8 â€” Event-Driven Backend | A committed business operation requires asynchronous follow-up | Consumes the agreed outbox/event contract; Member 2 records relevant outbox data within the business transaction. |
-| Member 10 â€” AI Assistant (bonus) | User requests a fee estimate or tracking/history information | Calls approved backend tools/APIs; it must not access the database directly or invent results. |
+| Member 1 — Identity & Access | An authenticated request reaches the Core API | Supplies verified caller identity/role context; Member 2 enforces resource ownership within its use cases. |
+| Member 3 — Dispatch & Couriers | A parcel is assigned or an operational status update is requested | Uses agreed parcel identifiers and lifecycle contracts; assignment and delivery-attempt execution remain Member 3 responsibilities. |
+| Member 5 — Tracking API | A tracking/history read is requested | Reads authoritative parcel/status data through the agreed read interface or approved database access pattern. It does not define a second lifecycle. |
+| Member 6 — Frontend | Booking, estimate, history, or receipt UI needs data | Calls the published API contract; frontend calculations are display-only and not authoritative. |
+| Member 8 — Event-Driven Backend | A committed business operation requires asynchronous follow-up | Consumes the agreed outbox/event contract; Member 2 records relevant outbox data within the business transaction. |
+| Member 10 — AI Assistant (bonus) | User requests a fee estimate or tracking/history information | Calls approved backend tools/APIs; it must not access the database directly or invent results. |
 | Administrator / pricing configuration capability | Approved pricing rules or delivery zones are created/changed | Pricing calculation uses only enabled, effective, approved rules. Ownership of pricing-rule administration and zone tables must be confirmed with the team. |
 
 # 3. Preconditions, Postconditions, and Shared Rules
@@ -89,7 +89,7 @@ If any portion of the database transaction fails, the entire transaction rolls b
 6. Public tracking responses strictly redact recipient phone numbers, full street addresses, customer delivery notes, and proof assets.
 7. External network operations (RabbitMQ publishing, SMS/email notifications, merchant webhooks) are never executed within the database transaction.
 
-# 4. Functional Flow A â€” Estimate Delivery Fee
+# 4. Functional Flow A — Estimate Delivery Fee
 
 ## Trigger
 
@@ -102,12 +102,12 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 3. The pricing application use case verifies that actual weight is positive and does not exceed the proposed maximum actual parcel weight of 30.00 kg ($0 < W \le 30.00\text{ kg}$). If dimensions are provided, it verifies length, width, and height do not exceed 150.00 cm per edge, with maximum combined girth ($L + 2(W+H)$) $\le 300.00$ cm.
 4. The pricing engine determines the **chargeable weight** under the selected **Option A threshold policy**:
    - **Actual weight $\le 1.00\text{ kg}$:**
-     $$\text{chargeable\_weight} = \text{actual\_weight}$$
+     $$\text{Chargeable Weight} = \text{Actual Weight}$$
      Dimensions do not affect the price under this threshold policy, even if dimensional measurements would produce a higher volumetric weight. (Note: This pricing exemption does not guarantee that arbitrary oversized parcels can be physically transported; physical transport restrictions remain coordinated with operational owners).
    - **Actual weight $> 1.00\text{ kg}$:**
      Dimensions in centimetres are mandatory. The engine calculates volumetric weight using the proposed volumetric divisor of $6000\text{ cm}^3/\text{kg}$:
-     $$\text{volumetric\_weight\_kg} = \frac{\text{length\_cm} \times \text{width\_cm} \times \text{height\_cm}}{6000}$$
-     $$\text{chargeable\_weight} = \max(\text{actual\_weight}, \text{volumetric\_weight})$$
+     $$\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{6000}$$
+     $$\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$$
    - **Precision preservation:** Full decimal precision is preserved; neither volumetric weight nor chargeable weight is rounded prematurely prior to band selection.
    - **Chargeable weight ceiling:** If the resulting chargeable weight exceeds 30.00 kg, the request is rejected with HTTP `422 Unprocessable Entity` (`PARCEL_LIMITS_EXCEEDED`).
 5. The engine assigns the chargeable weight to its unique, non-overlapping **weight band**:
@@ -119,11 +119,11 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
    - **Band 6:** $10.0 < W \le 20.0\text{ kg}$
    - **Band 7:** $20.0 < W \le 30.0\text{ kg}$
 6. The pricing engine retrieves the configured delivery fee from the applicable, enabled pricing rule matching the pickup zone, destination zone, and weight band:
-   $$\text{delivery\_fee} = \text{tariff}(\text{pickup\_zone\_id}, \text{destination\_zone\_id}, \text{weight\_band\_id})$$
-   $$\text{enabled} = \text{TRUE} \land \text{effective\_from} \le \text{NOW}() \land (\text{effective\_to IS NULL} \lor \text{effective\_to} > \text{NOW}())$$
+   $$\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$$
+   $$\text{Rule Active} = (\text{Enabled} = \text{TRUE}) \land (\text{Effective From} \le \text{NOW}) \land (\text{Effective To is NULL} \lor \text{Effective To} > \text{NOW})$$
    The tariff represents the complete delivery fee for that route and weight band. The engine does NOT add a separate common base fee, per-kilogram charge, distance fee, or service multiplier.
 7. The use case persists the generated quote into `pricing_quotes` with a **15-minute validity window**:
-   $$\text{expires\_at} = \text{NOW}() + 15\text{ minutes}$$
+   $$\text{Expires At} = \text{NOW} + 15\text{ minutes}$$
 8. The endpoint returns HTTP `200 OK` (or `201 Created`) containing `quote_id`, `fee_cents`, `currency = "LKR"`, `pricing_rule_id`, `pricing_rule_version`, input snapshot, breakdown (actual weight, volumetric weight if evaluated, chargeable weight, assigned weight band), `created_at`, and `expires_at`.
 
 ## Alternate and Failure Flows
@@ -142,7 +142,7 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 
 ## Pricing Rules and Invariants
 
-1. **Integer Minor Units:** All calculations and persistent fees use 64-bit integer minor units (cents in LKR, `BIGINT`). Floating-point arithmetic is strictly prohibited â€” *Confirmed Project Standard*.
+1. **Integer Minor Units:** All calculations and persistent fees use 64-bit integer minor units (cents in LKR, `BIGINT`). Floating-point arithmetic is strictly prohibited — *Confirmed Project Standard*.
 2. **Fixed Complete Tariffs:** Delivery fees are evaluated as a complete tariff per zone pair and weight band. No separate common base fee, per-kilogram charge, distance charge, or service tier multiplier is added.
 3. **Threshold Volumetric Policy (Option A):** Parcels with actual weight $\le 1\text{ kg}$ use actual weight as chargeable weight regardless of dimensions. Parcels with actual weight $> 1\text{ kg}$ evaluate volumetric weight using proposed divisor $6000\text{ cm}^3/\text{kg}$.
 4. **Seven Non-Overlapping Weight Bands:** Bands are partitioned with strict, non-overlapping boundaries covering positive weights up to 30 kg. No premature rounding before band assignment.
@@ -152,7 +152,7 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 
 > [!IMPORTANT]
 > **Provisional Pricing Baseline Notice (Pending Team Approval):**
-> The seven weight bands, 1 kg threshold policy, volumetric divisor ($6000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, fixed zone-pair/band tariff model, and 15-minute quote TTL represent the **current proposed Member 2 design baseline, pending formal team approval**. All example figures are illustrative, not commercial price promises. The underlying architectural invariantsâ€”server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`â€”are fixed and invariant.
+> The seven weight bands, 1 kg threshold policy, volumetric divisor ($6000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, fixed zone-pair/band tariff model, and 15-minute quote TTL represent the **current proposed Member 2 design baseline, pending formal team approval**. All example figures are illustrative, not commercial price promises. The underlying architectural invariants—server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`—are fixed and invariant.
 
 ### Illustrative Worked Examples
 
@@ -183,11 +183,11 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 
 ## UML Sequence Diagram
 
-![UML Sequence Diagram â€” Delivery Fee Estimate](./Document2-Functional-Flows-Business-Rules-Revised_assets/Delivery%20Fee%20Estimate%20Sequence%20Diagram.png)
+![UML Sequence Diagram — Delivery Fee Estimate](./Document2-Functional-Flows-Business-Rules-Revised_assets/Delivery%20Fee%20Estimate%20Sequence%20Diagram.png)
 
-*Figure 4.1: UML Sequence Diagram â€” Delivery Fee Estimation*
+*Figure 4.1: UML Sequence Diagram — Delivery Fee Estimation*
 
-# 5. Functional Flow B â€” Create a Customer Parcel Booking
+# 5. Functional Flow B — Create a Customer Parcel Booking
 
 ## Trigger
 
@@ -240,11 +240,11 @@ An authenticated customer confirms a delivery booking. The system supports two d
 
 ## UML Sequence Diagram
 
-![UML Sequence Diagram â€” Customer Parcel Booking](./Document2-Functional-Flows-Business-Rules-Revised_assets/Customer%20Parcel%20Booking%20Sequence%20Diagram.png)
+![UML Sequence Diagram — Customer Parcel Booking](./Document2-Functional-Flows-Business-Rules-Revised_assets/Customer%20Parcel%20Booking%20Sequence%20Diagram.png)
 
-*Figure 5.1: UML Sequence Diagram â€” Customer Parcel Booking*
+*Figure 5.1: UML Sequence Diagram — Customer Parcel Booking*
 
-# 6. Functional Flow C â€” Merchant Order Creation
+# 6. Functional Flow C — Merchant Order Creation
 
 ## Trigger
 
@@ -282,7 +282,7 @@ Webhook delivery failure after a successful booking does not roll back the parce
 
 Boundary: Member 2 owns the parcel business operation and pricing calculation. Member 4 owns merchant onboarding, credentials, and tenant validation. The exact internal interface between these modules must be agreed and documented in the API and integration contract.
 
-# 7. Functional Flow D â€” Retrieve Parcel Details, History, and Receipt Data
+# 7. Functional Flow D — Retrieve Parcel Details, History, and Receipt Data
 
 ## 7.1 Retrieve Parcel Details / Customer List
 
@@ -336,7 +336,7 @@ If the receipt format, eligibility rules, or downloadable file type are not yet 
 
 The SRS defines the following baseline lifecycle:
 
-CREATED â†’ PICKED_UP â†’ IN_TRANSIT â†’ OUT_FOR_DELIVERY â†’ DELIVERED
+CREATED → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED
 
 The SRS states that FAILED is a terminal outcome for a delivery attempt or parcel only according to the approved operational policy. A failed attempt may be retried by an authorized dispatcher/courier workflow; if retries are allowed, model the attempt outcome separately from the final parcel lifecycle rather than silently reopening a terminal parcel.
 
@@ -460,11 +460,11 @@ To prevent race conditions when multiple couriers or dispatchers interact with t
 - Member 8's Outbox Relay reads unpublished rows and publishes to RabbitMQ topic exchange `swiftdrop.events.topic` with at-least-once delivery semantics.
 - Downstream consumers (Tracking API, Event Worker, Webhooks) maintain their own consumer deduplication tables (`processed_events` keyed by `(event_id, consumer_name)`).
 
-# 10. UML Activity Diagram â€” Booking Decision Flow
+# 10. UML Activity Diagram — Booking Decision Flow
 
-![UML Activity Diagram â€” Parcel Booking Decision Flow](./Document2-Functional-Flows-Business-Rules-Revised_assets/SwiftDrop_Parcel_Booking_Activity_Diagram.png)
+![UML Activity Diagram — Parcel Booking Decision Flow](./Document2-Functional-Flows-Business-Rules-Revised_assets/SwiftDrop_Parcel_Booking_Activity_Diagram.png)
 
-*Figure 10.1: UML Activity Diagram â€” Parcel Booking Decision Flow*
+*Figure 10.1: UML Activity Diagram — Parcel Booking Decision Flow*
 
 # 11. Edge Cases and Expected Outcomes
 
@@ -499,8 +499,8 @@ To prevent race conditions when multiple couriers or dispatchers interact with t
 | **FR-PAR-007** | List and view own bookings and history | Section 7 | Tenant and owner authorization scoping tests |
 | **FR-PAR-008** | Booking receipt with accepted price snapshot | Section 7.3 | Receipt data endpoint tests verifying historical stability |
 | **FR-PAR-009** | Public tracking data privacy masking | Section 3.3, 7.2 | Public tracking response serialization tests |
-| **FR-LIFE-001â€“007**| 9-state lifecycle and status history enforcement | Section 8 | State machine unit tests, ADR-004 attempt limit tests |
-| **FR-MER-002â€“006**| Merchant order creation via shared booking capability | Section 6 | Merchant tenant integration tests |
+| **FR-LIFE-001–007**| 9-state lifecycle and status history enforcement | Section 8 | State machine unit tests, ADR-004 attempt limit tests |
+| **FR-MER-002–006**| Merchant order creation via shared booking capability | Section 6 | Merchant tenant integration tests |
 | **FR-EVT-001** | Atomic outbox event persistence | Section 5, 8.5 | PostgreSQL transactional rollback tests |
 | **FR-AI-002** | AI Assistant fee estimation via Core API | Section 4 | Integration tests verifying assistant consumes quote endpoint |
 
@@ -510,18 +510,18 @@ The table below documents the status of architectural decisions governing functi
 
 | Decision Area | Status | Authoritative Resolution | Reference |
 | :--- | :--- | :--- | :--- |
-| **Pricing Endpoint & Quote Persistence** | **RESOLVED** | Standardized on `POST /api/v1/pricing/quotes` with quote persistence in `pricing_quotes`. | Audit Â§4.A, `pricing-rules.md` Â§6 |
-| **Monetary Representation** | **RESOLVED** | Integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floats. | Engineering Standards Â§5.2, `pricing-rules.md` Â§1 |
+| **Pricing Endpoint & Quote Persistence** | **RESOLVED** | Standardized on `POST /api/v1/pricing/quotes` with quote persistence in `pricing_quotes`. | Audit §4.A, `pricing-rules.md` §6 |
+| **Monetary Representation** | **RESOLVED** | Integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floats. | Engineering Standards §5.2, `pricing-rules.md` §1 |
 | **Pricing Model & Tariffs** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands. Retrieval interface owned by M2; admin UI owned by M7. | Member 2 Baseline |
-| **Volumetric Threshold & Divisor (6000)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cmÂ³/kg for $> 1$ kg; 30 kg max limits. | Member 2 Baseline |
+| **Volumetric Threshold & Divisor (6000)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cm³/kg for $> 1$ kg; 30 kg max limits. | Member 2 Baseline |
 | **Quote Validity Window (15m)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | Member 2 Baseline |
-| **Address Snapshots** | **RESOLVED** | Immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`. | Audit Â§4.D, SRS Â§7.1 |
-| **Lifecycle State Machine** | **RESOLVED** | 9 canonical states; aggregate root enforcement; optimistic locking via `version`. | `domain-boundaries.md` Â§3, ADR-004 |
+| **Address Snapshots** | **RESOLVED** | Immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`. | Audit §4.D, SRS §7.1 |
+| **Lifecycle State Machine** | **RESOLVED** | 9 canonical states; aggregate root enforcement; optimistic locking via `version`. | `domain-boundaries.md` §3, ADR-004 |
 | **Delivery Attempt Limits** | **RESOLVED** | Separated in `delivery_attempts` (Member 3); max 3 attempts; terminal `RETURNED`. | ADR-004 |
-| **Idempotency Mechanism** | **RESOLVED** | `Idempotency-Key` header, table `idempotency_keys`, SHA-256 hash, 24h retention. | Audit Â§4.H, `api-conventions.md` Â§4 |
-| **Outbox Integration** | **RESOLVED** | Atomic commit of `parcels` and `outbox_events` (`parcel.booked.v1`). | Audit Â§4.J, `event-contracts.md` Â§2 |
-| **Merchant Route** | **RESOLVED** | Member 4 owns `POST /api/v1/merchant/parcels` transport and delegates to Member 2. | Audit Â§4.E, `domain-boundaries.md` Â§2 |
-| **Admin Tariff Write Endpoints** | **PENDING TEAM CONFIRMATION** | Administrative CRUD for zones and pricing rules assigned to Member 7 (Admin UI / Gateway). | Team Work Division Â§3 |
+| **Idempotency Mechanism** | **RESOLVED** | `Idempotency-Key` header, table `idempotency_keys`, SHA-256 hash, 24h retention. | Audit §4.H, `api-conventions.md` §4 |
+| **Outbox Integration** | **RESOLVED** | Atomic commit of `parcels` and `outbox_events` (`parcel.booked.v1`). | Audit §4.J, `event-contracts.md` §2 |
+| **Merchant Route** | **RESOLVED** | Member 4 owns `POST /api/v1/merchant/parcels` transport and delegates to Member 2. | Audit §4.E, `domain-boundaries.md` §2 |
+| **Admin Tariff Write Endpoints** | **PENDING TEAM CONFIRMATION** | Administrative CRUD for zones and pricing rules assigned to Member 7 (Admin UI / Gateway). | Team Work Division §3 |
 | **Receipt Download Format** | **PENDING TEAM CONFIRMATION** | Member 2 provides structured JSON via `GET /api/v1/parcels/{id}/receipt`; PDF rendering by Member 6. | SRS FR-PAR-008 |
 
 ### 13.1 Pricing Policy Dependency & Impact Analysis (If Pricing Rules Change)
@@ -538,7 +538,7 @@ If the team modifies the provisional pricing formula, weight bands, divisor, or 
 
 The workflows are considered ready for implementation review when:
 
-1. A valid quote request to `POST /api/v1/pricing/quotes` deterministically calculates fees in LKR cents across 7 weight bands using divisor 6000 cmÂ³/kg and threshold policy, returning a 15-minute quote snapshot with backend expiry enforcement.
+1. A valid quote request to `POST /api/v1/pricing/quotes` deterministically calculates fees in LKR cents across 7 weight bands using divisor 6000 cm³/kg and threshold policy, returning a 15-minute quote snapshot with backend expiry enforcement.
 2. Invalid parcel inputs, negative weights, weights exceeding 30 kg, and unconfigured route/band combinations return structured validation errors (`400`/`422`, `PRICING_UNAVAILABLE`) without inventing fallback rates.
 3. A valid booking atomically commits the parcel record, JSONB address snapshots, initial status history, idempotency cache, and outbox event (`parcel.booked.v1`).
 4. Replaying a booking with the same `Idempotency-Key` and payload returns the cached result; replaying with a different payload returns HTTP `409 Conflict`.

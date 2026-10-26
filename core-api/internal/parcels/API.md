@@ -1,6 +1,6 @@
-﻿# Parcel Management API Specifications (`/api/v1/parcels`)
+# Parcel Management API Specifications (`/api/v1/parcels`)
 
-> **Module:** `internal/parcels` | **Owner:** Member 2 â€” Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
+> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
 
 ---
 
@@ -106,8 +106,8 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
 ### Error Responses
 - `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY` or `MALFORMED_JSON`.
 - `401 Unauthorized`: Missing or invalid Bearer token.
-- `403 Forbidden`: `QUOTE_FORBIDDEN` â€” Quote was generated for a different customer/tenant context.
-- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` â€” Reusing idempotency key with different payload body.
+- `403 Forbidden`: `QUOTE_FORBIDDEN` — Quote was generated for a different customer/tenant context.
+- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` — Reusing idempotency key with different payload body.
 - `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m; `current_time >= expires_at`), `QUOTE_PARAM_MISMATCH` (inputs altered), `PARCEL_LIMITS_EXCEEDED` (actual or chargeable weight $> 30.00\text{ kg}$), `DIMENSIONS_REQUIRED_ABOVE_1KG` (missing dimensions when weight $> 1\text{ kg}$), or `PRICING_UNAVAILABLE` (no tariff rule found).
 
 ---

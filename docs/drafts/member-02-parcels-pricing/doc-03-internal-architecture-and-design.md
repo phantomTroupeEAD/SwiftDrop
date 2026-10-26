@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 3 â€” API & Data Model Specification
+## Document 3 — API & Data Model Specification
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
@@ -14,7 +14,7 @@
 This document defines the formal RESTful API contracts, request/response DTO schemas, HTTP error envelopes, and logical data models for Member 2's **Parcel Management & Pricing** bounded contexts within the SwiftDrop Core API Go modular monolith.
 
 ### 1.1 In-Scope Capabilities
-- **Pricing Calculation & Quote Generation:** Deterministic tariff evaluation across seven weight bands, Option A threshold volumetric calculation (divisor 6000 cmÂ³/kg, 1 kg actual weight threshold, 30 kg max limits), quote persistence, and 15-minute quote validity enforcement with backend expiration checks (`POST /api/v1/pricing/quotes`).
+- **Pricing Calculation & Quote Generation:** Deterministic tariff evaluation across seven weight bands, Option A threshold volumetric calculation (divisor 6000 cm³/kg, 1 kg actual weight threshold, 30 kg max limits), quote persistence, and 15-minute quote validity enforcement with backend expiration checks (`POST /api/v1/pricing/quotes`).
 - **Parcel Booking & Invariant Enforcement:** Idempotent customer booking (`POST /api/v1/parcels`), quote verification, deterministic fallback calculation for direct bookings, tracking number generation (`SD-YYYYMMDD-XXXXXX`), immutable JSONB address snapshots, and atomic transactional outbox writes.
 - **Parcel Queries & Reporting:** Secure, tenant/customer-scoped parcel retrieval (`GET /api/v1/parcels/{id}`, `GET /api/v1/parcels`), chronological status audit history (`GET /api/v1/parcels/{id}/history`), and booking receipt snapshot generation (`GET /api/v1/parcels/{id}/receipt`).
 - **State Machine & Concurrency Control:** Authoritative 9-state parcel lifecycle management with optimistic concurrency control (`version` column) and integration with ADR-004 delivery failure semantics.
@@ -45,7 +45,7 @@ The following architectural and domain invariants are strictly enforced by Membe
 | **FR-PAR-007** | Owner & Tenant Scoped Queries | Restrict `GET /api/v1/parcels` and detail endpoints strictly to the authenticated `customer_id` or `tenant_id` (IDOR prevention). |
 | **FR-PAR-008** | Historical Receipt Snapshot | Generate receipts based solely on the immutable booking-time price snapshot, immune to future tariff revisions. |
 | **FR-PAR-009** | Public Tracking Masking & Privacy | Strict separation of internal parcel models from public tracking DTOs; redact recipient street address, phone numbers, and internal notes. |
-| **FR-LIFE-001â€“004** | Lifecycle Transitions & Outbox Atomicity | Enforce 9-state machine; reject unauthorized transitions; commit parcel state, audit history, and outbox event (`parcel.booked.v1`) in one transaction. |
+| **FR-LIFE-001–004** | Lifecycle Transitions & Outbox Atomicity | Enforce 9-state machine; reject unauthorized transitions; commit parcel state, audit history, and outbox event (`parcel.booked.v1`) in one transaction. |
 
 ---
 
@@ -157,7 +157,7 @@ Calculates the estimated delivery fee based on weight, dimensions (if actual wei
 
 > [!NOTE]
 > **Provisional Pricing Proposal Notice:**
-> The mathematical parameters (seven weight bands, 1 kg threshold policy, volumetric divisor 6000 cmÂ³/kg, 30 kg weight limits, fixed complete tariff per zone-pair/band, and 15-minute quote validity) represent the **current proposed design baseline, pending formal team approval**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer LKR cents standard, server-side authority, and quote persistence are stable requirements.
+> The mathematical parameters (seven weight bands, 1 kg threshold policy, volumetric divisor 6000 cm³/kg, 30 kg weight limits, fixed complete tariff per zone-pair/band, and 15-minute quote validity) represent the **current proposed design baseline, pending formal team approval**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer LKR cents standard, server-side authority, and quote persistence are stable requirements.
 
 #### Error Codes
 - `400 Bad Request`: Malformed JSON, non-positive parameters, or dimensions omitted when actual weight $> 1.0\text{ kg}$ (`DIMENSIONS_REQUIRED_ABOVE_1KG`).
@@ -267,7 +267,7 @@ Books a parcel for delivery. Supports both **Quoted Booking** (providing an unex
 #### Error Codes
 - `400 Bad Request`: Missing mandatory fields or malformed JSON.
 - `401 Unauthorized`: Missing or invalid authentication token.
-- `403 Forbidden`: `QUOTE_FORBIDDEN` â€” The supplied `quote_id` belongs to another caller or tenant.
+- `403 Forbidden`: `QUOTE_FORBIDDEN` — The supplied `quote_id` belongs to another caller or tenant.
 - `409 Conflict`:
   - `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`: The provided `Idempotency-Key` was previously used with a different request payload.
 - `422 Unprocessable Entity`:
@@ -656,7 +656,7 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 | :--- | :--- | :--- | :--- |
 | **Pricing Endpoint & Quote Persistence** | Ambiguous (`/estimate` vs `/quotes`) | Standardized on `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes`. | Aligned with Member 10 / Team Standards |
 | **Pricing Model & Tariffs** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Fixed complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands. Retrieval interface owned by M2; admin UI owned by M7. | Member 2 Baseline |
-| **Volumetric Threshold & Divisor (6000)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cmÂ³/kg for $> 1$ kg; 30 kg max limits. | Member 2 Baseline |
+| **Volumetric Threshold & Divisor (6000)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cm³/kg for $> 1$ kg; 30 kg max limits. | Member 2 Baseline |
 | **Quote Validity Window (15m)** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | Member 2 Baseline |
 | **Monetary Data Type** | Floating-point / arbitrary decimal | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
 | **Address Data Model** | Child table `parcel_addresses` | Immutable `pickup_address` & `dropoff_address` JSONB on `parcels` | Database Schema Standards & Audit |
@@ -670,10 +670,10 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 
 | Impacted Area | What Changes If Pricing Policy Is Modified | Files & Interfaces to Update |
 | :--- | :--- | :--- |
-| **API Quote DTO** | The fields in `breakdown` object reflect chargeable weight and selected band (Bands 1â€“7). | `core-api/internal/pricing/transport/dto.go`, `doc-03 Â§5.1` |
-| **Database Schema** | Table `pricing_rules` stores complete zone-pair/band tariffs. DDL check constraints update if 30 kg limit changes. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05 Â§3.1` |
-| **Quote Expiry Validation** | If 15-minute freeze duration is altered, config `PRICING_QUOTE_TTL_MINUTES` and backend check `current_time >= expires_at` adapt. | `core-api/internal/pricing/application/`, `doc-08 Â§4` |
-| **Validation Boundaries** | If operational maximum weight (30 kg) or dimension (150 cm) changes, handler boundary checks update. | `core-api/internal/parcels/transport/dto.go`, `doc-03 Â§5.2` |
+| **API Quote DTO** | The fields in `breakdown` object reflect chargeable weight and selected band (Bands 1–7). | `core-api/internal/pricing/transport/dto.go`, `doc-03 §5.1` |
+| **Database Schema** | Table `pricing_rules` stores complete zone-pair/band tariffs. DDL check constraints update if 30 kg limit changes. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05 §3.1` |
+| **Quote Expiry Validation** | If 15-minute freeze duration is altered, config `PRICING_QUOTE_TTL_MINUTES` and backend check `current_time >= expires_at` adapt. | `core-api/internal/pricing/application/`, `doc-08 §4` |
+| **Validation Boundaries** | If operational maximum weight (30 kg) or dimension (150 cm) changes, handler boundary checks update. | `core-api/internal/parcels/transport/dto.go`, `doc-03 §5.2` |
 | **Core Architecture Stability** | **ZERO IMPACT:** Parcel aggregate root, 9-state machine, tracking number format, address snapshots, and outbox integration remain completely unchanged. | `parcels` domain and persistence layers |
 
 ---

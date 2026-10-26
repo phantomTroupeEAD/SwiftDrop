@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 6 â€” Testing Strategy & Acceptance Specification
+## Document 6 — Testing Strategy & Acceptance Specification
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Testing Specification (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
@@ -93,7 +93,7 @@ flowchart TD
 
 > [!NOTE]
 > **Provisional Pricing Specification Notice:**
-> The following test cases verify the proposed Member 2 pricing baseline pending team approval: fixed complete tariff per zone pair and weight band, 7 weight bands up to 30 kg, Option A threshold (dims required only when actual weight > 1 kg), volumetric divisor 6000 cmÂ³/kg, and 15-minute quote validity window.
+> The following test cases verify the proposed Member 2 pricing baseline pending team approval: fixed complete tariff per zone pair and weight band, 7 weight bands up to 30 kg, Option A threshold (dims required only when actual weight > 1 kg), volumetric divisor 6000 cm³/kg, and 15-minute quote validity window.
 
 #### `TC-PRC-001`: Option A Threshold & Bulky Parcel ($\le 1\text{ kg}$)
 - **Objective:** Verify that parcels with actual weight $\le 1\text{ kg}$ use actual weight only; dimensions do not affect price.

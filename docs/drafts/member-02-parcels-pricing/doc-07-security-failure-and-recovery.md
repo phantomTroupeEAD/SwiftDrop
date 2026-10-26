@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 7 â€” Security, Failure & Recovery Specification
+## Document 7 — Security, Failure & Recovery Specification
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Security Specification (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications

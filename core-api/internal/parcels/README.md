@@ -1,7 +1,7 @@
-﻿# Parcel Management Module (`internal/parcels`)
+# Parcel Management Module (`internal/parcels`)
 
 > **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking
-> **Primary Owner:** Member 2 â€” Parcel Management & Pricing
+> **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
 > **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)
 
@@ -36,10 +36,10 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 ## 3. Layer Breakdown
 ```
 internal/parcels/
-â”œâ”€â”€ domain/                  # Parcel aggregate, TrackingNumber VO, Address VO, Status enum, domain errors
-â”œâ”€â”€ application/             # BookParcel, GetParcelDetails, CancelParcel use cases & repository interfaces
-â”œâ”€â”€ infrastructure/          # PostgresParcelRepository, OutboxAdapter, TrackingNumberGenerator
-â””â”€â”€ transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
+├── domain/                  # Parcel aggregate, TrackingNumber VO, Address VO, Status enum, domain errors
+├── application/             # BookParcel, GetParcelDetails, CancelParcel use cases & repository interfaces
+├── infrastructure/          # PostgresParcelRepository, OutboxAdapter, TrackingNumberGenerator
+└── transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
 ```
 
 ---

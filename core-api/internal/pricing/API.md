@@ -1,6 +1,6 @@
-﻿# Pricing Module API Specifications (`/api/v1/pricing`)
+# Pricing Module API Specifications (`/api/v1/pricing`)
 
-> **Module:** `internal/pricing` | **Owner:** Member 2 â€” Parcel Management & Pricing | **Status:** Proposed Baseline (Pending Team Approval)
+> **Module:** `internal/pricing` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Proposed Baseline (Pending Team Approval)
 
 ---
 
@@ -54,12 +54,12 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 
 > [!NOTE]
 > **Proposed Pricing Baseline Notice (Pending Formal Team Approval):**
-> Delivery fee is a fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cmÂ³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
+> Delivery fee is a fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cm³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
 
 ### Error Responses
-- `400 Bad Request`: `PRICING_INVALID_INPUT` â€” Non-positive dimension, weight $\le 0$, or malformed JSON.
-- `422 Unprocessable Entity`: `DIMENSIONS_REQUIRED_ABOVE_1KG` â€” Parcel weight exceeds 1.0 kg but dimensions are missing.
-- `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` â€” Actual weight or applicable chargeable weight exceeds 30.00 kg.
-- `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` â€” Length, width, or height exceeds 150.00 cm.
-- `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` â€” No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
-- `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` â€” Multiple active rules match the same zone pair and weight band; fails safely.
+- `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, or malformed JSON.
+- `422 Unprocessable Entity`: `DIMENSIONS_REQUIRED_ABOVE_1KG` — Parcel weight exceeds 1.0 kg but dimensions are missing.
+- `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` — Actual weight or applicable chargeable weight exceeds 30.00 kg.
+- `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` — Length, width, or height exceeds 150.00 cm.
+- `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` — No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
+- `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` — Multiple active rules match the same zone pair and weight band; fails safely.

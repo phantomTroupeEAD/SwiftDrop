@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 5 â€” Data & Persistence Specification
+## Document 5 — Data & Persistence Specification
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
@@ -53,12 +53,12 @@ All schema migrations use standard sequential `.sql` migration files applied via
 
 ```
 core-api/migrations/
-â”œâ”€â”€ 000004_create_pricing_rules.up.sql
-â”œâ”€â”€ 000004_create_pricing_rules.down.sql
-â”œâ”€â”€ 000005_create_parcels_and_quotes.up.sql
-â”œâ”€â”€ 000005_create_parcels_and_quotes.down.sql
-â”œâ”€â”€ 000010_create_idempotency_keys.up.sql
-â””â”€â”€ 000010_create_idempotency_keys.down.sql
+├── 000004_create_pricing_rules.up.sql
+├── 000004_create_pricing_rules.down.sql
+├── 000005_create_parcels_and_quotes.up.sql
+├── 000005_create_parcels_and_quotes.down.sql
+├── 000010_create_idempotency_keys.up.sql
+└── 000010_create_idempotency_keys.down.sql
 ```
 
 ### 3.1 Migration `000004_create_pricing_rules`

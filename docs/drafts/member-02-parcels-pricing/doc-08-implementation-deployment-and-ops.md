@@ -1,8 +1,8 @@
-﻿# SwiftDrop Parcel Delivery & Courier Management System
+# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 8 â€” Implementation, Deployment & Operations Guide
+## Document 8 — Implementation, Deployment & Operations Guide
 
-> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
 > **Status:** Aligned Operations Guide (Post-Audit v2.0.0 Alignment)
 > **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
@@ -42,38 +42,38 @@ Both `parcels` and `pricing` modules strictly adhere to Clean / Hexagonal Archit
 
 ```
 core-api/internal/
-â”œâ”€â”€ parcels/
-â”‚   â”œâ”€â”€ domain/               # Pure business invariants, aggregates, errors (ZERO external deps)
-â”‚   â”‚   â”œâ”€â”€ parcel.go         # Parcel aggregate root & 9-state machine transitions
-â”‚   â”‚   â”œâ”€â”€ tracking.go       # Crockford Base32 tracking number generator
-â”‚   â”‚   â””â”€â”€ errors.go         # Domain errors (ErrInvalidTransition, ErrMaxAttemptsExceeded)
-â”‚   â”œâ”€â”€ application/          # Use cases, commands, and repository interfaces
-â”‚   â”‚   â”œâ”€â”€ create_parcel.go  # Book parcel command handler & tx boundary
-â”‚   â”‚   â”œâ”€â”€ get_parcel.go     # Query handlers (detail, list, history, receipt)
-â”‚   â”‚   â””â”€â”€ repository.go     # ParcelRepository & OutboxWriter interfaces
-â”‚   â”œâ”€â”€ infrastructure/       # PostgreSQL pgx implementations & outbox adapter
-â”‚   â”‚   â”œâ”€â”€ postgres_repo.go  # Atomic SQL statements & version checks
-â”‚   â”‚   â””â”€â”€ outbox_adapter.go # Writes to shared outbox_events table
-â”‚   â”œâ”€â”€ transport/            # HTTP handlers, request DTOs, response mappers
-â”‚   â”‚   â”œâ”€â”€ handler.go        # Chi HTTP routes (/api/v1/parcels)
-â”‚   â”‚   â””â”€â”€ dto.go            # Request/Response JSON serialization & validation
-â”‚   â”œâ”€â”€ API.md                # Co-located living API contract
-â”‚   â””â”€â”€ README.md             # Co-located living module documentation
-â”œâ”€â”€ pricing/
-â”‚   â”œâ”€â”€ domain/               # Deterministic calculation engine & monetary values
-â”‚   â”‚   â”œâ”€â”€ formula.go        # Option A threshold (1 kg), divisor 6000 cmÂ³/kg, 7 weight bands (<= 30 kg)
-â”‚   â”‚   â””â”€â”€ money.go          # Exact integer minor units (LKR cents)
-â”‚   â”œâ”€â”€ application/          # Quote calculation & persistence use cases
-â”‚   â”‚   â”œâ”€â”€ quote_usecase.go  # Evaluates active rule, sets 15m TTL
-â”‚   â”‚   â””â”€â”€ repository.go     # PricingRuleRepository & QuoteRepository interfaces
-â”‚   â”œâ”€â”€ infrastructure/       # SQL queries for pricing_rules and pricing_quotes
-â”‚   â”‚   â””â”€â”€ postgres_repo.go  # Rule lookup & quote persistence
-â”‚   â”œâ”€â”€ transport/            # HTTP handler for POST /api/v1/pricing/quotes
-â”‚   â”‚   â”œâ”€â”€ handler.go        # Chi routes (/api/v1/pricing/quotes)
-â”‚   â”‚   â””â”€â”€ dto.go            # Quote request/response schemas
-â”‚   â”œâ”€â”€ API.md                # Co-located living pricing API contract
-â”‚   â””â”€â”€ README.md             # Co-located living pricing documentation
-â””â”€â”€ platform/                 # Shared technical drivers (Auth middleware, DB pool, logging)
+├── parcels/
+│   ├── domain/               # Pure business invariants, aggregates, errors (ZERO external deps)
+│   │   ├── parcel.go         # Parcel aggregate root & 9-state machine transitions
+│   │   ├── tracking.go       # Crockford Base32 tracking number generator
+│   │   └── errors.go         # Domain errors (ErrInvalidTransition, ErrMaxAttemptsExceeded)
+│   ├── application/          # Use cases, commands, and repository interfaces
+│   │   ├── create_parcel.go  # Book parcel command handler & tx boundary
+│   │   ├── get_parcel.go     # Query handlers (detail, list, history, receipt)
+│   │   └── repository.go     # ParcelRepository & OutboxWriter interfaces
+│   ├── infrastructure/       # PostgreSQL pgx implementations & outbox adapter
+│   │   ├── postgres_repo.go  # Atomic SQL statements & version checks
+│   │   └── outbox_adapter.go # Writes to shared outbox_events table
+│   ├── transport/            # HTTP handlers, request DTOs, response mappers
+│   │   ├── handler.go        # Chi HTTP routes (/api/v1/parcels)
+│   │   └── dto.go            # Request/Response JSON serialization & validation
+│   ├── API.md                # Co-located living API contract
+│   └── README.md             # Co-located living module documentation
+├── pricing/
+│   ├── domain/               # Deterministic calculation engine & monetary values
+│   │   ├── formula.go        # Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands (<= 30 kg)
+│   │   └── money.go          # Exact integer minor units (LKR cents)
+│   ├── application/          # Quote calculation & persistence use cases
+│   │   ├── quote_usecase.go  # Evaluates active rule, sets 15m TTL
+│   │   └── repository.go     # PricingRuleRepository & QuoteRepository interfaces
+│   ├── infrastructure/       # SQL queries for pricing_rules and pricing_quotes
+│   │   └── postgres_repo.go  # Rule lookup & quote persistence
+│   ├── transport/            # HTTP handler for POST /api/v1/pricing/quotes
+│   │   ├── handler.go        # Chi routes (/api/v1/pricing/quotes)
+│   │   └── dto.go            # Quote request/response schemas
+│   ├── API.md                # Co-located living pricing API contract
+│   └── README.md             # Co-located living pricing documentation
+└── platform/                 # Shared technical drivers (Auth middleware, DB pool, logging)
 ```
 
 ---
@@ -140,8 +140,8 @@ migrate -path core-api/migrations -database "postgres://swiftdrop:swiftdrop_dev_
 > [!NOTE]
 > **Illustrative Test Fixture Notice (Not Commercial Price Promises):**
 > Commercial tariffs are determined by business operations and configured exclusively through Member 7's administration workflow. Member 2 never hard-codes commercial rates. For local testing and development only, database fixtures provide illustrative complete tariffs per zone pair and weight band:
-- **Inter-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Illustrative complete tariffs for Bands 1â€“7 (e.g., Band 1: 35,000 cents, Band 2: 45,000 cents, Band 3: 55,000 cents, Band 4: 75,000 cents, Band 5: 110,000 cents, Band 6: 160,000 cents, Band 7: 220,000 cents).
-- **Intra-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01`: Illustrative complete tariffs for Bands 1â€“7.
+- **Inter-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Illustrative complete tariffs for Bands 1–7 (e.g., Band 1: 35,000 cents, Band 2: 45,000 cents, Band 3: 55,000 cents, Band 4: 75,000 cents, Band 5: 110,000 cents, Band 6: 160,000 cents, Band 7: 220,000 cents).
+- **Intra-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01`: Illustrative complete tariffs for Bands 1–7.
 
 ---
 
