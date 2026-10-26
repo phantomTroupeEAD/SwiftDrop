@@ -1,10 +1,10 @@
-# SwiftDrop Parcel Delivery & Courier Management System
+﻿# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 5 — Data & Persistence Specification
+## Document 5 â€” Data & Persistence Specification
 
-> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
-> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)  
-> **Date:** 25 October 2026  
+> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)
+> **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
 
 ---
@@ -53,12 +53,12 @@ All schema migrations use standard sequential `.sql` migration files applied via
 
 ```
 core-api/migrations/
-├── 000004_create_pricing_rules.up.sql
-├── 000004_create_pricing_rules.down.sql
-├── 000005_create_parcels_and_quotes.up.sql
-├── 000005_create_parcels_and_quotes.down.sql
-├── 000010_create_idempotency_keys.up.sql
-└── 000010_create_idempotency_keys.down.sql
+â”œâ”€â”€ 000004_create_pricing_rules.up.sql
+â”œâ”€â”€ 000004_create_pricing_rules.down.sql
+â”œâ”€â”€ 000005_create_parcels_and_quotes.up.sql
+â”œâ”€â”€ 000005_create_parcels_and_quotes.down.sql
+â”œâ”€â”€ 000010_create_idempotency_keys.up.sql
+â””â”€â”€ 000010_create_idempotency_keys.down.sql
 ```
 
 ### 3.1 Migration `000004_create_pricing_rules`
@@ -66,7 +66,7 @@ Creates `pricing_rules` and `pricing_quotes` tables.
 
 > [!NOTE]
 > **Provisional Pricing DDL Notice (Pending Team Confirmation):**
-> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the specific columns for volumetric calculation (`volumetric_factor`, `service_multiplier_*`), check constraints, and quote expiry duration reflect **provisional proposals pending team confirmation**. If the team alters the pricing formula or multiplier tiers, an additive migration will update these columns without impacting the parcel schema.
+> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the complete tariff schema per zone pair and weight band, the 7 weight bands, volumetric divisor 6000, 30 kg maximum weight limits, and 15-minute quote expiration reflect **provisional proposals pending team confirmation**. Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior and lookup.
 
 ```sql
 -- Up Migration: 000004_create_pricing_rules.up.sql
@@ -75,36 +75,37 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
     id VARCHAR(64) NOT NULL,
     version INT NOT NULL DEFAULT 1,
     name VARCHAR(128) NOT NULL,
-    origin_zone_id VARCHAR(64) NOT NULL,
+    pickup_zone_id VARCHAR(64) NOT NULL,
     destination_zone_id VARCHAR(64) NOT NULL,
-    base_fee_cents BIGINT NOT NULL CHECK (base_fee_cents >= 0),
-    per_kg_rate_cents BIGINT NOT NULL CHECK (per_kg_rate_cents >= 0),
-    volumetric_factor NUMERIC(6,2) NOT NULL DEFAULT 5000.00 CHECK (volumetric_factor > 0),
-    service_multiplier_standard NUMERIC(4,2) NOT NULL DEFAULT 1.00,
-    service_multiplier_express NUMERIC(4,2) NOT NULL DEFAULT 1.50,
-    service_multiplier_same_day NUMERIC(4,2) NOT NULL DEFAULT 2.00,
+    weight_band_id INT NOT NULL CHECK (weight_band_id BETWEEN 1 AND 7),
+    min_weight_kg NUMERIC(6,2) NOT NULL CHECK (min_weight_kg >= 0),
+    max_weight_kg NUMERIC(6,2) NOT NULL CHECK (max_weight_kg > min_weight_kg AND max_weight_kg <= 30.00),
+    fee_cents BIGINT NOT NULL CHECK (fee_cents >= 0),
+    currency VARCHAR(3) NOT NULL DEFAULT 'LKR',
     effective_from TIMESTAMPTZ NOT NULL,
     effective_to TIMESTAMPTZ,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id, version),
-    CONSTRAINT chk_effective_window CHECK (effective_to IS NULL OR effective_to > effective_from)
+    CONSTRAINT chk_effective_window CHECK (effective_to IS NULL OR effective_to > effective_from),
+    CONSTRAINT uq_zone_band_version UNIQUE (pickup_zone_id, destination_zone_id, weight_band_id, version)
 );
 
-CREATE INDEX idx_pricing_rules_lookup 
-ON pricing_rules (origin_zone_id, destination_zone_id, is_active, effective_from);
+CREATE INDEX idx_pricing_rules_lookup
+ON pricing_rules (pickup_zone_id, destination_zone_id, weight_band_id, is_active, effective_from);
 
 CREATE TABLE IF NOT EXISTS pricing_quotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pricing_rule_id VARCHAR(64) NOT NULL,
     pricing_rule_version INT NOT NULL,
-    service_level VARCHAR(32) NOT NULL,
+    service_level VARCHAR(32) NOT NULL DEFAULT 'STANDARD',
     currency VARCHAR(3) NOT NULL DEFAULT 'LKR',
     fee_cents BIGINT NOT NULL CHECK (fee_cents >= 0),
     input_snapshot JSONB NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    accepted_parcel_id UUID,
     FOREIGN KEY (pricing_rule_id, pricing_rule_version) REFERENCES pricing_rules(id, version) ON DELETE RESTRICT
 );
 
@@ -133,14 +134,12 @@ CREATE TABLE IF NOT EXISTS parcels (
     courier_id UUID,
     status VARCHAR(32) NOT NULL DEFAULT 'CREATED',
     service_level VARCHAR(32) NOT NULL DEFAULT 'STANDARD',
-    weight_kg NUMERIC(6,2) NOT NULL CHECK (weight_kg > 0 AND weight_kg <= 50.00),
-    length_cm NUMERIC(6,2) NOT NULL CHECK (length_cm > 0 AND length_cm <= 150.00),
-    width_cm NUMERIC(6,2) NOT NULL CHECK (width_cm > 0 AND width_cm <= 150.00),
-    height_cm NUMERIC(6,2) NOT NULL CHECK (height_cm > 0 AND height_cm <= 150.00),
-    chargeable_weight_kg NUMERIC(6,2) NOT NULL CHECK (chargeable_weight_kg > 0),
+    weight_kg NUMERIC(6,2) NOT NULL CHECK (weight_kg > 0 AND weight_kg <= 30.00),
+    length_cm NUMERIC(6,2) CHECK (length_cm > 0 AND length_cm <= 150.00),
+    width_cm NUMERIC(6,2) CHECK (width_cm > 0 AND width_cm <= 150.00),
+    height_cm NUMERIC(6,2) CHECK (height_cm > 0 AND height_cm <= 150.00),
+    chargeable_weight_kg NUMERIC(6,2) NOT NULL CHECK (chargeable_weight_kg > 0 AND chargeable_weight_kg <= 30.00),
     currency VARCHAR(3) NOT NULL DEFAULT 'LKR',
-    base_fee_cents BIGINT NOT NULL CHECK (base_fee_cents >= 0),
-    additional_fee_cents BIGINT NOT NULL CHECK (additional_fee_cents >= 0),
     price_cents BIGINT NOT NULL CHECK (price_cents >= 0),
     pricing_rule_id VARCHAR(64) NOT NULL,
     pricing_rule_version INT NOT NULL,
@@ -152,8 +151,8 @@ CREATE TABLE IF NOT EXISTS parcels (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_parcel_status CHECK (status IN (
-        'CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 
-        'OUT_FOR_DELIVERY', 'DELIVERED', 'ATTEMPT_FAILED', 
+        'CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT',
+        'OUT_FOR_DELIVERY', 'DELIVERED', 'ATTEMPT_FAILED',
         'RETURNED', 'CANCELLED'
     )),
     CONSTRAINT chk_owner_present CHECK (customer_id IS NOT NULL OR merchant_id IS NOT NULL)
@@ -229,15 +228,13 @@ DROP TABLE IF EXISTS idempotency_keys;
 | `courier_id` | `UUID` | Yes | `NULL` | Assigned courier user ID (updated by Member 3). |
 | `status` | `VARCHAR(32)` | No | `'CREATED'` | Current state constrained to 9 canonical values. |
 | `service_level` | `VARCHAR(32)` | No | `'STANDARD'` | Speed tier: `STANDARD`, `EXPRESS`, `SAME_DAY`. |
-| `weight_kg` | `NUMERIC(6,2)` | No | None | Measured physical weight in kilograms ($0.01 \le w \le 50.00$). |
-| `length_cm` | `NUMERIC(6,2)` | No | None | Physical length in cm ($1.0 \le l \le 150.0$). |
-| `width_cm` | `NUMERIC(6,2)` | No | None | Physical width in cm ($1.0 \le w \le 150.0$). |
-| `height_cm` | `NUMERIC(6,2)` | No | None | Physical height in cm ($1.0 \le h \le 150.0$). |
-| `chargeable_weight_kg` | `NUMERIC(6,2)` | No | None | $\max(\text{actual\_weight}, \text{volumetric\_weight})$. |
+| `weight_kg` | `NUMERIC(6,2)` | No | None | Measured physical weight in kilograms ($0.01 \le w \le 30.00$). |
+| `length_cm` | `NUMERIC(6,2)` | Yes | None | Physical length in cm ($1.0 \le l \le 150.0$); required if weight > 1 kg. |
+| `width_cm` | `NUMERIC(6,2)` | Yes | None | Physical width in cm ($1.0 \le w \le 150.0$); required if weight > 1 kg. |
+| `height_cm` | `NUMERIC(6,2)` | Yes | None | Physical height in cm ($1.0 \le h \le 150.0$); required if weight > 1 kg. |
+| `chargeable_weight_kg` | `NUMERIC(6,2)` | No | None | Actual weight if $\le 1\text{ kg}$, else $\max(\text{actual}, \frac{L \times W \times H}{6000})$ ($0 < w \le 30.00$). |
 | `currency` | `VARCHAR(3)` | No | `'LKR'` | ISO 4217 currency code. |
-| `base_fee_cents` | `BIGINT` | No | None | Base tariff fee component in integer cents. |
-| `additional_fee_cents` | `BIGINT` | No | None | Weight surcharge in integer cents. |
-| `price_cents` | `BIGINT` | No | None | Final charged delivery fee in integer cents. |
+| `price_cents` | `BIGINT` | No | None | Immutable accepted complete delivery fee snapshot in integer cents. |
 | `pricing_rule_id` | `VARCHAR(64)` | No | None | Identifier of pricing rule applied at booking. |
 | `pricing_rule_version` | `INT` | No | None | Version of pricing rule applied. |
 | `pickup_address` | `JSONB` | No | None | Immutable snapshot of pickup contact and address. |
@@ -248,7 +245,44 @@ DROP TABLE IF EXISTS idempotency_keys;
 | `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Booking creation timestamp in UTC. |
 | `updated_at` | `TIMESTAMPTZ` | No | `NOW()` | Last state update timestamp in UTC. |
 
-### 4.2 JSONB Address Schemas (`pickup_address`, `dropoff_address`)
+### 4.2 Table: `pricing_rules`
+
+| Column Name | Data Type | Nullable | Default | Description & Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `VARCHAR(64)` | No | None | Unique pricing rule identifier; part of composite PK `(id, version)`. |
+| `version` | `INT` | No | `1` | Version number; incremented on tariff edits by Member 7 admin workflow. |
+| `name` | `VARCHAR(128)` | No | None | Human-readable tariff description. |
+| `pickup_zone_id` | `VARCHAR(64)` | No | None | Canonical pickup zone identifier (FK to `delivery_zones.id`). |
+| `destination_zone_id` | `VARCHAR(64)` | No | None | Canonical destination zone identifier (FK to `delivery_zones.id`). |
+| `weight_band_id` | `INT` | No | None | Weight band index ($1 \le \text{band} \le 7$). |
+| `min_weight_kg` | `NUMERIC(6,2)` | No | None | Lower bound of chargeable weight band ($W_{\min} \ge 0$). |
+| `max_weight_kg` | `NUMERIC(6,2)` | No | None | Upper bound of chargeable weight band ($W_{\max} \le 30.00$). |
+| `fee_cents` | `BIGINT` | No | None | Complete configured delivery fee in integer cents (`fee_cents >= 0`). |
+| `currency` | `VARCHAR(3)` | No | `'LKR'` | ISO 4217 currency code. |
+| `effective_from` | `TIMESTAMPTZ` | No | None | Start timestamp of tariff validity window. |
+| `effective_to` | `TIMESTAMPTZ` | Yes | `NULL` | Optional end timestamp; must satisfy `effective_to > effective_from`. |
+| `is_active` | `BOOLEAN` | No | `TRUE` | Administrative active flag. |
+| `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Audit creation timestamp. |
+| `updated_at` | `TIMESTAMPTZ` | No | `NOW()` | Audit modification timestamp. |
+
+Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, weight_band_id, version)` prevents ambiguous rules.
+
+### 4.3 Table: `pricing_quotes`
+
+| Column Name | Data Type | Nullable | Default | Description & Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | No | `gen_random_uuid()` | Quote identifier (UUID v4). Primary key. |
+| `pricing_rule_id` | `VARCHAR(64)` | No | None | Applied rule ID (FK references `pricing_rules.id`). |
+| `pricing_rule_version` | `INT` | No | None | Applied rule version (FK references `pricing_rules.version`). |
+| `service_level` | `VARCHAR(32)` | No | `'STANDARD'` | Speed tier requested. |
+| `currency` | `VARCHAR(3)` | No | `'LKR'` | Currency code. |
+| `fee_cents` | `BIGINT` | No | None | Calculated complete delivery fee in integer cents. |
+| `input_snapshot` | `JSONB` | No | None | Frozen snapshot of calculation inputs (zones, actual weight, dimensions, chargeable weight, weight band). |
+| `expires_at` | `TIMESTAMPTZ` | No | None | Quote expiration timestamp (`created_at + INTERVAL '15 minutes'`). |
+| `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Quote creation timestamp in UTC. |
+| `accepted_parcel_id` | `UUID` | Yes | `NULL` | Optional parcel ID that consumed this quote (enforces single-use consumption policy). |
+
+### 4.4 JSONB Address Schemas (`pickup_address`, `dropoff_address`)
 Addresses are embedded directly into `parcels` to guarantee snapshot isolation:
 
 ```json
@@ -278,7 +312,7 @@ sequenceDiagram
     participant H as HTTP Handler
     participant U as CreateParcelUseCase
     participant DB as PostgreSQL Transaction
-    
+
     Caller->>H: POST /api/v1/parcels (Idempotency-Key)
     H->>U: Execute(cmd)
     U->>DB: BEGIN TRANSACTION
@@ -307,7 +341,7 @@ To prevent lost updates during concurrent state transitions (e.g., dispatcher re
 
 ```sql
 UPDATE parcels
-SET 
+SET
     status = $1,
     attempt_count = $2,
     version = version + 1,
@@ -328,22 +362,23 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
 | **Tracking Number** | Arbitrary text format | `SD-YYYYMMDD-XXXXXX` (Crockford Base32) | SRS FR-PAR-004 & Audit |
 | **Quote Persistence** | Optional / unpersisted | Persisted in `pricing_quotes` table | Engineering Standards & Audit |
-| **Pricing Formula & Divisor (5000)** | Unspecified weight calculation | Volumetric factor 5000, chargeable weight, billable extra weight. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Tariffs & Multipliers** | Undefined rates | Multipliers (1.0x, 1.5x, 2.0x) and base/per-kg rates are illustrative baselines. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`). | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg formula | Complete tariff per zone-pair and weight band: `tariff(pickup, dest, band)`; no separate base/per-kg/distance fees. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Volumetric Policy & Divisor (6000)** | Unspecified weight calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)`. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
 | **Idempotency Model** | Module-local vs duplicate | Canonical `idempotency_keys` table (24h TTL) | Engineering Standards v1.0 Section 7 |
 | **Failure States** | Unclear `FAILED` state | Transient `ATTEMPT_FAILED` (max 3), `RETURNED` | ADR-004 Failed Delivery Semantics |
-| **Tariff Admin Rights** | Unassigned | Admin write endpoints owned by M7/M1 | `PENDING TEAM CONFIRMATION` |
+| **Tariff Admin Rights** | Unassigned | Admin write UI & workflow owned by M7; calculation engine owned by M2 | Coordinated Boundary |
 | **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 6.1 Pricing Policy Dependency & Persistence Impact Analysis
 
 | Persistence Element | Invariant (Unaffected by Pricing Changes) | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **`parcels` Table** | Stores `base_fee_cents`, `additional_fee_cents`, `price_cents`, `pricing_rule_id`, `pricing_rule_version`. | **Zero Schema Impact:** Columns store final calculated cents and rule references regardless of formula details. |
+| **`parcels` Table** | Stores immutable `price_cents`, currency, `pricing_rule_id`, and `pricing_rule_version`. | **Zero Schema Impact:** Column `price_cents` stores the final agreed integer cents snapshot regardless of internal tariff tiering. |
 | **`pricing_quotes` Table** | Stores frozen quote inputs, total fee, and expiration timestamp. | **Zero Schema Impact:** `input_snapshot JSONB` accommodates any revised formula parameters cleanly without DDL changes. |
-| **`pricing_rules` Table** | Stores active and effective date ranges for zone-pair tariffs. | **Column Alterations:** If formula changes from divisor 5000 or introduces new surcharge tiers, columns like `volumetric_factor` or `service_multiplier_*` will be modified via migration. |
-| **Check Constraints** | Positive weight and dimension checks. | If maximum parcel limits change (e.g. from 50 kg to 30 kg), table CHECK constraints in `parcels` update via migration. |
+| **`pricing_rules` Table** | Stores zone-pair weight-band tariffs with effective dates. | **Additive Migration:** If band count or zone schema is altered, new rules are inserted or updated by Member 7 admin workflow without altering `parcels`. |
+| **Check Constraints** | Positive weight and dimension checks ($0 < W \le 30.00\text{ kg}$). | If maximum parcel limits change, table CHECK constraints in `parcels` and `pricing_rules` update via sequential migration. |
 
 ---
 

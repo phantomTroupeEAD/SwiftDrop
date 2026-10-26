@@ -1,8 +1,8 @@
-# Parcel Management Module (`internal/parcels`)
+﻿# Parcel Management Module (`internal/parcels`)
 
-> **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking  
-> **Primary Owner:** Member 2 — Parcel Management & Pricing  
-> **Clean Architecture Boundary:** Modular Monolith Internal Module  
+> **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking
+> **Primary Owner:** Member 2 â€” Parcel Management & Pricing
+> **Clean Architecture Boundary:** Modular Monolith Internal Module
 > **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment)
 
 ---
@@ -13,8 +13,9 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 ### Key Responsibilities:
 - Parcel aggregate root encapsulation and state transition invariant enforcement.
 - Customer and merchant parcel booking workflows with idempotency protection.
+- Quote verification and accepted price snapshot: Validates quote existence, checks backend expiry (`current_time >= expires_at`), ensures route and weight inputs match, and freezes an immutable accepted price snapshot (`price_cents`, currency, rule/version).
 - Unique tracking number generation (`SD-YYYYMMDD-XXXXXX` using Crockford's Base32).
-- Dimension and weight validation against tariff classes.
+- Dimension and weight validation against tariff classes (proposed max 30.00 kg actual and chargeable weight).
 - Address snapshot persistence using immutable JSONB fields (`pickup_address`, `dropoff_address`).
 - Atomic state persistence, status audit logging (`parcel_status_history`), and outbox event creation (`parcel.booked.v1`, `parcel.cancelled.v1`).
 
@@ -27,17 +28,18 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 4. **Audit History Trail:** Every status change must record an immutable row in `parcel_status_history` containing `from_status`, `to_status`, `actor_id`, `actor_role`, `occurred_at`, and `parcel_version`.
 5. **Atomic Outbox Record:** Every domain state change commits an integration event (e.g., `parcel.booked.v1`, `parcel.cancelled.v1`) to `outbox_events` in the exact same PostgreSQL transaction.
 6. **Idempotent Booking:** Repeated booking requests with identical `Idempotency-Key` headers return the previously booked parcel from the `idempotency_keys` cache. Reusing a key with altered parameters returns HTTP 409 Conflict.
-7. **Monetary Representation:** Stored strictly in integer minor units (`BIGINT`, LKR cents). Binary floating-point types are strictly forbidden.
+7. **Monetary Representation & Immutable Price Snapshot:** Stored strictly in integer minor units (`BIGINT`, LKR cents). Once confirmed, `price_cents`, `currency`, and `pricing_rule_version` are frozen immutably. Subsequent tariff modifications by Member 7 never retroactively alter confirmed bookings or receipts.
+8. **Backend Quote Expiration:** Quote validity is strictly enforced by the backend (`current_time >= expires_at`). Expired or tampered quotes are rejected with structured HTTP 422 errors.
 
 ---
 
 ## 3. Layer Breakdown
 ```
 internal/parcels/
-├── domain/                  # Parcel aggregate, TrackingNumber VO, Address VO, Status enum, domain errors
-├── application/             # BookParcel, GetParcelDetails, CancelParcel use cases & repository interfaces
-├── infrastructure/          # PostgresParcelRepository, OutboxAdapter, TrackingNumberGenerator
-└── transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
+â”œâ”€â”€ domain/                  # Parcel aggregate, TrackingNumber VO, Address VO, Status enum, domain errors
+â”œâ”€â”€ application/             # BookParcel, GetParcelDetails, CancelParcel use cases & repository interfaces
+â”œâ”€â”€ infrastructure/          # PostgresParcelRepository, OutboxAdapter, TrackingNumberGenerator
+â””â”€â”€ transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
 ```
 
 ---
@@ -62,3 +64,4 @@ internal/parcels/
 | :--- | :--- | :--- |
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-10-25 | Aligned with Audit v2.0.0: Crockford Base32 tracking, JSONB addresses, 9-state machine, integer LKR cents, and migrations 000005 & 000010 | Member 2 |
+| 2026-10-26 | Integrated Member 2 pricing decisions: Immutable accepted price snapshot, quote validation, 30 kg operational limits, and backend quote expiry | Member 2 |

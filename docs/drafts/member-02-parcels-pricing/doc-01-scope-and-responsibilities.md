@@ -1,5 +1,5 @@
-# SwiftDrop Parcel Delivery & Courier Management System
-## Document 1 — Module Scope & Responsibility Specification
+﻿# SwiftDrop Parcel Delivery & Courier Management System
+## Document 1 â€” Module Scope & Responsibility Specification
 ### Member 2: Parcel Management & Pricing
 
 ## 1. Purpose
@@ -46,16 +46,17 @@ The module shall aim to:
 10. Provide automated tests, database migrations, API documentation, and reproducible setup instructions for the module.
 
 ## 2. Scope and Responsibilities
-### 2.1 In-Scope Responsibilities
+
+### 2.1 In-Scope Responsibilities
 
 | Capability | Responsibility |
 |---|---|
 | Parcel booking | Receive, validate, and process parcel-creation requests for customers and authorized merchants via both quoted booking (`quote_id`) and direct booking paths. |
 | Parcel data | Maintain authoritative parcel business records within the canonical PostgreSQL schema, including immutable JSONB address snapshots (`pickup_address`, `dropoff_address`). |
 | Tracking number | Generate unique public tracking numbers in the canonical format `SD-YYYYMMDD-XXXXXX` and enforce database uniqueness with bounded collision retries. |
-| Pricing and estimation | Calculate deterministic fees via `POST /api/v1/pricing/quotes` using approved rule-based tariff formulas, volumetric calculations (divisor 5000), and service-level multipliers. |
-| Quote persistence | Persist 15-minute validity quote records in `pricing_quotes` to lock fees before booking. |
-| Price snapshot | Atomically preserve the accepted fee (`price_cents` in integer minor units), currency (`LKR`), and pricing-rule/version reference directly on the parcel record. |
+| Pricing and estimation | Calculate deterministic delivery fees via `POST /api/v1/pricing/quotes` using fixed complete tariffs per zone-pair and weight band across seven bands, threshold-based volumetric calculations (divisor 6000 cmÂ³/kg, 1 kg threshold, 30 kg max limits), backend quote expiry enforcement (15-minute TTL), and controlled missing-tariff rejection (`pricing_unavailable`). |
+| Quote persistence | Persist 15-minute validity quote records in `pricing_quotes` to freeze fees prior to booking confirmation. |
+| Price snapshot | Atomically preserve the accepted fee (`price_cents` in integer minor units), currency (`LKR`), and pricing-rule/version reference directly on the parcel record as an immutable historical record. |
 | Parcel lifecycle | Validate permitted parcel-state transitions through the `Parcel` aggregate root (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`) with optimistic concurrency (`version`), rejecting illegal or direct SQL status updates. |
 | Status history | Atomically record every valid status transition in `parcel_status_history` with UTC timestamp, actor ID/role, reason code, notes, and aggregate version. |
 | Parcel history API | Provide authorized access to the parcel's chronological history via `GET /api/v1/parcels/{id}/history`. |
@@ -98,21 +99,21 @@ The canonical Go Core API modular monolith directory structure is:
 
 ```text
 core-api/
-├── internal/
-│   ├── parcels/
-│   │   ├── domain/           # Pure domain models (Parcel aggregate root, status state machine, events, domain errors)
-│   │   ├── application/      # Use cases (BookParcel, GetParcel, ListParcels, GetHistory, GetReceipt)
-│   │   ├── infrastructure/   # PostgreSQL repositories, outbox adapters, tracking number generator
-│   │   └── transport/        # HTTP handlers, DTO mapping, input validation
-│   ├── pricing/
-│   │   ├── domain/           # Tariff calculation engine, volumetric weight formulas, pricing rules
-│   │   ├── application/      # Quote generation use case (CalculateQuoteUseCase)
-│   │   ├── infrastructure/   # Pricing rule and quote PostgreSQL repositories
-│   │   └── transport/        # HTTP quote handlers, request/response DTOs
-│   ├── events/               # Shared outbox writer contract and event envelope
-│   └── platform/             # Technical drivers (database pool, auth middleware, HTTP helpers)
-├── migrations/               # Canonical PostgreSQL migrations
-└── tests/                    # Integration and contract test suites
+â”œâ”€â”€ internal/
+â”‚   â”œâ”€â”€ parcels/
+â”‚   â”‚   â”œâ”€â”€ domain/           # Pure domain models (Parcel aggregate root, status state machine, events, domain errors)
+â”‚   â”‚   â”œâ”€â”€ application/      # Use cases (BookParcel, GetParcel, ListParcels, GetHistory, GetReceipt)
+â”‚   â”‚   â”œâ”€â”€ infrastructure/   # PostgreSQL repositories, outbox adapters, tracking number generator
+â”‚   â”‚   â””â”€â”€ transport/        # HTTP handlers, DTO mapping, input validation
+â”‚   â”œâ”€â”€ pricing/
+â”‚   â”‚   â”œâ”€â”€ domain/           # Tariff calculation engine, volumetric weight formulas, pricing rules
+â”‚   â”‚   â”œâ”€â”€ application/      # Quote generation use case (CalculateQuoteUseCase)
+â”‚   â”‚   â”œâ”€â”€ infrastructure/   # Pricing rule and quote PostgreSQL repositories
+â”‚   â”‚   â””â”€â”€ transport/        # HTTP quote handlers, request/response DTOs
+â”‚   â”œâ”€â”€ events/               # Shared outbox writer contract and event envelope
+â”‚   â””â”€â”€ platform/             # Technical drivers (database pool, auth middleware, HTTP helpers)
+â”œâ”€â”€ migrations/               # Canonical PostgreSQL migrations
+â””â”€â”€ tests/                    # Integration and contract test suites
 ```
 
 Following Clean Architecture rules, the `domain/` layer has zero external dependencies (no `database/sql`, no `net/http`, no RabbitMQ imports).
@@ -135,17 +136,32 @@ The Parcel Management area owns:
 The Pricing area owns:
 
 - The deterministic delivery-fee calculation engine (`POST /api/v1/pricing/quotes`).
-- Validation of pricing-related inputs against configured operational thresholds (provisional: weight 0.01–50.0 kg, max length 150 cm).
-- Evaluation of the delivery-fee calculation formula. *(Provisional proposal pending team confirmation: Volumetric Weight (kg) = $\frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$)*.
-- Chargeable weight determination ($\max(\text{actual}, \text{volumetric})$) and billable extra weight calculation.
-- Evaluation of zone tariffs and service-level tiers. *(Provisional proposal pending team confirmation: `STANDARD` 1.0x, `EXPRESS` 1.5x, `SAME_DAY` 2.0x)*.
-- Strict integer minor-unit financial representation (`BIGINT` / `int64` in cents, currency `LKR`) — *Confirmed Project Standard*.
-- Quote generation and persistence with a price freeze window. *(Provisional proposal pending team confirmation: standard 15-minute expiration period)*.
-- Creation and persistence of the immutable accepted-price snapshot embedded in confirmed bookings — *Confirmed Project Standard*.
+- Retrieval interface for applicable tariffs based on canonical pickup and destination zones. *(Note: Member 7 owns admin screens and tariff-administration workflow; Member 2 owns calculation behavior and tariff-retrieval interface).*
+- Strict validation of weight and dimensions against proposed operational limits (maximum actual parcel weight: 30.00 kg; maximum chargeable weight: 30.00 kg; reject quote requests exceeding either limit).
+- Evaluation of chargeable weight under the selected Option A threshold policy:
+  - If actual weight $\le 1\text{ kg}$: $\text{chargeable\_weight} = \text{actual\_weight}$ (dimensions do not affect pricing).
+  - If actual weight $> 1\text{ kg}$: dimensions in cm are required; $\text{volumetric\_weight\_kg} = \frac{\text{length\_cm} \times \text{width\_cm} \times \text{height\_cm}}{6000}$; $\text{chargeable\_weight} = \max(\text{actual\_weight}, \text{volumetric\_weight})$.
+  *(Proposed volumetric divisor: $6000\text{ cm}^3/\text{kg}$, provisional parameter pending team confirmation).*
+- Preservation of full decimal precision for volumetric and chargeable weight without premature rounding prior to band selection.
+- Assignment to exactly one of seven unambiguous, non-overlapping chargeable weight bands:
+  - Band 1: $0 < W \le 0.5\text{ kg}$
+  - Band 2: $0.5 < W \le 1.0\text{ kg}$
+  - Band 3: $1.0 < W \le 2.0\text{ kg}$
+  - Band 4: $2.0 < W \le 5.0\text{ kg}$
+  - Band 5: $5.0 < W \le 10.0\text{ kg}$
+  - Band 6: $10.0 < W \le 20.0\text{ kg}$
+  - Band 7: $20.0 < W \le 30.0\text{ kg}$
+- Tariff lookup evaluating the unique applicable, enabled pricing rule for the zone pair and weight band:
+  $$\text{delivery\_fee} = \text{tariff}(\text{pickup\_zone\_id}, \text{destination\_zone\_id}, \text{weight\_band\_id})$$
+  *(The tariff is the complete delivery fee for that combination; no separate common base fee, per-kilogram charge, distance fee, or service multiplier is added).*
+- Controlled missing-tariff behavior: return a safe `pricing_unavailable` business error if no tariff exists; fail safely and flag a configuration problem if multiple applicable rules create ambiguity (no guessing or fallback rates).
+- Strict integer minor-unit financial representation (`BIGINT` / `int64` in cents, currency `LKR`) â€” *Confirmed Project Standard*.
+- Quote generation and persistence with a proposed 15-minute validity window (`expires_at = created_at + 15m`), enforced strictly on the backend upon booking confirmation.
+- Creation and persistence of the immutable accepted-price snapshot embedded in confirmed bookings â€” *Confirmed Project Standard*.
 
 > [!IMPORTANT]
-> **Provisional Pricing Notice (Pending Team Confirmation):**
-> The specific pricing formula, divisor (5000), service tier multipliers, numerical tariff rates, weight bands, and 15-minute quote validity window are **provisional proposals pending formal team confirmation**. All example figures are illustrative. The underlying architecture—server-side price calculation, integer minor units (LKR cents), quote persistence, and immutable accepted-price snapshots on `parcels`—is fixed and invariant.
+> **Provisional Pricing Baseline Notice (Pending Team Approval):**
+> The seven weight bands, 1 kg threshold policy, volumetric divisor ($6000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, fixed zone-pair/band tariff model, and 15-minute quote TTL represent the **current proposed Member 2 design baseline, pending formal team approval**. All example figures are illustrative, not commercial price promises. The underlying architectural invariantsâ€”server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`â€”are fixed and invariant.
 
 The module must calculate prices on the server. It must not trust a client-submitted fee as authoritative.
 
@@ -167,7 +183,7 @@ The module must not treat RabbitMQ messages, frontend state, tracking caches, or
 | API conventions | Shared Contract | Base path `/api/v1`, standard JSON envelopes (`{"data": ...}`, `{"error": ...}`), correlation IDs, and ISO 8601 UTC timestamps. |
 | Database conventions | Shared Contract / Member 9 | Canonical identifiers (`UUIDv4`), migration sequencing (`migrations/NNNNNN_name.up.sql`), and exact integer minor-unit conventions (`BIGINT`). |
 | Parcel lifecycle agreement | Members 2, 3, 5 | Approved 9-state lifecycle (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`), actor permissions, and ADR-004 failed-delivery semantics. |
-| Pricing decisions | Member 2 / Team | Canonical formula, volumetric divisor (5000), LKR minor units, zone IDs (`VARCHAR(64)`), and 15-minute quote validity. |
+| Pricing decisions | Member 2 / Team | Fixed complete tariff per zone-pair & weight band (7 bands), 1 kg threshold, divisor 6000 cmÂ³/kg, 30 kg limits, LKR minor units, zone IDs (`VARCHAR(64)`), and 15-minute quote validity. |
 | Outbox/event interface | Member 8 | Canonical event envelope, `outbox_events` table contract, event types `parcel.booked.v1` and `parcel.cancelled.v1`. |
 | Customer interface requirements | Member 6 | Booking wizard inputs, quote request DTO, receipt presentation fields. |
 | Merchant integration requirements | Member 4 | Transport endpoint `POST /api/v1/merchant/parcels`, merchant tenant verification, and delegation to Member 2's booking use case. |
@@ -176,13 +192,13 @@ The module must not treat RabbitMQ messages, frontend state, tracking caches, or
 
 | Consumer | Expected Interaction |
 |---|---|
-| Customer frontend — Member 6 | Requests fee quotes (`POST /api/v1/pricing/quotes`), creates bookings (`POST /api/v1/parcels`), and retrieves authorized parcel history and receipt data. |
-| Merchant integration — Member 4 | In-process invocation of Member 2's `CreateParcelUseCase` within the authenticated merchant tenant context. |
-| Dispatch & Couriers — Member 3 | Reads authoritative parcel state and invokes the `Parcel` aggregate methods to advance operational status (`ASSIGNED`, `PICKED_UP`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`). |
-| Tracking API — Member 5 | Reads authoritative parcel and status history records from PostgreSQL to construct read-optimized Server-Sent Events (SSE) and public tracking projections. |
-| Event-driven backend — Member 8 | Outbox Relay poller queries unpublished rows from `outbox_events` and publishes them to RabbitMQ. |
-| AI Assistant — Member 10 | Calls approved REST endpoints (`POST /api/v1/pricing/quotes`, `GET /api/v1/parcels/{id}`) through the API Gateway; zero direct database or message bus access. |
-| Admin / Operations — Member 7 | Consumes parcel and pricing data for admin reporting and zone/tariff maintenance. |
+| Customer frontend â€” Member 6 | Requests fee quotes (`POST /api/v1/pricing/quotes`), creates bookings (`POST /api/v1/parcels`), and retrieves authorized parcel history and receipt data. |
+| Merchant integration â€” Member 4 | In-process invocation of Member 2's `CreateParcelUseCase` within the authenticated merchant tenant context. |
+| Dispatch & Couriers â€” Member 3 | Reads authoritative parcel state and invokes the `Parcel` aggregate methods to advance operational status (`ASSIGNED`, `PICKED_UP`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`). |
+| Tracking API â€” Member 5 | Reads authoritative parcel and status history records from PostgreSQL to construct read-optimized Server-Sent Events (SSE) and public tracking projections. |
+| Event-driven backend â€” Member 8 | Outbox Relay poller queries unpublished rows from `outbox_events` and publishes them to RabbitMQ. |
+| AI Assistant â€” Member 10 | Calls approved REST endpoints (`POST /api/v1/pricing/quotes`, `GET /api/v1/parcels/{id}`) through the API Gateway; zero direct database or message bus access. |
+| Admin / Operations â€” Member 7 | Consumes parcel and pricing data for admin reporting and zone/tariff maintenance. |
 
 ### 4.3 Collaboration Boundaries
 
@@ -200,7 +216,7 @@ The module strictly enforces the following core business invariants:
 
 1. **Identity & Reference:** Every persisted parcel has an immutable internal `UUIDv4` identifier and a unique public tracking number in the format `SD-YYYYMMDD-XXXXXX`.
 2. **Immutable Address Snapshots:** Pickup and drop-off addresses are stored as JSONB snapshots on the `parcels` table at booking creation. Subsequent customer profile updates never alter existing bookings.
-3. **Validated Input Boundaries:** Weight must be between 0.100 kg and 50.000 kg. Dimensions must not exceed 150.00 cm per edge, with maximum combined girth ($L + 2(W+H)$) $\le 300.00$ cm.
+3. **Validated Input Boundaries:** Positive actual weight up to proposed 30.000 kg maximum ($0 < W \le 30.000\text{ kg}$). Chargeable weight must also not exceed 30.000 kg. Dimensions must not exceed 150.00 cm per edge, with maximum combined girth ($L + 2(W+H)$) $\le 300.00$ cm.
 4. **Aggregate Root State Machine:** Parcel status transitions can only occur through the `Parcel` aggregate root methods, enforcing legal transitions and rejecting direct SQL updates.
 5. **Optimistic Concurrency Control:** Every parcel row includes an integer `version` column incremented on every transition. Stale concurrent updates fail with HTTP `409 Conflict`.
 6. **Append-Only Status History:** Every accepted status transition creates an immutable record in `parcel_status_history` within the same transaction.
@@ -211,10 +227,11 @@ The module strictly enforces the following core business invariants:
 
 1. **Deterministic Calculation:** Identical inputs evaluated against the same pricing rule version produce identical fees.
 2. **Canonical Financial Representation:** All monetary amounts are stored as 64-bit integers (`BIGINT` / `int64`) in Sri Lankan Rupee minor units (**cents**). Floating-point arithmetic is strictly prohibited.
-3. **Volumetric Standard:** Volumetric weight is calculated using the divisor $5000 \text{ cm}^3/\text{kg}$. Chargeable weight is the greater of actual and volumetric weight.
-4. **Quote Immutability:** Generated quotes in `pricing_quotes` are valid for **15 minutes** (`expires_at = NOW() + 15m`).
-5. **Accepted Price Lock:** Confirmed bookings lock the accepted price (`price_cents`), currency (`LKR`), and rule version permanently onto the `parcels` record. Subsequent rule changes never alter booked prices.
-6. **No Fallback Guessing:** If no active, enabled pricing rule covers the requested zone pair, the pricing engine returns HTTP `422 Unprocessable Entity` (`PRICING_RULE_NOT_FOUND`). The system never fabricates a fee.
+3. **Volumetric Standard & Threshold Policy:** Actual weight $\le 1\text{ kg}$ uses actual weight only. Actual weight $> 1\text{ kg}$ requires dimensions and uses volumetric divisor $6000\text{ cm}^3/\text{kg}$: $\text{volumetric\_kg} = (L \times W \times H) / 6000$, $\text{chargeable\_weight} = \max(\text{actual}, \text{volumetric})$. No rounding before band selection. Maximum actual and chargeable weight is 30 kg.
+4. **Tariff Completeness:** Each applicable pricing rule specifies the complete delivery fee for the (pickup zone, destination zone, weight band) combination. No separate common base fee, per-kg charge, distance fee, or multiplier is added.
+5. **Quote Immutability & Backend Expiry:** Generated quotes in `pricing_quotes` are valid for **15 minutes** (`expires_at = NOW() + 15m`). Backend strictly enforces expiry (`current_time >= expires_at` is expired) upon booking confirmation.
+6. **Accepted Price Lock:** Confirmed bookings lock the accepted price (`price_cents`), currency (`LKR`), and rule/version reference permanently onto the `parcels` record. Subsequent rule changes never alter booked prices.
+7. **No Fallback Guessing:** If no active, enabled pricing rule matches the requested route and weight band, the engine returns a controlled `pricing_unavailable` error. If multiple rules match ambiguously, fail safely. The system never fabricates a fee or falls back to default rates.
 
 ### 5.3 Idempotency and Transaction Invariants
 
@@ -254,11 +271,11 @@ Other modules must not:
 
 | Path | Ownership |
 |---|---|
-| `core-api/internal/parcels/` | Member 2 — Parcel aggregate root, booking use cases, lifecycle state machine, status history, and receipt data. |
-| `core-api/internal/pricing/` | Member 2 — Pricing engine, volumetric calculations, tariff rules, quote persistence. |
-| `core-api/migrations/000004_create_pricing_rules.up.sql` | Member 2 — Schema for `pricing_rules` and `pricing_quotes`. |
-| `core-api/migrations/000005_create_parcels_and_quotes.up.sql` | Member 2 — Schema for `parcels` and `parcel_status_history`. |
-| `core-api/migrations/000010_create_idempotency_keys.up.sql` | Member 2 (Shared technical driver) — Schema for `idempotency_keys`. |
+| `core-api/internal/parcels/` | Member 2 â€” Parcel aggregate root, booking use cases, lifecycle state machine, status history, and receipt data. |
+| `core-api/internal/pricing/` | Member 2 â€” Pricing engine, volumetric calculations, tariff rules, quote persistence. |
+| `core-api/migrations/000004_create_pricing_rules.up.sql` | Member 2 â€” Schema for `pricing_rules` and `pricing_quotes`. |
+| `core-api/migrations/000005_create_parcels_and_quotes.up.sql` | Member 2 â€” Schema for `parcels` and `parcel_status_history`. |
+| `core-api/migrations/000010_create_idempotency_keys.up.sql` | Member 2 (Shared technical driver) â€” Schema for `idempotency_keys`. |
 | `core-api/tests/` | Member 2 contributes parcel and pricing unit, repository, and integration test suites. |
 | `docs/drafts/member-02-parcels-pricing/` | Member 2 authoritative specifications (doc-01 through doc-08). |
 | `core-api/internal/parcels/README.md`, `API.md` | Member 2 co-located living module documentation and living API contract. |
@@ -270,7 +287,7 @@ Member 2 owns the following PostgreSQL tables within the authoritative database 
 
 - `parcels`: Core parcel aggregate, tracking number, status, JSONB address snapshots, accepted price snapshot, optimistic lock version.
 - `parcel_status_history`: Append-only chronological audit log of all parcel status transitions.
-- `pricing_rules`: Zone-pair tariff rates, base fees, per-kg rates, service multipliers, and effective validity windows.
+- `pricing_rules`: Zone-pair tariff rates per weight band, complete fee in cents, currency, rule version, enabled state, and effective validity windows.
 - `pricing_quotes`: Ephemeral 15-minute quote snapshots locking calculated prices prior to booking confirmation.
 - `idempotency_keys`: Central idempotency store tracking caller scope, request SHA-256 hash, and cached HTTP responses.
 
@@ -302,7 +319,7 @@ Member 2 is responsible for:
 Member 2 defines module-specific environment configuration in `.env.example`:
 - `PRICING_DEFAULT_CURRENCY=LKR`
 - `PRICING_QUOTE_TTL_MINUTES=15`
-- `PARCEL_MAX_WEIGHT_KG=50.0`
+- `PARCEL_MAX_WEIGHT_KG=30.0`
 - `PARCEL_MAX_DIMENSION_CM=150.0`
 - `IDEMPOTENCY_RETENTION_HOURS=24`
 
@@ -314,20 +331,20 @@ The table below summarizes the alignment between authoritative project sources, 
 
 | Domain Area | Audit / Baseline Recommendation | Authoritative Resolution Status | Supporting Source | Affected Documents |
 |---|---|---|---|---|
-| **Pricing Endpoint & Quote Persistence** | Standardize on `POST /api/v1/pricing/quotes` with persisted quote record. | **RESOLVED:** Adopted canonical endpoint `POST /api/v1/pricing/quotes` and quote persistence in `pricing_quotes`. | Audit §4.A, `docs/contracts/pricing-rules.md` §6 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Monetary Representation** | Store all monetary values as integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floating point. | **RESOLVED:** Canonical fields `fee_cents`, `price_cents`, `base_fee_cents`, `per_kg_fee_cents`, `currency = 'LKR'`. Strict prohibition of floats. | Engineering Standards §5.2, `pricing-rules.md` §1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Pricing Formula & Divisor (5000)** | Volumetric divisor 5000, chargeable weight $\max(\text{actual}, \text{volumetric})$, billable extra weight $\lceil \max(0, \text{chargeable} - 1.0) \rceil$. | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Adopted as working design proposal. Mathematical logic and divisor must be formally ratified before production release. | Audit §4.C, `pricing-rules.md` §2–3 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Tariffs & Service Multipliers** | Illustrative base/per-kg rates and multipliers (`STANDARD` 1.0x, `EXPRESS` 1.5x, `SAME_DAY` 2.0x). | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Example rates and multiplier ratios are illustrative placeholders. Production tariffs await commercial sign-off. | Audit §4.C | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Quote Validity Period** | 15-minute price freeze window (`expires_at = created_at + 15m`). | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION):** Adopted as working design proposal from Audit §4.A. Validity duration must be ratified by team. | Audit §4.A | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Address Data Model** | Replace separate `parcel_addresses` child rows with immutable `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL` directly on `parcels`. | **RESOLVED:** Single canonical model is JSONB snapshots on `parcels`. Separate `parcel_addresses` table removed from active design. | Audit §4.D, SRS §7.1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Tracking Number** | Format `SD-YYYYMMDD-XXXXXX` using Crockford's Base32 alphabet. Bounded collision retry (max 3). | **RESOLVED:** Standardized format `SD-YYYYMMDD-XXXXXX`. Tracking number is a public identifier, not an auth secret. | Audit §4.G, SRS FR-PAR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Parcel Lifecycle** | 9-state machine: `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`. | **RESOLVED:** All transitions evaluated by `Parcel` aggregate root. Optimistic locking via `version INT`. | `domain-boundaries.md` §3, ADR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Failed Delivery** | Decouple `delivery_attempts` (Member 3) from `parcels` (Member 2). Increment `attempt_count` (max 3). | **RESOLVED:** Transient `ATTEMPT_FAILED` requires dispatcher rescheduling; terminal `RETURNED` upon 3rd failure. | ADR-004, SRS §13.2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Idempotency** | Header `Idempotency-Key` (UUIDv4), table `idempotency_keys` with caller scope, SHA-256 hash, 24h TTL, HTTP 409 on mismatch. | **RESOLVED:** Single canonical idempotency implementation shared via platform driver. | Audit §4.H, `api-conventions.md` §4 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Database Migrations** | Sequential numbers: `000004_create_pricing_rules.up.sql`, `000005_create_parcels_and_quotes.up.sql`, `000010_create_idempotency_keys.up.sql`. `delivery_zones.id` is `VARCHAR(64)`. | **RESOLVED:** Adopted migration schedule aligned with Member 9 database coordination. | Audit §4.I, `database-schema.md` | Docs 1, 5, 8 |
-| **Outbox Events** | Atomic commit of `parcels`, `parcel_status_history`, and `outbox_events` (`parcel.booked.v1`, `parcel.cancelled.v1`). | **RESOLVED:** Producer responsibility separated from Member 8 relay daemon. | Audit §4.J, `event-contracts.md` §2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Merchant Ingress** | Merchant route `POST /api/v1/merchant/parcels` owned by Member 4; invokes Member 2 use case in-process. | **RESOLVED:** Member 2 does not document competing merchant routes as canonical. | Audit §4.E, `domain-boundaries.md` §2 | Docs 1, 2, 3, 4 |
-| **Tariff Administration** | Administrative write endpoints for zones and pricing rules (`/api/v1/admin/pricing-rules`). | **PENDING TEAM CONFIRMATION:** Candidate ownership belongs to Member 7 (Admin UI / Gateway) and Member 1 (Admin RBAC). Member 2 provides domain calculation interfaces. | Team Work Division §3 (Member 7) | Docs 1, 2, 3, 4 |
+| **Pricing Endpoint & Quote Persistence** | Standardize on `POST /api/v1/pricing/quotes` with persisted quote record. | **RESOLVED:** Adopted canonical endpoint `POST /api/v1/pricing/quotes` and quote persistence in `pricing_quotes`. | Audit Â§4.A, `docs/contracts/pricing-rules.md` Â§6 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Monetary Representation** | Store all monetary values as integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floating point. | **RESOLVED:** Canonical fields `fee_cents`, `price_cents`, `currency = 'LKR'` (complete tariff snapshot). Strict prohibition of floats. | Engineering Standards Â§5.2, `pricing-rules.md` Â§1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Pricing Model & Tariffs** | Fixed complete tariff per (pickup zone, destination zone, weight band). No separate base fee, per-kg fee, or multipliers. | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL):** Complete fee model with 7 weight bands. Retrieval interface owned by Member 2; tariff administration workflow owned by Member 7. | Member 2 Baseline | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Volumetric Threshold & Divisor (6000)** | Actual weight $\le 1\text{ kg}$ exempt from volumetric pricing. Actual $> 1\text{ kg}$ requires dims and uses divisor 6000 cmÂ³/kg. Max actual/chargeable weight 30 kg. | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL):** Option A threshold policy and divisor 6000 adopted as proposed design baseline. | Member 2 Baseline | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Quote Validity Period** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend expiry enforcement (`current_time >= expires_at`). | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL):** Standard 15-minute quote TTL with backend enforcement upon booking confirmation. | Member 2 Baseline | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Address Data Model** | Replace separate `parcel_addresses` child rows with immutable `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL` directly on `parcels`. | **RESOLVED:** Single canonical model is JSONB snapshots on `parcels`. Separate `parcel_addresses` table removed from active design. | Audit Â§4.D, SRS Â§7.1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Tracking Number** | Format `SD-YYYYMMDD-XXXXXX` using Crockford's Base32 alphabet. Bounded collision retry (max 3). | **RESOLVED:** Standardized format `SD-YYYYMMDD-XXXXXX`. Tracking number is a public identifier, not an auth secret. | Audit Â§4.G, SRS FR-PAR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Parcel Lifecycle** | 9-state machine: `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`. | **RESOLVED:** All transitions evaluated by `Parcel` aggregate root. Optimistic locking via `version INT`. | `domain-boundaries.md` Â§3, ADR-004 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Failed Delivery** | Decouple `delivery_attempts` (Member 3) from `parcels` (Member 2). Increment `attempt_count` (max 3). | **RESOLVED:** Transient `ATTEMPT_FAILED` requires dispatcher rescheduling; terminal `RETURNED` upon 3rd failure. | ADR-004, SRS Â§13.2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Idempotency** | Header `Idempotency-Key` (UUIDv4), table `idempotency_keys` with caller scope, SHA-256 hash, 24h TTL, HTTP 409 on mismatch. | **RESOLVED:** Single canonical idempotency implementation shared via platform driver. | Audit Â§4.H, `api-conventions.md` Â§4 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Database Migrations** | Sequential numbers: `000004_create_pricing_rules.up.sql`, `000005_create_parcels_and_quotes.up.sql`, `000010_create_idempotency_keys.up.sql`. `delivery_zones.id` is `VARCHAR(64)`. | **RESOLVED:** Adopted migration schedule aligned with Member 9 database coordination. | Audit Â§4.I, `database-schema.md` | Docs 1, 5, 8 |
+| **Outbox Events** | Atomic commit of `parcels`, `parcel_status_history`, and `outbox_events` (`parcel.booked.v1`, `parcel.cancelled.v1`). | **RESOLVED:** Producer responsibility separated from Member 8 relay daemon. | Audit Â§4.J, `event-contracts.md` Â§2 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Merchant Ingress** | Merchant route `POST /api/v1/merchant/parcels` owned by Member 4; invokes Member 2 use case in-process. | **RESOLVED:** Member 2 does not document competing merchant routes as canonical. | Audit Â§4.E, `domain-boundaries.md` Â§2 | Docs 1, 2, 3, 4 |
+| **Tariff Administration** | Administrative write endpoints for zones and pricing rules (`/api/v1/admin/pricing-rules`). | **PENDING TEAM CONFIRMATION:** Candidate ownership belongs to Member 7 (Admin UI / Gateway) and Member 1 (Admin RBAC). Member 2 provides domain calculation interfaces. | Team Work Division Â§3 (Member 7) | Docs 1, 2, 3, 4 |
 | **Receipt Rendering** | Downloadable PDF presentation vs structured JSON receipt endpoint. | **PENDING TEAM CONFIRMATION:** Member 2 standardizes `GET /api/v1/parcels/{id}/receipt` returning structured JSON receipt data; presentation/PDF download coordinated with Member 6. | SRS FR-PAR-008 | Docs 1, 2, 3, 4, 6 |
 
 ### 8.1 Pricing-Policy Dependency & Impact Analysis (If Pricing Policy Changes)
@@ -338,11 +355,11 @@ The delivery pricing policy has been architected to isolate mathematical formula
 | :--- | :--- | :--- | :--- |
 | **Core Architecture & Persistence** | PostgreSQL persistence, atomic transaction, `parcels` table schema, accepted-price snapshot storage, outbox events. | **Zero Impact:** Booking transactions, address snapshots, and parcel lifecycle remain completely unchanged. | `parcels`, `parcel_status_history`, `outbox_events` |
 | **Monetary Standard** | Integer minor units (`BIGINT` in SQL, `int64` in Go, LKR cents). No binary floating-point. | **Zero Impact:** Any revised tariff must still be stored and calculated in integer minor units. | All schemas and domain structs |
-| **API Contracts** | `POST /api/v1/pricing/quotes` endpoint path and base envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`). | **DTO Breakdown Update:** `breakdown` JSON object fields in quote response may need adjusting if weight bands or multiplier tiers change. | `core-api/internal/pricing/API.md`, `doc-03`, `doc-04` |
-| **Database Schema** | `pricing_quotes` and `pricing_rules` table existence and foreign key relationships. | **Column & Constraint Alterations:** If formula replaces multipliers or alters volumetric divisor, `pricing_rules.volumetric_factor` or `pricing_rules.service_multiplier_*` columns and DDL check constraints must be updated via migration. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05` |
-| **Quote Expiry Policy** | Quote verification during booking (`quote_id` lookup and freeze enforcement). | **TTL & Error Handling:** If 15-minute window is lengthened or shortened, `PRICING_QUOTE_TTL_MINUTES` config and checkout timers in frontend require updating. | `.env.example`, `doc-08`, Member 6 UI |
-| **Validation Limits** | Bounded validation in Go transport DTOs before persistence. | **Boundary Checks:** If maximum weight (50 kg) or dimension (150 cm) changes, validator logic and error codes (`WEIGHT_LIMIT_EXCEEDED`) adapt. | `internal/pricing/transport/dto.go`, `doc-03` |
-| **Automated Tests** | Test structure, mocks, transaction rollback assertions, idempotency checks. | **Test Assertions Update:** Test cases `TC-PRC-001`, `TC-PRC-002`, `TC-PRC-003` must be updated with newly approved mathematical expected values. | `doc-06`, `internal/pricing/domain/formula_test.go` |
+| **API Contracts** | `POST /api/v1/pricing/quotes` endpoint path and base envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`). | **DTO Alignment:** Breakdown fields reflect chargeable weight, selected band (Bands 1â€“7), and rule version. | `core-api/internal/pricing/API.md`, `doc-03`, `doc-04` |
+| **Database Schema** | `pricing_quotes` and `pricing_rules` table existence and foreign key relationships. | **Column Alignment:** `pricing_rules` stores fixed complete fee per zone-pair and weight band. Max weight constraint reflects 30 kg limit. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05` |
+| **Quote Expiry Policy** | Quote verification during booking (`quote_id` lookup and backend freeze enforcement). | **TTL & Error Handling:** 15-minute window enforced at `current_time >= expires_at`. | `.env.example`, `doc-08`, Member 6 UI |
+| **Validation Limits** | Bounded validation in Go transport DTOs before persistence. | **Boundary Checks:** Proposed 30 kg max actual weight and 30 kg max chargeable weight enforced. Required dimensions for actual weight $> 1$ kg. | `internal/pricing/transport/dto.go`, `doc-03` |
+| **Automated Tests** | Test structure, mocks, transaction rollback assertions, idempotency checks. | **Test Suite Alignment:** Tests cover all 7 bands, boundary transitions, divisor 6000, 1 kg threshold, and 30 kg ceiling. | `doc-06`, `internal/pricing/domain/formula_test.go` |
 
 ## 9. Out-of-Scope Work
 
@@ -363,7 +380,7 @@ Member 2 remains responsible for providing the robust interfaces, data contracts
 
 The module is considered implementation-ready and acceptable when:
 
-1. **Deterministic Pricing:** A valid quote request (`POST /api/v1/pricing/quotes`) deterministically calculates delivery fees using LKR integer cents, volumetric divisor 5000, and returns a 15-minute quote snapshot.
+1. **Deterministic Pricing:** A valid quote request (`POST /api/v1/pricing/quotes`) deterministically calculates delivery fees using LKR integer cents, fixed complete tariffs across 7 weight bands, volumetric divisor 6000 cmÂ³/kg with 1 kg actual weight threshold, 30 kg max weight limits, and returns a 15-minute quote snapshot with backend expiry enforcement.
 2. **Atomic Booking:** Submitting `POST /api/v1/parcels` with a valid quote or inputs atomically creates the parcel record, JSONB address snapshots, initial status history, idempotency record, and outbox event (`parcel.booked.v1`).
 3. **Idempotency Guarantees:** Repeating an identical booking with the same `Idempotency-Key` returns the original cached response with `Idempotent-Replay: true`. Reusing a key with a different payload returns HTTP `409 Conflict`.
 4. **Tracking Number Integrity:** Every booked parcel receives an unambiguous `SD-YYYYMMDD-XXXXXX` tracking number, backed by database unique constraints and collision retry logic.

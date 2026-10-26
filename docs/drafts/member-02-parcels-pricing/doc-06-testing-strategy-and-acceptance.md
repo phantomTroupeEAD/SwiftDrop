@@ -1,10 +1,10 @@
-# SwiftDrop Parcel Delivery & Courier Management System
+﻿# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 6 — Testing Strategy & Acceptance Specification
+## Document 6 â€” Testing Strategy & Acceptance Specification
 
-> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
-> **Status:** Aligned Testing Specification (Post-Audit v2.0.0 Alignment)  
-> **Date:** 25 October 2026  
+> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Status:** Aligned Testing Specification (Post-Audit v2.0.0 Alignment)
+> **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
 
 ---
@@ -14,8 +14,8 @@
 This document defines the comprehensive testing strategy, quality assurance gates, requirement traceability, test case specifications, and acceptance criteria for Member 2 (**Parcel Management & Pricing**) in the SwiftDrop Core API.
 
 ### 1.1 In-Scope Test Boundaries
-- **Deterministic Pricing & Quote Verification:** Volumetric calculations ($L \times W \times H / 5000$), chargeable weight, billable extra weight ceilings, service tier multipliers, and 15-minute quote expiration enforcement.
-- **Parcel Booking & Aggregate Invariants:** Quoted booking validation, direct booking tariff evaluation, tracking number generation (`SD-YYYYMMDD-XXXXXX`), address snapshot persistence in JSONB, and optimistic concurrency versioning.
+- **Deterministic Pricing & Complete Tariff Verification:** Complete tariff lookup per `(pickup_zone_id, destination_zone_id, weight_band_id)`, Option A volumetric threshold (actual weight $\le 1\text{ kg}$ requires no dimensions; $> 1\text{ kg}$ requires dimensions with volumetric divisor $6000\text{ cm}^3/\text{kg}$), 7 non-overlapping weight bands up to 30 kg, and 15-minute quote expiration enforcement.
+- **Parcel Booking & Aggregate Invariants:** Quoted booking validation, direct booking tariff evaluation, tracking number generation (`SD-YYYYMMDD-XXXXXX`), address snapshot persistence in JSONB, immutable price snapshot, and optimistic concurrency versioning.
 - **Idempotency Protection:** Replay verification of cached 201 responses, payload alteration conflict detection (409 Conflict), and 24-hour retention window verification.
 - **Authoritative 9-State Lifecycle (ADR-004):** State transition rules, actor permission checks, delivery attempt ceiling (max 3), transition to `ATTEMPT_FAILED` vs terminal `RETURNED`, and optimistic locking conflicts.
 - **Transactional Outbox Atomicity:** Verifying atomic persistence of parcel state, status history, and outbox integration events (`parcel.booked.v1`, `parcel.cancelled.v1`).
@@ -28,9 +28,9 @@ This document defines the comprehensive testing strategy, quality assurance gate
 
 1. **Deterministic Financial Verification:** Monetary amounts are asserted strictly in integer minor units (LKR cents). Floating-point comparisons are prohibited.
 2. **Real Persistence for Invariants:** Database constraints, transaction rollbacks, uniqueness checks, and outbox atomicity are verified against a real PostgreSQL instance (via Docker Compose or Testcontainers), never via unit mocks.
-3. **Fail-Fast Boundary Testing:** Input parameters (weights $> 50$ kg, dimensions $> 150$ cm, negative values) are verified to fail early with structured 400/422 errors before reaching persistence layers.
+3. **Fail-Fast Boundary Testing:** Input parameters (weights $> 30$ kg, dimensions $> 150$ cm, negative values) are verified to fail early with structured 400/422 errors before reaching persistence layers.
 4. **Zero-PII Disclosure Checks:** Public tracking tests assert that recipient phone numbers, complete street addresses, and internal notes are strictly omitted from responses.
-5. **No Synthetic Pass Claims:** Test execution reports must reflect actual execution output and exit codes.
+5. **No Synthetic Pass Claims:** Test execution reports must reflect actual execution output and exit codes. Test cases document expected verification suites, distinguishing documented specifications from code executed.
 
 ---
 
@@ -75,10 +75,10 @@ flowchart TD
 | Requirement ID | Domain Area | Test Case IDs | Test Level | Verification Objective |
 | :--- | :--- | :--- | :--- | :--- |
 | **FR-PAR-001** | Booking Details | `TC-BKG-001`, `TC-BKG-002` | API / DB Integration | Captures dimensions, weights, and JSONB addresses. |
-| **FR-PAR-002** | Pricing Quote | `TC-PRC-001`, `TC-PRC-002` | Unit / API Integration | Computes volumetric fee; guarantees 15m price freeze. |
-| **FR-PAR-003** | Accepted Price | `TC-PRC-005`, `TC-BKG-007` | Database Integration | Persists immutable rule version and LKR cents snapshot. |
+| **FR-PAR-002** | Pricing Quote | `TC-PRC-001` to `TC-PRC-011`| Unit / API Integration | Computes complete tariff, Option A threshold, divisor 6000, 7 bands, 15m price freeze. |
+| **FR-PAR-003** | Accepted Price | `TC-PRC-010`, `TC-BKG-007` | Database Integration | Persists immutable rule version and LKR cents snapshot. |
 | **FR-PAR-004** | Tracking Number | `TC-TRK-001`, `TC-TRK-002` | Unit / DB Integration | Crockford Base32 format `SD-YYYYMMDD-XXXXXX`; unique. |
-| **FR-PAR-005** | Input Validation | `TC-VAL-001`, `TC-VAL-002` | Unit / API Integration | Rejects weights $> 50$ kg, dimensions $> 150$ cm (422). |
+| **FR-PAR-005** | Input Validation | `TC-VAL-001`, `TC-VAL-002` | Unit / API Integration | Rejects weights $> 30$ kg, dimensions $> 150$ cm (422). |
 | **FR-PAR-006** | Idempotency | `TC-IDM-001`, `TC-IDM-002` | API / DB Integration | Key replay returns cached 201; payload mismatch returns 409. |
 | **FR-PAR-007** | Caller Scoping | `TC-SEC-001`, `TC-SEC-002` | Security Integration | Prevents IDOR cross-tenant access to foreign parcels. |
 | **FR-PAR-008** | Booking Receipt | `TC-READ-003` | API Integration | Receipt reflects stored price snapshot, not current tariff. |
@@ -91,47 +91,112 @@ flowchart TD
 
 ### 5.1 Deterministic Pricing & Quote Management (`TC-PRC-*`)
 
-#### `TC-PRC-001`: Standard Tariff Calculation & Volumetric Weight
-- **Objective:** Verify deterministic fee calculation using $(L \times W \times H) / 5000$. *(Provisional formula proposal pending team confirmation)*.
-- **Inputs:** Dimensions $30 \times 25 \times 15$ cm, actual weight $2.00$ kg, service level `STANDARD`.
-- **Calculations (Illustrative Baseline):**
-  - Volumetric weight = $(30 \times 25 \times 15) / 5000 = 2.25$ kg.
-  - Chargeable weight = $\max(2.00, 2.25) = 2.25$ kg.
-  - Billable extra weight = $\lceil \max(0, 2.25 - 1.0) \rceil = 2.0$ kg.
-  - Base fee = 35,000 cents (LKR 350.00), per-kg fee = 10,000 cents (LKR 100.00).
-  - Total fee = $(35000 + 2 \times 10000) \times 1.0 = 55,000$ cents (LKR 550.00).
-- **Assertions:** Returns HTTP 201; `fee_cents == 55000`, `currency == "LKR"`, `expires_at == created_at + 15m`.
-
 > [!NOTE]
-> **Provisional Pricing Test Fixture Notice:**
-> Test cases `TC-PRC-001`, `TC-PRC-002`, and `TC-PRC-003` assert calculations against provisional pricing proposals (divisor 5000, 1.5x/2.0x multipliers, 15m TTL). If the team adopts alternative tariff structures or formulas, the testing harness and invariant assertions remain valid while the specific mathematical expected values will be updated to match the ratified policy.
+> **Provisional Pricing Specification Notice:**
+> The following test cases verify the proposed Member 2 pricing baseline pending team approval: fixed complete tariff per zone pair and weight band, 7 weight bands up to 30 kg, Option A threshold (dims required only when actual weight > 1 kg), volumetric divisor 6000 cmÂ³/kg, and 15-minute quote validity window.
 
-#### `TC-PRC-002`: Service Tier Multipliers
-- **Objective:** Verify `EXPRESS` (1.5x) and `SAME_DAY` (2.0x) multipliers.
-- **Inputs:** Identical parcel as `TC-PRC-001` evaluated under `EXPRESS` and `SAME_DAY`.
-- **Assertions:**
-  - `EXPRESS`: $55000 \times 1.5 = 82,500$ cents (HTTP 201).
-  - `SAME_DAY`: $55000 \times 2.0 = 110,000$ cents (HTTP 201).
+#### `TC-PRC-001`: Option A Threshold & Bulky Parcel ($\le 1\text{ kg}$)
+- **Objective:** Verify that parcels with actual weight $\le 1\text{ kg}$ use actual weight only; dimensions do not affect price.
+- **Inputs:** Actual weight = 0.8 kg, dimensions = $40 \times 30 \times 28$ cm, pickup = `ZONE-WESTERN-01`, destination = `ZONE-CENTRAL-01`.
+- **Calculations:**
+  - Actual weight $\le 1.0\text{ kg}$ $\implies$ `chargeable_weight` = 0.8 kg.
+  - Volumetric calculation bypassed for pricing determination.
+  - Applicable band: Band 2 ($0.5 < W \le 1.0\text{ kg}$).
+- **Assertions:** Returns HTTP 201; `chargeable_weight_kg == 0.80`, `weight_band_id == 2`, `fee_cents` equals configured Band 2 tariff, `expires_at == created_at + 15m`.
 
-#### `TC-PRC-003`: Quote Expiration Enforcement
-- **Objective:** Attempt to book a parcel with an expired quote.
-- **Setup:** Create a quote with `expires_at = NOW() - INTERVAL '1 minute'`.
-- **Action:** Submit `POST /api/v1/parcels` referencing the expired `quote_id`.
-- **Assertions:** Request rejected with HTTP 422 Unprocessable Entity (`code: "QUOTE_EXPIRED"`). No parcel created.
+#### `TC-PRC-002`: Exact Threshold Boundary at 1.0 kg vs 1.001 kg
+- **Objective:** Verify strict transition at the 1 kg threshold boundary.
+- **Setup & Cases:**
+  - **Case A (Exactly 1.00 kg):** Dimensions omitted or provided; `chargeable_weight` = 1.00 kg $\implies$ Band 2 ($0.5 < W \le 1.0\text{ kg}$).
+  - **Case B (1.001 kg, Dims Missing):** Dimensions omitted $\implies$ HTTP 422 Unprocessable Entity (`code: "DIMENSIONS_REQUIRED_ABOVE_1KG"`).
+  - **Case C (1.001 kg, Dims Provided):** Dims $20 \times 15 \times 10$ cm $\implies$ Volumetric = $(20 \times 15 \times 10) / 6000 = 0.50\text{ kg}$. Chargeable = $\max(1.001, 0.50) = 1.001\text{ kg} \implies$ Band 3 ($1.0 < W \le 2.0\text{ kg}$).
+- **Assertions:** Case A succeeds (Band 2); Case B rejected (422); Case C succeeds (Band 3).
 
-#### `TC-PRC-004`: Quote Parameter Mismatch
-- **Objective:** Prevent price tampering by altering parcel weight between quote and booking.
-- **Setup:** Generate quote for 2.0 kg. Submit booking referencing quote with weight 5.0 kg.
-- **Assertions:** Request rejected with HTTP 422 Unprocessable Entity (`code: "QUOTE_PARAM_MISMATCH"`).
+#### `TC-PRC-003`: Volumetric Divisor 6000 & Volumetric Exceeding Actual Weight
+- **Objective:** Verify divisor 6000 and selection of volumetric weight when greater than actual weight.
+- **Inputs:** Actual weight = 2.0 kg, dimensions = $40 \times 30 \times 28$ cm.
+- **Calculations:**
+  - Volumetric weight = $(40 \times 30 \times 28) / 6000 = 33600 / 6000 = 5.60\text{ kg}$.
+  - Chargeable weight = $\max(2.0, 5.60) = 5.60\text{ kg}$.
+  - Applicable band: Band 5 ($5.0 < W \le 10.0\text{ kg}$).
+- **Assertions:** Returns HTTP 201; `chargeable_weight_kg == 5.60`, `weight_band_id == 5`, fee matches Band 5 tariff.
+
+#### `TC-PRC-004`: Actual Weight Exceeding Volumetric Weight
+- **Objective:** Verify selection of actual weight when actual weight exceeds volumetric weight.
+- **Inputs:** Actual weight = 4.0 kg, dimensions = $20 \times 20 \times 15$ cm.
+- **Calculations:**
+  - Volumetric weight = $(20 \times 20 \times 15) / 6000 = 6000 / 6000 = 1.00\text{ kg}$.
+  - Chargeable weight = $\max(4.0, 1.00) = 4.00\text{ kg}$.
+  - Applicable band: Band 4 ($2.0 < W \le 5.0\text{ kg}$).
+- **Assertions:** Returns HTTP 201; `chargeable_weight_kg == 4.00`, `weight_band_id == 4`.
+
+#### `TC-PRC-005`: All Seven Weight Bands & Boundary Invariants
+- **Objective:** Verify non-overlapping coverage of all 7 bands at exact boundary points.
+- **Test Matrix:**
+  - $W = 0.50\text{ kg} \implies$ Band 1 ($0 < W \le 0.5\text{ kg}$).
+  - $W = 0.501\text{ kg} \implies$ Band 2 ($0.5 < W \le 1.0\text{ kg}$).
+  - $W = 1.00\text{ kg} \implies$ Band 2.
+  - $W = 1.001\text{ kg} \implies$ Band 3 ($1.0 < W \le 2.0\text{ kg}$).
+  - $W = 2.00\text{ kg} \implies$ Band 3.
+  - $W = 2.001\text{ kg} \implies$ Band 4 ($2.0 < W \le 5.0\text{ kg}$).
+  - $W = 5.00\text{ kg} \implies$ Band 4.
+  - $W = 5.001\text{ kg} \implies$ Band 5 ($5.0 < W \le 10.0\text{ kg}$).
+  - $W = 10.00\text{ kg} \implies$ Band 5.
+  - $W = 10.001\text{ kg} \implies$ Band 6 ($10.0 < W \le 20.0\text{ kg}$).
+  - $W = 20.00\text{ kg} \implies$ Band 6.
+  - $W = 20.001\text{ kg} \implies$ Band 7 ($20.0 < W \le 30.0\text{ kg}$).
+  - $W = 30.00\text{ kg} \implies$ Band 7.
+- **Assertions:** Every test weight matches exactly one band; zero ambiguity or missing coverage.
+
+#### `TC-PRC-006`: No Premature Rounding Before Band Selection
+- **Objective:** Ensure calculations preserve decimal precision and do not round prematurely.
+- **Inputs:** Parcel resulting in chargeable weight 5.02 kg.
+- **Assertions:** Must NOT round down to 5.00 kg (Band 4); must select Band 5 ($5 < W \le 10\text{ kg}$).
+
+#### `TC-PRC-007`: Maximum Weight Limit Enforcement (30 kg Actual and Chargeable)
+- **Objective:** Reject quotes when actual weight or chargeable weight exceeds 30.00 kg.
+- **Cases:**
+  - Case A: Actual weight = 30.01 kg $\implies$ Rejected HTTP 422 (`code: "PARCEL_LIMITS_EXCEEDED"`).
+  - Case B: Actual weight = 8.0 kg, volumetric = 32.0 kg $\implies$ Chargeable = 32.0 kg $\implies$ Rejected HTTP 422 (`code: "PARCEL_LIMITS_EXCEEDED"`).
+  - Case C: Chargeable weight exactly 30.00 kg $\implies$ Accepted in Band 7.
+- **Assertions:** Cases A & B return HTTP 422; Case C returns HTTP 201.
+
+#### `TC-PRC-008`: Missing Tariff & Ambiguity Handling
+- **Objective:** Return controlled error if no tariff exists, and fail safely on ambiguous rules.
+- **Cases:**
+  - Case A (Missing Rule): Zone pair with no configured rule $\implies$ HTTP 422 (`code: "PRICING_UNAVAILABLE"`).
+  - Case B (Ambiguous Match): Multiple active rules match same zone pair and band $\implies$ HTTP 500 (`code: "PRICING_CONFIGURATION_ERROR"`).
+- **Assertions:** Neither case fabricates a price or falls back to arbitrary defaults.
+
+#### `TC-PRC-009`: Quote Expiry at Exact Boundary (`current_time >= expires_at`)
+- **Objective:** Enforce 15-minute quote expiration at the exact boundary.
+- **Setup:** Create quote with `expires_at = T0 + 15m`.
+- **Cases:**
+  - Case A: Booking submitted at `T0 + 14m 59s` $\implies$ Accepted (HTTP 201).
+  - Case B: Booking submitted at `T0 + 15m 00s` (`current_time >= expires_at`) $\implies$ Rejected HTTP 422 (`code: "QUOTE_EXPIRED"`).
+  - Case C: Booking submitted at `T0 + 16m` $\implies$ Rejected HTTP 422 (`code: "QUOTE_EXPIRED"`).
+- **Assertions:** Boundary check evaluates strictly on the backend; frontend expiration is non-authoritative.
+
+#### `TC-PRC-010`: Tariff Version Change & Historical Quote References
+- **Objective:** Confirm that updating a pricing rule does not alter already-issued quotes or confirmed bookings.
+- **Setup:** Rule v1 issued for quote Q1. Admin creates Rule v2 with new tariff.
+- **Action:** Customer books parcel using quote Q1 within its 15-minute window.
+- **Assertions:** Booking succeeds using Q1's agreed fee snapshot; `parcels.pricing_rule_version == 1` and `parcels.price_cents` matches Q1.
+
+#### `TC-PRC-011`: Tampered or Mismatched Quote Inputs & Authorization Protection
+- **Objective:** Prevent quote tampering and unauthorized cross-customer quote reuse.
+- **Cases:**
+  - Case A: Altering weight, dimensions, or route between quote and booking $\implies$ HTTP 422 (`code: "QUOTE_PARAM_MISMATCH"`).
+  - Case B: Customer B attempts to book with Customer A's quote $\implies$ HTTP 403 Forbidden (`code: "QUOTE_FORBIDDEN"`).
 
 ---
 
 ### 5.2 Parcel Booking & Input Validation (`TC-BKG-*`, `TC-VAL-*`)
 
 #### `TC-VAL-001`: Maximum Weight Boundary Enforcement
-- **Objective:** Reject bookings exceeding operational limit of 50.00 kg.
-- **Inputs:** Weight = 50.01 kg.
-- **Assertions:** HTTP 422 Unprocessable Entity (`code: "WEIGHT_LIMIT_EXCEEDED"`).
+- **Objective:** Reject bookings exceeding operational limit of 30.00 kg.
+- **Inputs:** Weight = 30.01 kg.
+- **Assertions:** HTTP 422 Unprocessable Entity (`code: "PARCEL_LIMITS_EXCEEDED"`).
 
 #### `TC-VAL-002`: Maximum Dimension Boundary Enforcement
 - **Objective:** Reject parcels exceeding maximum single dimension of 150.00 cm.
@@ -147,6 +212,12 @@ flowchart TD
   - `parcels.pickup_address` and `parcels.dropoff_address` stored as JSONB.
   - `parcel_status_history` contains initial row (`from_status: null`, `to_status: "CREATED"`).
   - `outbox_events` contains `parcel.booked.v1` event with matching payload.
+
+#### `TC-BKG-007`: Immutable Accepted Price Snapshot Verification
+- **Objective:** Verify that confirmed parcel booking retains original `price_cents`, currency, and pricing rule version even after active tariff changes.
+- **Setup:** Book parcel using Quote Q1 under Tariff Rule v1.
+- **Action:** Member 7 admin workflow creates Tariff Rule v2 with modified fee. Retrieve booked parcel via `GET /api/v1/parcels/{id}`.
+- **Assertions:** Stored `price_cents` matches Q1 snapshot exactly; `pricing_rule_version == 1`; historical price remains immutable.
 
 ---
 
@@ -251,22 +322,23 @@ go test -v -tags=integration ./internal/parcels/infrastructure/...
 | Testing Topic | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Monetary Validation** | Allowed float fee checks | Exact integer LKR cents comparison | Engineering Standards v1.0 Section 6 |
-| **Pricing Formula Test** | General estimation tests | Volumetric ($/ 5000$), billable extra weight, tier multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Tariffs & Multipliers Test** | Undefined test rates | Multipliers (1.0x, 1.5x, 2.0x) and illustrative rates | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`TC-PRC-003`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Pricing Model & Complete Tariff** | General estimation tests | Fixed complete tariff `tariff(pickup, dropoff, band)`; no separate base/per-kg/distance fees | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Volumetric Policy & Divisor (6000)** | Divisor 5000 / arbitrary calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`current_time >= expires_at` enforced on backend) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
 | **Address Verification** | Tested `parcel_addresses` child table | Tests JSONB snapshots on `parcels` | Database Schema Standards |
 | **Failure Semantics** | Tested terminal `FAILED` | Tested transient `ATTEMPT_FAILED` (max 3) vs `RETURNED` | ADR-004 Failed Delivery Semantics |
 | **Migration Testing** | Unnumbered migrations | Explicit testing of `000004`, `000005`, `000010` | Database Migration Baseline |
-| **Tariff Administration** | Mixed ownership tests | Admin writes owned by M7/M1; M2 tests calculation | `PENDING TEAM CONFIRMATION` |
+| **Tariff Administration** | Mixed ownership tests | Admin write UI & workflow owned by M7; M2 tests calculation engine & lookup | Coordinated Boundary |
 | **Receipt File Format** | Tested arbitrary PDF output | M2 tests JSON snapshot; M6 tests rendering | `PENDING TEAM CONFIRMATION` |
 
 ### 7.1 Pricing Policy Dependency & Test Suite Impact Analysis
 
 | Test Suite / Area | Invariant Framework (Unaffected by Pricing Changes) | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **Pricing Unit Tests (`internal/pricing/...`)** | Unit test framework, deterministic calculation assertion, zero-float validation. | Mathematical expected values in `TC-PRC-001` and `TC-PRC-002` will be updated to match the newly ratified formula/rates. |
-| **Quote Expiration Tests** | Test verifying expired quotes are rejected during booking with HTTP 422 (`QUOTE_EXPIRED`). | If the 15-minute TTL changes, the synthetic timestamp delta in `TC-PRC-003` will adjust to match the ratified duration. |
-| **Booking & Idempotency Integration** | Booking transaction atomicity, `Idempotency-Key` replay, payload mismatch conflict (409), address snapshots. | **Zero Impact:** Booking workflows test the accepted price snapshot irrespective of how the fee was calculated. |
+| **Pricing Unit Tests (`internal/pricing/...`)** | Unit test framework, deterministic calculation assertion, zero-float validation. | Mathematical expected values in `TC-PRC-001` through `TC-PRC-007` test complete tariff lookups and band selections rather than base/per-kg formulas. |
+| **Quote Expiration Tests** | Test verifying expired quotes are rejected during booking with HTTP 422 (`QUOTE_EXPIRED`). | If the 15-minute TTL changes, the synthetic timestamp delta in `TC-PRC-009` will adjust to match the ratified duration. |
+| **Booking & Idempotency Integration** | Booking transaction atomicity, `Idempotency-Key` replay, payload mismatch conflict (409), address snapshots. | **Zero Impact:** Booking workflows test the accepted price snapshot (`TC-BKG-007`) irrespective of internal tariff rules. |
 | **Lifecycle & Concurrency Tests** | 9-state machine transitions, ADR-004 attempt ceiling (max 3), optimistic locking (`version INT`). | **Zero Impact:** Parcel state machine is decoupled from pricing formulas. |
 
 ---

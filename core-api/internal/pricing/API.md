@@ -1,15 +1,15 @@
-# Pricing Module API Specifications (`/api/v1/pricing`)
+﻿# Pricing Module API Specifications (`/api/v1/pricing`)
 
-> **Module:** `internal/pricing` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
+> **Module:** `internal/pricing` | **Owner:** Member 2 â€” Parcel Management & Pricing | **Status:** Proposed Baseline (Pending Team Approval)
 
 ---
 
 ## 1. Create Pricing Quote
-Calculates the estimated delivery fee based on weight, dimensions, pickup/dropoff zones, and service level before booking. Persists the quote in `pricing_quotes` with a guaranteed 15-minute price freeze.
+Calculates the complete delivery fee tariff based on pickup/dropoff zones and chargeable weight band before booking. Persists the quote in `pricing_quotes` with a guaranteed 15-minute price freeze window.
 
 - **Method / Path:** `POST /api/v1/pricing/quotes`
 - **Auth Required:** Optional (Public with rate limit, or Bearer JWT)
-- **Headers:** 
+- **Headers:**
   - `Content-Type: application/json`
   - `Authorization: Bearer <jwt>` (Optional)
 
@@ -27,6 +27,7 @@ Calculates the estimated delivery fee based on weight, dimensions, pickup/dropof
   "service_level": "STANDARD"
 }
 ```
+*Note: Dimensions are optional if `weight_kg <= 1.0` (Option A threshold policy); dimensions are strictly required if `weight_kg > 1.0`.*
 
 ### Success Response (`201 Created`)
 ```json
@@ -38,13 +39,12 @@ Calculates the estimated delivery fee based on weight, dimensions, pickup/dropof
   "currency": "LKR",
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 2.25,
+    "volumetric_weight_kg": 1.875,
     "chargeable_weight_kg": 2.50,
-    "billable_extra_weight_kg": 2.0,
-    "base_fee_cents": 35000,
-    "per_kg_fee_cents": 10000,
-    "additional_fee_cents": 20000,
-    "service_multiplier": 1.0
+    "weight_band_id": 4,
+    "weight_band_label": "2 < W <= 5 kg",
+    "band_min_weight_kg": 2.00,
+    "band_max_weight_kg": 5.00
   },
   "fee_cents": 55000,
   "expires_at": "2026-10-25T14:45:00Z",
@@ -53,11 +53,13 @@ Calculates the estimated delivery fee based on weight, dimensions, pickup/dropof
 ```
 
 > [!NOTE]
-> **Provisional Pricing Proposal Notice:**
-> The mathematical breakdown (volumetric divisor 5000, billable extra weight, service tier multipliers, and 15-minute quote validity) represents a **provisional proposal pending team confirmation**. The endpoint route, integer LKR cents standard, server-side authority, and quote persistence are confirmed architectural requirements.
+> **Proposed Pricing Baseline Notice (Pending Formal Team Approval):**
+> Delivery fee is a fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cmÂ³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
 
 ### Error Responses
-- `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, or malformed JSON.
-- `422 Unprocessable Entity`: `UNSERVICEABLE_ZONE_PAIR` — No active pricing rule covers the requested zone combination.
-- `422 Unprocessable Entity`: `WEIGHT_LIMIT_EXCEEDED` — Weight exceeds 50.00 kg.
-- `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` — Length, width, or height exceeds 150.00 cm.
+- `400 Bad Request`: `PRICING_INVALID_INPUT` â€” Non-positive dimension, weight $\le 0$, or malformed JSON.
+- `422 Unprocessable Entity`: `DIMENSIONS_REQUIRED_ABOVE_1KG` â€” Parcel weight exceeds 1.0 kg but dimensions are missing.
+- `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` â€” Actual weight or applicable chargeable weight exceeds 30.00 kg.
+- `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` â€” Length, width, or height exceeds 150.00 cm.
+- `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` â€” No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
+- `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` â€” Multiple active rules match the same zone pair and weight band; fails safely.

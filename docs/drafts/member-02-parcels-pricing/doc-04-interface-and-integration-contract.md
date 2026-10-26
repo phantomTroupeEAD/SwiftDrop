@@ -1,17 +1,17 @@
-# SwiftDrop Parcel Delivery & Courier Management System
+﻿# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 4 — Interface & Integration Contract
+## Document 4 â€” Interface & Integration Contract
 
-> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
-> **Status:** Aligned Integration Contract (Post-Audit v2.0.0 Alignment)  
-> **Date:** 25 October 2026  
+> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Status:** Aligned Integration Contract (Post-Audit v2.0.0 Alignment)
+> **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
 
 ---
 
 ## 1. Purpose and Authority
 
-This document defines the authoritative external and inter-module interface contracts for Member 2 — **Parcel Management & Pricing** in the SwiftDrop Parcel Delivery & Courier Management System. It establishes explicit HTTP route contracts, JSON payload DTOs, query parameters, header requirements, authorization rules, idempotency semantics, transactional outbox contracts, and public tracking privacy masking rules.
+This document defines the authoritative external and inter-module interface contracts for Member 2 â€” **Parcel Management & Pricing** in the SwiftDrop Parcel Delivery & Courier Management System. It establishes explicit HTTP route contracts, JSON payload DTOs, query parameters, header requirements, authorization rules, idempotency semantics, transactional outbox contracts, and public tracking privacy masking rules.
 
 ### 1.1 Source Baseline & Alignment
 - **SwiftDrop SRS v1.0:** Core functional requirements (FR-PAR-001 through FR-PAR-009, FR-LIFE-001 through FR-LIFE-004).
@@ -76,8 +76,7 @@ Content-Type: application/json
     "length_cm": 30.0,
     "width_cm": 25.0,
     "height_cm": 15.0
-  },
-  "service_level": "STANDARD"
+  }
 }
 ```
 
@@ -86,11 +85,11 @@ Content-Type: application/json
 | :--- | :--- | :--- | :--- |
 | `pickup_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-WESTERN-01`). |
 | `dropoff_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-CENTRAL-01`). |
-| `weight_kg` | Float | Required, $0.01 \le w \le 50.00$ | Physical measured weight in kilograms. |
-| `dimensions.length_cm` | Float | Required, $1.0 \le l \le 150.0$ | Parcel length in centimeters. |
-| `dimensions.width_cm` | Float | Required, $1.0 \le w \le 150.0$ | Parcel width in centimeters. |
-| `dimensions.height_cm` | Float | Required, $1.0 \le h \le 150.0$ | Parcel height in centimeters. |
-| `service_level` | String | Required, Enum: `STANDARD`, `EXPRESS`, `SAME_DAY` | Target speed tier. |
+| `weight_kg` | Float | Required, $0.01 \le w \le 30.00$ | Physical measured weight in kilograms. |
+| `dimensions` | Object | Required if $w > 1.0\text{ kg}$; optional if $w \le 1.0\text{ kg}$ | Package measurements in cm. Under threshold policy, dimensions do not affect price at $w \le 1.0\text{ kg}$. |
+| `dimensions.length_cm` | Float | Required if dimensions provided, $1.0 \le l \le 150.0$ | Parcel length in centimeters. |
+| `dimensions.width_cm` | Float | Required if dimensions provided, $1.0 \le w \le 150.0$ | Parcel width in centimeters. |
+| `dimensions.height_cm` | Float | Required if dimensions provided, $1.0 \le h \le 150.0$ | Parcel height in centimeters. |
 
 #### Response Payload (`201 Created`)
 ```json
@@ -98,27 +97,23 @@ Content-Type: application/json
   "quote_id": "d3b07384-d113-494b-9c8e-aa672580c822",
   "pricing_rule_id": "pr-rule-zone-w-c-v2",
   "pricing_rule_version": 2,
-  "service_level": "STANDARD",
   "currency": "LKR",
+  "fee_cents": 55000,
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 2.25,
+    "volumetric_weight_kg": 1.88,
     "chargeable_weight_kg": 2.50,
-    "billable_extra_weight_kg": 2.0,
-    "base_fee_cents": 35000,
-    "per_kg_fee_cents": 10000,
-    "additional_fee_cents": 20000,
-    "service_multiplier": 1.0
+    "weight_band": "BAND_4",
+    "weight_band_range": "2 < W <= 5 kg"
   },
-  "fee_cents": 55000,
   "expires_at": "2026-10-25T14:45:00Z",
   "created_at": "2026-10-25T14:30:00Z"
 }
 ```
 
 > [!NOTE]
-> **Provisional Pricing Notice (Pending Team Confirmation):**
-> The mathematical breakdown shown above (volumetric divisor 5000, billable extra weight, multiplier tiers, illustrative rates, and 15-minute quote validity) represents a **provisional design proposal pending team confirmation**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements.
+> **Provisional Pricing Notice (Pending Team Approval):**
+> The mathematical parameters (seven weight bands, 1 kg threshold policy, volumetric divisor $6000\text{ cm}^3/\text{kg}$, 30 kg weight limits, fixed complete tariff per zone-pair/band, and 15-minute quote validity) represent the **current proposed design baseline, pending formal team approval**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements. Missing tariffs return `422 PRICING_UNAVAILABLE`. Quotes expired at `current_time >= expires_at` are rejected upon booking.
 
 ---
 
@@ -192,8 +187,6 @@ Content-Type: application/json
   "chargeable_weight_kg": 2.50,
   "price": {
     "currency": "LKR",
-    "base_fee_cents": 35000,
-    "additional_fee_cents": 20000,
     "price_cents": 55000,
     "pricing_rule_id": "pr-rule-zone-w-c-v2",
     "pricing_rule_version": 2
@@ -304,11 +297,14 @@ To comply with global privacy standards and project security rules, the public t
 | `409 Conflict` | `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` | Idempotency key reused with altered payload body. |
 | `409 Conflict` | `INVALID_STATE_TRANSITION` | Parcel state cannot transition to the target state. |
 | `409 Conflict` | `VERSION_CONFLICT` | Stale update detected; concurrent update modified parcel. |
-| `422 Unprocessable` | `QUOTE_EXPIRED` | Quote timestamp is older than 15 minutes. |
+| `403 Forbidden` | `QUOTE_FORBIDDEN` | Quote was issued to a different customer or merchant context. |
+| `422 Unprocessable` | `QUOTE_EXPIRED` | Quote timestamp is expired (`current_time >= expires_at`). |
 | `422 Unprocessable` | `QUOTE_PARAM_MISMATCH` | Booking inputs do not match frozen quote parameters. |
-| `422 Unprocessable` | `UNSERVICEABLE_ZONE_PAIR` | No active pricing rule covers the requested zone combination. |
-| `422 Unprocessable` | `WEIGHT_LIMIT_EXCEEDED` | Parcel weight exceeds maximum allowable threshold (50 kg). |
+| `422 Unprocessable` | `DIMENSIONS_REQUIRED_ABOVE_1KG` | Dimensions required when actual weight > 1.0 kg under Option A policy. |
+| `422 Unprocessable` | `PARCEL_LIMITS_EXCEEDED` | Actual weight or chargeable weight exceeds proposed maximum limit (30 kg). |
 | `422 Unprocessable` | `DIMENSION_LIMIT_EXCEEDED` | Dimension exceeds maximum allowable threshold (150 cm). |
+| `422 Unprocessable` | `PRICING_UNAVAILABLE` | No active pricing rule covers the requested zone combination and weight band. |
+| `500 Server Error` | `PRICING_CONFIGURATION_ERROR` | Ambiguous active pricing rules detected; fails safely. |
 | `500 Server Error` | `INTERNAL_SYSTEM_ERROR` | Unhandled internal error; sanitized response returned. |
 
 ---
@@ -374,25 +370,28 @@ flowchart TD
 | Decision Topic | Aligned Specification Baseline | Status / Source |
 | :--- | :--- | :--- |
 | **Canonical Quote Route & Persistence** | `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes` | Aligned with Member 10 & API Conventions |
-| **Pricing Formula & Divisor (5000)** | Volumetric divisor 5000, chargeable weight, billable extra weight | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Tariffs & Multipliers** | Multipliers (1.0x, 1.5x, 2.0x) and illustrative base/per-kg rates | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Pricing Model & Complete Tariff** | Fixed complete tariff `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`; no separate base fee, per-kg charge, distance fee, or multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg actual and chargeable weight | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Volumetric Policy & Divisor (6000)** | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
 | **Monetary Data Type** | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
 | **Address Snapshot Model** | Immutable `pickup_address` & `dropoff_address` JSONB on `parcels` | Database Schema Standards & Audit |
 | **Tracking Number Format** | `SD-YYYYMMDD-XXXXXX` (Crockford Base32 uppercase) | SRS FR-PAR-004 & Member 5 Alignment |
 | **Delivery Failure Lifecycle** | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
 | **Idempotency Mechanism** | Header `Idempotency-Key`, `idempotency_keys` table, SHA-256 | Engineering Standards v1.0 Section 7 |
-| **Tariff Administration** | Admin write endpoints owned by Member 7 / Member 1 | `PENDING TEAM CONFIRMATION` |
-| **Receipt Rendering Format** | Member 2 outputs JSON; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
+| **Tariff Administration** | Admin write UI & maintenance workflow owned by Member 7; calculation engine owned by Member 2 | Coordinated Boundary |
+| **Missing Tariff Behavior** | Controlled `422 PRICING_UNAVAILABLE`; ambiguous matches fail safely | Proposed Baseline |
+| **Receipt Rendering Format** | Member 2 outputs JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
 
 ### 9.1 Pricing Policy Dependency & Cross-Contract Impact Analysis
 
 | Integration Boundary | Invariant Contract Elements | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **Member 6 (Customer UI)** | Endpoint `POST /api/v1/pricing/quotes`, `quote_id`, and `fee_cents` binding. | Checkout countdown timer must adapt to ratified quote validity duration. |
-| **Member 4 (Merchant Ingress)** | `POST /api/v1/merchant/parcels` delegates to Member 2 booking use case. | Direct bookings evaluate the new tariff rules; no change to merchant transport layer. |
-| **Member 10 (AI Assistant)** | Tool calls approved Core API `POST /api/v1/pricing/quotes` with auth context. | AI Tool returns updated fee amounts deterministically; prompt guides reflect new validity window. |
-| **Database Migrations** | Core `parcels` and `pricing_quotes` schema and foreign keys remain fixed. | Multiplier columns or divisor checks in `pricing_rules` update via additive migration. |
+| **Member 6 (Customer UI)** | Endpoint `POST /api/v1/pricing/quotes`, `quote_id`, and `fee_cents` binding. | Checkout countdown timer reflects 15-minute validity; UI prompts for dimensions only if actual weight > 1 kg. |
+| **Member 4 (Merchant Ingress)** | `POST /api/v1/merchant/parcels` delegates to Member 2 booking use case. | Direct bookings evaluate the new complete tariff rules; no change to merchant transport layer. |
+| **Member 7 (Admin UI)** | Tariff configuration screens manage `(pickup_zone_id, destination_zone_id, weight_band_id) -> fee_cents` rules and effective date windows. | Admin portal configures complete fees without calculating multipliers or per-kg formulas. |
+| **Member 10 (AI Assistant)** | Tool calls approved Core API `POST /api/v1/pricing/quotes` with auth context. | AI Tool returns updated fee amounts deterministically; prompt guides reflect 15-minute validity window and 30 kg maximum. |
+| **Database Migrations** | Core `parcels` and `pricing_quotes` schema and foreign keys remain fixed. | `pricing_rules` stores `weight_band_id`, boundaries, and complete `fee_cents` without separate multiplier columns. |
 
 ---
 

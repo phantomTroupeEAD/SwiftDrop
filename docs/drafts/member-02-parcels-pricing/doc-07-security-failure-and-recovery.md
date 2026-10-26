@@ -1,10 +1,10 @@
-# SwiftDrop Parcel Delivery & Courier Management System
+﻿# SwiftDrop Parcel Delivery & Courier Management System
 
-## Document 7 — Security, Failure & Recovery Specification
+## Document 7 â€” Security, Failure & Recovery Specification
 
-> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
-> **Status:** Aligned Security Specification (Post-Audit v2.0.0 Alignment)  
-> **Date:** 25 October 2026  
+> **Module:** Member 2 â€” Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Status:** Aligned Security Specification (Post-Audit v2.0.0 Alignment)
+> **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
 
 ---
@@ -34,7 +34,7 @@ This document defines the application security guardrails, data privacy boundari
 
 ### 2.1 Critical Protected Assets
 - **Customer & Recipient PII:** Names, mobile phone numbers, exact physical delivery addresses, and building access codes stored in `pickup_address` and `dropoff_address` JSONB snapshots.
-- **Financial & Commercial Data:** Tariff rules, base fees, volumetric factors, accepted price snapshots, and merchant-specific discounts.
+- **Financial & Commercial Data:** Tariff rules, configured complete fees, weight band boundaries, accepted price snapshots, and merchant-specific discounts.
 - **System State & History:** Immutable status transition logs in `parcel_status_history` and integration events in `outbox_events`.
 - **System Credentials:** PostgreSQL database credentials, JWT signing keys, and internal API secrets.
 
@@ -80,7 +80,7 @@ flowchart LR
         P2["current_status"]
         P3["pickup_address (JSONB)"]
         P4["dropoff_address (JSONB)"]
-        P5["price_cents & base_fee_cents"]
+        P5["price_cents (Complete Fee)"]
         P6["special_instructions"]
     end
 
@@ -120,8 +120,13 @@ flowchart LR
 ## 5. Input Validation & Abuse Prevention
 
 ### 5.1 Request Sanitization & Boundary Rules
-- **Physical Weight:** Constrained strictly between $0.01$ kg and $50.00$ kg. Values $\le 0$ or $> 50$ kg are rejected with `422 WEIGHT_LIMIT_EXCEEDED`.
-- **Dimensions:** Length, width, and height are each constrained between $1.0$ cm and $150.0$ cm. Values exceeding 150 cm are rejected with `422 DIMENSION_LIMIT_EXCEEDED`.
+- **Physical Weight:** Constrained strictly between $0.01$ kg and $30.00$ kg. Actual weight $> 30.00$ kg is rejected with `422 PARCEL_LIMITS_EXCEEDED`.
+- **Dimensions & Volumetric Threshold (Option A):**
+  - For actual weight $\le 1.00$ kg: dimensions are optional and do not alter the delivery price (`chargeable_weight = actual_weight`).
+  - For actual weight $> 1.00$ kg: dimensions (length, width, height in cm) are strictly required. Missing dimensions are rejected with `422 DIMENSIONS_REQUIRED_ABOVE_1KG`.
+  - Dimensions are constrained between $1.0$ cm and $150.0$ cm per side. Single dimension $> 150.0$ cm is rejected with `422 DIMENSION_LIMIT_EXCEEDED`.
+  - Volumetric weight is calculated as $(L \times W \times H) / 6000$.
+- **Chargeable Weight Limit:** Maximum chargeable weight is $30.00$ kg. If $\max(\text{actual}, \text{volumetric}) > 30.00$ kg, the request is rejected with `422 PARCEL_LIMITS_EXCEEDED`.
 - **Address Strings:** Contact names, address lines, and cities are trimmed and bounded to 255 characters to prevent buffer and memory exhaustion attacks.
 - **Tracking Number Format:** Validated against pattern `^SD-[0-9]{8}-[0-9A-Z]{6}$`.
 
@@ -134,8 +139,11 @@ All database interactions in Member 2 utilize parameterized prepared statements 
 
 | Failure Scenario | Root Cause | Impact | Automated Recovery / System Behavior |
 | :--- | :--- | :--- | :--- |
-| **Quote Expired (> 15m)** | User delays checkout past quote TTL. | Booking submission with expired quote ID. | Server rejects with `422 QUOTE_EXPIRED`. Client must request a fresh quote via `POST /api/v1/pricing/quotes`. |
-| **Quote Parameter Mismatch** | Client tampers with weight or destination after quote. | Attempted tariff circumvention. | Server recomputes hash of booking inputs and rejects with `422 QUOTE_PARAM_MISMATCH`. |
+| **Missing Tariff Rule** | Requested route/weight-band combination has no active rule configured. | Pricing cannot be evaluated. | Server rejects request with `422 PRICING_UNAVAILABLE`. Server never fabricates a price or falls back to an arbitrary default. |
+| **Ambiguous Tariff Match** | Misconfiguration introduces multiple active rules for same zone pair and weight band. | Tariff ambiguity. | Server fails safely with `500 PRICING_CONFIGURATION_ERROR`, logs error with correlation ID, and alerts Member 7 admin. |
+| **Quote Expired (>= 15m)** | User delays checkout past quote TTL (`current_time >= expires_at`). | Booking submission with expired quote ID. | Server rejects with `422 QUOTE_EXPIRED`. Expiry is enforced strictly on the backend; client must request a fresh quote via `POST /api/v1/pricing/quotes`. |
+| **Quote Parameter Mismatch** | Client tampers with weight, dimensions, or route after quote. | Attempted tariff circumvention. | Server verifies quote input snapshot against booking payload and rejects with `422 QUOTE_PARAM_MISMATCH`. |
+| **Cross-Customer Quote Reuse** | Customer B attempts to use Quote ID issued to Customer A. | IDOR / quote stealing attempt. | Server verifies caller context against quote ownership and rejects with `403 QUOTE_FORBIDDEN`. |
 | **Idempotency Key Reuse** | Network timeout causes client retry with different body. | Potential duplicate or corrupted booking. | Server computes SHA-256 hash. If hash matches: returns cached 201. If hash differs: returns `409 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`. |
 | **Tracking Number Collision** | Random 6-char Base32 collision. | Database unique constraint violation on `tracking_number`. | Generator catches unique constraint error and automatically retries with a new seed up to 3 times before failing. |
 | **Database Failure Mid-Tx** | PostgreSQL crashes or connection drops during commit. | Incomplete transaction. | PostgreSQL rolls back entire transaction atomically; no orphan parcel, status history, or outbox record is committed. |
@@ -170,13 +178,17 @@ Member 2 exposes operational signals for platform monitoring (Member 9):
 | Security / Failure Topic | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Public Tracking Privacy** | Vague field list | Explicit masking matrix: redacts phone, street address, notes, fees | AGENTS.md Section 8 & SRS FR-PAR-009 |
-| **Quote TTL & Expiry** | Undefined quote TTL | 15-minute expiration window (`expires_at = created_at + 15m`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Tampering Protection** | Client supplied price | Server recomputes hash of booking inputs against frozen quote | Engineering Standards & Audit |
+| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg rates | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no separate base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual and chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Volumetric Threshold & Divisor (6000)** | Divisor 5000 / arbitrary calculation | Option A: weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote TTL & Backend Expiry** | Undefined quote TTL | 15-minute expiration window (`current_time >= expires_at` enforced on server) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Quote Tampering Protection** | Client supplied price | Server verifies inputs against frozen quote snapshot; rejects tampering with `422` and foreign callers with `403` | Engineering Standards & Audit |
+| **Missing Tariff Behavior** | Undefined fallback | Server rejects with `422 PRICING_UNAVAILABLE`; zero price fabrication | Proposed Baseline |
 | **Monetary Data Type** | Allowed binary floats | Integer LKR cents (`BIGINT`); prevents precision rounding exploits | Engineering Standards v1.0 Section 6 |
 | **Address Snapshot Integrity** | Child table `parcel_addresses` | Immutable JSONB snapshots on `parcels` | Database Schema Standards & Audit |
 | **Idempotency Mechanism** | Duplicate local ideas | Canonical `idempotency_keys` table (24h TTL, SHA-256 hash) | Engineering Standards v1.0 Section 7 |
 | **Delivery Failure Semantics**| Ambiguous terminal failure | ADR-004 3-attempt ceiling (`ATTEMPT_FAILED` $\to$ `RETURNED`) | ADR-004 Failed Delivery Semantics |
-| **Tariff Administration** | Mixed Member 2 admin claims | Admin write endpoints owned by M7/M1 | `PENDING TEAM CONFIRMATION` |
+| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; M2 owns calculation engine | Coordinated Boundary |
 | **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 8.1 Pricing Policy Dependency & Security Impact Analysis
@@ -185,7 +197,7 @@ Member 2 exposes operational signals for platform monitoring (Member 9):
 | :--- | :--- | :--- |
 | **Server Authority** | Frontend-supplied price is NEVER authoritative; price always validated server-side. | **Zero Impact:** Any future tariff formula will still be enforced strictly by server use cases. |
 | **Anti-Tampering** | Input parameters submitted at booking must match the quote parameters. | **Zero Impact:** Tampering with weights, dimensions, or zones will still be rejected with `422 QUOTE_PARAM_MISMATCH`. |
-| **Quote TTL Expiration** | Bookings submitted after quote expiry are rejected with `422 QUOTE_EXPIRED`. | If the team changes the 15-minute window, the expiration check will use the newly configured TTL. |
+| **Quote TTL Expiration** | Bookings submitted after quote expiry are rejected with `422 QUOTE_EXPIRED`. | Expiration evaluates strictly on the backend (`current_time >= expires_at`) using the 15-minute window. |
 | **Financial Integrity** | Integer minor units prevent floating-point rounding vulnerabilities. | **Zero Impact:** No floating-point precision exploits can occur under any future pricing schedule. |
 
 ---

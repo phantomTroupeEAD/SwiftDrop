@@ -1,6 +1,6 @@
-# Parcel Management API Specifications (`/api/v1/parcels`)
+﻿# Parcel Management API Specifications (`/api/v1/parcels`)
 
-> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
+> **Module:** `internal/parcels` | **Owner:** Member 2 â€” Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
 
 ---
 
@@ -9,7 +9,7 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
 
 - **Method / Path:** `POST /api/v1/parcels`
 - **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `ADMIN`)
-- **Headers:** 
+- **Headers:**
   - `Authorization: Bearer <jwt>`
   - `Content-Type: application/json`
   - `Idempotency-Key: <uuid-or-string>` (Mandatory, max 255 chars)
@@ -67,8 +67,6 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
   "chargeable_weight_kg": 2.50,
   "price": {
     "currency": "LKR",
-    "base_fee_cents": 35000,
-    "additional_fee_cents": 20000,
     "price_cents": 55000,
     "pricing_rule_id": "pr-rule-zone-w-c-v2",
     "pricing_rule_version": 2
@@ -101,11 +99,16 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
 }
 ```
 
+> [!NOTE]
+> **Pricing Contract Authority:**
+> Complete pricing formulas, weight band boundaries, Option A threshold rules, and tariff lookup behavior are defined authoritatively in [`core-api/internal/pricing/API.md`](file:///d:/SwiftDrop/SwiftDrop/core-api/internal/pricing/API.md). The parcel booking endpoint validates the quote reference, verifies backend expiration (`current_time >= expires_at`), ensures weight/dimension inputs match the quote snapshot, and persists an immutable price snapshot (`price_cents`, currency, rule version).
+
 ### Error Responses
 - `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY` or `MALFORMED_JSON`.
 - `401 Unauthorized`: Missing or invalid Bearer token.
-- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` — Reusing idempotency key with different payload body.
-- `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m), `QUOTE_PARAM_MISMATCH`, or `WEIGHT_LIMIT_EXCEEDED` (> 50 kg).
+- `403 Forbidden`: `QUOTE_FORBIDDEN` â€” Quote was generated for a different customer/tenant context.
+- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` â€” Reusing idempotency key with different payload body.
+- `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m; `current_time >= expires_at`), `QUOTE_PARAM_MISMATCH` (inputs altered), `PARCEL_LIMITS_EXCEEDED` (actual or chargeable weight $> 30.00\text{ kg}$), `DIMENSIONS_REQUIRED_ABOVE_1KG` (missing dimensions when weight $> 1\text{ kg}$), or `PRICING_UNAVAILABLE` (no tariff rule found).
 
 ---
 
@@ -203,10 +206,10 @@ Retrieves the financial receipt snapshot for a booking, using the immutable acce
   "service_level": "STANDARD",
   "financial_summary": {
     "currency": "LKR",
-    "base_fee_cents": 35000,
-    "additional_fee_cents": 20000,
-    "total_fee_cents": 55000,
-    "total_fee_formatted": "LKR 550.00"
+    "price_cents": 55000,
+    "total_fee_formatted": "LKR 550.00",
+    "pricing_rule_id": "pr-rule-zone-w-c-v2",
+    "pricing_rule_version": 2
   },
   "package_summary": {
     "chargeable_weight_kg": 2.50,
