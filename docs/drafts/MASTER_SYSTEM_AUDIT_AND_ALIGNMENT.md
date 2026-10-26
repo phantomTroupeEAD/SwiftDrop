@@ -134,6 +134,20 @@ Detailed inspection revealed internal discrepancies where a single member's docu
 5. **Performance Latency Target Ambiguity:** In `doc-03`, Member 9 highlighted that SRS specifies p95 <= 500ms for Core API, while `database-schema.md` states 200ms.
    - *Fix:* Standardize SLA: Core API end-to-end transactional HTTP requests p95 <= 500ms (SRS NFR-PERF-001); internal DB query execution p95 <= 50ms; Edge Traefik proxy overhead p95 <= 15ms.
 
+### 2.10 Member 06 Contradictions
+1. **DTO Casing and Envelopes (`camelCase` vs `snake_case`):** In `doc-04` Section 4.1 and `doc-02`, Member 6 defined response models using `camelCase` (`trackingNumber`, `amountMinor`, `perPage`, `totalRecords`).
+   - *Fix:* Enforce standard `snake_case` across all API client interfaces conforming to `docs/contracts/api-conventions.md` (`tracking_number`, `fee_cents`, `per_page`, `total_items`, `total_pages`).
+2. **Server-Sent Events (SSE) Event Name & Payload Inconsistency:** In `doc-02` line 168 and `doc-04`, Member 6 specifies listening to `tracking-update` with camelCase payloads. Member 5's v2.0.0 contract emits `status_update` with `data.data.status`.
+   - *Fix:* Configure `useSSE` hook to listen for `status_update` (while defensively aliasing `tracking-update`) and handle snake_case payload envelope `{"data": {"tracking_number": "...", "status": "...", ...}}`.
+3. **Public Tracking Privacy Masking Requirement ID & Field Exposure (SEC-009 vs SEC-016):** In `doc-01` and `doc-07`, Member 6 referenced `SEC-016` (Container Hardening in the SRS) for tracking privacy and included "origin city".
+   - *Fix:* Re-key requirement ID to **`SEC-009`** (Public Tracking Privacy Masking). Strictly adhere to Member 5's public DTO which masks origin details and exposes only destination city/district, status badge, and milestone timestamps.
+4. **Merchant Session Invalidation on Admin Approval:** When an admin approves an onboarding merchant application, the user's existing client-side JWT lacks `tenant_id`, causing immediate `401`/`403` errors on merchant portal routes (`/merchants/me/**`).
+   - *Fix:* Enforce an automatic silent token refresh (`POST /api/v1/auth/refresh`) upon detecting approved merchant status or on session resume, prompting Member 1 to issue an updated JWT bearing the resolved `tenant_id` and `MERCHANT` role.
+5. **Dynamic Webhook Event Type Querying vs Hardcoded Inactive Topics:** Member 6 hardcoded static event strings in `doc-02` line 217.
+   - *Fix:* Dynamically query Member 4's endpoint `GET /api/v1/merchants/webhook-event-types` to render the subscription checkbox list, ensuring zero drift with the authoritative event catalog.
+6. **AI Assistant Generative UI Action Ingestion (`NAVIGATE_BOOKING`):** Previous drafts lacked specification for consuming AI-generated quotes from Member 10.
+   - *Fix:* Standardize the booking wizard to consume `location.state` or URL query parameters to prefill Step 1, Step 2, and instant quote data when redirected from the AI assistant chat widget.
+
 ---
 
 ## 3. Inter-Member Contradictions & Boundary Conflicts
@@ -201,9 +215,11 @@ flowchart TD
 3. **PII Exposure Risks:** Did not formalize exact JSON filtering to prevent recipient phone numbers and street addresses from leaking to public tracking consumers.
 
 ### 4.6 Flaws in Member 06 (Customer & Merchant Web)
-1. **Missing Draft Specifications:** Only `README.md` exists.
-2. **Undefined Booking Wizard State:** Did not specify client-side caching of quotes and idempotency key retention during form submission.
-3. **Lack of Automated Testing Attributes:** Omitted `data-testid` standards required for Member 10's Playwright E2E suite.
+1. **Missing Draft Specifications (Resolved):** Member 6 completed authoring the full 8-document suite (`doc-01` through `doc-08`) and `integration-inventory.json`.
+2. **DTO Casing and Envelopes:** Used `camelCase` DTOs (`amountMinor`, `trackingNumber`) instead of canonical `snake_case` (`fee_cents`, `tracking_number`).
+3. **SSE Event Stream Inconsistency:** Listened for `tracking-update` instead of Member 5's authoritative `status_update`.
+4. **Tracking Privacy Mis-mapping:** Cited `SEC-016` instead of `SEC-009` and exposed origin city on public tracking views.
+5. **Merchant Token Staleness:** Lacked silent token refresh mechanism to acquire `tenant_id` after admin onboarding approval.
 
 ### 4.7 Flaws in Member 07 (Dispatcher/Admin Web & Gateway)
 1. **Omitted Document 4:** Contract definitions were buried in text rather than presented as standard OpenAPI/REST specs.
