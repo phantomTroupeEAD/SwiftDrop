@@ -54,7 +54,12 @@ type AnyEnvelope interface {
     GetEventType() string
     GetAggregateType() string
     GetAggregateID() string
+    GetAggregateVersion() int
+    GetSchemaVersion() string
+    GetOccurredAt() time.Time
+    GetProducer() string
     GetCorrelationID() string
+    GetPayload() any
     SerializePayload() ([]byte, error)
 }
 ```
@@ -81,8 +86,9 @@ All messages published to the RabbitMQ topic exchange `swiftdrop.events.topic` a
     "event_type",
     "aggregate_type",
     "aggregate_id",
-    "version",
-    "timestamp",
+    "aggregate_version",
+    "schema_version",
+    "occurred_at",
     "correlation_id",
     "producer",
     "payload"
@@ -106,12 +112,17 @@ All messages published to the RabbitMQ topic exchange `swiftdrop.events.topic` a
       "type": "string",
       "description": "Primary identifier of the mutated aggregate."
     },
-    "version": {
+    "aggregate_version": {
       "type": "integer",
       "minimum": 1,
-      "description": "Monotonically increasing aggregate or schema version."
+      "description": "Monotonically increasing aggregate sequence counter."
     },
-    "timestamp": {
+    "schema_version": {
+      "type": "string",
+      "example": "1.0.0",
+      "description": "Contract SemVer schema version (e.g. 1.0.0)."
+    },
+    "occurred_at": {
       "type": "string",
       "format": "date-time",
       "description": "UTC ISO-8601 timestamp of event occurrence."
@@ -392,7 +403,7 @@ Before dispatching to a merchant's HTTP endpoint, `cmd/worker` translates the in
 type MerchantWebhookBody struct {
     EventID        string          `json:"event_id"`        // Envelope EventID
     EventType      string          `json:"event_type"`      // e.g. "parcel.delivered.v1"
-    SchemaVersion  int             `json:"schema_version"`  // Envelope SchemaVersion (e.g. 1)
+    SchemaVersion  string          `json:"schema_version"`  // Envelope SchemaVersion (e.g. "1.0.0")
     OccurredAt     time.Time       `json:"occurred_at"`     // Envelope OccurredAt
     ParcelID       string          `json:"parcel_id"`       // Extracted from payload
     TrackingNumber string          `json:"tracking_number"`  // Extracted from payload
@@ -488,8 +499,8 @@ paths:
                   type: string
                   example: parcel.delivered.v1
                 schema_version:
-                  type: integer
-                  example: 1
+                  type: string
+                  example: "1.0.0"
                 occurred_at:
                   type: string
                   format: date-time
@@ -741,12 +752,11 @@ sequenceDiagram
 
     Broker->>Worker: Consume parcel.booked.v1
     activate Worker
-    Worker->>DB: INSERT INTO processed_events (event_id, consumer_name) ON CONFLICT DO NOTHING
     Worker->>Worker: Render Booking Confirmation HTML Email
     Worker->>SMTP: Connect TLS & Authenticate (AUTH LOGIN)
     Worker->>SMTP: MAIL FROM / RCPT TO / DATA
     SMTP-->>Worker: 250 OK (Message ID: <msg_99812>)
-    Worker->>DB: INSERT INTO notification_deliveries (Status: SUCCESS, ProviderID: msg_99812)
+    Worker->>DB: Single Tx: INSERT INTO notification_deliveries (Status: SUCCESS, ProviderID: msg_99812)<br/>& INSERT INTO processed_events (event_id, consumer_name) ON CONFLICT DO NOTHING
     Worker-->>Broker: AMQP Ack
     deactivate Worker
 ```

@@ -85,14 +85,14 @@ flowchart TD
 - **The Resolution:** Fully align with Member 4's ratified schema (Migration 3). Member 4 stores `secret_ciphertext BYTEA` encrypted symmetrically with AES-256-GCM. Member 8's Webhook Worker reads `merchant_webhook_targets` view and decrypts the secret using `WEBHOOK_SECRET_ENCRYPTION_KEY` (selected by `secret_key_version`) from `integrations-secrets` before computing the HMAC-SHA256 signature.
 
 ### 3.2 Contradiction 2: Kubernetes Health Probe Endpoints
-- **The Inconsistency:** In `doc-08` Section 5, Member 8 configured `httpGet` probes to `/livez` and `/readyz` on ports `:8082` and `:8083`.
+- **The Inconsistency (Historical Draft v1):** In early drafts of `doc-08`, Member 8 configured `httpGet` probes to `/livez` and `/readyz` on ports `:8082` and `:8083`.
 - **The Resolution:** Member 9 Agreement A2 and universal project standards mandate:
   - Liveness: **`/health/live`**
   - Readiness: **`/health/ready`** (verifies PostgreSQL pool and RabbitMQ AMQP channel readiness)
   - Metrics: **`/metrics`** (Prometheus exposition)
 
 ### 3.3 Contradiction 3: Container Image Packaging, User, and Tags
-- **The Inconsistency:** In `doc-08`, Member 8 drafted two separate Docker images tagged `swiftdrop/outbox-relay:latest` and `swiftdrop/event-worker:latest`, executing under `USER 65532:65532`.
+- **The Inconsistency (Historical Draft v1):** In early drafts of `doc-08`, Member 8 drafted two separate Docker images tagged `swiftdrop/outbox-relay:latest` and `swiftdrop/event-worker:latest`, executing under `USER 65532:65532`.
 - **The Resolution:** Align with Member 9 Agreement A3:
   1. Build a **single multi-binary image**: `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`.
   2. The image provides 3 entrypoints: `/usr/local/bin/relay`, `/usr/local/bin/worker`, and `/usr/local/bin/reconcile`.
@@ -169,8 +169,9 @@ All messages published to `swiftdrop.events.topic` adhere to the universal JSON 
   "event_type": "parcel.delivered.v1",
   "aggregate_type": "parcel",
   "aggregate_id": "0192e4a1-0001-7abc-8def-0123456789ab",
-  "version": 4,
-  "timestamp": "2026-10-25T14:30:00Z",
+  "aggregate_version": 4,
+  "schema_version": "1.0.0",
+  "occurred_at": "2026-10-25T14:30:00Z",
   "correlation_id": "c8a9f24e-7b12-4f33-912a-881234567890",
   "producer": "core-api.parcels",
   "payload": {
@@ -253,7 +254,7 @@ type AnyEnvelope interface {
 	GetAggregateType() string
 	GetAggregateID() uuid.UUID
 	GetAggregateVersion() int
-	GetSchemaVersion() int
+	GetSchemaVersion() string
 	GetOccurredAt() time.Time
 	GetProducer() string
 	GetCorrelationID() string
@@ -303,8 +304,8 @@ func (w *PostgresOutboxWriter) Write(ctx context.Context, tx *sql.Tx, envelopes 
 		}
 
 		schemaVer := env.GetSchemaVersion()
-		if schemaVer == 0 {
-			schemaVer = 1
+		if schemaVer == "" {
+			schemaVer = "1.0.0"
 		}
 
 		_, err = stmt.ExecContext(
