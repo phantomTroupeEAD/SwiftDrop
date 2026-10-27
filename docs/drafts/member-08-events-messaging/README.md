@@ -20,7 +20,7 @@ The boundary encompasses two primary subsystems:
 2. **Dedicated Asynchronous Messaging Services (`services/messaging/`):**
    - **Outbox Relay Daemon (`cmd/relay`):** High-throughput poller claiming pending outbox events using `SELECT ... FOR UPDATE SKIP LOCKED` and publishing them with AMQP publisher confirms to RabbitMQ topic exchange `swiftdrop.events.topic`.
    - **Event Consumer Worker (`cmd/worker`):** Scalable consumer listening on dedicated RabbitMQ queues (`q.notifications.worker`, `q.webhooks.dispatcher`), enforcing lease-based database-driven retries, cryptographic HMAC-SHA256 signatures, and SSRF-hardened webhook delivery.
-   - **Outbox Reconciler CronJob (`cmd/reconciler`):** Scheduled background auditor running every 10 minutes (`*/10 * * * *`) to identify stuck pending events, detect publisher confirm timeouts, and export Prometheus health metrics.
+   - **Outbox Reconciler CronJob (`cmd/reconcile`):** Scheduled background auditor running every 10 minutes (`*/10 * * * *`) to identify stuck pending events, detect publisher confirm timeouts, and export Prometheus health metrics.
    - **Notification & Webhook Dispatchers:** Single-path real SMTP email delivery (Mailpit in local/CI) and SSRF-safe webhook HTTP clients with AES-256-GCM secret decryption.
 
 ---
@@ -135,7 +135,7 @@ type EventEnvelope[T any] struct {
     AggregateType    string          `json:"aggregate_type"`    // e.g. "parcel", "courier", "merchant"
     AggregateID      uuid.UUID       `json:"aggregate_id"`      // Authoritative aggregate UUID
     AggregateVersion int             `json:"aggregate_version"` // Monotonic sequence counter
-    SchemaVersion    int             `json:"schema_version"`    // Contract schema version (1)
+    SchemaVersion    string          `json:"schema_version"`    // Contract SemVer schema version (e.g. "1.0.0")
     OccurredAt       time.Time       `json:"occurred_at"`       // RFC 3339 UTC timestamp
     Producer         string          `json:"producer"`          // Subsystem identifier (e.g. "core-api/parcels")
     CorrelationID    string          `json:"correlation_id"`     // Distributed trace ID (max 128 chars)
@@ -182,7 +182,7 @@ services/messaging/
 ├── cmd/
 │   ├── relay/main.go            # Outbox Relay entrypoint (singleton poller)
 │   ├── worker/main.go           # Event Worker entrypoint (AMQP consumer)
-│   └── reconciler/main.go       # Reconciler CLI entrypoint (scheduled audit task)
+│   └── reconcile/main.go        # Reconciler CLI entrypoint (scheduled audit task)
 ├── internal/
 │   ├── config/                  # Environment variable parsing and validation
 │   ├── platform/                # Shared drivers (PostgreSQL pool, RabbitMQ channel manager)

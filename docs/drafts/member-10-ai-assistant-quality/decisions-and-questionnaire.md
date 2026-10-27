@@ -316,21 +316,57 @@ Below is the comprehensive decision matrix covering every aspect of the Member 1
 
 ---
 
+## Part 6: Audit Remediation Decisions & Architecture Finalization
+
+### Decision 10.6: Multi-Tenant Mock Webhook Receiver & Visual HTML Test Artifact (`mock-webhook:9999`)
+- **Context:** `localhost:9999` is unroutable from containers and blocked by SSRF filters. Additionally, live demo evaluators cannot see async events without a visual interface.
+- **Ratified Decision:**
+  - Deploy a standalone `mock-webhook:9999` container in Docker Compose with distinct endpoints for **Merchant Alpha** (`/webhooks/merchant-alpha`), **Merchant Beta** (`/webhooks/merchant-beta`), and **Chaos Merchant** (`/webhooks/merchant-chaos`).
+  - Embed a live visual HTML dashboard at `http://localhost:9999/dashboard` rendering dispatches, HMAC-SHA256 signature verification badges (`VALID`/`INVALID`), and tenant isolation proof (showing 0 events leaked to Merchant Beta).
+  - Solve SSRF via dev-mode flags agreed with Member 8: `WEBHOOK_ALLOW_INSECURE_HTTP=true` and `WEBHOOK_ALLOWED_HOSTS=mock-webhook,localhost`.
+
+### Decision 10.7: Elimination of Orphan Policy Endpoints & Dynamic Precedence Rule
+- **Context:** The draft documentation referenced non-existent `system_policies` tables and orphan `/system/policies` endpoints owned by no member.
+- **Ratified Decision:**
+  - Delete all references to `system_policies` and orphan endpoints.
+  - Ground baseline policy knowledge in version-controlled `company_policies.md`.
+  - Fetch dynamic operational thresholds via Member 7's approved `GET /api/v1/admin/settings` endpoint (5-minute cache TTL).
+  - **Dynamic Precedence Invariant:** Live API configuration values take absolute precedence over static text whenever thresholds, COD limits, or rules conflict.
+
+### Decision 10.8: MCP Client Dual-Mode Authentication & Principle of Least Privilege (PoLP)
+- **Context:** Short-lived 15-minute JWTs break developer experience in external MCP clients (Claude Desktop / Cursor), but requiring Member 1 to build Personal Access Tokens (PATs) violates domain boundaries and overloads Member 1.
+- **Ratified Decision:**
+  - Web Portal AI Chat: Standard short-lived JWT silently refreshed by React via Member 1's `POST /api/v1/auth/refresh`.
+  - Public Tools: 3 of 4 tools (`estimate_shipping_fee`, `track_parcel_status`, `explain_company_policies`) are open and anonymous.
+  - External MCP Clients: Reuses Member 4's existing merchant API keys (`sd_live_...`).
+  - **Least Privilege Enforcement:** Mandates `parcels:read` scope only. If an attacker uses the desktop key to attempt booking (`POST /api/v1/merchant/orders`), Core API rejects it with `403 Forbidden (MERCHANT_SCOPE_DENIED)`.
+  - Zero extra workload or tables for Member 1.
+
+### Decision 10.9: FastMCP SSE Transport Dual-Channel Mechanics
+- **Context:** Standard Server-Sent Events (SSE) is unidirectional. How does an external AI agent send requests and receive responses without WebSockets?
+- **Ratified Decision:**
+  - Implement Anthropic's official MCP Dual-Channel HTTP/SSE transport pattern:
+    - **Channel 1 (Downstream):** Persistent `GET /api/v1/ai/mcp` emitting dedicated session URLs.
+    - **Channel 2 (Upstream):** Standard HTTP `POST /api/v1/ai/mcp/messages?session_id=...` carrying JSON-RPC tool calls.
+  - Streams results back down Channel 1. Seamlessly routed via Traefik `PathPrefix('/api/v1/ai')` without WebSocket upgrade complexity.
+
+---
+
 ## Summary of Recommendations
 
 | Item | Recommendation |
 | :--- | :--- |
 | **Stack** | Python 3.11, FastAPI, Pydantic v2, `httpx`, `pytest` |
 | **LLM Provider** | Universal OpenAI-Compatible (`AsyncOpenAI`): OpenRouter, NVIDIA NIM Builder, OpenAI, or Groq via `LLM_BASE_URL` + mock fallback for CI |
-| **Protocol** | Dual: HTTP REST `/api/v1/ai/chat` + MCP Server (`mcp` SDK) |
+| **Protocol** | Dual: HTTP REST `/api/v1/ai/chat` + FastMCP Dual-Channel SSE (`/api/v1/ai/mcp`) |
 | **Data Access** | **Zero direct DB access**; strictly calls Core/Tracking REST APIs |
 | **State** | Stateless sessions with short-lived in-memory context cache |
-| **Tools** | 1. `track_parcel` (Public), 2. `get_my_active_parcels` (Auth), 3. `estimate_fee` (Public), 4. `get_my_deliveries` (Auth) |
-| **Mutations** | Strictly read-only; pre-filled deep-link navigation actions (`action.type = "NAVIGATE_BOOKING"`) |
-| **Safety** | Defense-in-depth: Least privilege, zero SQL access, enforceable tool output grounding, secret isolation |
-| **Rate Limits** | Fully configurable via `.env`: `AI_RATE_LIMIT_ANONYMOUS_RPM`, `AI_RATE_LIMIT_AUTHENTICATED_RPM` |
-| **E2E Testing** | Two-tier suite: Playwright browser tests (`data-testid` standard) + Pytest backend async event tests |
-| **Deployment** | Docker container on port `8000`, non-root `USER 10001:10001`, routed through Traefik Gateway |
+| **Tools (FR-AI-007)** | 1. `estimate_shipping_fee`, 2. `track_parcel_status`, 3. `get_my_active_parcels`, 4. `explain_company_policies` |
+| **Mutations** | Strictly read-only; pre-filled deep-link navigation actions (`action.type = "NAVIGATE_BOOKING"` pointing to `/portal/book`) |
+| **Safety** | Defense-in-depth: Least privilege (`parcels:read` only), zero SQL access, enforceable tool output grounding, secret isolation |
+| **Rate Limits** | Standardized to 20 requests/minute matching Traefik ingress rate limiter |
+| **E2E Testing** | Two-tier suite: Playwright browser tests (`data-testid` standard) + Multi-tenant webhook receiver (`mock-webhook:9999`) with HTML dashboard |
+| **Deployment** | Docker container on port `8000`, non-root `USER 10001:10001`, standard `make up` and `make seed` commands |
 
 ---
 

@@ -7,11 +7,25 @@ import (
 )
 
 var (
-	zoneCodePattern = regexp.MustCompile(`^ZONE_[A-Z0-9_]{2,35}$`)
+	zoneIDPattern   = regexp.MustCompile(`^ZONE_[A-Z0-9_]{2,27}$`)
+	zoneCodePattern = regexp.MustCompile(`^[A-Z0-9_-]{2,32}$`)
 	prefixPattern   = regexp.MustCompile(`^[0-9]{3,5}$`)
 )
 
-// ZoneCode is a human code such as ZONE_COLOMBO_CENTRAL.
+// ZoneID is the zone's primary key, such as ZONE_COLOMBO_01. Other modules'
+// foreign keys point at it (VARCHAR(32)), so it never changes.
+type ZoneID struct{ v string }
+
+func NewZoneID(s string) (ZoneID, error) {
+	if !zoneIDPattern.MatchString(s) {
+		return ZoneID{}, fmt.Errorf("%w: %q", ErrInvalidZoneID, s)
+	}
+	return ZoneID{v: s}, nil
+}
+
+func (id ZoneID) String() string { return id.v }
+
+// ZoneCode is a short human code such as CMB-01. It can be changed.
 type ZoneCode struct{ v string }
 
 func NewZoneCode(s string) (ZoneCode, error) {
@@ -40,15 +54,5 @@ func (p PostalPrefix) Overlaps(o PostalPrefix) bool {
 	return strings.HasPrefix(p.v, o.v) || strings.HasPrefix(o.v, p.v)
 }
 
-// Money is an amount in LKR cents. It never holds a float.
-type Money struct{ cents int64 }
-
-func NewLKR(cents int64) (Money, error) {
-	if cents < 0 {
-		return Money{}, fmt.Errorf("%w: %d", ErrNegativeMoney, cents)
-	}
-	return Money{cents: cents}, nil
-}
-
-func (m Money) Cents() int64     { return m.cents }
-func (m Money) Currency() string { return "LKR" }
+// Covers reports whether a full postal code starts with this prefix.
+func (p PostalPrefix) Covers(postalCode string) bool { return strings.HasPrefix(postalCode, p.v) }

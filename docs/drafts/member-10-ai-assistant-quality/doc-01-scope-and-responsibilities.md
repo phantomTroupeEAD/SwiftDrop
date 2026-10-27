@@ -37,20 +37,20 @@ The **AI Delivery Assistant** solves this by:
    - Ingest customer messages, manage short-lived conversation sessions, and enforce input length hygiene (default max 1,000 characters).
    - Coordinate with any OpenAI-compatible provider (OpenRouter, NVIDIA NIM, OpenAI, Groq, local Ollama) using `AsyncOpenAI`.
    - Maintain an offline mock LLM adapter for deterministic CI testing without paid external API keys.
-2. **Standardized Tool Calling & Dispatching:**
+2. **Standardized Tool Calling & Dispatching (SRS FR-AI-007):**
    - Expose and execute the 4 approved read-only tools:
-     - `track_parcel(tracking_number)` $\to$ Public milestone lookup.
-     - `get_my_active_parcels()` $\to$ Resolves ambiguous inquiries for authenticated users.
-     - `estimate_shipping_fee(origin, destination, weight, dimensions)` $\to$ Authoritative tariff calculation.
-     - `get_my_deliveries(status_filter)` $\to$ Authenticated customer history lookup.
+     - `estimate_shipping_fee(weight_kg, destination_zone_id, dimensions, service_type)`: Authoritative tariff calculation via Member 2's pricing engine.
+     - `track_parcel_status(tracking_number)`: Public sanitized milestone delivery status lookup via Member 5 / Member 2.
+     - `get_my_active_parcels()`: Retrieves active, in-flight shipments for the authenticated customer.
+     - `explain_company_policies(topic_or_query)`: Grounded Q&A over company shipping guidelines and packaging restrictions.
 3. **MCP Server Interface (`mcp_server.py`):**
-   - Provide an official Model Context Protocol server via `FastMCP` exposing the exact same tools over STDIO/SSE to external clients.
+   - Provide an official Model Context Protocol server via `FastMCP` exposing the exact same tools over an HTTP Server-Sent Events (SSE) dual-channel transport (`/api/v1/ai/mcp` + `/api/v1/ai/mcp/messages`) to external clients (Claude Desktop, Cursor).
 4. **Structured Generative UI Action Protocol:**
-   - Return structured `action` payloads (`NAVIGATE_BOOKING`, URL, `prefill_data`) so the React frontend can render 1-click interactive cards to navigate to `/customer/book`.
+   - Return structured `action` payloads (`NAVIGATE_BOOKING`, URL, `prefill_data`) so the React frontend can render 1-click interactive cards to navigate to `/portal/book` (with `/customer/book` supported as alias).
 5. **Knowledge Base Grounding & Dynamic Policy Synchronization:**
-   - Ground general company inquiries (prohibited goods, standard SLA transit times, packaging rules) using authoritative markdown policy data.
-   - **Admin Management Support:** The Admin portal (Member 7 / Member 1) allows administrators to read, edit, or upload an entirely new company policy markdown document (`PUT /api/v1/admin/policies`).
-   - The AI Assistant dynamically fetches the active policy content via `GET /api/v1/system/policies` and refreshes its in-memory context cache, with a static fallback file (`company_policies.md`) maintained for offline local development and CI testing.
+   - Ground general company inquiries (prohibited goods, standard SLA transit times, packaging rules) using authoritative markdown policy data (`company_policies.md`).
+   - **Dynamic System Settings Overrides:** The assistant queries Member 7's approved `GET /api/v1/admin/settings` endpoint (cached in-memory with a 5-minute TTL).
+   - **Dynamic Precedence Invariant:** Whenever operational thresholds, rates, or limits in `GET /api/v1/admin/settings` conflict with text in `company_policies.md`, the live API settings take absolute precedence.
 
 ---
 
@@ -130,6 +130,7 @@ Member 10 designs, implements, and maintains the automated End-to-End (E2E) test
 1. **Two-Tier E2E Automated Test Suite:**
    - **Tier 1 (Playwright Browser Tests - `tests/e2e/playwright/`):** Full-stack browser automation testing real user journeys in Chromium/WebKit, verifying UI state transitions, responsive behavior, and capturing screenshots/video traces for the final presentation.
    - **Tier 2 (Headless API & Messaging Tests - `tests/e2e/api/`):** Automated Pytest + HTTPX + Pika test suite verifying asynchronous outbox publication, RabbitMQ message consumption, and merchant webhook delivery with retry/DLQ validation.
+   - **Tier 3 (Multi-Tenant Webhook Test Artifact - `mock-webhook:9999`):** Containerized mock webhook receiver with multi-tenant endpoints and a real-time visual HTML dashboard (`/dashboard`) for live demonstration evidence and automated Playwright screenshot assertions.
 2. **Enforcement of the `data-testid` Frontend Standard:**
    - Maintain and audit the frontend `data-testid` selector contract with Members 6 & 7 to ensure automated browser tests never break due to CSS or Tailwind changes.
 3. **Verification of Cross-Cutting Security Invariants:**
@@ -153,8 +154,8 @@ Member 10 designs, implements, and maintains the automated End-to-End (E2E) test
 | Resource Category | Member 10 Exclusive Ownership | Shared / Upstream Ownership |
 | :--- | :--- | :--- |
 | **Source Code Directories** | `services/ai-assistant/`<br>`tests/e2e/` | `core-api/` (Members 1, 2, 3, 4, 7, 8)<br>`services/tracking/` (Member 5)<br>`web/` (Members 6, 7) |
-| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2) |
-| **Protocols & Interfaces** | Model Context Protocol (`mcp_server.py`) | Traefik Ingress Gateway routing (Member 7/9) |
+| **HTTP Endpoints (Exposed)** | `POST /api/v1/ai/chat`<br>`GET /api/v1/ai/mcp`<br>`POST /api/v1/ai/mcp/messages`<br>`GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | `/api/v1/pricing/*` (Member 2)<br>`/api/v1/tracking/*` (Member 5)<br>`/api/v1/parcels/*` (Member 2)<br>`/api/v1/admin/settings` (Member 7) |
+| **Protocols & Interfaces** | FastMCP SSE Dual-Channel Protocol (`mcp_server.py`) | Traefik Ingress Gateway routing (Member 7/9) |
 | **Database Tables** | **NONE** (Zero database ownership) | PostgreSQL tables owned by Members 1, 2, 3, 4, 8 |
 | **Message Queues** | Read-only test listener on `swiftdrop.events.topic` | RabbitMQ broker & Outbox Relay (Member 8) |
 | **Configuration Files** | `services/ai-assistant/.env.example`<br>`services/ai-assistant/Dockerfile` | Root `docker-compose.yml` (Member 9) |

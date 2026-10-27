@@ -59,8 +59,8 @@ func ValidateSetting(key string, value json.RawMessage) error {
 	return r(value)
 }
 
-// ValidateReason is required for changes that affect money or many parcels
-// (zone surcharge, disable zone, settings). 10 to 500 characters.
+// ValidateReason is required for changes that affect many parcels
+// (disable zone, settings). 10 to 500 characters.
 func ValidateReason(reason string) error {
 	n := utf8.RuneCountInString(strings.TrimSpace(reason))
 	if n < 10 || n > 500 {

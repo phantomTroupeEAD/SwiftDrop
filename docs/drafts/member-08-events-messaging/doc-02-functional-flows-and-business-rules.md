@@ -380,7 +380,7 @@ flowchart TD
     LogStale --> CheckLeases
     CheckLeases --> ExpiredLeases{"Expired leases > 0?"}
     ExpiredLeases -- Yes --> ResetLeases["Reset expired leases to status = 'PENDING'<br/>(Re-arms delivery tasks for worker poller pickup)"]
-    ExpiredLeases -- No --> AuditConsistency["Check operational consistency (FR-REC-003)<br/>Verify parcel status history alignment"]
+    ExpiredLeases -- No --> AuditConsistency["Check operational consistency (FR-REC-003 partial)<br/>Audit M8 outbox/deliveries; cross-domain checks pending DEC-04"]
     
     ResetLeases --> AuditConsistency
     AuditConsistency --> CheckDLQ["Query RabbitMQ API: Depth of swiftdrop.dlq"]

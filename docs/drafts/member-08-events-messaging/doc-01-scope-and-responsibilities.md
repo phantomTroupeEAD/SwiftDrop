@@ -58,7 +58,7 @@ It accomplishes this by implementing:
    - Render responsive HTML and plaintext transactional email templates for parcel milestones (Booking Confirmation, Out for Delivery, Delivery Success, Delivery Failure).
    - Track delivery outcomes, provider message IDs, timestamps, and errors in `notification_deliveries`.
 7. **Merchant Webhook Delivery Pipeline & SSRF Protection:**
-   - Query registered webhook endpoints from `webhook_endpoints` (configured by Member 04).
+   - Query registered webhook endpoints from `merchant_webhook_targets` read-only view (owned by Member 04).
    - Sign payloads using HMAC-SHA256 (`X-SwiftDrop-Signature: t={timestamp},v1={hash}`) with timestamp anti-replay verification (300-second window).
    - Implement hardened outbound HTTP client (`SafeDialContext`) with single-resolution DNS and CIDR blocklist (prohibiting `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `::1`, `fe80::/10`, `fc00::/7`).
    - Disallow HTTP redirects, enforce strict 5.0-second socket timeouts, and truncate logged error responses to 500 characters.
@@ -96,7 +96,7 @@ flowchart LR
         OBT[("outbox_events")]
         DLV[("notification_deliveries<br/>webhook_deliveries")]
         IDM[("processed_events")]
-        WHE[("webhook_endpoints<br/>(Owned by M4)")]
+        WHE[("merchant_webhook_targets<br/>(View Owned by M4)")]
     end
 
     subgraph M8_Daemons ["Member 08: Messaging Daemons"]
@@ -186,7 +186,7 @@ Every AI agent and developer touching this module must respect the following non
 2. **Zero Broker Dependency in Core API:** The Core API monolith must NEVER connect to RabbitMQ or import AMQP libraries. All broker networking is strictly isolated to `services/messaging`.
 3. **Publisher Confirms Before Status Update:** The Outbox Relay must NEVER mark an outbox row as `status = 'PUBLISHED'` or set `published_at` until the RabbitMQ broker explicitly acknowledges receipt via publisher confirms.
 4. **Strict Relay Singleton:** The Outbox Relay process must ALWAYS run as a strict singleton (`replicas: 1`). Horizontal scaling without distributed leader election is strictly prohibited to prevent database row-lock contention.
-5. **Mandatory Consumer Idempotency:** Because RabbitMQ provides at-least-once delivery, every consumer MUST check and record `processed_events` before executing side effects. Duplicate events must be acknowledged and discarded without re-sending emails or re-calling webhooks.
+5. **Mandatory Consumer Idempotency:** Because RabbitMQ provides at-least-once delivery, every consumer MUST check `processed_events` before executing side effects and record deduplication upon reaching a terminal state (`SUCCESS` or terminal `FAILED`). Duplicate events must be acknowledged and discarded without re-sending emails or re-calling webhooks, while in-flight worker crashes remain retryable without premature drops.
 6. **Non-Blocking Transactions:** No database transaction may ever be held open while waiting for external network calls (SMTP connections or HTTP merchant webhooks).
 7. **Strict SSRF Immunity:** The outbound webhook client MUST resolve destination hostnames once, validate that the IP does NOT fall within blacklisted CIDRs (private, loopback, link-local, cloud metadata, CGNAT, broadcast, IPv6 unique local), and dial the validated IP directly without following HTTP redirects.
 8. **Real SMTP Notifications:** Transactional milestone notifications must be dispatched through a real, configured SMTP mail server using TLS/STARTTLS authentication (or Mailpit in local/CI environments). No fake/mock sinks or console-only drops are permitted in the delivery pipeline.

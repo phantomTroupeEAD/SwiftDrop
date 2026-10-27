@@ -3,7 +3,7 @@
 > **Domain:** Deterministic Fee Estimation, Tariffs & Volumetric Weight
 > **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
-> **Status:** Proposed Baseline (Pending Team Approval)
+> **Status:** Proposed Baseline (Pending Team Ratification vs `docs/contracts/pricing-rules.md`)
 
 ---
 
@@ -13,7 +13,7 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ### Key Responsibilities:
 - Complete tariff lookup and rule evaluation:
   - $\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$.
-  - Complete tariff represents the total fee; there is no separate base fee, per-kg charge, distance fee, or service multiplier.
+  - Complete tariff represents the total fee; there is no separate base fee, per-kg charge, distance fee, or service multiplier (provisional proposal diverging from legacy `pricing-rules.md`).
 - Option A Volumetric Threshold Policy:
   - Actual weight $\le 1.00\text{ kg}$: dimensions do not affect price; $\text{Chargeable Weight} = \text{Actual Weight}$.
   - Actual weight $> 1.00\text{ kg}$: dimensions in cm are required; $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{6000}$; $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
@@ -31,6 +31,7 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 - Safe failure: Returns controlled `pricing_unavailable` if no tariff exists; fails safely on ambiguous multiple matches. Never fabricates a price.
 - In-process domain service interface consumed by `internal/parcels`.
 - Public/authenticated fee estimation endpoint `POST /api/v1/pricing/quotes`.
+- Candidate REST CRUD endpoints for administrative tariff management (`/api/v1/admin/pricing-rules`) served for Member 7's Admin UI.
 
 ---
 
@@ -38,9 +39,9 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
 3. **Deterministic Complete Tariff:** Given identical zone pairs and weight band, tariff lookup returns the unique configured fee for that rule version — *Confirmed Project Standard*.
-4. **Option A Threshold & Volumetric Divisor (6000):** Actual weight $\le 1\text{ kg}$ uses actual weight only. Weight $> 1\text{ kg}$ requires dimensions and uses divisor 6000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{6000}$ — *Proposed Baseline (Pending Team Approval)*.
-5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Proposed Baseline (Pending Team Approval)*.
-6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior and lookup interface.
+4. **Option A Threshold & Volumetric Divisor (6000):** Actual weight $\le 1\text{ kg}$ uses actual weight only. Weight $> 1\text{ kg}$ requires dimensions and uses divisor 6000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{6000}$ — *Proposed Baseline (Pending Team Ratification)*.
+5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Proposed Baseline (Pending Team Ratification)*.
+6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
 
 ---
 
@@ -68,3 +69,4 @@ internal/pricing/
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-10-25 | Aligned with Audit v2.0.0: Standardized on POST /api/v1/pricing/quotes, integer LKR cents, 15-minute quote validity, and migration 000004 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
+| 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |

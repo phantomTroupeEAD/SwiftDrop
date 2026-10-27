@@ -181,7 +181,7 @@ func Middleware(log *slog.Logger, m *Metrics, next http.Handler) http.Handler {
 			lvl := slog.LevelInfo
 			if rec.status >= 500 {
 				lvl = slog.LevelError
-			} else if r.URL.Path == "/livez" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
+			} else if r.URL.Path == "/health/live" || r.URL.Path == "/health/ready" || r.URL.Path == "/metrics" {
 				lvl = slog.LevelDebug // probes every few seconds would flood the logs
 			}
 			attrs := []any{"request_id", id, "method", r.Method, "route", route, "status", rec.status, "duration_ms", float64(d.Microseconds()) / 1000}

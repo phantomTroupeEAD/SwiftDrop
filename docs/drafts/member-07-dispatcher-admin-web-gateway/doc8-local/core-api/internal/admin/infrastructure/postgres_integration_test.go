@@ -2,6 +2,8 @@ package infrastructure_test
 
 // Integration tests on a REAL PostgreSQL. They run only when TEST_DATABASE_URL is set
 // (scripts/local-up.sh prints how). In CI, Testcontainers would provide the database.
+// The tests run as swiftdrop_app, which may not delete zones (Member 9 D7), so test
+// rows are cleaned with TEST_CLEANUP_DATABASE_URL (the migrator login) when it is set.
 
 import (
 	"context"
@@ -30,21 +32,22 @@ func setup(t *testing.T) (*application.Service, *pgxpool.Pool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanURL := os.Getenv("TEST_CLEANUP_DATABASE_URL")
+	if cleanURL == "" {
+		cleanURL = url
+	}
 	clean := func() {
-		// Test zones only. Audit rows stay: they are append-only, and that is the point.
-		_, _ = pool.Exec(context.Background(), `DELETE FROM zone_postal_codes WHERE zone_id IN (SELECT id FROM delivery_zones WHERE code LIKE 'ZONE_T_%')`)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM delivery_zones WHERE code LIKE 'ZONE_T_%'`)
+		// Test zones only (ids start with ZONE_T_). Audit rows stay: they are append-only.
+		c, err := pgxpool.New(context.Background(), cleanURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		_, _ = c.Exec(context.Background(), `DELETE FROM delivery_zones WHERE id LIKE 'ZONE\_T\_%'`) // prefixes go by ON DELETE CASCADE
 	}
 	clean()
 	t.Cleanup(func() { clean(); pool.Close() })
-	n := 0
-	ids := func() string {
-		n++
-		return fmt.Sprintf("%08x-0000-4000-8000-%012d", time.Now().UnixNano()&0xffffffff, n)
-	}
-	var mu sync.Mutex
-	safe := func() string { mu.Lock(); defer mu.Unlock(); return ids() }
-	return &application.Service{Store: &infrastructure.Store{Pool: pool, LockTimeout: 2 * time.Second}, NewID: safe}, pool
+	return &application.Service{Store: &infrastructure.Store{Pool: pool, LockTimeout: 2 * time.Second}}, pool
 }
 
 var admin = application.Actor{ID: adminID, Role: "ADMIN", RequestID: "itest"}
@@ -63,7 +66,7 @@ func TestOverlappingPrefixRace(t *testing.T) {
 			// "655", "6550" and "65500" all overlap each other, so only one zone may own any of them.
 			prefix := []string{"655", "6550", "65500"}[i%3]
 			_, err := svc.CreateZone(context.Background(), admin, application.CreateZoneInput{
-				Code: fmt.Sprintf("ZONE_T_RACE_%s_%02d", run, i), Name: "Race", PostalPrefixes: []string{prefix}})
+				ID: fmt.Sprintf("ZONE_T_RACE_%s_%02d", run, i), Code: fmt.Sprintf("T-RACE-%s-%02d", run, i), Name: "Race", PostalPrefixes: []string{prefix}})
 			mu.Lock()
 			defer mu.Unlock()
 			switch {
@@ -87,7 +90,7 @@ func TestStaleVersionRace(t *testing.T) {
 	svc, _ := setup(t)
 	run := time.Now().Format("150405")
 	z, err := svc.CreateZone(context.Background(), admin, application.CreateZoneInput{
-		Code: "ZONE_T_VERSION_" + run, Name: "V", PostalPrefixes: []string{"75500"}})
+		ID: "ZONE_T_VERSION_" + run, Code: "T-VER-" + run, Name: "V", PostalPrefixes: []string{"75500"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,16 +124,52 @@ func TestStaleVersionRace(t *testing.T) {
 func TestAuditInSameTransaction(t *testing.T) {
 	svc, pool := setup(t)
 	run := time.Now().Format("150405")
-	code := "ZONE_T_AUDIT_" + run
+	id := "ZONE_T_AUDIT_" + run
 	bad := admin
 	bad.Role = "NOT_A_ROLE" // audit_logs CHECK refuses this, so the audit insert fails
-	_, err := svc.CreateZone(context.Background(), bad, application.CreateZoneInput{Code: code, Name: "A", PostalPrefixes: []string{"85500"}})
+	_, err := svc.CreateZone(context.Background(), bad, application.CreateZoneInput{ID: id, Code: "T-AUD-" + run, Name: "A", PostalPrefixes: []string{"85500"}})
 	if err == nil {
 		t.Fatal("expected the audit insert to fail")
 	}
 	var n int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM delivery_zones WHERE code = $1", code).Scan(&n)
+	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM delivery_zones WHERE id = $1", id).Scan(&n)
 	if n != 0 {
 		t.Fatal("zone was saved without its audit row")
+	}
+}
+
+// Doc 5 TD-13, TD-14: public zone list and postal code lookup (Doc 1 R-18).
+func TestPublicZonesAndPostalLookup(t *testing.T) {
+	svc, _ := setup(t)
+	run := time.Now().Format("150405")
+	ctx := context.Background()
+	on, err := svc.CreateZone(ctx, admin, application.CreateZoneInput{ID: "ZONE_T_PUB_ON_" + run, Code: "T-ON-" + run, Name: "Public On", PostalPrefixes: []string{"445"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	off, err := svc.CreateZone(ctx, admin, application.CreateZoneInput{ID: "ZONE_T_PUB_OFF_" + run, Code: "T-OFF-" + run, Name: "Public Off", PostalPrefixes: []string{"44600"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetZoneEnabled(ctx, admin, off.ID, application.StatusInput{Version: off.Version, Enabled: false, Reason: "test disable"}); err != nil {
+		t.Fatal(err)
+	}
+	z, err := svc.Store.ZoneForPostalCode(ctx, "44512")
+	if err != nil || z.ID != on.ID || z.Code != on.Code {
+		t.Fatalf("lookup 44512: %+v %v", z, err)
+	}
+	if _, err := svc.Store.ZoneForPostalCode(ctx, "44600"); !errors.Is(err, apperr.ErrZoneNotFound) {
+		t.Fatalf("disabled zone must not be found: %v", err)
+	}
+	list, err := svc.Store.ListPublicZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, x := range list {
+		seen[x.ID] = true
+	}
+	if !seen[on.ID] || seen[off.ID] {
+		t.Fatalf("public list must hold enabled zones only: %+v", list)
 	}
 }

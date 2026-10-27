@@ -53,8 +53,10 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 ```
 
 > [!NOTE]
-> **Proposed Pricing Baseline Notice (Pending Formal Team Approval):**
-> Delivery fee is a fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cm³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
+> **Provisional Pricing Proposal Notice (Pending Team Ratification):**
+> Delivery fee is a proposed fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cm³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
+>
+> *Conflict & Arithmetic Notice:* This proposed model diverges from `docs/contracts/pricing-rules.md`, which defines a formula with base fee (35000), per-kg surcharge (8000), service multiplier, and divisor 5000 (yielding 51000 cents for 2.5 kg Metro->Metro, or 55000 under rate 10000). The 55000 cents in this example represents an illustrative flat Band 4 complete tariff pending formal team ratification.
 
 ### Error Responses
 - `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, or malformed JSON.
@@ -63,3 +65,17 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 - `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` — Length, width, or height exceeds 150.00 cm.
 - `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` — No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
 - `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` — Multiple active rules match the same zone pair and weight band; fails safely.
+
+---
+
+## 2. Admin Pricing Tariff Rules Management (Candidate Endpoints)
+
+> [!NOTE]
+> **Boundary Coordination (Member 2 / Member 7):**
+> Member 2's pricing context serves the candidate backend tariff CRUD REST endpoints to allow administrative tariff maintenance. Member 7 owns the Admin UI portal consuming these endpoints. Full ratification of endpoint ownership is pending team approval.
+
+- `POST /api/v1/admin/pricing-rules`: Create a new tariff rule for a zone-pair and weight band.
+- `GET /api/v1/admin/pricing-rules`: List all active/inactive tariff rules with filtering by zone and band.
+- `GET /api/v1/admin/pricing-rules/{id}`: Retrieve detailed pricing rule definition.
+- `PUT /api/v1/admin/pricing-rules/{id}`: Update tariff fee or validity window (creates new rule version).
+- `DELETE /api/v1/admin/pricing-rules/{id}`: Deactivate tariff rule.

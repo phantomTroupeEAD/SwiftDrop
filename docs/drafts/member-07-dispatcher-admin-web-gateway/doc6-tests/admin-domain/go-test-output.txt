@@ -10,14 +10,16 @@
     --- PASS: TestPrefixOverlapPolicy/own_prefixes_never_clash (0.00s)
     --- PASS: TestPrefixOverlapPolicy/free_prefixes_pass (0.00s)
     --- PASS: TestPrefixOverlapPolicy/all_clashes_are_reported,_not_just_the_first (0.00s)
+=== RUN   TestNewZoneID
+--- PASS: TestNewZoneID (0.00s)
 === RUN   TestNewZoneCode
 --- PASS: TestNewZoneCode (0.00s)
 === RUN   TestNewPostalPrefix
 --- PASS: TestNewPostalPrefix (0.00s)
 === RUN   TestPrefixOverlaps
 --- PASS: TestPrefixOverlaps (0.00s)
-=== RUN   TestNewLKR
---- PASS: TestNewLKR (0.00s)
+=== RUN   TestPrefixCovers
+--- PASS: TestPrefixCovers (0.00s)
 === RUN   TestNewZoneHappyPath
 --- PASS: TestNewZoneHappyPath (0.00s)
 === RUN   TestNewZoneInvalid
@@ -32,6 +34,8 @@
 --- PASS: TestReplacePrefixesInvalidKeepsOld (0.00s)
 === RUN   TestPrefixesAreCopied
 --- PASS: TestPrefixesAreCopied (0.00s)
+=== RUN   TestRestoreRecordsNoEvents
+--- PASS: TestRestoreRecordsNoEvents (0.00s)
 PASS
-coverage: 95.6% of statements
-ok  	swiftdrop.local/m7/admindomain/domain	1.032s	coverage: 95.6% of statements
+coverage: 98.1% of statements
+ok  	swiftdrop.local/m7/admindomain/domain	1.022s	coverage: 98.1% of statements

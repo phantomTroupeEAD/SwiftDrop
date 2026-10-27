@@ -29,35 +29,39 @@ flowchart TD
     
     CheckJWT -- No --> AnonContext["Set AuthContext = Anonymous"]
     
-    AttachContext --> RateLimiter["Rate Limiter (30 RPM per user_id)"]
-    AnonContext --> RateLimiterAnon["Rate Limiter (10 RPM per IP)"]
+    AttachContext --> RateLimiter["Rate Limiter (20 RPM per user_id)"]
+    AnonContext --> RateLimiterAnon["Rate Limiter (20 RPM per IP)"]
     
     RateLimiter --> ToolGate{"Tool Invocation Triggered?"}
     RateLimiterAnon --> ToolGate
     
-    ToolGate -- Public Tool (track_parcel, estimate_fee) --> ExecPublic["Execute Tool"]
-    ToolGate -- Auth Tool (get_my_active_parcels) --> CheckUserAuth{"Is AuthContext.user_id present?"}
+    ToolGate -- Public Tool (track_parcel_status, estimate_fee) --> ExecPublic["Execute Tool"]
+    ToolGate -- Auth Tool (get_my_active_parcels) --> CheckUserAuth{"Is AuthContext present?"}
     
-    CheckUserAuth -- Yes --> ForwardJWT["Forward JWT to Core API (/api/v1/parcels)"]
+    CheckUserAuth -- Yes (JWT or parcels:read API key) --> ForwardAuth["Forward Auth to Core API (/api/v1/parcels)"]
     CheckUserAuth -- No --> PromptLogin["Return: 'Please log in to check your active deliveries'"]
 ```
 
 1. **Zero Trust in the LLM for Authorization:**
    - The LLM cannot decide whether a user is allowed to access an order.
-   - If a tool requires authentication (`get_my_active_parcels`, `get_my_deliveries`), the application layer checks the caller's verified JWT. If missing, the tool call is blocked before reaching the backend API.
+   - If a tool requires authentication (`get_my_active_parcels`), the application layer checks the caller's verified JWT or `parcels:read` scoped API key. If missing, the tool call is blocked before reaching the backend API.
 2. **Tenant & Identity Forwarding:**
    - The AI Assistant never impersonates users with superuser service tokens.
-   - When calling Core API on behalf of a logged-in customer, it forwards the caller's original `Authorization: Bearer <jwt>` header. Core API independently enforces row-level tenant and user isolation.
+   - When calling Core API on behalf of a logged-in customer or merchant, it forwards the caller's original `Authorization: Bearer <jwt>` or `X-API-Key: <key>` header. Core API independently enforces row-level tenant and user isolation.
+3. **Principle of Least Privilege (PoLP) for MCP API Keys:**
+   - External MCP clients (Claude Desktop, Cursor) query personal shipments using Member 4's merchant API keys.
+   - Documentation and system contracts mandate that keys provisioned for MCP integrations must be granted **`parcels:read` scope ONLY**.
+   - If an attacker compromises a desktop configuration file containing this key and attempts to invoke courier order booking (`POST /api/v1/merchant/orders`), Core API enforces Member 4's `BR-K-07` and rejects the request with `403 Forbidden (MERCHANT_SCOPE_DENIED)`.
 
 #### A.1.1 Internal Service-to-Service Keys & Secret Inventory
 To ensure zero unauthorized network access across internal microservices, the system uses specific internal keys and tokens:
 
 | Secret / Key Name | Owning Service | Consuming Service | Header / Transport | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
-| **`INTERNAL_SERVICE_KEY`** | AI Assistant & Core API | Core API Monolith | `X-Internal-Service-Key: <secret>` | Authenticates internal administrative calls (e.g., Core API triggering `POST /api/v1/ai/admin/refresh-knowledge`). |
+| **`AI_SERVICE_ROLE_TOKEN`** | AI Assistant & Core API | Core API Monolith | `Authorization: Bearer <token>` | Authenticates internal administrative calls (fallback: `INTERNAL_SERVICE_KEY`). |
 | **`JWT_SIGNING_KEY`** | Member 1 (Identity) | Core API, Tracking API, AI Assistant | `Authorization: Bearer <jwt>` | Cryptographic secret/key used to sign and verify user identity across all services. |
 | **`MERCHANT_WEBHOOK_SECRET`**| Member 4 (Merchants) | Member 8 (Event Worker) | `X-SwiftDrop-Signature: sha256=<hmac>` | Per-merchant secret key used by Event Worker to sign outbound webhook events. |
-| **`SWIFTDROP_MCP_API_KEY`** | AI Assistant / FastMCP | External Remote Agents | `Authorization: Bearer <key>` | Authenticates external agents connecting to remote FastMCP SSE endpoints. |
+| **`LLM_API_KEY`** | Member 10 (AI Assistant)| AI Assistant Service | Internal environment | Secret API key used by universal `AsyncOpenAI` client to authenticate to external LLM provider. |
 
 ---
 
@@ -126,14 +130,22 @@ flowchart LR
 - **Attack Scenario:** Attacker floods the chat endpoint with 100,000-character payloads or rapid requests to deplete LLM API credits.
 - **Defense Mechanism:**
   - FastAPI middleware enforces a strict maximum input size (default: 1,000 characters). Larger payloads are rejected immediately with `400 Bad Request`.
-  - Rate limiting enforced via SlowAPI: 10 requests/minute per anonymous IP; 30 requests/minute per authenticated user.
+  - Rate limiting enforced via SlowAPI / Traefik: 20 requests/minute default matching the edge gateway limiter.
 
 #### Threat 5: Autonomous Mutation Deception
 - **Attack Scenario:** Attacker asks: *"Book a delivery from Colombo to Kandy for 2 kg right now."* Attacker tries to make the AI execute a booking without user confirmation.
 - **Defense Mechanism:**
   - The AI Assistant possesses **zero booking mutation tools**.
   - It generates an informational fee breakdown and emits a structured `NAVIGATE_BOOKING` action card.
-  - The booking only occurs if the human user navigates to the booking portal and confirms with a client-supplied `Idempotency-Key`.
+  - The booking only occurs if the human user navigates to the booking portal (`/portal/book`) and confirms with a client-supplied `Idempotency-Key`.
+
+#### Threat 6: Server-Side Request Forgery (SSRF) in Webhook Dispatching
+- **Defense Mechanism:**
+  - In production, Member 8's Event Worker strictly requires HTTPS endpoints on port 443 and blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.1`).
+  - In development and CI testing, to allow dispatching to the `mock-webhook:9999` container across the internal Docker bridge network, Member 8 supports dev-mode flags:
+    - `WEBHOOK_ALLOW_INSECURE_HTTP=true`
+    - `WEBHOOK_ALLOWED_HOSTS=mock-webhook,localhost,127.0.0.1`
+  - In production builds, these variables default to `false` and empty, ensuring zero SSRF risk in live deployment.
 
 ---
 
@@ -250,10 +262,11 @@ sequenceDiagram
 
 ## 4. Module-Specific Security Checklist for Meeting 2
 
-- [ ] **AI Assistant Tools Allowlist:** Confirm that the tool registry exports only read-only tools (`track_parcel`, `get_my_active_parcels`, `estimate_shipping_fee`, `get_my_deliveries`).
-- [ ] **PII Sanitization:** Confirm that `GET /api/v1/tracking/public/{id}` strips recipient phone numbers and street addresses at the API gateway layer.
-- [ ] **Zero Secrets in Prompts:** Verify that no API keys, database connection strings, or internal tokens appear in `domain/` prompt templates.
-- [ ] **Rate Limiting Config:** Verify that `AI_RATE_LIMIT_ANONYMOUS_RPM=10` and `AI_RATE_LIMIT_AUTHENTICATED_RPM=30` are configurable via `.env`.
-- [ ] **IDOR Enforcement:** Confirm that Core API parcel endpoints enforce `parcel.sender_id == caller.sub` on customer queries.
-- [ ] **Webhook Security:** Confirm that merchant webhook dispatches compute `X-SwiftDrop-Signature` via HMAC-SHA256 with the merchant's secret key.
-- [ ] **DLQ Setup:** Confirm that RabbitMQ broker includes the `swiftdrop.webhooks.dlq` dead-letter exchange and queue.
+- [x] **AI Assistant Tools Allowlist:** Confirm that the tool registry exports only the 4 read-only tools mandated by SRS FR-AI-007 (`estimate_shipping_fee`, `track_parcel_status`, `get_my_active_parcels`, `explain_company_policies`).
+- [x] **PII Sanitization:** Confirm that `GET /api/v1/tracking/public/{id}` strips recipient phone numbers and street addresses at the API gateway layer.
+- [x] **Zero Secrets in Prompts:** Verify that no API keys, database connection strings, or internal tokens appear in `domain/` prompt templates.
+- [x] **Rate Limiting Config:** Standardized to 20 requests/minute matching Traefik ingress rate limiter.
+- [x] **Least Privilege for MCP:** Verified that MCP API keys are restricted to `parcels:read` scope only, blocking unauthorized booking calls.
+- [x] **IDOR Enforcement:** Confirm that Core API parcel endpoints enforce `parcel.sender_id == caller.sub` on customer queries.
+- [x] **Webhook Security:** Confirm that merchant webhook dispatches compute `X-SwiftDrop-Signature` via HMAC-SHA256 with the merchant's secret key.
+- [x] **DLQ Setup:** Confirm that RabbitMQ broker includes the `swiftdrop.dlq` dead-letter queue and compressed retries via `WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`.

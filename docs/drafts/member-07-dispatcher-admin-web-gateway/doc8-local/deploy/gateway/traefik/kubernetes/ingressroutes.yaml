@@ -7,7 +7,7 @@ spec:
   entryPoints: ["websecure"]
   tls: {secretName: cloudflare-origin-cert}   # name differs in deploy/gateway/README (U-58)
   routes:
-    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/tracking/public/[^/]+/stream$`)
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/tracking/(public/)?[^/]+/stream$`)
       kind: Rule
       priority: 100
       middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}, {name: stream-inflight}]
@@ -17,20 +17,30 @@ spec:
       priority: 90
       middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}]
       services: [{name: tracking-api, port: 8081, serversTransport: stream-transport}]
+    - match: Host(`swiftdrop.example.com`) && Path(`/api/v1/ai/mcp/sse`)
+      kind: Rule
+      priority: 85
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: ai-ratelimit}, {name: stream-inflight}]
+      services: [{name: ai-assistant, port: 8000, serversTransport: ai-transport}]
     - match: Host(`swiftdrop.example.com`) && (Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`))
       kind: Rule
       priority: 80
-      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: json-limit}]
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: ai-ratelimit}, {name: json-limit}]
       services: [{name: ai-assistant, port: 8000, serversTransport: ai-transport}]
     - match: Host(`swiftdrop.example.com`) && Path(`/api/v1/auth/login`)
       kind: Rule
       priority: 70
       middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: login-ratelimit}, {name: json-limit}]
       services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
-    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/(deliveries/[^/]+/complete|courier/parcels/[^/]+/deliver)$`)
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/deliveries/[^/]+/proof-photo$`)
       kind: Rule
       priority: 60
       middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: upload-limit-middleware}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api/v1/merchant/`)
+      kind: Rule
+      priority: 55
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: merchant-ratelimit}, {name: json-limit}]
       services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
     - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api/v1`)
       kind: Rule

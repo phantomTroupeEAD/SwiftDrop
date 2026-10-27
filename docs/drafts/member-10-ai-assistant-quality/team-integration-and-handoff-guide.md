@@ -312,7 +312,7 @@ Please freeze the canonical zone IDs across all backend tables (matching Member 
 E2E tests will inspect RabbitMQ event queues to verify the asynchronous integration flow:
 - **Exchange:** `swiftdrop.events.topic` (Topic Exchange)
 - **Routing Keys:**
-  - `parcel.created`
+  - `parcel.booked.v1`
   - `parcel.assigned`
   - `parcel.status_changed`
   - `parcel.delivered`
@@ -437,10 +437,11 @@ flowchart TD
 ## 5. Review Checklist for Team Meeting 2
 
 Please review your respective section before Meeting 2:
-- [ ] **Members 6 & 7 (Frontend):** Confirm acceptance of Section 2 `data-testid` attributes and chat action card integration.
-- [ ] **Member 1 (Auth):** Confirm JWT claim structure and inclusion of test seed accounts in `seeds/dev_seed.sql`.
-- [ ] **Member 2 (Pricing/Parcels):** Confirm `POST /api/v1/pricing/quotes` and `GET /api/v1/parcels` schemas.
-- [ ] **Member 3 (Dispatch):** Confirm courier proof upload format and status transition enum.
-- [ ] **Member 5 (Tracking):** Confirm PII masking on `GET /api/v1/tracking/public/{trackingNumber}`.
-- [ ] **Member 8 (Messaging):** Confirm CloudEvents JSON envelope and webhook HMAC header.
-- [ ] **Member 9 (DevOps):** Confirm port `8000`, Traefik path `/api/v1/ai`, and probe paths (`/health/live`, `/health/ready`).
+- [x] **Members 6 & 7 (Frontend):** Confirm acceptance of Section 2 `data-testid` attributes and chat action card integration (`/portal/book`).
+- [x] **Member 1 (Auth):** Confirm JWT claim structure and inclusion of test seed accounts in `seeds/dev_seed.sql`.
+- [x] **Member 2 (Pricing/Parcels):** Confirm `POST /api/v1/pricing/quotes` and `GET /api/v1/parcels` schemas.
+- [x] **Member 3 (Dispatch):** Confirm courier proof upload format and status transition enum.
+- [x] **Member 4 (Merchants):** Confirm singular `POST /api/v1/merchant/orders` and `parcels:read` scoped API keys for external MCP clients.
+- [x] **Member 5 (Tracking):** Confirm PII masking on `GET /api/v1/tracking/public/{trackingNumber}`.
+- [x] **Member 8 (Messaging):** Confirm CloudEvents `parcel.booked.v1`, queue `q.webhooks.dispatcher`, DLQ `swiftdrop.dlq`, compressed retries, and SSRF dev flags (`WEBHOOK_ALLOW_INSECURE_HTTP=true`).
+- [x] **Member 9 (DevOps):** Confirm port `8000`, Traefik path `/api/v1/ai`, `mock-webhook:9999` container in Compose, and standard `make up` and `make seed` commands.

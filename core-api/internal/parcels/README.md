@@ -25,9 +25,9 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 1. **Exclusive Aggregate Root Authority:** Only the `Parcel` aggregate may mutate parcel status. No other module, handler, or raw SQL script may update `parcels.status`.
 2. **Transition Legality:** State transitions strictly follow the 9-state machine: `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`.
 3. **Delivery Failure Ceiling (ADR-004):** Failed delivery attempts increment `attempt_count`. Up to 3 attempts transition to transient `ATTEMPT_FAILED`. After 3 failures, state transitions to terminal `RETURNED`.
-4. **Audit History Trail:** Every status change must record an immutable row in `parcel_status_history` containing `from_status`, `to_status`, `actor_id`, `actor_role`, `occurred_at`, and `parcel_version`.
+4. **Audit History Trail & Deletion Protection:** Every status change must record an immutable row in `parcel_status_history` containing `from_status`, `to_status`, `actor_id`, `actor_role`, `reason_code`, `note`, `occurred_at`, and `parcel_version`. Deleting parcels with status history is strictly prohibited (`ON DELETE RESTRICT`) to protect regulatory audit records.
 5. **Atomic Outbox Record:** Every domain state change commits an integration event (e.g., `parcel.booked.v1`, `parcel.cancelled.v1`) to `outbox_events` in the exact same PostgreSQL transaction.
-6. **Idempotent Booking:** Repeated booking requests with identical `Idempotency-Key` headers return the previously booked parcel from the `idempotency_keys` cache. Reusing a key with altered parameters returns HTTP 409 Conflict.
+6. **Idempotent Booking:** Repeated booking requests with identical `Idempotency-Key` headers return the previously booked parcel from the `idempotency_keys` cache scoped by `(key, caller_scope)`. Reusing a key with altered parameters returns HTTP 409 Conflict.
 7. **Monetary Representation & Immutable Price Snapshot:** Stored strictly in integer minor units (`BIGINT`, LKR cents). Once confirmed, `price_cents`, `currency`, and `pricing_rule_version` are frozen immutably. Subsequent tariff modifications by Member 7 never retroactively alter confirmed bookings or receipts.
 8. **Backend Quote Expiration:** Quote validity is strictly enforced by the backend (`current_time >= expires_at`). Expired or tampered quotes are rejected with structured HTTP 422 errors.
 
@@ -47,9 +47,10 @@ internal/parcels/
 ## 4. Database Ownership & Migrations
 - `000005_create_parcels_and_quotes.up.sql`:
   - `parcels`: Primary aggregate table (ID, tracking number, sender ID, JSONB addresses, dimensions, price in cents, status, courier ID, version, timestamps).
-  - `parcel_status_history`: Append-only audit log of all historical transitions.
+  - `parcel_status_history`: Append-only audit log of all historical transitions with `ON DELETE RESTRICT`.
+  - *Architecture Alignment Item:* Dual Specification accommodates normalized child table `parcel_addresses` if team ratifies relational address persistence over JSONB snapshots.
 - `000010_create_idempotency_keys.up.sql`:
-  - `idempotency_keys`: Keys, caller scope, request hash (SHA-256), cached response status/payload, and 24-hour expiration.
+  - `idempotency_keys`: Keys, `caller_scope`, request hash (SHA-256), cached response status/payload, and 24-hour expiration.
 
 ---
 
@@ -65,3 +66,4 @@ internal/parcels/
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-10-25 | Aligned with Audit v2.0.0: Crockford Base32 tracking, JSONB addresses, 9-state machine, integer LKR cents, and migrations 000005 & 000010 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Immutable accepted price snapshot, quote validation, 30 kg operational limits, and backend quote expiry | Member 2 |
+| 2026-10-26 | Reconciliation: Added cancellation endpoint `POST /api/v1/parcels/{id}/cancel`, updated `parcel_status_history` fields (`reason_code`, `note`, `RESTRICT`), `caller_scope`, and dual address specification notice | Member 2 |

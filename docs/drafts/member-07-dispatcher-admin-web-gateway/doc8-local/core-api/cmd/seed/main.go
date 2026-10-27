@@ -10,26 +10,27 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Fixed ids so tokens and tests can refer to them. Users are a stand-in for Member 1's seed.
+// Fixed ids so tokens and tests can refer to them. Users are a stand-in for Member 1's seed
+// (the users table here is scripts/dev-stub-users.sql, never a real migration).
 const (
 	AdminID      = "00000000-0000-4000-8000-000000000001"
 	DispatcherID = "00000000-0000-4000-8000-000000000002"
 	CourierID    = "00000000-0000-4000-8000-000000000003"
 )
 
+// Zones carry no money: Member 2's pricing seed adds fees for these zone ids.
 var zones = []struct {
-	code, name string
-	cents      int64
-	prefixes   []string
-	enabled    bool
+	id, code, name string
+	prefixes       []string
+	enabled        bool
 }{
-	{"ZONE_COLOMBO_CENTRAL", "Colombo Central", 0, []string{"00100", "00200", "00300"}, true},
-	{"ZONE_COLOMBO_SOUTH", "Colombo South", 0, []string{"00400", "00500", "00600"}, true},
-	{"ZONE_COLOMBO_EAST", "Colombo East", 5000, []string{"00700", "00800"}, true},
-	{"ZONE_NEGOMBO", "Negombo", 10000, []string{"11500"}, true},
-	{"ZONE_KANDY", "Kandy", 15000, []string{"20000"}, true},
-	{"ZONE_GALLE", "Galle", 15000, []string{"80000"}, true},
-	{"ZONE_DEMO_DISABLED", "Demo Disabled Zone", 0, []string{"99999"}, false},
+	{"ZONE_COLOMBO_01", "CMB-01", "Colombo Central", []string{"00100", "00200", "00300"}, true},
+	{"ZONE_COLOMBO_02", "CMB-02", "Colombo South", []string{"00400", "00500", "00600"}, true},
+	{"ZONE_COLOMBO_03", "CMB-03", "Colombo East", []string{"00700", "00800"}, true},
+	{"ZONE_NEGOMBO_01", "NEG-01", "Negombo", []string{"11500"}, true},
+	{"ZONE_KANDY_01", "KDY-01", "Kandy", []string{"20000"}, true},
+	{"ZONE_GALLE_01", "GAL-01", "Galle", []string{"80000"}, true},
+	{"ZONE_DEMO_DISABLED", "DEMO-OFF", "Demo Disabled Zone", []string{"99999"}, false},
 }
 
 func main() {
@@ -57,14 +58,12 @@ func seed(ctx context.Context, url string) error {
 			}
 		}
 		for _, z := range zones {
-			var id string
-			err := tx.QueryRow(ctx, `INSERT INTO delivery_zones (code, name, base_surcharge_cents, enabled, created_by, updated_by)
-				VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code RETURNING id`, z.code, z.name, z.cents, z.enabled, AdminID).Scan(&id)
-			if err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO delivery_zones (id, code, name, enabled) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+				z.id, z.code, z.name, z.enabled); err != nil {
 				return err
 			}
 			for _, p := range z.prefixes {
-				if _, err := tx.Exec(ctx, "INSERT INTO zone_postal_codes (prefix, zone_id, created_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", p, id, AdminID); err != nil {
+				if _, err := tx.Exec(ctx, "INSERT INTO zone_postal_codes (prefix, zone_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", p, z.id); err != nil {
 					return err
 				}
 			}

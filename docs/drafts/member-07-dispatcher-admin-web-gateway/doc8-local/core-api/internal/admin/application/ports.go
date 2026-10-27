@@ -25,9 +25,9 @@ type AuditEntry struct {
 type Tx interface {
 	LockZonePrefixes(ctx context.Context) error
 	OtherZonePrefixes(ctx context.Context, exceptZoneID string) ([]domain.PrefixOwner, error)
-	InsertZone(ctx context.Context, z *domain.Zone, actorID string) error
+	InsertZone(ctx context.Context, z *domain.Zone) error
 	LoadZone(ctx context.Context, id string) (*domain.Zone, error)
-	SaveZone(ctx context.Context, z *domain.Zone, expectedVersion int, actorID string) error
+	SaveZone(ctx context.Context, z *domain.Zone, expectedVersion int) error
 	LoadSetting(ctx context.Context, key string) (Setting, error)
 	SaveSetting(ctx context.Context, key string, value json.RawMessage, expectedVersion int, actorID string) error
 	Audit(ctx context.Context, a Actor, e AuditEntry) error
@@ -37,6 +37,9 @@ type Store interface {
 	InTx(ctx context.Context, fn func(Tx) error) error
 	ListZones(ctx context.Context) ([]*domain.Zone, error)
 	GetZone(ctx context.Context, id string) (*domain.Zone, error)
+	ListPublicZones(ctx context.Context) ([]PublicZone, error)
+	// ZoneForPostalCode returns the enabled zone with the longest matching prefix.
+	ZoneForPostalCode(ctx context.Context, postalCode string) (PublicZone, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListAudit(ctx context.Context, limit int) ([]AuditRow, error)
 }

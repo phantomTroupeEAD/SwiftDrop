@@ -4,9 +4,9 @@
 > **Author:** Member 7 — Dispatcher/Admin UI, Courier Web, Traefik Gateway  
 > **Target Module / Location:** `web/src/features/dispatcher-admin/` (ops + courier screens), `core-api/internal/admin/` (admin module), `deploy/gateway/traefik/` (gateway)  
 > **Key Upstream Dependencies:** Member 1 (Auth, RBAC, JWT), Member 2 (Parcels, Pricing), Member 3 (Dispatch, Delivery), Member 4 (Merchants), Member 5 (Tracking SSE), Member 8 (Outbox, events), Member 9 (Compose, Kubernetes)  
-> **Open Questions / Needs Clarification:** U-28 to U-34 in section 9: ESLint boundary rules, shared Money type, audit writer owner, more depguard rules, zone events to outbox, route map location, version column on delivery_zones
+> **Open Questions / Needs Clarification:** Section 9. Still open: U-28 ESLint boundary rules, U-29 shared Money type, U-31 more depguard rules, U-32 zone events to outbox, U-33 route map location, U-64 audit target_id type, U-67 assignment status name. Closed in the 26 Oct review: U-30 (each module writes its own audit rows), U-34 (version column added)
 
-**Module:** Dispatcher/Admin/Courier Frontend, Admin Backend Module & API Gateway (Member 7) **Project:** SwiftDrop Parcel Delivery & Courier Management System **Based on:** Document 1 v3 (scope), Document 2 v2 (flows), AGENTS.md, CLAUDE.md, web/CLAUDE.md, .cursor/rules/frontend.mdc, .golangci.yml, Engineering Standards v1.0 sections 2, 4, 10, 11, domain-boundaries.md, database-schema.md, ADR-001 to ADR-004, deploy/gateway/ **Status:** Draft v1. Items marked **\[TBD\]** wait for a teammate or a team decision. Open questions reuse U-01 to U-27 from Documents 1 and 2; new ones start at U-28 (section 9). **Date:** 24 October 2026
+**Module:** Dispatcher/Admin/Courier Frontend, Admin Backend Module & API Gateway (Member 7) **Project:** SwiftDrop Parcel Delivery & Courier Management System **Based on:** Document 1 v4 (scope), Document 2 v3 (flows), Member 3 Doc 4, Member 4 Doc 4 and OpenAPI, Member 9 team agreements, AGENTS.md, CLAUDE.md, web/CLAUDE.md, .cursor/rules/frontend.mdc, .golangci.yml, Engineering Standards v1.0 sections 2, 4, 10, 11, domain-boundaries.md, database-schema.md, ADR-001 to ADR-004, deploy/gateway/ **Status:** Draft v2 (26 Oct 2026, aligned with the Member 7 alignment guide and the docs audit). Items marked **\[TBD\]** wait for a teammate or a team decision. Open questions reuse U-01 to U-27 from Documents 1 and 2; new ones start at U-28 (section 9). **Date:** 24 October 2026 (revised 26 October 2026)
 
 ## 1. How to read this document
 
@@ -114,21 +114,23 @@ web/src/
     │   ├── schemas/                      # zod schemas for forms
     │   ├── types.ts                      # view models used by components
     │   └── __tests__/                    # Vitest + React Testing Library
-    ├── failed-deliveries/                # F-06 [Proposed new folder]
-    ├── fleet/                            # F-07
-    ├── merchants/                        # F-08 [Proposed new folder]
-    ├── users/                            # F-09 [Proposed new folder]
-    ├── zones/                            # F-10
-    ├── pricing/                          # F-11 [Proposed new folder]
-    ├── reports/                          # F-12, F-13 (audit explorer inside reports, as web/README says)
+    ├── failed-deliveries/                # F-06 /ops/failed-deliveries (Member 3 reschedule)
+    ├── fleet/                            # F-07 /ops/couriers (Member 3 /dispatch/couriers)
+    ├── merchants/                        # F-08 /ops/merchants list and /ops/merchants/:id actions
+    ├── users/                            # F-09 /ops/users (Member 1 endpoints, U-66)
+    ├── zones/                            # F-10 /ops/zones
+    ├── pricing/                          # F-11 /ops/pricing (Member 2 endpoints, U-65)
+    ├── settings/                         # A-02 /ops/settings
+    ├── reports/                          # F-12 /ops/reports (ADMIN and DISPATCHER)
+    ├── audit/                            # F-13 /ops/audit (ADMIN only)
     ├── corrections/                      # F-14 [TBD U-08]
-    ├── courier-mobile/                   # C-01 to C-05
+    ├── courier-mobile/                   # C-01 to C-05 /courier/*
     │   ├── ...same inside layout...
     │   └── utils/resizeImage.ts          # photo resize before upload (Doc 2 C-04)
     └── shared-ops/                       # code used by 2+ of MY features only (status badge text, reason code labels)
 ```
 
-Folders not in web/README today (`failed-deliveries`, `merchants`, `users`, `pricing`, `corrections`, `shared-ops`) must be added to web/README in the same change that creates them (AGENTS.md 6.3).
+Folders not in web/README today (`failed-deliveries`, `merchants`, `users`, `pricing`, `settings`, `audit`, `corrections`, `shared-ops`) and the full `/ops/*` route table (Doc 1 section 2.1) must be added to web/README in the same change that creates them (AGENTS.md 6.3, U-63).
 
 ### 3.2 What each layer does
 
@@ -240,14 +242,25 @@ export interface ApiClient {
 }
 
 // features/dispatcher-admin/dispatch-board/types.ts  (view models)
-export interface BoardParcel { id: string; trackingNumber: string; weightKg: number; city: string; createdAt: Date; }
-export interface BoardCourier { id: string; name: string; status: string; active: number; max: number; isFull: boolean; }
-export interface DispatchBoard { zoneCode: string; parcels: BoardParcel[]; couriers: BoardCourier[]; }
+// Field names follow Member 3 Doc 4 3.4 (snake_case on the wire, mapped once in dispatchApi.ts)
+export interface BoardParcel { id: string; trackingNumber: string; status: 'CREATED' | 'ATTEMPT_FAILED'; attemptCount: number; weightKg: number; city: string; createdAt: Date; }
+export interface BoardCourier { id: string; name: string; employeeCode: string; vehicleType: string; shiftStatus: string; active: number; max: number; isFull: boolean; }
+export interface DispatchBoard { zoneId: string; parcels: BoardParcel[]; couriers: BoardCourier[]; }
 
 // features/dispatcher-admin/dispatch-board/api/dispatchApi.ts
 export interface DispatchApi {
-  getBoard(zoneCode: string): Promise<DispatchBoard>;
-  assign(input: { parcelId: string; courierId: string }, idempotencyKey: string): Promise<{ assignmentId: string }>;
+  getBoard(zoneId: string): Promise<DispatchBoard>;                                     // GET /dispatch/board?zone_id=
+  assign(input: { parcelId: string; courierId: string }, idempotencyKey: string): Promise<{ assignmentId: string; status: string }>;
+  cancelAssignment(assignmentId: string, cancellationReason: string): Promise<void>;     // POST /dispatch/assignments/{id}/cancel
+  reschedule(parcelId: string, input: { targetCourierId: string; scheduledDate: string; preferredTimeWindow: string; dispatchNotes?: string }, idempotencyKey: string): Promise<void>; // POST /dispatch/parcels/{id}/reschedule
+}
+
+// features/dispatcher-admin/merchants/api/merchantsApi.ts  (routes hosted by my admin module, logic by Member 4)
+export type MerchantAction = 'approve' | 'reject' | 'suspend' | 'reinstate' | 'disable';
+export interface MerchantsApi {
+  list(f: { status?: string; q?: string; page: number; perPage: number }): Promise<Page<MerchantRow>>; // GET /admin/merchants
+  get(id: string): Promise<MerchantDetail>;                                                           // GET /admin/merchants/{id}
+  act(id: string, action: MerchantAction, body: { expectedVersion: number; reason?: string }): Promise<MerchantDetail>;
 }
 
 // features/dispatcher-admin/dispatch-board/hooks/useAssignParcel.ts
@@ -291,8 +304,10 @@ classDiagram
         +fieldErrors: map
     }
     class DispatchApi {
-        +getBoard(zoneCode) DispatchBoard
+        +getBoard(zoneId) DispatchBoard
         +assign(input, key) Assignment
+        +cancelAssignment(id, reason)
+        +reschedule(parcelId, input, key)
     }
     class useAssignParcel {
         +assign(parcelId, courierId)
@@ -379,7 +394,7 @@ There is **no global store** (no Redux, no Zustand). Reason in decision DD-02.
 
 ## 4. Admin backend module design (`core-api/internal/admin/`)
 
-Who writes which part is still open (U-10). This section describes the target design so whoever writes it follows one plan.
+I write all of this module (U-10 closed, Doc 1 section 2.3). It owns zones, postal prefixes, settings, the audit table and the audit queries, the delivery report, the public zone list, and the HTTP routes for merchant admin (whose logic stays in Member 4's module).
 
 ### 4.1 Package structure
 
@@ -389,10 +404,10 @@ The four layer folders are required by AGENTS.md 4.2 \[Repo\]. File names are \[
 core-api/internal/admin/
 ├── README.md, API.md                         # living docs (AGENTS.md 6)
 ├── domain/                                   # pure Go, no imports of net/http, database/sql, amqp
-│   ├── zone.go                               # Zone aggregate root
-│   ├── zone_code.go                          # ZoneCode value object
+│   ├── zone.go                               # Zone aggregate root (no money fields, Doc 1 R-04)
+│   ├── zone_id.go                            # ZoneID value object: ^ZONE_[A-Z0-9_]{2,27}$, the primary key
+│   ├── zone_code.go                          # ZoneCode value object: ^[A-Z0-9_-]{2,32}$
 │   ├── postal_prefix.go                      # PostalPrefix value object
-│   ├── money.go                              # Money value object (LKR cents) [or shared, U-29]
 │   ├── prefix_policy.go                      # PrefixOverlapPolicy domain service
 │   ├── setting.go                            # SystemSetting entity, SettingKey value object
 │   ├── report_period.go                      # ReportPeriod value object (from/to, Sri Lanka days)
@@ -401,24 +416,24 @@ core-api/internal/admin/
 │   └── errors.go                             # ErrZoneCodeTaken, ErrPrefixConflict, ErrInvalidPrefix, ...
 ├── application/                              # use cases + interfaces they need ("ports")
 │   ├── ports.go                              # ZoneRepository, SettingRepository, ReportReader, AuditReader,
-│   │                                         # AuditWriter, MerchantStatusChanger, TxManager, Clock
+│   │                                         # AuditWriter, TxManager, Clock
 │   ├── create_zone.go                        # CreateZone use case
 │   ├── update_zone.go                        # UpdateZone use case
 │   ├── set_zone_status.go                    # EnableZone / DisableZone
 │   ├── update_setting.go                     # UpdateSetting
-│   ├── generate_report.go                    # GenerateOperationalReport (query)
-│   ├── query_audit_log.go                    # QueryAuditLog (query)
-│   └── approve_merchant.go                   # ApproveMerchant: calls M4 through MerchantStatusChanger
+│   ├── generate_report.go                    # DeliveryReport (query, ADMIN and DISPATCHER)
+│   ├── list_public_zones.go                  # PublicZones (query, no sign-in)
+│   └── query_audit_log.go                    # QueryAuditLog (query)
 ├── infrastructure/                           # adapters that implement the ports
 │   ├── postgres_zone_repository.go
 │   ├── postgres_setting_repository.go
 │   ├── postgres_report_reader.go             # read-only SQL or calls into other modules' read interfaces
 │   ├── postgres_audit_reader.go
-│   ├── postgres_audit_writer.go              # [TBD U-30: may move to platform as a shared audit writer]
-│   └── merchant_adapter.go                   # wraps the merchants module's exported interface
+│   └── postgres_audit_writer.go              # shared audit writer; Members 1 and 4 call the same one (U-30)
 └── transport/
-    ├── routes.go                             # mounts /api/v1/admin/* with ADMIN role middleware
-    ├── zone_handler.go, report_handler.go, audit_handler.go, setting_handler.go, merchant_handler.go
+    ├── routes.go                             # mounts /api/v1/admin/* (ADMIN; reports also DISPATCHER) and /api/v1/zones (public)
+    ├── zone_handler.go, report_handler.go, audit_handler.go, setting_handler.go, public_zone_handler.go
+    ├── merchant_handler.go                   # /admin/merchants/** -> merchants.AdminService (Member 4), no use case of mine
     ├── dto.go                                # request/response JSON structs (separate from domain types)
     └── errors.go                             # domain error -> HTTP status and error code table
 ```
@@ -431,7 +446,7 @@ Wiring is done in `core-api/internal/app/wiring.go` \[Repo\] AGENTS.md 4.1: it c
 | --- | --- | --- |
 | **Transport (handlers)** | Parse JSON and query strings, check syntax (types, required), read user id and role from the auth middleware context, call one use case, map result or error to HTTP | `POST /admin/zones` handler turns `ZoneCreateRequest` DTO into `CreateZoneCommand` |
 | **Application (use cases)** | Own the transaction, load and save aggregates through ports, call domain methods, write audit rows, return results. One file per use case | `CreateZone.Execute(ctx, cmd)` opens a tx, checks prefixes, saves, writes audit |
-| **Domain (objects)** | Hold the rules that are true no matter how data is stored: valid code format, prefix format, no duplicate prefix inside one zone, enable and disable rules, money never negative | `domain.NewZone(code, name, surcharge, prefixes)` returns error if a rule fails |
+| **Domain (objects)** | Hold the rules that are true no matter how data is stored: valid id and code format, name length, prefix format, no overlapping prefix inside one zone, enable and disable rules | `domain.NewZone(id, code, name, prefixes)` returns error if a rule fails |
 | **Repositories (ports)** | Interfaces declared in `application/ports.go`, written from the use case's point of view | `ZoneRepository.Save(ctx, *Zone)` |
 | **Infrastructure (adapters)** | SQL, row mapping, unique-constraint error to domain error, calls into other modules | `postgresZoneRepository` maps `23505 unique_violation` on `zone_postal_codes` to `ErrPrefixConflict` |
 | **Platform (shared, not mine)** | DB pool, auth middleware, idempotency middleware, logging, request id | Used by `routes.go` and `wiring.go` |
@@ -466,11 +481,11 @@ Arrows show "imports". The domain (yellow) imports nothing from the project. Inf
 | --- | --- | --- | --- |
 | `admin/domain` | Go standard library (`errors`, `fmt`, `strings`, `time`, `regexp`) | `net/http`, `database/sql`, amqp, any `infrastructure` or `transport` | `depguard` rule `domain_purity` \[Repo\] |
 | `admin/application` | `admin/domain`, `context`, other modules' **exported interfaces or types only if needed for a port** | `net/http`, any `transport` | `depguard` rule `application_purity` \[Repo\] |
-| `admin/infrastructure` | `admin/application`, `admin/domain`, `platform/db`, `database/sql` or pgx, the merchants module's exported service interface | `admin/transport`, other modules' `infrastructure` or tables | review + proposed depguard rule \[U-31\] |
-| `admin/transport` | `admin/application`, `admin/domain` (errors only), `platform/http`, `platform/auth`, `net/http` | `admin/infrastructure`, `database/sql` | proposed depguard rule \[U-31\] |
+| `admin/infrastructure` | `admin/application`, `admin/domain`, `platform/db`, pgx | `admin/transport`, other modules' `infrastructure` or tables | review + proposed depguard rule \[U-31\] |
+| `admin/transport` | `admin/application`, `admin/domain` (errors only), `platform/http`, `platform/auth`, `net/http`, the root package `internal/merchants` (its facade only: `AdminService` and DTOs) | `admin/infrastructure`, `database/sql`, `merchants/domain` or any other internal merchants package | proposed depguard rule \[U-31\] |
 | Other modules | `admin` exported interfaces only, if ever needed | `admin/infrastructure`, admin tables | review |
 
-**Talking to other modules.** Go idiom: "the consumer declares the interface". The admin `application/ports.go` declares a tiny interface such as `MerchantStatusChanger` with only the one method admin needs. The adapter in `infrastructure/merchant_adapter.go` wraps the merchants module's public service. Admin never imports the merchants module's `domain` or `infrastructure` and never touches `merchants` tables.
+**Talking to other modules.** Member 4 already publishes the exact interface the admin routes need, `merchants.AdminService` (`ListMerchants`, `GetMerchant`, `ChangeStatus`), in its root package (Member 4 Doc 4 section 4). My merchant handler depends on that interface directly; `wiring.go` passes in Member 4's implementation, and tests pass a fake. Admin never imports the merchants module's `domain` or `infrastructure` and never touches `merchants` tables. For reports, the admin module declares a small `ReportReader` port that Members 2 and 3 implement.
 
 ### 4.4 Key Go interfaces
 
@@ -507,18 +522,25 @@ type AuditReader interface {
     Query(ctx context.Context, f domain.AuditQueryFilter, page Page) ([]AuditEntry, int, error)
 }
 
-type ReportReader interface {
-    Operational(ctx context.Context, p domain.ReportPeriod, zone *domain.ZoneCode) (OperationalReport, error)
-}
-
-type MerchantStatusChanger interface { // implemented by an adapter over Member 4's module
-    Approve(ctx context.Context, merchantID string, actor Actor, reason string) (MerchantStatus, error)
-    Suspend(ctx context.Context, merchantID string, actor Actor, reason string) (MerchantStatus, error)
+type ReportReader interface { // implemented over read-only interfaces of parcels (M2) and delivery (M3)
+    Deliveries(ctx context.Context, p domain.ReportPeriod) (DeliveryReport, error) // per day + totals
 }
 
 type Clock interface{ Now() time.Time } // makes tests repeatable
 
-type Actor struct { UserID string; Role string; IP string; RequestID string } // from auth context, never from the body
+// Actor is built from the auth context, never from the body. Field names match the audit_logs columns (Doc 5).
+type Actor struct { UserID string; Role string; ClientIP string; UserAgent string; RequestID string }
+
+// AuditEntry maps 1:1 to the shared audit_logs shape (database-schema.md, Doc 1 R-05).
+type AuditEntry struct {
+    Actor         Actor
+    Action        string          // ZONE_CREATED, ZONE_UPDATED, ZONE_DISABLED, SETTING_CHANGED, ...
+    TargetType    string          // DELIVERY_ZONE, SYSTEM_SETTING
+    TargetID      string          // zone id or setting key (text, U-64)
+    PreviousState json.RawMessage // nil on create
+    NewState      json.RawMessage
+    Reason        string          // required for disable and setting changes
+}
 ```
 
 ```go
@@ -526,20 +548,21 @@ type Actor struct { UserID string; Role string; IP string; RequestID string } //
 package domain
 
 type Zone struct {
-    id        string
-    code      ZoneCode
-    name      string
-    surcharge Money
-    prefixes  []PostalPrefix
-    enabled   bool
-    version   int
-    events    []Event // recorded, read by the use case for audit
+    id          ZoneID   // e.g. ZONE_COLOMBO_01, never changes (Members 2 and 3 reference it)
+    code        ZoneCode // e.g. CMB-01
+    name        string   // 1 to 120 characters
+    description string
+    boundary    []byte   // optional GeoJSON, stored as jsonb
+    prefixes    []PostalPrefix
+    enabled     bool
+    version     int
+    events      []Event // recorded, read by the use case for audit
 }
 
-func NewZone(id string, code ZoneCode, name string, surcharge Money, prefixes []PostalPrefix) (*Zone, error)
+// No money here: fees and any per-zone charge are Member 2's pricing rules (Doc 1 R-04).
+func NewZone(id ZoneID, code ZoneCode, name, description string, prefixes []PostalPrefix) (*Zone, error)
 func (z *Zone) Rename(name string) error
-func (z *Zone) ChangeSurcharge(m Money) error
-func (z *Zone) ReplacePrefixes(p []PostalPrefix) error // no duplicates, at least one
+func (z *Zone) ReplacePrefixes(p []PostalPrefix) error // no overlaps inside the zone, at least one
 func (z *Zone) Disable() error                          // ErrAlreadyDisabled
 func (z *Zone) Enable() error
 func (z *Zone) PullEvents() []Event
@@ -559,7 +582,7 @@ func (p PostalPrefix) Overlaps(o PostalPrefix) bool  // "627" overlaps "62701"
 | **Bounded context** | Admin & Operations (shared with M1, M4) \[Repo\] domain-boundaries 2 | Zones, settings, reports and audit queries are back-office concerns that do not belong to parcels or dispatch |
 | **Aggregate root** | `Zone` (owns its list of `PostalPrefix`) | A zone and its prefixes must change together and stay valid together (at least one prefix, no duplicates inside). Kept small, as Engineering Standards 2.3 asks |
 | **Entity** | `Zone`, `SystemSetting` | They have an identity and change over time |
-| **Value objects** | `ZoneCode`, `PostalPrefix`, `Money`, `ReportPeriod`, `AuditQueryFilter`, `SettingKey` | Checked once when made, cannot be changed afterwards, so bad values cannot travel through the code. `Money` stops float mistakes (LKR cents, INV-13) |
+| **Value objects** | `ZoneID`, `ZoneCode`, `PostalPrefix`, `ReportPeriod`, `AuditQueryFilter`, `SettingKey` | Checked once when made, cannot be changed afterwards, so bad values cannot travel through the code. There is no `Money` in this module any more, because zones hold no money (R-04) |
 | **Domain service** | `PrefixOverlapPolicy` | "Does this new prefix clash with prefixes of **other** zones?" involves more than one aggregate, so it does not fit inside one `Zone`. It is a pure function: given the new prefixes and the existing owners, return the clashes |
 | **Domain events** | `ZoneCreated`, `ZoneChanged`, `ZoneStatusChanged`, `SettingChanged` | Recorded by the aggregate and turned into `audit_logs` rows by the use case in the same transaction. **Not** published to RabbitMQ (I publish nothing, Doc 1 X-08). If Member 2's pricing later needs to react, they can be written to the outbox with Member 8's writer **\[TBD U-32\]** |
 | **Repositories** | `ZoneRepository`, `SettingRepository` | Hide SQL from use cases; make unit tests possible with in-memory fakes |
@@ -575,19 +598,22 @@ func (p PostalPrefix) Overlaps(o PostalPrefix) bool  // "627" overlaps "62701"
 classDiagram
     class Zone {
         <<aggregate root>>
-        -id: string
+        -id: ZoneID
         -code: ZoneCode
         -name: string
-        -surcharge: Money
+        -description: string
         -prefixes: PostalPrefix[]
         -enabled: bool
         -version: int
         +Rename(name)
-        +ChangeSurcharge(m)
         +ReplacePrefixes(p)
         +Enable()
         +Disable()
         +PullEvents() Event[]
+    }
+    class ZoneID {
+        <<value object>>
+        +String()
     }
     class ZoneCode {
         <<value object>>
@@ -596,11 +622,6 @@ classDiagram
     class PostalPrefix {
         <<value object>>
         +Overlaps(other) bool
-    }
-    class Money {
-        <<value object>>
-        +Cents int64
-        +Currency LKR
     }
     class PrefixOverlapPolicy {
         <<domain service>>
@@ -626,9 +647,9 @@ classDiagram
         ZoneChanged
         ZoneStatusChanged
     }
+    Zone *-- ZoneID
     Zone *-- ZoneCode
     Zone *-- "1..*" PostalPrefix
-    Zone *-- Money
     Zone ..> ZoneEvent : records
     PrefixOverlapPolicy ..> PostalPrefix : compares
 ```
@@ -648,39 +669,41 @@ flowchart LR
         H1["Zone handler"]
         H2["Report handler"]
         H3["Audit handler"]
-        H4["Merchant approval handler"]
+        H4["Merchant admin handler"]
+        H5["Public zone handler"]
     end
     subgraph Core["admin application + domain"]
         UC1["CreateZone, UpdateZone, SetZoneStatus"]
-        UC2["GenerateOperationalReport"]
+        UC2["DeliveryReport"]
         UC3["QueryAuditLog"]
-        UC4["ApproveMerchant"]
+        UC5["PublicZones"]
         DM["Domain: Zone, value objects, PrefixOverlapPolicy"]
         P1(["ZoneRepository"])
         P2(["ReportReader"])
         P3(["AuditReader / AuditWriter"])
-        P4(["MerchantStatusChanger"])
+        P4(["merchants.AdminService (M4 facade)"])
         P5(["TxManager"])
     end
     subgraph Out["Driven side (what we call)"]
         A1["postgresZoneRepository"]
         A2["postgresReportReader"]
         A3["postgresAudit adapters"]
-        A4["merchantAdapter -> merchants module (M4)"]
+        A4["merchants module (M4), wired in app/wiring.go"]
         A5["platform tx manager"]
         DB[("PostgreSQL")]
     end
     H1 --> UC1
     H2 --> UC2
     H3 --> UC3
-    H4 --> UC4
+    H4 --> P4
+    H5 --> UC5
+    UC5 --> P1
     UC1 --> DM
     UC1 --> P1
     UC1 --> P3
     UC1 --> P5
     UC2 --> P2
     UC3 --> P3
-    UC4 --> P4
     P1 -.-> A1
     P2 -.-> A2
     P3 -.-> A3
@@ -704,13 +727,14 @@ flowchart LR
 | UpdateZone (incl. prefixes) | same as above + `UPDATE ... WHERE id = $1 AND version = $2` | as above + optimistic version check | Strong; stale edit gets 409 |
 | Enable/DisableZone | update status with version check, audit row | optimistic version check | Strong |
 | UpdateSetting | read old value, update, audit row | `SELECT ... FOR UPDATE` on the setting row | Strong |
-| ApproveMerchant | M4's status change + audit row, in **the same** tx passed through ctx | M4's merchant `version` check | Strong across both modules, because they share one database and one tx (modular monolith) |
-| GenerateOperationalReport | read-only tx (or none) | READ COMMITTED, `statement_timeout` (proposed 5 s) | Read can be a few seconds behind writes in progress; acceptable for reports |
+| Merchant status change | Opened and committed by Member 4's `AdminService.ChangeStatus` (status update + audit row + outbox); my handler opens no transaction | M4's `expected_version` check | Strong, inside Member 4's module |
+| DeliveryReport | read-only tx (or none) | READ COMMITTED, `statement_timeout` 5 s | Read can be a few seconds behind writes in progress; acceptable for reports |
+| PublicZones | read-only | READ COMMITTED | Same |
 | QueryAuditLog | read-only | READ COMMITTED | Same |
 
 **Why the advisory lock?** The unique index stops two zones getting the **exact same** prefix. It cannot stop "627" in one zone and "62701" in another (overlap). Two admins could each check, find no clash, and both commit. A short transaction-level advisory lock makes prefix changes run one after another. Zone edits are rare (a few per week), so waiting is not a problem. Alternative: SERIALIZABLE isolation with retry (DD-07).
 
-**Why audit in the same transaction?** If the change commits, its audit row must exist, and if the change fails, there must be no audit row (SEC-009, INV-12). An async audit through the outbox could lose or delay the record (DD-10).
+**Why audit in the same transaction?** If the change commits, its audit row must exist, and if the change fails, there must be no audit row (SRS SEC-015, INV-12). An async audit through the outbox could lose or delay the record (DD-10).
 
 **Idempotency** is handled by the shared platform middleware using the `idempotency_keys` table (scope `USER:<id>`, operation, request hash, saved response, 24 h) \[Repo\] api-conventions 4, database-schema. The key row is written in the same transaction as the change, so a crash cannot leave "key saved, change lost". Owner of the middleware **\[TBD U-24\]**.
 
@@ -730,7 +754,7 @@ sequenceDiagram
     participant AW as AuditWriter
     participant DB as PostgreSQL
     H->>UC: Execute(cmd with Actor from token)
-    UC->>UC: Build value objects (ZoneCode, PostalPrefix, Money)
+    UC->>UC: Build value objects (ZoneID, ZoneCode, PostalPrefix)
     UC->>TX: WithinTx
     TX->>DB: BEGIN
     UC->>R: LockPrefixSpace
@@ -760,17 +784,19 @@ Domain and application return typed errors. Only `transport/errors.go` knows HTT
 
 | Go error | HTTP | Error code (proposed) |
 | --- | --- | --- |
-| `ErrInvalidZoneCode`, `ErrInvalidPrefix`, `ErrNegativeMoney`, `ErrNoPrefixes`, `ErrDuplicatePrefixInZone` | 422 | `VALIDATION_FAILED` with `details[]` |
+| `ErrInvalidZoneID`, `ErrInvalidZoneCode`, `ErrInvalidName`, `ErrInvalidPrefix`, `ErrNoPrefixes`, `ErrDuplicatePrefixInZone` | 422 | `VALIDATION_FAILED` with `details[]` |
 | `ErrZoneCodeTaken` | 409 | `ZONE_CODE_ALREADY_EXISTS` |
 | `ErrPrefixConflict` | 409 | `ZONE_POSTAL_CODE_CONFLICT` |
-| `ErrConcurrentConflict` | 409 | `CONCURRENT_MODIFICATION` **\[TBD: shared name with M2\]** |
+| `ErrConcurrentConflict` | 409 | `CONCURRENT_MODIFICATION` |
 | `ErrZoneNotFound` | 404 | `ZONE_NOT_FOUND` |
+| `ErrBusy` (lock wait over 2 s) | 503 | `TRY_AGAIN` |
+| Member 4 errors from `AdminService` | 404, 409, 422 | Member 4's codes passed through unchanged |
 | `ErrForbidden` (from auth) | 403 | `ACCESS_DENIED` |
 | anything else | 500 | `INTERNAL_ERROR` + correlation id, details only in logs |
 
 Errors are wrapped with context (`fmt.Errorf("create zone: %w", err)`) and checked with `errors.Is` \[Repo\] AGENTS.md 9. No `panic`.
 
-### 4.9 Cross-module call: merchant approval
+### 4.9 Cross-module call: merchant admin routes
 
 ![Figure: admin merchant](doc3-images/d10-admin-merchant.png)
 
@@ -779,21 +805,20 @@ Errors are wrapped with context (`fmt.Errorf("create zone: %w", err)`) and check
 
 ```mermaid
 flowchart LR
-    H["admin transport: merchant handler"] --> UC["admin application: ApproveMerchant"]
-    UC --> P(["port: MerchantStatusChanger"])
-    P -.-> AD["admin infrastructure: merchantAdapter"]
-    AD --> MS["merchants module public service (M4)"]
+    R["/api/v1/admin/merchants/**"] --> H["admin transport: merchant handler (M7)"]
+    H --> CHK["Require ADMIN, decode body, build Actor"]
+    CHK --> P(["merchants.AdminService (M4 facade)"])
+    P --> MS["merchants application (M4)"]
     MS --> MD["merchants domain: Merchant aggregate (M4)"]
     MS --> MDB[("merchants table (M4 owns)")]
-    UC --> AW["AuditWriter"]
+    MS --> AW["shared AuditWriter"]
     AW --> ADB[("audit_logs")]
-    TX["One transaction passed in ctx"] -.- UC
-    TX -.- MS
+    TX["One transaction, opened by M4"] -.- MS
 ```
 
 </details>
 
-Member 4 keeps all merchant rules (which status changes are allowed). Admin only adds the ADMIN check, the reason, and the audit row **\[TBD U-10, U-26\]**.
+Member 4 keeps all merchant rules (which status changes are allowed, reason length, version check) and writes the audit row through the shared audit writer. My handler only hosts the route, checks ADMIN, refuses unknown JSON fields and maps errors (Member 4 Doc 4 I-03, Doc 1 R-02).
 
 ## 5. Gateway design (`deploy/gateway/traefik/`)
 
@@ -803,16 +828,17 @@ Member 4 keeps all merchant rules (which status changes are allowed). Admin only
 deploy/gateway/
 ├── README.md                         # living doc (route map lives here or in docs/, U-33)
 ├── traefik/
-│   ├── traefik.yml                   # [Repo] static config: entrypoints, trusted IPs, logs, dashboard
-│   ├── dynamic-routes.yml            # [Repo] Docker/file provider: routers, services, middlewares
-│   ├── ingressroutes.yaml            # [Proposed, M7] Kubernetes IngressRoute CRDs, same routes
-│   └── middlewares.yaml              # [Proposed, M7] Kubernetes Middleware CRDs, same limits
+│   ├── traefik.yml                   # static config: entrypoints 80/443, dashboard on internal 8090, trusted IPs, logs
+│   ├── dynamic-routes.yml            # Docker/file provider: routers, services, middlewares (my hardened version, Doc 7)
+│   └── kubernetes/
+│       ├── ingressroutes.yaml        # [M7] Kubernetes IngressRoute CRDs, same routes
+│       └── middlewares.yaml          # [M7] Kubernetes Middleware CRDs, same limits
 └── tests/
     ├── smoke.sh                      # [Proposed] curl checks: route per service, 429, 413, 401/403 unchanged, internal paths blocked
     └── route-parity.sh               # [Proposed] checks Docker and Kubernetes files list the same routes and limits
 ```
 
-Member 9 owns `values.yaml` (Helm install) and the Docker Compose file (Doc 1 D-11).
+Member 9 owns `values.yaml` (Helm install) and the one Compose file `deploy/docker-compose.yml` (Doc 1 D-11, R-09).
 
 ### 5.2 Components inside Traefik
 
@@ -828,25 +854,26 @@ flowchart LR
     subgraph EP["Entrypoints (traefik.yml)"]
         E1["web :80"]
         E2["websecure :443, origin TLS secret"]
+        E3["traefik :8090, internal: dashboard, ping"]
     end
     subgraph RT["Routers (match path)"]
-        R1["tracking: /api/v1/tracking"]
-        R2["ai: /api/v1/ai"]
-        R3["core: /api/v1"]
-        R4["api-404: /api (proposed)"]
+        R1["tracking and tracking-stream"]
+        R2["ai and ai-stream"]
+        R3["login, merchant-api, upload, core"]
+        R4["api-catchall: /api"]
         R5["web: /"]
     end
     subgraph MW["Middleware chains"]
-        M1["cors, tracking-ratelimit, tracking-inflight (proposed)"]
-        M2["cors, ai-ratelimit (proposed), small body limit (proposed)"]
-        M3["cors, login-ratelimit on /auth/login (proposed), upload-limit 10 MB"]
-        M4["none"]
+        M1["strip-identity, security-headers, cors, tracking 30/min burst 10, 5 streams per IP"]
+        M2["strip-identity, security-headers, cors, AI 10/min burst 2, 1 MB"]
+        M3["strip-identity, security-headers, cors, login 5/min burst 3 or merchant 120/min burst 20, 1 MB or 10 MB on proof-photo"]
+        M4["security-headers, CSP"]
     end
     subgraph SV["Services"]
         S1["tracking-api :8081"]
         S2["ai-assistant :8000"]
         S3["core-api :8080"]
-        S4["404 JSON (proposed)"]
+        S4["core-api answers 404 JSON"]
         S5["web :3000"]
     end
     E1 --> RT
@@ -862,27 +889,35 @@ flowchart LR
 
 ### 5.3 Router and middleware design
 
-| Router | Rule | Priority | Middlewares (in order) | Service | Status |
-| --- | --- | --- | --- | --- | --- |
-| `login-router` | `Path(/api/v1/auth/login)` | high (explicit) | cors, login-ratelimit (5/min, burst 3, per real IP) | core-api | \[Proposed, U-06\] |
-| `tracking-router` | `PathPrefix(/api/v1/tracking)` | auto (by rule length) | cors, tracking-ratelimit, tracking-inflight (5 per IP) | tracking-api | ratelimit \[Repo\], inflight \[Proposed\] |
-| `ai-router` | `PathPrefix(/api/v1/ai)` | auto | cors, ai-ratelimit (per IP), ai-body-limit (1 MB) | ai-assistant | \[Proposed, U-06\] |
-| `core-api-router` | `PathPrefix(/api/v1)` | auto | cors, upload-limit (10 MB) | core-api | \[Repo\] |
-| `api-404-router` | `PathPrefix(/api)` | auto (shorter than /api/v1) | none | a small 404 JSON responder **\[Proposed, Doc 2 G-01; method TBD with M9\]** | \[Proposed\] |
-| `frontend-router` | `PathPrefix(/)` | lowest | none (later: security headers) | web | \[Repo\] |
+| Router | Rule | Priority | Middlewares (in order) | Service |
+| --- | --- | --- | --- | --- |
+| `tracking-stream-router` | `^/api/v1/tracking/public/[^/]+/stream$` or `^/api/v1/tracking/[^/]+/stream$` | 100 (explicit) | strip-identity-headers, security-headers, cors, tracking-ratelimit, stream-inflight (5 per IP) | tracking-api |
+| `tracking-router` | `/api/v1/tracking` or `/api/v1/tracking/…` | auto (by rule length) | strip-identity-headers, security-headers, cors, tracking-ratelimit (30/min, burst 10) | tracking-api |
+| `ai-stream-router` | `/api/v1/ai/mcp/sse` | 100 (explicit) | strip-identity-headers, security-headers, cors, stream-inflight | ai-assistant |
+| `ai-router` | `/api/v1/ai` or `/api/v1/ai/…` | auto | strip-identity-headers, security-headers, cors, ai-ratelimit (10/min, burst 2), json-limit (1 MB) | ai-assistant |
+| `login-router` | `Path(/api/v1/auth/login)` | auto | strip-identity-headers, security-headers, cors, login-ratelimit (5/min, burst 3), json-limit | core-api |
+| `merchant-api-router` | `PathPrefix(/api/v1/merchant/)` | auto | strip-identity-headers, security-headers, cors, merchant-ratelimit (120/min, burst 20), json-limit | core-api |
+| `upload-router` | `^/api/v1/deliveries/[^/]+/proof-photo$` | auto | strip-identity-headers, security-headers, cors, upload-limit (10 MB) | core-api |
+| `core-api-router` | `PathPrefix(/api/v1)` | auto | strip-identity-headers, security-headers, cors, json-limit (1 MB) | core-api |
+| `api-catchall-router` | `PathPrefix(/api)` | 2 | strip-identity-headers, security-headers, json-limit | core-api (answers 404 JSON) |
+| `frontend-router` | `PathPrefix(/)` | 1 | security-headers, spa-csp | web |
+| `dashboard-router` | `/api` or `/dashboard` on entry point `traefik` (8090) only | auto | none | `api@internal` |
+
+All numbers come from security-notes.md section 3 and CORS from section 4 (Doc 1 R-13, R-14). Traefik ranks routers by the length of the rule text, so the two stream routers need an explicit priority to beat the longer tracking and AI rules.
 
 **Design rules for the files**
 
-- Every rate limit middleware sets `sourceCriterion` so the **real visitor IP** is counted (for example `requestHeaderName: CF-Connecting-IP` in production behind Cloudflare, `ipStrategy` in local). Without it, all Cloudflare traffic shares one bucket (Doc 2 G-02).
-- No `retry` middleware on any router that accepts writes (Doc 2 R-GW-03).
-- No middleware that reads, checks or changes `Authorization` or `X-API-Key` (INV-04).
-- The tracking router never gets the buffering middleware (INV-07).
-- Names are the same in Docker and Kubernetes files so smoke tests and logs match.
+- Every rate limit and in-flight middleware sets `sourceCriterion.ipStrategy.depth: 1`, so the **real visitor IP** (the right-most `X-Forwarded-For` entry written by Cloudflare) is counted. Without it, all Cloudflare traffic shares one bucket (Doc 2 G-02, U-46).
+- No `retry` middleware on any router (Doc 2 R-GW-03).
+- No middleware that reads, checks or changes `Authorization` or `X-API-Key` (INV-04). `X-Tenant-ID`, `X-User-ID`, `X-User-Role`, `X-Merchant-ID` and `X-Forwarded-User` are removed from client requests (R-15).
+- The stream routers never get a buffering middleware (INV-07); the buffering middleware also buffers responses.
+- `X-Request-ID` is passed through unchanged and allowed in CORS (R-11).
+- Names are the same in Docker and Kubernetes files; `gateway_parity.py` fails CI if they drift (DD-12).
 
-Example of the proposed Kubernetes middleware (placeholders only, no secrets):
+Example of the Kubernetes middleware (placeholders only, no secrets):
 
 ```yaml
-# middlewares.yaml (proposed)
+# kubernetes/middlewares.yaml
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata: { name: tracking-ratelimit, namespace: swiftdrop }
@@ -890,18 +925,18 @@ spec:
   rateLimit:
     average: 30
     period: 1m
-    burst: 50            # U-15: 50 or 10
+    burst: 10            # security-notes.md 3 (U-15 closed)
     sourceCriterion:
-      requestHeaderName: CF-Connecting-IP
+      ipStrategy: { depth: 1 }
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
-metadata: { name: tracking-inflight, namespace: swiftdrop }
+metadata: { name: stream-inflight, namespace: swiftdrop }
 spec:
   inFlightReq:
-    amount: 5            # Member 5: 5 open streams per IP (proposed)
+    amount: 5            # Member 5: 5 open streams per IP
     sourceCriterion:
-      requestHeaderName: CF-Connecting-IP
+      ipStrategy: { depth: 1 }
 ```
 
 ### 5.4 Patterns used in the gateway
@@ -911,8 +946,8 @@ spec:
 | API gateway / edge router | Traefik routers | One front door for all clients (ADR-001) |
 | Chain of responsibility | Middleware chains | Each middleware does one job and can stop the request (429, 413) |
 | Configuration as code | All files in git | Rebuildable from a clean clone (INV-09) |
-| Smoke test as contract | `tests/smoke.sh` | Proves routes and limits after every change (Doc 2 G-07) |
-| Parity check | `tests/route-parity.sh` | Docker and Kubernetes files cannot drift apart (DD-12) |
+| Smoke test as contract | `security_gateway_test.sh` (Doc 7 GS-01 to GS-19) | Proves routes and limits after every change (Doc 2 G-07) |
+| Parity check | `gateway_parity.py` | Docker and Kubernetes files cannot drift apart (DD-12) |
 
 ## 6. Design decisions, alternatives and trade-offs
 
@@ -928,9 +963,11 @@ spec:
 | DD-08 | Reports | (a) aggregates, (b) separate reporting service, (c) materialized views, (d) read-only queries behind `ReportReader` | (d): simplest; meets NFR at our data size; can switch to (c) later behind the same port | Heavy ranges may be slow; capped range + timeout (7.2) |
 | DD-09 | How admin reaches other modules | (a) read their tables with SQL, (b) HTTP calls, (c) RabbitMQ, (d) in-process Go interfaces | (d) \[Repo\] domain-boundaries 4: no shared-table coupling, no network hop, can share one tx | Other owners must export a small interface |
 | DD-10 | Writing audit rows | (a) async through outbox and worker, (b) same transaction as the change | (b): an audit row exists if and only if the change happened | Slightly longer transaction |
-| DD-11 | Concurrent edits of zones and rules | (a) last write wins, (b) optimistic `version` column, (c) row locks held while the user edits | (b), same as parcels \[Repo\] database-schema 3.3; needs a migration adding `version` to `delivery_zones` | User must reload on 409 |
+| DD-11 | Concurrent edits of zones and settings | (a) last write wins, (b) optimistic `version` column, (c) row locks held while the user edits | (b), same as parcels \[Repo\] database-schema 3.3; `version` is in migration `000002` (alignment guide 6.1) | User must reload on 409 |
 | DD-12 | Gateway files for Docker and Kubernetes | (a) plain Kubernetes Ingress + annotations, (b) generate both from one template, (c) two hand-written sets + parity test | (c): Traefik CRDs support all needed middlewares; files stay readable for a student team; parity test stops drift | Two places to edit per change |
-| DD-13 | Where rate limits live | (a) only gateway, (b) only backend, (c) gateway per IP + backend per user or key | (c): gateway cannot see users (ADR-001); backend per-user limits are Members 1, 4, 10's choice (U-06) | Per pod, so limits are approximate (7.3) |
+| DD-13 | Where rate limits live | (a) only gateway, (b) only backend, (c) gateway per IP + backend per user or key | (c): gateway cannot see users (ADR-001); gateway numbers are security-notes.md section 3 (R-13); backend per-user limits are Members 1, 3, 4, 10's job (U-50) | Per pod, so limits are approximate (7.3) |
+| DD-17 | Zone primary key | (a) uuid + unique code, (b) text id chosen by the admin (`ZONE_COLOMBO_01`) + separate short code | (b) (alignment guide 3.1, database-schema.md): Members 2 and 3 already reference text zone ids in their foreign keys and seed data | The id can never be renamed; a typo means a new zone |
+| DD-18 | Merchant admin routes | (a) Member 4 hosts `/admin/merchants`, (b) admin module hosts the route and calls `merchants.AdminService` | (b) (Member 4 OpenAPI `x-route-owner: member-7`): all `/admin/*` routes sit behind one ADMIN check in one module | My handler must follow Member 4's DTOs exactly |
 | DD-14 | Photo size | (a) send original, (b) resize on the phone | (b): faster on slow networks, stays under 10 MB | Small quality loss; some old phones resize slowly |
 | DD-15 | Courier offline mode | (a) offline queue with service worker, (b) manual retry with same key | (b): offline queue is complex (ordering, conflicts, stale tasks) and not required by the SRS | Courier must press "Try again" when back online |
 | DD-16 | Admin module layering | (a) one flat package for simple CRUD, (b) four layers | (b) for zones (real rules) and settings; reports and audit stay thin (no domain objects) as the anti-boilerplate rule allows \[Repo\] AGENTS.md 4.2 | Some folders have few files |
@@ -942,7 +979,7 @@ spec:
 | Topic | Expected load | Design response |
 | --- | --- | --- |
 | Dispatch board polling | About 10 dispatchers × 1 call per 30 s = 0.3 calls per second | Negligible. Polling pauses when the browser tab is hidden (TanStack Query default) |
-| Board size | Up to a few hundred unassigned parcels per zone **\[TBD with M3: does the board paginate?\]** | Zone filter is required; list uses virtual scrolling above 200 rows **\[Proposed\]** |
+| Board size | Up to a few hundred parcels per zone | `zone_id` is required by Member 3's board, so one call never returns all zones; list uses virtual scrolling above 200 rows |
 | Bundle size | Ops chunk includes charts; courier chunk must be small | Lazy routes per feature; charts library only in `reports` chunk; budget checked by `npm run build` output |
 | Couriers on slow networks | 3G, high delay | Small courier chunk, resized photos, no polling on courier screens (refresh on open and pull-to-refresh) |
 | Stale data | Two people editing | Server is truth; 409 then refetch |
@@ -952,11 +989,12 @@ spec:
 | Topic | Design response |
 | --- | --- |
 | Stateless pods | Core API runs 2 to 4 replicas with HPA at 70 % CPU \[Repo\] Engineering Standards 10. Admin keeps nothing in memory between requests |
-| Database connections | `replicas_max × MaxOpenConns ≤ PostgreSQL max_connections` \[Repo\]. Example: 4 × 20 = 80 ≤ 100. Admin uses the shared pool, no own pool |
+| Database connections | `replicas_max × pool size ≤ PostgreSQL max_connections`. Member 9's budget (D8): core-api 12 × 4 pods = 48 of 150. Admin uses the shared pool, no own pool |
 | Speed target | p95 ≤ 500 ms at 50 concurrent users (NFR-PERF-001). Zone writes are small. Reports are the risk |
-| Report queries | Range capped (proposed 92 days), `statement_timeout` 5 s, indexes on `parcels(created_at)`, `parcel_status_history(to_status, occurred_at)`, `delivery_attempts(attempted_at)` **\[TBD with M2, M3: they own those tables\]**. If still slow: materialized view refreshed by a CronJob (DD-08) |
-| Audit search | Paginated (max 100 per page, NFR-PERF-004); index on `audit_logs(created_at DESC)`, `(actor_id, created_at)`, `(target_type, target_id)` **\[Proposed; owner U-30\]** |
-| Graceful shutdown | Handled by the Core API main (20 s on SIGTERM) \[Repo\]; admin requests are short |
+| Report queries | Range capped by the setting `reports.max_range_days` (default 92), `statement_timeout` 5 s, indexes on `parcels(created_at)`, `parcel_status_history(to_status, occurred_at)`, `delivery_attempts(attempted_at)` **\[TBD with M2, M3: they own those tables\]**. If still slow: materialized view refreshed by a CronJob (DD-08) |
+| Audit search | Paginated (max 100 per page, NFR-PERF-004); indexes on `audit_logs(created_at DESC)`, `(actor_id, created_at DESC)`, `(target_type, target_id)` in migration `000011` |
+| Public zone list | Small (tens of rows); `Cache-Control: public, max-age=300` so browsers and Cloudflare cache it |
+| Graceful shutdown | Handled by the Core API main: `/health/ready` turns 503, 5 s drain, then up to 20 s for open requests; admin requests are short |
 | Metrics | Request count and latency per route; no user or parcel ids as labels \[Repo\] Engineering Standards 11 |
 
 ### 7.3 Gateway
@@ -966,7 +1004,7 @@ spec:
 | Replicas | Traefik runs as a Deployment that can scale (domain-boundaries 5). Rate limits are **per pod**: with 3 pods a client can get up to 3 × the limit. Set numbers per pod with that in mind (ADR-001 3) |
 | Real client IP | `trustedIPs` + `sourceCriterion` so limits and audit logs see the real visitor |
 | Memory | About 50 to 80 MB per instance (ADR-001). The 10 MB buffering limit means many big uploads at once use memory; Traefik writes large bodies to disk above its memory threshold **\[to verify in test\]** |
-| SSE connections | Long open connections are cheap for Traefik; limited to 5 per IP by `inFlightReq` (proposed). Heartbeat keeps Cloudflare from closing them (U-17) |
+| SSE connections | Long open connections are cheap for Traefik; limited to 5 per IP by `inFlightReq`. The 15-second heartbeat keeps Cloudflare from closing them (R-12) |
 | Hot reload | File provider `watch: true` reloads routes without restart (Docker); CRDs reload on apply (Kubernetes) |
 
 ### 7.4 Deployment view
@@ -1018,25 +1056,23 @@ flowchart TB
 | Admin domain | Plain Go unit tests, no database | Pure `domain/` package |
 | Admin use cases | Go tests with in-memory fakes of the ports | Interfaces in `application/ports.go` |
 | Admin adapters | Integration tests on real PostgreSQL (Testcontainers) for unique index, advisory lock, version check | Infrastructure kept separate |
-| Gateway | `smoke.sh` and `route-parity.sh` against Member 9's Docker Compose | Config as code |
+| Gateway | `security_gateway_test.sh` (real Traefik binary) and `gateway_parity.py` | Config as code |
 
 Full test plans belong in a later document.
 
 ## 9. Open questions
 
-Earlier questions U-01 to U-27 still apply. Those that most affect this design: U-01 (courier tokens), U-06 (rate limits), U-10 (who writes admin Go code), U-13 (zone model), U-24 (idempotency support), U-26 (merchant statuses).
+Questions closed by the 26 October review (Doc 1 section 11.4): U-10 (I write the admin code), U-13 (zone model), U-26 (merchant statuses), U-34 (`version` column is in migration `000002`). Still open and relevant here: U-01, U-24, U-50.
 
-New questions:
-
-| ID | Question | Decide with |
-| --- | --- | --- |
-| U-28 | Add an ESLint import-boundary rule to the shared lint config so cross-feature imports fail CI? | Member 6 |
-| U-29 | One shared `Money` value object (in `platform` or a `shared kernel` package) or one per module? | Members 1, 2 |
-| U-30 | Who owns the audit writer and `audit_logs` indexes: admin module or `platform` (database-schema lists "Member 7 / 1, centralized audit middleware")? | Member 1 |
-| U-31 | Add depguard rules for `transport` and `infrastructure` packages (today only `domain` and `application` are checked)? | All backend members, Member 9 for CI |
-| U-32 | Should zone changes also go to the outbox so pricing or tracking can react? | Members 2, 8 |
-| U-33 | Where the route map lives: `deploy/gateway/README.md` or a new file in `docs/` | Member 9 |
-| U-34 | Add a `version` column to `delivery_zones` (needs a migration) | Members 1, 4 (admin co-owners) |
+| ID | Question | Decide with | Status |
+| --- | --- | --- | --- |
+| U-28 | Add an ESLint import-boundary rule to the shared lint config so cross-feature imports fail CI? | Member 6 | Open |
+| U-29 | One shared `Money` value object or one per module? | Members 1, 2 | Open, but no longer affects the admin module (zones hold no money) |
+| U-30 | Who owns the audit writer and `audit_logs` indexes? | Member 1 | **Closed**: I create `audit_logs` in `000011` (alignment guide 6.2) and own the shared writer; Members 1 and 4 call it |
+| U-31 | Add depguard rules for `transport` and `infrastructure` packages, including "admin transport may import only the merchants facade" | All backend members, Member 9 | Open |
+| U-32 | Should zone changes also go to the outbox so pricing or tracking can react? | Members 2, 8 | Open |
+| U-33 | Where the route map lives: `deploy/gateway/README.md` or a new file in `docs/` | Member 9 | Open |
+| U-34 | `version` column on `delivery_zones` | Members 1, 4 | **Closed**: yes, in `000002` |
 
 ## 10. Sign-off
 

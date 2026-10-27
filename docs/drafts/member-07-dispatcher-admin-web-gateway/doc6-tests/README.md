@@ -1,6 +1,6 @@
 # Member 7 starter automated tests (Document 6)
 
-These tests were written and run on 24 Oct 2026 for Document 6. They are **not yet in the team repo**.
+These tests were written and run on 24 Oct 2026 for Document 6. The admin-domain suite was re-run on 26 Oct 2026 after the docs audit (text zone id `ZONE_COLOMBO_01`, short code `CMB-01`, no money in zones); it is the same code as `doc8-local/core-api/internal/admin/domain/`. They are **not yet in the team repo**.
 Move them into the repo paths below when the real code is created.
 
 | Folder | What it tests | Move to | Run |

@@ -40,11 +40,16 @@ This document defines the authoritative external and inter-module interface cont
 | :--- | :--- | :--- | :--- | :--- |
 | `POST /api/v1/pricing/quotes` | Create Pricing Quote | Customer, Merchant, Admin | Safe (No) | JWT / Public |
 | `POST /api/v1/parcels` | Book Customer Parcel | Customer | Yes (`Idempotency-Key`) | JWT (`ROLE_CUSTOMER`) |
+| `POST /api/v1/parcels/{id}/cancel` | Cancel Parcel Booking | Customer, Merchant, Admin | Yes (`Idempotency-Key` / Optional) | JWT (Owner / Admin) |
 | `GET /api/v1/parcels/{id}` | Get Parcel Details | Customer, Merchant, Courier, Admin | Safe (Yes) | JWT (Resource Owner / Assigned Staff) |
 | `GET /api/v1/parcels` | List Visible Parcels | Customer, Merchant, Admin | Safe (Yes) | JWT (Scoped to caller ID / Tenant ID) |
 | `GET /api/v1/parcels/{id}/history` | Get Parcel History | Customer, Merchant, Courier, Admin | Safe (Yes) | JWT (Resource Owner / Assigned Staff) |
 | `GET /api/v1/parcels/{id}/receipt` | Get Booking Receipt | Customer, Merchant, Admin | Safe (Yes) | JWT (Resource Owner / Admin) |
-| `POST /api/v1/merchant/parcels` | Create Merchant Parcel | Merchant | Yes (`Idempotency-Key`) | *Member 4 owns transport/auth; invokes Member 2 use case* |
+| `POST /api/v1/merchant/orders` | Create Merchant Parcel | Merchant | Yes (`Idempotency-Key`) | *Member 4 owns transport/auth; invokes Member 2 use case* |
+| `POST /api/v1/admin/pricing-rules` | Create Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
+| `GET /api/v1/admin/pricing-rules` | List Tariff Rules (Candidate) | Admin | Safe (Yes) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
+| `PUT /api/v1/admin/pricing-rules/{id}` | Update Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
+| `DELETE /api/v1/admin/pricing-rules/{id}` | Delete Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
 
 ---
 
@@ -211,23 +216,76 @@ Content-Type: application/json
     "zone_id": "ZONE-CENTRAL-01",
     "instructions": "Leave at front security desk"
   },
-  "attempt_count": 0,
-  "max_attempts": 3,
-  "version": 1,
-  "created_at": "2026-10-25T14:32:00Z",
-  "updated_at": "2026-10-25T14:32:00Z"
+    "attempt_count": 0,
+    "max_attempts": 3,
+    "version": 1,
+    "created_at": "2026-10-25T14:32:00Z",
+    "updated_at": "2026-10-25T14:32:00Z"
+  }
 }
 ```
 
 ---
 
-### 4.3 Idempotency Contract & Behavior
+### 4.3 Customer Parcel Cancellation Contract
 
-All mutating parcel creation requests (`POST /api/v1/parcels` and `POST /api/v1/merchant/parcels`) require the HTTP header `Idempotency-Key`.
+#### Endpoint
+`POST /api/v1/parcels/{id}/cancel`
+
+#### Purpose
+Cancels a parcel booking if and only if the parcel is in `CREATED` status. Once picked up or in transit, cancellation via this endpoint is prohibited. Updates parcel status to `CANCELLED`, appends an immutable entry to `parcel_status_history` (`actor_role`, `reason_code = 'CUSTOMER_CANCELLED'`, optional `note`), increments aggregate version, and atomically writes `parcel.cancelled.v1` to `outbox_events`.
+
+#### Request Headers
+```http
+POST /api/v1/parcels/7f8b3c10-e29b-4b14-9f44-8d961234ef01/cancel HTTP/1.1
+Host: api.swiftdrop.io
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+#### Request Payload (Optional)
+```json
+{
+  "reason_code": "CUSTOMER_CANCELLED",
+  "note": "Sender cancelled booking before courier dispatch."
+}
+```
+
+#### Response Payload (`200 OK`)
+```json
+{
+  "id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "status": "CANCELLED",
+  "version": 2,
+  "updated_at": "2026-10-25T14:40:00Z"
+}
+```
+
+---
+
+### 4.4 Admin Pricing Rules Management Contract (Candidate — Coordination with M7)
+
+> [!NOTE]
+> **Boundary Coordination (Member 2 / Member 7):**
+> Member 2's Pricing Context serves these candidate backend REST APIs to allow administrative tariff maintenance. Member 7 owns the Admin UI portal consuming these endpoints. Full ratification of endpoint ownership is pending team approval.
+
+#### Candidate Endpoints
+- `POST /api/v1/admin/pricing-rules`: Create new pricing tariff rule.
+- `GET /api/v1/admin/pricing-rules`: List all configured tariff rules (filterable by zone and band).
+- `GET /api/v1/admin/pricing-rules/{id}`: Retrieve detailed rule definition.
+- `PUT /api/v1/admin/pricing-rules/{id}`: Update rule effective window or fee.
+- `DELETE /api/v1/admin/pricing-rules/{id}`: Deactivate or soft-delete tariff rule.
+
+---
+
+### 4.5 Idempotency Contract & Behavior
+
+All mutating parcel creation requests (`POST /api/v1/parcels` and `POST /api/v1/merchant/orders`) require the HTTP header `Idempotency-Key`.
 
 #### Processing Rules
 1. **Header Validation:** If `Idempotency-Key` is missing, empty, or exceeds 255 characters, the request is rejected with `400 Bad Request`.
-2. **Caller Scoping:** The key is combined with the authenticated caller ID: `(key, caller_id)`. Keys from different users/tenants do not collide.
+2. **Caller Scoping (`caller_scope`):** The key is combined with the caller's authenticated scope: `(key, caller_scope)` where `caller_scope` is formatted as `USER:<uuid>` or `MERCHANT:<uuid>`. Per `docs/contracts/api-conventions.md`, no unconditional foreign key to `users` is enforced to accommodate various caller scopes cleanly without orphan FK errors. Keys from different callers or tenant scopes do not collide.
 3. **Fingerprint Verification:** The server computes a SHA-256 hash of the normalized request JSON body.
 4. **Existing Key Lookup:**
    - **Case A (Exact Match):** If the key exists and the computed SHA-256 matches the stored `request_hash`, the operation is bypassed and the previously recorded HTTP status (201) and JSON response body are returned immediately.
@@ -242,12 +300,25 @@ All mutating parcel creation requests (`POST /api/v1/parcels` and `POST /api/v1/
 ### 5.1 GET /api/v1/parcels/{id} (Authorized Resource Detail)
 Returns the complete parcel aggregate model. Accessible only by the booking customer, merchant tenant, assigned courier, or administrative staff.
 
-### 5.2 GET /api/v1/parcels (Paginated Query)
+### 5.2 GET /api/v1/parcels/{id}/history (Authorized Status History)
+Returns the chronological audit log of status transitions. Accessible only by resource owner, assigned courier, dispatcher, or admin.
+- **Response Fields per Entry:**
+  - `id`: UUID of the history entry.
+  - `parcel_id`: UUID of the parcel.
+  - `status`: Lifecycle status (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`).
+  - `actor_id`: UUID of caller triggering transition.
+  - `actor_role`: String (`CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`, `SYSTEM`).
+  - `reason_code`: Optional standardized reason code (e.g., `RECIPIENT_UNAVAILABLE`, `CUSTOMER_CANCELLED`, `ADDRESS_INACCESSIBLE`).
+  - `note`: Optional descriptive text (internal only; strictly excluded from public tracking).
+  - `parcel_version`: Aggregate version at the time of insertion.
+  - `created_at`: UTC timestamp.
+
+### 5.3 GET /api/v1/parcels (Paginated Query)
 Returns caller-visible parcels filtered by status and dates.
 - Supported query parameters: `status` (string), `page` (int, default 1), `page_size` (int, default 20, max 100), `from_date` (ISO UTC), `to_date` (ISO UTC).
 - Enforces strict tenant/customer scoping: customer queries implicitly include `WHERE customer_id = $1`; merchant queries implicitly include `WHERE merchant_id = $1`.
 
-### 5.3 Public Tracking Masking Policy (Member 5 Integration)
+### 5.4 Public Tracking Masking Policy (Member 5 Integration)
 To comply with global privacy standards and project security rules, the public tracking lookup endpoint (`/api/v1/tracking/public/{trackingNumber}`, served by Member 5 from read projections) must strictly redact private data.
 
 | Field Name | Internal Parcel Model | Public Tracking Projection | Privacy Justification |
@@ -333,7 +404,7 @@ Committed atomically into `outbox_events` table during state mutations. Publishe
 - `event_type`: Formatted string (`"parcel.booked.v1"`, `"parcel.cancelled.v1"`).
 - `schema_version`: Integer (`1`).
 - `occurred_at`: UTC timestamp ISO 8601.
-- `payload`: Structured JSON payload.
+- `payload`: Structured JSON payload containing `tracking_number`, `status`, `sender_id`, and `merchant_id` (nullable for direct customer bookings per CR-M02-01). To protect privacy, recipient phone numbers, full street addresses, and private notes are strictly excluded from event payloads. Downstream event catalog expansion (`parcel.cancelled.v1`, `parcel.in_transit.v1`, `parcel.returned.v1`) is coordinated with Member 8.
 
 ---
 
@@ -356,10 +427,10 @@ flowchart TD
 | :--- | :--- | :--- |
 | **Member 1 (Identity)** | Authenticates incoming HTTP requests; supplies claims (`user_id`, `role`, `tenant_id`). | `platform/auth/middleware.go` attaches user context to `context.Context`. |
 | **Member 3 (Dispatch)** | Manages fleet, couriers, and delivery attempts. Records attempts in `delivery_attempts`. | Calls Member 2 application service (`RecordAttemptOutcome`) to update parcel state. |
-| **Member 4 (Merchants)** | Exposes `POST /api/v1/merchant/parcels`, validates API keys, handles webhook registrations. | Invokes Member 2's `CreateParcelUseCase` directly with verified merchant context. |
+| **Member 4 (Merchants)** | Exposes `POST /api/v1/merchant/orders`, validates API keys, handles webhook registrations. | Invokes Member 2's `CreateParcelUseCase` directly with verified merchant context. |
 | **Member 5 (Tracking)** | Exposes public read endpoints and SSE streaming. | Reads authoritative state from database/read projection; redacts private PII fields. |
 | **Member 6 (Frontend)** | Implements React booking and tracking portals. | Consumes `POST /api/v1/pricing/quotes` and `POST /api/v1/parcels` via OpenAPI DTOs. |
-| **Member 7 (Admin)** | Implements dispatcher and administration dashboards. | Consumes zone and parcel admin endpoints; monitors attempt counts. |
+| **Member 7 (Admin)** | Implements dispatcher and administration dashboards. | Consumes zone and parcel admin endpoints; monitors attempt counts. Manages tariff rules via candidate `/api/v1/admin/pricing-rules` endpoints. |
 | **Member 8 (Events)** | Implements Outbox Relay publisher and RabbitMQ consumer workers. | Polls `outbox_events` table populated by Member 2; relays messages to RabbitMQ exchanges. |
 | **Member 10 (AI Assistant)** | Implements conversational support bot. | Calls `POST /api/v1/pricing/quotes` using authorized client credentials; zero direct DB access. |
 
@@ -370,16 +441,16 @@ flowchart TD
 | Decision Topic | Aligned Specification Baseline | Status / Source |
 | :--- | :--- | :--- |
 | **Canonical Quote Route & Persistence** | `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes` | Aligned with Member 10 & API Conventions |
-| **Pricing Model & Complete Tariff** | Fixed complete tariff `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`; no separate base fee, per-kg charge, distance fee, or multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Weight Bands (7 Bands)** | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg actual and chargeable weight | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Volumetric Policy & Divisor (6000)** | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Pricing Model & Complete Tariff** | Fixed complete tariff `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`; no separate base fee, per-kg charge, distance fee, or multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`; 55000 cents in example is flat Band 4 rate vs 51000 cents in legacy formula) |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg actual and chargeable weight | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (6000)** | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
 | **Monetary Data Type** | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
-| **Address Snapshot Model** | Immutable `pickup_address` & `dropoff_address` JSONB on `parcels` | Database Schema Standards & Audit |
+| **Address Persistence Model** | Dual specification: JSONB snapshots (`pickup_address`, `dropoff_address`) on `parcels` table vs child table `parcel_addresses` per `database-schema.md` | Dual Specification (Architecture Alignment Item) |
 | **Tracking Number Format** | `SD-YYYYMMDD-XXXXXX` (Crockford Base32 uppercase) | SRS FR-PAR-004 & Member 5 Alignment |
 | **Delivery Failure Lifecycle** | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
-| **Idempotency Mechanism** | Header `Idempotency-Key`, `idempotency_keys` table, SHA-256 | Engineering Standards v1.0 Section 7 |
-| **Tariff Administration** | Admin write UI & maintenance workflow owned by Member 7; calculation engine owned by Member 2 | Coordinated Boundary |
+| **Idempotency Mechanism** | Header `Idempotency-Key`, `idempotency_keys` table with `caller_scope`, SHA-256 | Engineering Standards v1.0 & API Conventions |
+| **Tariff Administration** | Admin write UI & maintenance workflow owned by Member 7; candidate REST endpoints served by Member 2 | Coordinated Boundary |
 | **Missing Tariff Behavior** | Controlled `422 PRICING_UNAVAILABLE`; ambiguous matches fail safely | Proposed Baseline |
 | **Receipt Rendering Format** | Member 2 outputs JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
 

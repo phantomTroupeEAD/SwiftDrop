@@ -10,8 +10,7 @@
 
 ```mermaid
 erDiagram
-    users ||--o{ user_roles : "assigned"
-    roles ||--o{ user_roles : "defines"
+    users ||--o{ refresh_tokens : "owns"
     users ||--o{ oauth_identities : "authenticates via"
     users ||--o| couriers : "profile"
     users ||--o| merchants : "primary contact/owner"
@@ -42,22 +41,28 @@ erDiagram
         uuid id PK
         varchar email UK
         varchar password_hash "nullable for OIDC"
-        varchar display_name
+        varchar full_name
         varchar phone
-        varchar status "ACTIVE, SUSPENDED"
+        varchar role "ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER"
+        varchar status "PENDING_VERIFICATION, ACTIVE, SUSPENDED, DEACTIVATED"
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        varchar token_hash UK
+        uuid family_id
+        boolean is_revoked
+        timestamptz expires_at
+        timestamptz used_at
+        timestamptz created_at
     }
 
     roles {
         varchar id PK "ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER"
         varchar description
-    }
-
-    user_roles {
-        uuid user_id PK,FK
-        varchar role_id PK,FK
-        timestamptz assigned_at
     }
 
     oauth_identities {
@@ -312,7 +317,7 @@ Every table is owned by a single domain capability in compliance with the **10-M
 | Table Name | Owning Bounded Context | Assigned Owner | Write Path / Primary Aggregate |
 | :--- | :--- | :--- | :--- |
 | `users` | Identity & Access | Member 1 | `core-api/internal/identity` |
-| `roles`, `user_roles` | Identity & Access | Member 1 | `core-api/internal/identity` |
+| `roles`, `refresh_tokens` | Identity & Access | Member 1 | `core-api/internal/identity` |
 | `oauth_identities` | Identity & Access | Member 1 | `core-api/internal/identity` |
 | `couriers` | Dispatch Context | Member 3 | `core-api/internal/dispatch` |
 | `merchants` | Merchant Integration | Member 4 | `core-api/internal/merchants` |

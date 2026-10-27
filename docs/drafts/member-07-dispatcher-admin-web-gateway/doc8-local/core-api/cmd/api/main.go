@@ -4,8 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,6 +20,7 @@ import (
 	"swiftdrop.local/m7/core-api/internal/admin/application"
 	"swiftdrop.local/m7/core-api/internal/admin/infrastructure"
 	"swiftdrop.local/m7/core-api/internal/admin/transport"
+	"swiftdrop.local/m7/core-api/internal/merchants"
 	"swiftdrop.local/m7/core-api/internal/platform/apperr"
 	"swiftdrop.local/m7/core-api/internal/platform/auth"
 	"swiftdrop.local/m7/core-api/internal/platform/config"
@@ -30,7 +29,7 @@ import (
 )
 
 func main() {
-	healthcheck := flag.Bool("healthcheck", false, "call /livez on this container and exit 0 or 1 (Docker HEALTHCHECK in a distroless image)")
+	healthcheck := flag.Bool("healthcheck", false, "call /health/live on this container and exit 0 or 1 (Docker HEALTHCHECK in a distroless image)")
 	flag.Parse()
 	if *healthcheck {
 		os.Exit(runHealthcheck())
@@ -50,7 +49,7 @@ func runHealthcheck() int {
 		}
 	}
 	c := http.Client{Timeout: 2 * time.Second}
-	resp, err := c.Get("http://" + addr + "/livez")
+	resp, err := c.Get("http://" + addr + "/health/live")
 	if err != nil || resp.StatusCode != 200 {
 		return 1
 	}
@@ -96,11 +95,12 @@ func run() error {
 
 	var shuttingDown atomic.Bool
 	mux := http.NewServeMux()
-	mux.Handle(obs.Route("GET /livez", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Health paths follow Member 9 agreement A2. They are internal: Traefik never routes them.
+	mux.Handle(obs.Route("GET /health/live", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"UP"}`))
 	})))
-	mux.Handle(obs.Route("GET /readyz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle(obs.Route("GET /health/ready", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
@@ -116,8 +116,11 @@ func run() error {
 		}
 	})))
 	mux.Handle(obs.Route("GET /metrics", metrics))
-	svc := &application.Service{Store: &infrastructure.Store{Pool: pool, LockTimeout: cfg.AdminLockTO}, NewID: newUUID}
-	(&transport.Handlers{Svc: svc, Metrics: metrics}).Register(mux)
+	svc := &application.Service{Store: &infrastructure.Store{Pool: pool, LockTimeout: cfg.AdminLockTO}}
+	// Member 4's merchants module and Members 2/3 report readers plug in here in the
+	// real repo. Locally, stand-ins are used and named in every report response.
+	(&transport.Handlers{Svc: svc, Metrics: metrics, Merchants: merchants.NewDevFake(),
+		Reports: application.NoDeliveryData{}, ReportSource: "stand-in: no parcel data until Members 2 and 3 connect"}).Register(mux)
 	// Anything else, including /api/v2/..., is a JSON 404 (Doc 7 GS-04).
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { web.WriteError(w, r, apperr.ErrNotFound) })
 
@@ -164,13 +167,4 @@ func withTimeout(d time.Duration, next http.Handler) http.Handler {
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func newUUID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	h := hex.EncodeToString(b[:])
-	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }

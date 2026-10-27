@@ -219,23 +219,61 @@ flowchart TD
 
 #### Step 1: Check DLQ Queue Depth
 ```bash
-# Check DLQ message count via Kubernetes StatefulSet pod:
-kubectl exec -it -n swiftdrop statefulset/rabbitmq -- rabbitmqctl list_queues name messages messages_ready | grep swiftdrop.dlq
+# Check DLQ message count via Kubernetes RabbitMQ StatefulSet pod:
+kubectl exec -it -n swiftdrop rabbitmq-0 -- rabbitmqctl list_queues name messages messages_ready | grep swiftdrop.dlq
 ```
 
 #### Step 2: Inspect Poison Message
 Extract one message without acknowledging to inspect headers and failure cause:
 ```bash
 # Read first message non-destructively:
-kubectl exec -it -n swiftdrop statefulset/rabbitmq -- rabbitmqadmin get queue=swiftdrop.dlq requeue=true count=1
+kubectl exec -it -n swiftdrop rabbitmq-0 -- rabbitmqadmin get queue=swiftdrop.dlq requeue=true count=1
 ```
 *Verify headers:* Look for `x-death` count, `x-first-death-reason`, and `correlation_id`.
 
 #### Step 3: Execute Safe DLQ Replay
-Once the underlying issue (e.g. worker deserialization bug resolved) is deployed:
+Once the underlying issue (e.g. worker deserialization bug resolved) is deployed, execute a one-shot standalone replay Job:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: swiftdrop-dlq-replay-
+  namespace: swiftdrop
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: swiftdrop-reconciler-sa
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: dlq-replay
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          command: ["/usr/local/bin/reconcile"]
+          args: ["--replay-dlq"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - configMapRef:
+                name: messaging-config
+            - secretRef:
+                name: outbox-reconciler-secrets
+```
+
+> [!NOTE]
+> The manifest above is the authoritative operational replay Job specification proposed for Member 09 to maintain at `deploy/kubernetes/messaging/dlq-replay-job.yaml`. Operators can save this manifest or pipe it directly via `kubectl apply -f -`.
+
 ```bash
-# Run manual replay via the reconciliation CronJob with --replay-dlq flag:
-kubectl create job --from=cronjob/swiftdrop-outbox-reconciler dlq-manual-replay-$(date +%s) -n swiftdrop -- /app/reconciler --replay-dlq
+# Execute standalone replay Job (once deployed or applied inline):
+kubectl create -f deploy/kubernetes/messaging/dlq-replay-job.yaml
 ```
 
 ---

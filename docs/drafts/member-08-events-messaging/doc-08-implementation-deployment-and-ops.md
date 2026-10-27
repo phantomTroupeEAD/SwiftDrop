@@ -18,7 +18,7 @@ The Messaging & Event subsystem is engineered using standard, production-grade G
 | :--- | :--- | :--- | :--- |
 | **Language Runtime** | Go | `1.22+` | Strongly typed, high concurrency via goroutines, memory safety. |
 | **AMQP 0-9-1 Broker Driver** | `github.com/rabbitmq/amqp091-go` | `v1.10.0` | Official RabbitMQ Go driver with Publisher Confirms & Manual Acks. |
-| **PostgreSQL Driver** | `github.com/lib/pq` / `pgx/v5` | `v1.10.9` | Relational SQL driver supporting `SKIP LOCKED` and binary JSONB. |
+| **PostgreSQL Driver** | `github.com/jackc/pgx/v5` | `v5.7.0` | High-performance PostgreSQL driver with native connection pooling (proposed under Agreement D10). |
 | **UUID Generation** | `github.com/google/uuid` | `v1.6.0` | RFC 4122 / UUIDv7 generation for time-ordered event identifiers. |
 | **Metrics Exposition** | `github.com/prometheus/client_golang` | `v1.19.1` | Standard Prometheus metric registry for scrapable operational metrics. |
 | **Real SMTP Emailer** | Standard Library `net/smtp` + `crypto/tls` | Go 1.22 Stdlib | Direct TLS/STARTTLS SMTP protocol delivery; zero mock sinks. |
@@ -261,7 +261,7 @@ docker build -t ghcr.io/phantomtroupeead/swiftdrop/messaging:${GIT_SHA} -f servi
 
 Member 08 provides the specifications and manifests for Member 09 to deploy to the Kubernetes cluster.
 
-### 6.1 Outbox Relay Manifest (`deploy/kubernetes/outbox-relay.yml`)
+### 6.1 Outbox Relay Manifest (`deploy/kubernetes/messaging/outbox-relay.yaml`)
 > [!IMPORTANT]
 > The Outbox Relay MUST remain a strict singleton (`replicas: 1`). Never scale horizontally without distributed leader election.
 
@@ -347,7 +347,7 @@ spec:
 
 ---
 
-### 6.2 Event Worker & KEDA Autoscaler (`deploy/kubernetes/event-worker.yml`)
+### 6.2 Event Worker & KEDA Autoscaler (`deploy/kubernetes/messaging/event-worker.yaml`)
 Stateless consumer scaling horizontally based on RabbitMQ queue backlog:
 
 ```yaml
@@ -477,7 +477,7 @@ spec:
 
 ---
 
-### 6.3 Scheduled Reconciliation CronJob (`deploy/kubernetes/reconciliation-cronjob.yml`)
+### 6.3 Scheduled Reconciliation CronJob (`deploy/kubernetes/messaging/reconciliation-cronjob.yaml`)
 Periodically audits for stuck outbox events (>5m), resets expired in-progress leases, and executes retention purges:
 
 ```yaml
@@ -518,8 +518,6 @@ spec:
                     name: messaging-config
                 - secretRef:
                     name: outbox-reconciler-secrets # Dedicated credentials for swiftdrop_reconciler role
-                - secretRef:
-                    name: rabbitmq-secrets
               resources:
                 requests:
                   cpu: 50m
@@ -548,6 +546,7 @@ Both daemons expose Prometheus counters and histograms:
 | `swiftdrop_webhook_delivery_attempts_total` | Counter | Total outbound webhook attempts (labeled by `http_status` & `status`). |
 | `swiftdrop_webhook_ssrf_blocked_total` | Counter | Total outbound webhooks aborted due to SSRF blacklist detection. |
 | `swiftdrop_dlq_depth` | Gauge | Current number of unacknowledged poison messages in `swiftdrop.dlq`. |
+| `swiftdrop_dlq_messages_routed_total` | Counter | Cumulative count of dead-lettered messages routed to `swiftdrop.dlq`. |
 | `swiftdrop_retention_purged_rows_total` | Counter | Total rows purged by retention jobs (labeled by `table_name`). |
 
 ### 7.2 Core Alerting Rules
