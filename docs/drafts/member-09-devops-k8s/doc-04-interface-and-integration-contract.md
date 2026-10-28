@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Health/metrics port for the relay and worker (Member 8); metric names to confirm with each owner; public tracking and SSE paths (Member 5); rate-limit and CORS values (Member 7); env var names such as VITE_API_GATEWAY_URL vs VITE_API_BASE_URL and the Google callback path (Members 1, 6, 7).  
+> **Open Questions / Needs Clarification:** Metric names to confirm with each owner; public tracking and SSE paths (C18, Member 5); rate-limit and CORS values (C19, C20, Member 7); the Google callback path (Member 1); team OK for one DB URL key per login role (A5 amendment). *(Settled: relay 8082 / worker 8083 (Member 8); web variable `VITE_API_BASE_URL` (Member 6).)*  
 > **Answers:** Exactly how does this module communicate with other modules?  
 > **Note:** the platform exposes **no business API**. Its "interfaces" are the contracts every service must meet to be built, run, probed, scraped and deployed. They are written below as **machine-readable** YAML where possible.  
 
@@ -118,12 +118,18 @@ conventions:
   k8s_source:
     non_secret: "<service>-config"        # ConfigMap, one per service
     secret:
-      postgres-secrets:     [POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, DATABASE_URL]
+      # One key per DB login role (A5 amendment 2026-10-28); each pod maps its key into the env var DATABASE_URL
+      postgres-secrets:     [POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,          # postgres container only
+                             DATABASE_URL,                                         # core-api (swiftdrop_app)
+                             TRACKING_DATABASE_URL, RELAY_DATABASE_URL,
+                             WORKER_DATABASE_URL, RECONCILER_DATABASE_URL]
+      postgres-migrator-secrets: [DATABASE_URL]                                    # migrate Job (swiftdrop_migrator)
       rabbitmq-secrets:     [RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS, RABBITMQ_URL]   # C6: KEDA reads RABBITMQ_URL
-      core-api-secrets:     [TBD by core-api owners]
       jwt-secrets:          [JWT_PRIVATE_KEY_PEM]
-      integrations-secrets: [GOOGLE_CLIENT_SECRET, LLM_API_KEY, SENDGRID_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
-                             OBJECT_STORAGE_ACCESS_KEY, OBJECT_STORAGE_SECRET_KEY, AI_SERVICE_ROLE_TOKEN]
+      integrations-secrets: [WEBHOOK_SECRET_ENCRYPTION_KEY, MERCHANT_API_KEY_PEPPER, GOOGLE_CLIENT_SECRET, LLM_API_KEY,
+                             SMTP_PASSWORD, OBJECT_STORAGE_ACCESS_KEY, OBJECT_STORAGE_SECRET_KEY, AI_SERVICE_ROLE_TOKEN,
+                             SENDGRID_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]       # last three optional (production providers)
+      "<service>-<module>-secrets": [module-specific keys]                         # A5 pattern, e.g. core-api-merchants-secrets
 change_policy:
   add: "PR updating environment-variables.md + .env.example + manifests (M9 reviews)"
   rename: "keep old name working for one milestone, then remove"   # avoids breaking teammates
@@ -144,7 +150,7 @@ database:
   - { name: swiftdrop_db_pool_open_connections,  type: gauge,     labels: [service] }
   - { name: swiftdrop_db_pool_wait_seconds_total,  type: counter,   labels: [service] }
 outbox (M8, names agreed 2026-10-25):
-  - { name: swiftdrop_outbox_pending_count,            type: gauge }    # K19 suggestion: swiftdrop_outbox_pending_events
+  - { name: swiftdrop_outbox_pending_events,           type: gauge }    # K19: not _count (reserved for histograms)
   - { name: swiftdrop_outbox_oldest_pending_age_seconds, type: gauge }  # proposed by M9, not yet confirmed by M8
   - { name: swiftdrop_outbox_publish_failures_total,   type: counter }
 worker (M8, names agreed 2026-10-25):
@@ -169,7 +175,7 @@ These names map to the SRS §11.4 list (request count, latency, errors, DB pool 
 
 | Rule | Value |
 | :--- | :--- |
-| Name | `ghcr.io/<org-lowercase>/swiftdrop/<service>:<git-sha>` (registry TBD, C24) |
+| Name | `ghcr.io/phantomtroupeead/swiftdrop/<image>:<git-sha>` (A3); manifests write `${IMAGE_TAG}` and the deploy step fills in the git SHA |
 | Images | `core-api`, `tracking-api`, **`messaging`** (relay + worker + reconcile, Member 8), `ai-assistant`, `web` (Dockerfile by Member 9), `core-api-migrations` |
 | User | non-root `10001:10001` |
 | Base | pinned version; distroless/alpine for Go, slim for Python, nginx alpine for web |
@@ -183,7 +189,7 @@ These names map to the SRS §11.4 list (request count, latency, errors, DB pool 
 | Path prefix | Service:port | Middlewares (M7) | Notes |
 | :--- | :--- | :--- | :--- |
 | `/api/v1/tracking` | `tracking-api:8081` | CORS, rate limit (public lookup only, C19) | SSE path TBD (C18) |
-| `/api/v1/ai` | `ai-assistant:8000` | CORS, rate limit 10/min | |
+| `/api/v1/ai` | `ai-assistant:8000` | CORS; rate limit *proposed*, not in `dynamic-routes.yml` yet (C19) | |
 | `/api/v1` | `core-api:8080` | CORS, 10 MB upload limit | |
 | `/` | `web:3000` | none | SPA |
 | `/health/*`, `/metrics` | **not routed** | — | internal only (C1) |
@@ -231,7 +237,7 @@ These names map to the SRS §11.4 list (request count, latency, errors, DB pool 
 | Kubernetes API (kubectl) | Minidu (+ a named backup admin, TBD); kubeconfig never committed |
 | Traefik dashboard | `api.insecure: false` in K8s; reached only via `kubectl port-forward` (ADR-002 §8) |
 | RabbitMQ management UI | internal only; `kubectl port-forward` when needed |
-| PostgreSQL | **per-service DB roles** (proposed, DB10): `swiftdrop_app` (core-api, read/write), `swiftdrop_tracking_ro` (tracking, **read only**), `swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_migrator` (DDL, only for migrations). No service uses the superuser |
+| PostgreSQL | **per-service DB roles** (agreed, D6): `swiftdrop_app` (core-api, read/write), `swiftdrop_tracking_ro` (tracking, **read only**), `swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_reconciler`, `swiftdrop_migrator` (DDL, only for migrations). Each pod gets its own URL key from `postgres-secrets` (§4). No service uses the superuser |
 | GHCR | CI pushes with `GITHUB_TOKEN` (`packages: write` only in `deploy.yml`) |
 | GitHub `main` | branch protection: PR, review, required checks, code-owner review for migrations |
 
@@ -249,8 +255,8 @@ The platform writes **no business tables**. It runs migrations written by the ta
 | :--- | :--- | :--- |
 | Probes | see the §2 table | readiness fails, so the pod gets no traffic; liveness fails, so the pod restarts |
 | Compose start order | `depends_on: service_healthy` / `service_completed_successfully` | dependants don't start |
-| Migrate Job | `backoffLimit: 2` (proposed); advisory lock | deploy stops; the old app keeps running |
-| Reconciler CronJob | `backoffLimit: 2`, `concurrencyPolicy: Forbid` ✅ | next schedule retries |
+| Migrate Job | `backoffLimit: 0` (D1: a failed migration needs a person, not retries); advisory lock | deploy stops; the old app keeps running |
+| Reconciler CronJob | `backoffLimit: 0`, `concurrencyPolicy: Forbid` ✅ | the next schedule (10 min later) retries |
 | Rollout | `progressDeadlineSeconds: 300` (proposed) | `kubectl rollout undo` |
 | Graceful shutdown | `terminationGracePeriodSeconds`: core-api 20s (+ buffer) | SIGKILL after the grace period |
 | Image pull | Kubernetes back-off | pod stays `ImagePullBackOff`; check the tag and GHCR access |

@@ -138,8 +138,9 @@ Verify system health across all layers:
   ```
 - [ ] **Health Probes Passing:**
   ```bash
-  curl -k -I https://api.swiftdrop.io/livez
-  # Expected: HTTP 200 OK
+  # Verify internal health probes (internal only, not routed by external ingress):
+  kubectl exec -n swiftdrop deployment/core-api -- wget -qO- http://localhost:8080/health/live
+  # Expected: HTTP 200 OK {"status":"UP"}
   ```
 - [ ] **Public Tracking Milestone Reachable:**
   ```bash

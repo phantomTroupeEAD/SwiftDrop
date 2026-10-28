@@ -11,10 +11,12 @@ All deployed services provide standard Kubernetes Liveness and Readiness probes:
 
 | Service | Port | Endpoint | Purpose | Expected Status / Body |
 | :--- | :--- | :--- | :--- | :--- |
-| **Core API** | `8080` | `GET /livez`<br>`GET /readyz` | Liveness (process up)<br>Readiness (DB pool connected) | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY","database":"UP"}` |
-| **Tracking API** | `8081` | `GET /livez`<br>`GET /readyz` | Liveness<br>Readiness (DB/SSE stream manager) | `200 OK` `{"status":"UP"}` |
-| **AI Assistant** | `8000` | `GET /health` | Liveness and model provider connectivity | `200 OK` `{"status":"healthy"}` |
-| **Traefik Ingress**| `9000` | `GET /ping` | Internal proxy liveness | `200 OK` `OK` |
+| **Core API** | `8080` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (process up)<br>Readiness (PostgreSQL pool connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY","database":"UP"}`<br>`200 OK` (metrics) |
+| **Tracking API** | `8081` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (process up)<br>Readiness (DB connection)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
+| **AI Assistant** | `8000` | `GET /health/live`<br>`GET /health/ready` | Liveness (process up)<br>Readiness (local model cache up) | `200 OK` `{"status":"healthy"}`<br>`200 OK` `{"status":"ready"}` |
+| **Outbox Relay** | `8082` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (daemon up)<br>Readiness (DB pool connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
+| **Event Worker** | `8083` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (worker up)<br>Readiness (RabbitMQ + DB connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
+| **Traefik Ingress**| `9000` (ping)<br>`8090` (dashboard) | `GET /ping` (9000)<br>`GET /dashboard/` (8090) | Internal proxy liveness<br>Local admin dashboard | `200 OK` `OK`<br>`200 OK` (dashboard UI) |
 
 ---
 
@@ -59,7 +61,7 @@ All backend services output structured **JSON** lines to `stdout`:
 docker exec -t swiftdrop-postgres pg_dump -U swiftdrop -d swiftdrop_db -F c -b -v -f /backups/swiftdrop_$(date +%Y%m%d_%H%M%S).dump
 
 # Or via Kubernetes pod:
-kubectl exec -n swiftdrop swiftdrop-postgres-0 -- pg_dump -U swiftdrop swiftdrop_db -F c > backup_$(date +%Y%m%d).dump
+kubectl exec -n swiftdrop postgres-0 -- pg_dump -U swiftdrop swiftdrop_db -F c > backup_$(date +%Y%m%d).dump
 ```
 
 ### 3.2 Database Restore Procedure
@@ -112,12 +114,12 @@ WHERE status = 'PENDING' AND attempt_count > 5;
 When unprocessable messages land in `events.dlq`:
 1. **Access RabbitMQ CLI:**
    ```bash
-   kubectl exec -it -n swiftdrop deployment/rabbitmq -- rabbitmqctl list_queues name messages messages_ready
+   kubectl exec -it -n swiftdrop statefulset/rabbitmq -- rabbitmqctl list_queues name messages messages_ready
    ```
 2. **Inspect Poison Pill Message:** Read first message without acknowledging to identify malformed schema or unhandled exception.
 3. **Replay DLQ:** Run the reconciliation script:
    ```bash
-   kubectl create job --from=cronjob/reconciliation-worker dlq-replay-manual -n swiftdrop
+   kubectl create job --from=cronjob/swiftdrop-outbox-reconciler dlq-replay-manual -n swiftdrop
    ```
 
 ---
@@ -145,9 +147,9 @@ WHERE id = 'TARGET_DELIVERY_UUID';
 
 ```bash
 # Access internal Traefik dashboard via secure port-forward
-kubectl port-forward svc/traefik -n traefik 9000:9000
+kubectl port-forward svc/traefik -n traefik 8090:8090
 
-# Open browser to: http://localhost:9000/dashboard/
+# Open browser to: http://localhost:8090/dashboard/
 # Verify active Routers, Middlewares, and Service health
 ```
 

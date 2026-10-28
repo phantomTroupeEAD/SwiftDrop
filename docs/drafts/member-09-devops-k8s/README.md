@@ -63,6 +63,10 @@ The 8-document template was written for business modules such as Parcels or Merc
 | C15 | Web Nginx listens on **3000**, SPA fallback; build with `VITE_API_BASE_URL=/api/v1` (Member 6) |
 | DB budget | Postgres `max_connections` = **150** (memory 1Gi); relay pool 5, worker pool 10 per pod (Member 9 + Member 8) |
 | C16 | Traefik dashboard on port **8090**, localhost/internal only (Member 7 + Member 9) |
+| D2 | 6-digit sequential migration naming (`000NNN_name.up.sql`, `000001`–`000011`) ratified (also required by AGENTS.md §7) |
+| D3 | First-wave migration order = the hub list (`docs/drafts/README.md` §4), plus `notification_deliveries` in `000009` (DB coordinator, 2026-10-28) |
+| D6 | Bootstrap DB roles ratified (`swiftdrop_migrator`, `swiftdrop_app`, `swiftdrop_tracking_ro`, `swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_reconciler`) |
+| A8 | Kubernetes manifest layout standardized to per-service modular `.yaml` folders |
 
 ## Open questions for Meeting 2
 
@@ -72,20 +76,21 @@ The docs refer to these by code (C = infrastructure doc conflict, DB = schema pr
 
 | Code | Question | Who |
 | :-: | :--- | :--- |
-| C2 | Manifest folder: keep `deploy/kubernetes/*.yml` (real files) instead of `deploy/k8s/` (ADR-002) | M9 |
+| C2 | Manifest layout: ✅ resolved: per-service modular `.yaml` folders (A8) | M9 |
 | C5 | TLS origin-certificate secret name and namespace (`traefik-origin-tls`) | M9, M7 |
 | C8 | Tracking API HPA numbers (manifest 1→2 vs docs 2→4); Redis needed if ≥ 2 | M5 |
 | C9 | Core API and web HPA files are referenced but missing | M9 |
-| C12 | Runbook commands that don't match the real resources (StatefulSet names) | M9 |
+| C12 | ✅ Runbook commands and StatefulSet/CronJob names resolved in `runbook.md` | M9 |
 | C13 | ✅ DLQ and columns agreed (see above); ⏳ still open: a `correlation_id` column | M8 |
-| C14 | Postgres probe uses user `postgres`, but the app user is `swiftdrop` | M9 |
+| C14 | ✅ Postgres probe user set to `swiftdrop` on `swiftdrop_db` with 1Gi limit | M9 |
 | C18 | Public tracking and SSE paths | M5 |
 | C19 | Rate-limit values (gateway vs security notes) | M7 |
 | C20 | CORS settings (gateway vs security notes) | M7 |
-| C21 | Env var names: ✅ web uses `VITE_API_BASE_URL` (Member 6); ⏳ Google callback path, SRS-only vars, storage vars `S3_*` vs `OBJECT_STORAGE_*` | M1, M3, M7, M9 |
+| C21 | ✅ Env var names aligned in `environment-variables.md` (web `VITE_API_BASE_URL`, storage aliases `S3_*` / `OBJECT_STORAGE_*`) | M1, M3, M7, M9 |
 | C23 | Outbox Relay scaling wording (SRS "may scale" vs singleton rule); singleton kept | M8 |
-| C24 | Repo URL, image registry (GHCR), demo domain | M9, coordinator |
-| C25 | CI gaps (unpinned actions, no web/Python jobs) | M9 |
+| C24 | ✅ registry `ghcr.io/phantomtroupeead/swiftdrop/<image>:<git-sha>` (A3); ⏳ demo domain | M9, coordinator |
+| C25 | ✅ Go CI jobs now key on `core-api/go.mod`, so draft `go.mod` files no longer break CI (2026-10-28); ⏳ unpinned actions (TruffleHog `@main`, golangci-lint `latest`), no web/Python jobs | M9 |
+| A5+ | DB URL keys per login role inside `postgres-secrets` (`TRACKING_`, `RELAY_`, `WORKER_`, `RECONCILER_DATABASE_URL`); every service still reads `DATABASE_URL` (amendment 2026-10-28) | M9, M5, M8 |
 | C26 | ✅ object storage: Cloudflare R2 in production, MinIO locally (Member 3); ⏳ Redis in Kubernetes | M5 |
 
 **Database (DB):**
@@ -95,7 +100,7 @@ The docs refer to these by code (C = infrastructure doc conflict, DB = schema pr
 | DB1 | Cross-module foreign keys: allowed as DB constraints (SRS §7.2), but no cross-module JOINs? | team |
 | DB2 | ✅ columns agreed: `database-schema.md` version (Member 8); ⏳ add `correlation_id` | M8 |
 | DB3 | `processed_events` (consumer dedup) table missing from `database-schema.md` | M8 |
-| DB4 | Refresh-token / session table missing | M1 |
+| DB4 | ✅ `refresh_tokens` is now in `database-schema.md` | M1 |
 | DB5 | `ai_conversations` conflicts with the AI no-database rule; leave it out of the baseline? | M10 |
 | DB6 | `parcels.sender_id` and `pricing_quotes.requester_id` point at two different tables | M2 |
 | DB7 | `idempotency_keys` has no named owner, and its key should be (caller, operation, key) | M2 |
@@ -103,3 +108,5 @@ The docs refer to these by code (C = infrastructure doc conflict, DB = schema pr
 | DB9 | Money type: `bigint` cents only (drop the `NUMERIC` option) | M9 |
 | DB10 | Who creates the per-service DB login roles (proposal: M9, reviewed by M1) | M9, M1 |
 | DB11 | Webhook signing secret: ✅ Member 4 designed AES-256-GCM encryption with a key from a K8s Secret (shared with the worker); ⏳ rename the `secret_hash` column in `database-schema.md` | M4, M8 |
+| DB12 | Webhook targets view name: owner Member 4 uses `merchant_webhook_targets`; the Master Audit says `merchant_webhook_targets_view`. Member 9 docs follow the owner | M4, M8 |
+| DB13 | `000005`: `parcel_addresses` table (hub list, `database-schema.md`) or JSONB snapshots on `parcels` (Master Audit §2.3)? | M2 |

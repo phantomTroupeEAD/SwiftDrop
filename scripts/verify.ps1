@@ -26,7 +26,7 @@ if ($foundSecrets) {
 if ((Test-Path "core-api") -or (Test-Path "go.mod")) {
     Write-Host "[2/4] Verifying Go formatting (gofmt)..." -ForegroundColor Yellow
     if (Get-Command gofmt -ErrorAction SilentlyContinue) {
-        $goFiles = Get-ChildItem -Recurse -Filter *.go | Where-Object { $_.FullName -notmatch "vendor" } | Select-Object -ExpandProperty FullName
+        $goFiles = Get-ChildItem -Recurse -Filter *.go | Where-Object { $_.FullName -notmatch "vendor|docs" } | Select-Object -ExpandProperty FullName
         if ($goFiles) {
             $unformatted = gofmt -l $goFiles
             if ($unformatted) {

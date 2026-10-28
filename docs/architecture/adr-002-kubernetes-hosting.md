@@ -1,7 +1,7 @@
 # ADR-002: Kubernetes & Hosting Architecture
 
 > **Status:** Accepted  
-> **Date:** 2026-10-21  
+> **Date:** 2026-10-21 (last updated 2026-10-28: workload table and autoscaling aligned with the Member 9 team agreements)  
 > **Owners:** Member 9 (DevOps, Kubernetes & Observability), Member 7 (Admin Frontend & Gateway)  
 > **Deciders:** SwiftDrop Engineering Team  
 > **References:** [SRS 11.2, 13.2 & 15.3](../../docs/intial/SwiftDrop_SRS_v1.md), [Engineering Standards §10](../../docs/intial/SwiftDrop_Engineering_Standards_and_Best_Practices_v1.0.md), [ADR-001 (Traefik Ingress)](adr-001-traefik-ingress.md)
@@ -10,7 +10,7 @@
 
 ## 1. Context & Problem Statement
 
-SwiftDrop is a comprehensive parcel delivery management system comprising 10 distinct domain capabilities. To demonstrate production readiness, scalability, and meet the deployment requirements specified in the project requirements ([SRS §11.2 & §15.3](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/intial/SwiftDrop_SRS_v1.md)), the engineering team requires an authoritative hosting architecture and deployment plan.
+SwiftDrop is a comprehensive parcel delivery management system comprising 10 distinct domain capabilities. To demonstrate production readiness, scalability, and meet the deployment requirements specified in the project requirements ([SRS §11.2 & §15.3](../intial/SwiftDrop_SRS_v1.md)), the engineering team requires an authoritative hosting architecture and deployment plan.
 
 Prior documentation contained ambiguities and gaps:
 1. Docker Compose was established for local development, but Kubernetes workload mapping and hosting boundaries lacked a binding architectural specification.
@@ -29,7 +29,7 @@ We adopt a **single Ubuntu VPS (Virtual Private Server) running K3s** as the pri
 1. **Host OS:** Ubuntu 22.04 / 24.04 LTS with a dedicated public IPv4 address.
 2. **Kubernetes Distribution:** **K3s** (Rancher/SUSE lightweight Kubernetes).
    - *Rationale:* K3s is fully CNCF-certified, packages control-plane and worker components into a single binary, consumes minimal memory overhead (<512 MB RAM), and includes a built-in `local-path` PersistentVolume provisioner suitable for single-node stateful storage.
-3. **Local Development Parity:** Developers run the system via Docker Compose (`deploy/docker-compose.yml`). The Kubernetes manifests in `deploy/k8s/` mirror the container images, environment variable schemas, and networking routes used in Compose.
+3. **Local Development Parity:** Developers run the system via Docker Compose (`deploy/docker-compose.yml`). The Kubernetes manifests in `deploy/kubernetes/` mirror the container images, environment variable schemas, and networking routes used in Compose.
 
 ---
 
@@ -76,11 +76,12 @@ Workloads must be mapped to appropriate Kubernetes workload primitives according
 | **Tracking API** | `Deployment` | 2 (baseline) | Stateless read-optimized SSE projection service. Connects to PostgreSQL read replica/pool. |
 | **AI Assistant** | `Deployment` | 1 | Stateless Python/FastAPI service calling Core API internal endpoints. |
 | **Web Frontend** | `Deployment` | 2 (baseline) | Nginx container serving React SPA static bundle. |
-| **Outbox Relay** | `Deployment` | 1 (singleton) | Dedicated polling daemon reading unpublished events from `outbox` table and publishing to RabbitMQ. Singleton ensures no concurrent lock contention on outbox batches. |
-| **Event Worker** | `Deployment` | 1–2 | Asynchronous consumer processing notifications, webhooks, and delivery updates from RabbitMQ. Must be idempotent. |
-| **PostgreSQL 16** | `StatefulSet` | 1 | Authoritative database. Uses `volumeClaimTemplates` with `local-path` StorageClass for durable disk persistence. |
-| **RabbitMQ 3.13** | `StatefulSet` | 1 | Authoritative event message broker. Persistent queues backed by PVC using `local-path` StorageClass. |
-| **Reconciliation Worker** | `CronJob` | Schedule: `*/15 * * * *` | Periodic reconciliation job auditing outbox DLQ, sweeping expired delivery locks, and checking webhook retry backlogs. |
+| **Outbox Relay** | `Deployment` | 1 (singleton) | Dedicated polling daemon reading unpublished events from the `outbox_events` table and publishing to RabbitMQ. Singleton ensures no concurrent lock contention on outbox batches. Never autoscaled. |
+| **Event Worker** | `Deployment` | 1–3 (KEDA) | Asynchronous consumer of `q.notifications.worker` and `q.webhooks.dispatcher` (notifications and merchant webhooks). Must be idempotent. |
+| **PostgreSQL 16** | `StatefulSet` | 1 | Authoritative database (`max_connections=150`, memory limit 1Gi). Uses `volumeClaimTemplates` with `local-path` StorageClass for durable disk persistence. |
+| **RabbitMQ 3.13** | `StatefulSet` | 1 | Event message broker (transport only, never the source of truth). Persistent queues backed by PVC using `local-path` StorageClass. |
+| **Redis** *(optional)* | `Deployment` | 1 | Pub/Sub fan-out only, needed only if Tracking API runs more than 1 replica (open item C8, Member 5). No persistence. |
+| **Reconciliation Worker** | `CronJob` | Schedule: `*/10 * * * *` | `messaging` image, `/usr/local/bin/reconcile --stale-threshold=5m --batch-size=50` (Member 8). `concurrencyPolicy: Forbid`. Sweeps stale outbox rows and stuck deliveries. |
 | **Traefik Ingress** | `Deployment` | 1–2 | Ingress Controller listening on HostPort/NodePort 80/443. Reads `IngressRoute` and `Middleware` CRDs. |
 
 ---
@@ -94,7 +95,7 @@ Because all inbound traffic traverses Cloudflare edge servers, Traefik natively 
 
 ### 5.2 Server-Sent Events (SSE) Proxy Compatibility
 Cloudflare proxies buffer HTTP responses by default, which breaks real-time event streaming. To guarantee seamless SSE delivery for Tracking API (`services/tracking`):
-1. Tracking API must emit response header `X-Accel-Buffering: no` on all `/api/v1/tracking/sse/*` streams.
+1. Tracking API must emit response header `X-Accel-Buffering: no` on every SSE stream under `/api/v1/tracking/` (the exact stream path is open item C18, owned by Member 5).
 2. Tracking API must send periodic heartbeat/keepalive comments (e.g. `: ping\n\n` every 15 seconds) to prevent Cloudflare's 100-second idle connection timeout from closing active browser sessions.
 3. Cloudflare dashboard setting for WebSockets/HTTP2 is enabled.
 
@@ -122,10 +123,11 @@ On a single Ubuntu VPS, compute and memory resources are constrained by the phys
 1. **Baseline Strategy:** Static replica counts with conservative resource requests and limits:
    - Core API: `requests.cpu: 100m`, `limits.cpu: 500m`, `requests.memory: 128Mi`, `limits.memory: 512Mi`
    - Tracking API: `requests.cpu: 50m`, `limits.cpu: 250m`, `requests.memory: 64Mi`, `limits.memory: 256Mi`
-   - PostgreSQL: `requests.cpu: 250m`, `limits.cpu: 1000m`, `requests.memory: 256Mi`, `limits.memory: 1Gi`
+   - PostgreSQL: `requests.cpu: 100m`, `limits.cpu: 500m`, `requests.memory: 256Mi`, `limits.memory: 1Gi` (as in `deploy/kubernetes/postgres-statefulset.yml`)
 2. **Demonstration Autoscaling (Bonus Requirement):**
-   - **HorizontalPodAutoscaler (HPA):** Configured for Core API and Tracking API with metric targets (`targetCPUUtilizationPercentage: 70%`) and bounded replicas (`minReplicas: 2`, `maxReplicas: 4`).
-   - **KEDA (Kubernetes Event-driven Autoscaling):** Optional `ScaledObject` defined for the `event-worker` targeting the RabbitMQ `events` queue depth (`queueLength: 50`), scaling workers from 1 to 3 pods during delivery spikes.
+   - **HorizontalPodAutoscaler (HPA):** Core API 2–4 replicas at 70% CPU. Tracking API: the manifest today scales 1–2 at 50% CPU; the final range is open item C8 (Member 5), and the DB connection budget allows at most 4 pods.
+   - **KEDA (Kubernetes Event-driven Autoscaling):** `ScaledObject` for the `event-worker` with two RabbitMQ triggers, `q.notifications.worker` and `q.webhooks.dispatcher` (`queueLength: 10` each), scaling workers from 1 to 3 pods. The KEDA trigger reads the `RABBITMQ_URL` key of `rabbitmq-secrets`.
+   - **Never autoscaled:** `outbox-relay` (singleton), PostgreSQL and RabbitMQ (StatefulSets).
 
 ---
 
@@ -134,7 +136,7 @@ On a single Ubuntu VPS, compute and memory resources are constrained by the phys
 1. **Dashboard Security:** The Traefik API/dashboard is configured with `api.insecure: false` in production manifests. Administrative access is restricted to authenticated `kubectl port-forward` sessions.
 2. **Kubernetes RBAC:** Services execute under dedicated Kubernetes `ServiceAccount`s with default permissions revoked. Pods run as non-root users with read-only root filesystems where practical.
 3. **Secret Hygiene:** Database passwords, JWT secret keys, and RabbitMQ credentials are stored in Kubernetes `Secret` resources and injected as environment variables. No plain secrets are stored in Git.
-4. **Network Policies:** In Kubernetes, egress from Core API to external networks is restricted, and direct access to PostgreSQL and RabbitMQ is permitted only from authorized application pods (`core-api`, `outbox-relay`, `event-worker`, `services/tracking`).
+4. **Network Policies:** In Kubernetes, egress from Core API to external networks is restricted, and direct access to PostgreSQL and RabbitMQ is permitted only from authorized application pods (`core-api`, `outbox-relay`, `event-worker`, `tracking-api`) and the migration Job and reconciler CronJob (PostgreSQL only).
 
 ---
 

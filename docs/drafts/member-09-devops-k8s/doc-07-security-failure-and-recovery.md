@@ -19,18 +19,18 @@ The platform does no user login. Its security is about **who can change, deploy 
 | Git `main` branch | PR required, at least 1 review, required CI checks, **code-owner review for migrations** (DB coordinator) | Work Division §4; Engineering Standards §3.3; election 2026-10-24 |
 | GitHub Actions | least-privilege `GITHUB_TOKEN` (`contents: read` by default; `packages: write` only in `deploy.yml`); no `pull_request_target` with untrusted code; pinned action versions | Engineering Standards §4.1 (pinning) |
 | Kubernetes API | kubeconfig held by Minidu (+ one named backup admin, TBD); never committed; VPS SSH is key-only | ADR-002 §3.1 |
-| Workload identity | one **ServiceAccount per workload**, `automountServiceAccountToken: false` unless needed; no cluster-admin for apps | ADR-002 §8.2; SRS SEC-017 |
-| Network | only Traefik is exposed. **NetworkPolicy:** Postgres and RabbitMQ reachable only from `core-api`, `tracking-api`, `outbox-relay`, `event-worker` and the reconciler/migrate jobs. Core API egress restricted; worker egress allowed for webhooks (with M8's SSRF guard) | ADR-002 §8.4 |
+| Workload identity | one **ServiceAccount per workload**, `automountServiceAccountToken: false` unless needed; no cluster-admin for apps | ADR-002 §8 (item 2); SRS SEC-017 |
+| Network | only Traefik is exposed. **NetworkPolicy:** Postgres and RabbitMQ reachable only from `core-api`, `tracking-api`, `outbox-relay`, `event-worker` and the reconciler/migrate jobs. Core API egress restricted; worker egress allowed for webhooks (with M8's SSRF guard) | ADR-002 §8 (item 4) |
 | VPS firewall | ports 80/443 only from **Cloudflare IP ranges** (UFW); everything else closed except SSH | ADR-002 §3.1 |
-| Database | per-service roles; the tracking role is **read-only**; the AI service has **no** DB access; the superuser is never used by apps | Doc 5 §2.2; SRS §3.2, FR-AI-005 |
-| Admin UIs | Traefik dashboard `api.insecure: false` in K8s; RabbitMQ management, Grafana and Prometheus reached only via `kubectl port-forward` | ADR-002 §8.1 |
+| Database | per-service roles (D6), each with its own URL key in `postgres-secrets`; the tracking role is **read-only**; the AI service has **no** DB access; the superuser is never used by apps | Doc 5 §2.2; SRS §3.2, FR-AI-005 |
+| Admin UIs | Traefik dashboard `api.insecure: false` in K8s; RabbitMQ management, Grafana and Prometheus reached only via `kubectl port-forward` | ADR-002 §8 (item 1) |
 | Tenant isolation | not a platform concern; enforced in the backend (M1/M4). The platform must not break it (e.g. no shared admin DB role for apps) | AGENTS.md §8 |
 
 ## 2. Sensitive data the platform handles
 
 | Secret / sensitive data | Where it lives | Must never appear in |
 | :--- | :--- | :--- |
-| DB passwords, `DATABASE_URL` | `postgres-secrets` | git, images, logs, CI output |
+| DB passwords, the per-role DB URLs | `postgres-secrets`, `postgres-migrator-secrets` | git, images, logs, CI output |
 | RabbitMQ credentials, `RABBITMQ_URL` | `rabbitmq-secrets` | same |
 | JWT private key | `jwt-secrets` | same, and never in ConfigMaps |
 | Google client secret, LLM key, SendGrid/Twilio, object storage keys, AI service token | `integrations-secrets` | same |
@@ -39,7 +39,7 @@ The platform does no user login. Its security is about **who can change, deploy 
 | DB backups (contain **PII**) | encrypted, off-site | laptops, git, public buckets |
 | Logs | stdout → cluster | must not contain passwords, tokens, API keys, webhook secrets or PII (SEC-008) |
 
-**Rule:** only `.env.example` and `secrets.example.yml` with **placeholders** are committed (SRS §11.1). `.env`, `*.pem` and `*.key` are already gitignored ✅.
+**Rule:** only `.env.example` and `secrets.example.yaml` with **placeholders** are committed (SRS §11.1). `.env`, `*.pem` and `*.key` are already gitignored ✅.
 
 ## 3. Threats and abuse cases
 
@@ -79,7 +79,7 @@ The platform does no user login. Its security is about **who can change, deploy 
 | Postgres down at start | Compose: dependants wait for `service_healthy`. K8s: readiness stays false and the apps retry connecting (app code) |
 | Postgres down while running | readiness becomes `NOT_READY`, so the pod leaves the endpoints. **Not** restarted (liveness doesn't check dependencies) |
 | RabbitMQ down | relay and worker readiness false; the outbox keeps events safe in Postgres (runbook Playbook B) |
-| Migration Job fails | `backoffLimit: 2`, then the deploy stops; the old version keeps running |
+| Migration Job fails | `backoffLimit: 0` (D1), so the deploy stops at once and a person checks it; the old version keeps running |
 | Image pull fails | `ImagePullBackOff`; the rollout doesn't progress; check the tag and GHCR access |
 | Slow shutdown | SIGTERM, then the grace period (core-api 20s), then SIGKILL |
 
@@ -143,7 +143,7 @@ The platform does no user login. Its security is about **who can change, deploy 
 
 ## 10. Module security checklist (tick before each milestone)
 
-- [ ] No real secrets in git; only placeholders in `.env.example` / `secrets.example.yml`
+- [ ] No real secrets in git; only placeholders in `.env.example` / `secrets.example.yaml`
 - [ ] All images pinned, non-root, scanned
 - [ ] Every workload has a ServiceAccount, resources and probes; no privileged pods
 - [ ] Only Traefik is exposed; DB, broker and admin UIs are internal
