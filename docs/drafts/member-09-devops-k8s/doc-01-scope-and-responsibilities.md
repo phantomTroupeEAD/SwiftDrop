@@ -102,13 +102,13 @@ Without a platform module:
 
 | # | Invariant | Source |
 | :-: | :--- | :--- |
-| I1 | Outbox Relay always has **`replicas: 1`**; no HPA or KEDA | AGENTS.md §4.4; ADR-002 §7.2 |
-| I2 | PostgreSQL and RabbitMQ run as **StatefulSets** with persistent volumes, and are never scaled | AGENTS.md §4.4; SRS §11.2 |
+| I1 | Outbox Relay always has **`replicas: 1`**; no HPA or KEDA | ADR-002 §4 (workload table) and §7 |
+| I2 | PostgreSQL and RabbitMQ run as **StatefulSets** with persistent volumes, and are never scaled | ADR-002 §4; SRS §11.2 |
 | I3 | **No real secrets** in git, images, CI logs or committed Helm values | SRS §11.1; AGENTS.md §8 |
 | I4 | **Pinned image tags**; no `latest` in the final submission | Engineering Standards §10 |
 | I5 | **Only Traefik is public.** Postgres, RabbitMQ (including its management UI), health and metrics stay internal | Engineering Standards §10; SRS §11.4 |
 | I6 | Containers **run as non-root** (UID 10001) | security-notes §6 |
-| I7 | Total DB connections stay **≤ Postgres `max_connections`** | ADR-002 §7.1; C11 |
+| I7 | Total DB connections stay **≤ Postgres `max_connections`** (150, D8) | C11; D8 |
 | I8 | **Migrations run before the app starts.** Every migration is **reviewed by the DB coordinator** and has a **unique number** | C22; Engineering Standards §6 |
 | I9 | Every workload that needs them has **probes and requests/limits** | SRS §11.2; Work Division §3 acceptance |
 | I10 | `main` stays **runnable from a clean clone** | Work Division §4; Engineering Standards §12.3 |
@@ -165,9 +165,11 @@ Without a platform module:
 
 **Decided (2026-10-24):** C1 health paths · C3 Compose location · C4 secret names · C11 M9 owns the pool budget · C17 path routing · C22 golang-migrate + Makefile · Minidu is DB coordinator · Watti leads the core-api Dockerfile.
 
+**Decided later:** C6, C7, C10, C15, C16 (2026-10-25) · C2, C12, C14, C21 · D2 6-digit names · D3 hub migration order (2026-10-28) · D6 DB roles · D8 `max_connections=150` · A8 per-service manifest folders. See the README.
+
 **Still open:**
-- infra conflicts C2, C5, C8, C9, C12, C13 (`correlation_id`), C14, C18–C21 and C23–C26 (C6, C7, C10, C15 and C16 were settled on 2026-10-25);
-- schema problems DB1–DB11;
+- infra conflicts C5, C8, C9, C13 (`correlation_id`), C18–C20, C23, C24 (domain), C25 (pinning, web/Python jobs), C26 (Redis);
+- schema problems DB1–DB3, DB5–DB13 (DB4 is resolved);
 - the VPS provider and size, the domain, and GitHub admin rights.
 
 **Out of scope:** multi-region or HA clusters, disaster recovery with a formal RPO/RTO (SRS §1.5), managed cloud Kubernetes, a service mesh, GitOps tools (Argo CD/Flux), and 24/7 on-call.

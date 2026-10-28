@@ -13,7 +13,7 @@ Variables shared across multiple backend services and daemons:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `APP_ENV` | Application runtime environment (`local`, `development`, `staging`, `production`). | `local` | **Yes** | No | All services |
 | `LOG_LEVEL` | Minimum log output level (`debug`, `info`, `warn`, `error`). | `info` | No | No | All services |
-| `DATABASE_URL` | PostgreSQL connection DSN (`postgres://user:pass@host:5432/dbname?sslmode=disable`). Least-privilege roles per service (D6). | `postgres://swiftdrop:swiftdrop_dev@postgres:5432/swiftdrop_db?sslmode=disable` | **Yes** | **Yes** | Core API, Tracking, Outbox Relay, Event Worker |
+| `DATABASE_URL` | PostgreSQL connection DSN (`postgres://user:pass@host:5432/dbname?sslmode=disable`). Each service logs in with its own role (D6): core-api `swiftdrop_app`, tracking `swiftdrop_tracking_ro`, relay `swiftdrop_relay`, worker `swiftdrop_worker`, reconciler `swiftdrop_reconciler`. In Kubernetes the value comes from the matching key of `postgres-secrets` (§7). Never the `swiftdrop` superuser. | `postgres://swiftdrop_app:<change-me-local-only>@postgres:5432/swiftdrop_db?sslmode=disable` | **Yes** | **Yes** | Core API, Tracking, Outbox Relay, Event Worker, Reconciler |
 | `DB_MAX_OPEN_CONNS` | Maximum database connection pool size per pod (D8 budget: Core 12, Tracking 5, Relay 5, Worker 10, Reconciler 2; max 105 active vs 150 server limit). | `12` | No | No | Core API, Tracking, Outbox Relay |
 | `DB_MAX_IDLE_CONNS` | Maximum idle connection pool size per pod. | `5` | No | No | Core API, Tracking, Outbox Relay |
 | `RABBITMQ_URL` | AMQP 0-9-1 connection URI (cluster user `swiftdrop`, vhost `/`). | `amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/` | **Yes** | **Yes** | Outbox Relay, Event Worker, Tracking |
@@ -124,7 +124,7 @@ Standardized secret naming scheme per Member 9 Agreement A5:
 | Configuration Group | Kubernetes Resource Name | Resource Type | Key Examples |
 | :--- | :--- | :--- | :--- |
 | Core API Config | `core-api-config` | `ConfigMap` | `APP_ENV`, `HTTP_ADDR`, `PUBLIC_BASE_URL` |
-| Database App Credentials | `postgres-secrets` | `Secret` | `DATABASE_URL` (role `swiftdrop_app`, `swiftdrop_tracking_ro`, `swiftdrop_relay`, `swiftdrop_worker`) |
+| Database App Credentials | `postgres-secrets` | `Secret` | One key per login role, mapped into each pod's `DATABASE_URL`: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL` (`swiftdrop_tracking_ro`), `RELAY_DATABASE_URL` (`swiftdrop_relay`), `WORKER_DATABASE_URL` (`swiftdrop_worker`), `RECONCILER_DATABASE_URL` (`swiftdrop_reconciler`); plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` for the Postgres container only |
 | Database Migration Credentials | `postgres-migrator-secrets` | `Secret` | `DATABASE_URL` (role `swiftdrop_migrator`) |
 | RabbitMQ Credentials | `rabbitmq-secrets` | `Secret` | `RABBITMQ_URL` (user `swiftdrop`) |
 | JWT Private Keys | `jwt-secrets` | `Secret` | `JWT_PRIVATE_KEY_PEM` |

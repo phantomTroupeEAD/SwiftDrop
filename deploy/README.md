@@ -18,11 +18,11 @@ SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 │   └── Traefik Ingress Controller (Ports: :80 HTTP, :443 HTTPS, :8090 Dashboard)
 ├── Stateless Workloads (Deployments):
 │   ├── core-api (Go Modular Monolith: :8080)
-│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA, replicas 2-5)
+│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA, replicas 1-2 today; final range open, C8)
 │   ├── ai-assistant (FastAPI Service: :8000 — Zero DB access)
 │   ├── web (React/TS Unified SPA + Nginx: :3000)
 │   ├── outbox-relay (Go Transactional Outbox Publisher daemon — Singleton replicas: 1)
-│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA, replicas 1-5)
+│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA, replicas 1-3)
 ├── Database Release Migration (Job):
 │   └── core-api-migrate-job (One-shot Job per release, backoffLimit: 0)
 ├── Scheduled Batch Workloads (CronJob):
@@ -47,6 +47,9 @@ deploy/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
 │       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
 └── kubernetes/                          # Kubernetes resource manifests (Member 9)
+    │                                    # Target layout (A8). Today the files are still flat:
+    │                                    # postgres-statefulset.yml, rabbitmq-statefulset.yml,
+    │                                    # cronjob-reconciliation.yml, autoscaling/*.yml (moved in one M9 PR)
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
     ├── postgres/                        # PostgreSQL 16 StatefulSet, Service, PVC
     ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet, Service, PVC
@@ -81,15 +84,19 @@ Because Cloudflare sits in front of the cluster edge, Traefik is configured with
 ## 5. Micro-Scaling Profile (HPA & KEDA)
 
 To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (OOM) crashes on a single-node VPS, autoscalers are configured with **Micro-Scaling demonstration envelopes**:
-- **Tracking API (HPA):** Scales from `2` &rarr; `5` replicas when CPU utilization exceeds 70%.
-- **Event Worker (KEDA):** Scales from `1` &rarr; `5` replicas when the `q.notifications.worker` or `q.webhooks.dispatcher` queue backlog exceeds 10 messages.
+- **Tracking API (HPA):** Scales from `1` &rarr; `2` replicas when CPU utilization exceeds 50% (`autoscaling/hpa-tracking.yml`). The final range is open item C8 (Member 5); the DB budget below allows at most 4 pods, and more than 1 pod needs Redis.
+- **Event Worker (KEDA):** Scales from `1` &rarr; `3` replicas when the `q.notifications.worker` or `q.webhooks.dispatcher` queue backlog exceeds 10 messages (`autoscaling/keda-event-worker.yml`).
 - **Outbox Relay:** Strictly a singleton (`replicas: 1`) to eliminate row lock contention.
 
 ---
 
 ## 6. Database Governance & Connection Pooling Budget
 
-PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling). Connection budgets are strictly enforced per pod ConfigMap:
+PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling), set by `args: ["-c", "max_connections=150"]` in `postgres-statefulset.yml`.
+
+Each workload logs in with its own role (D6). `postgres-secrets` holds one key per role, and the manifest maps that key into the `DATABASE_URL` env var the service reads: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL`, `RELAY_DATABASE_URL`, `WORKER_DATABASE_URL`, `RECONCILER_DATABASE_URL`. The migrate Job uses `postgres-migrator-secrets`.
+
+Connection budgets are strictly enforced per pod ConfigMap:
 - `core-api`: 12 conns/pod $\times$ 4 replicas = 48
 - `tracking-api`: 5 conns/pod $\times$ 4 replicas = 20
 - `outbox-relay`: 5 conns

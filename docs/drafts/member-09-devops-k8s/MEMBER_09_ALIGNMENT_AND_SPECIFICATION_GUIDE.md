@@ -1,13 +1,14 @@
 # Member 09 — DevOps, Kubernetes & Database Coordinator Alignment Guide
 
-> **Author / Domain Owner:** Member 9 — DevOps, Kubernetes, Observability & Database Coordinator (Minidu Dhananjana)  
+> **Domain Owner:** Member 9 — DevOps, Kubernetes, Observability & Database Coordinator (Minidu Dhananjana)  
+> **Written by:** Poorna Rashmika (team audit, 2026-10-25) · **Corrected by Member 9:** 2026-10-28 (real requirement IDs, agreed scaling numbers, hub migration order, working code samples)  
 > **Target Directories / Modules:**  
 > - `deploy/` (Docker Compose, Kubernetes manifests, Helm values, Traefik integration, monitoring)  
 > - `.github/workflows/` (Continuous Integration & Delivery pipelines)  
 > - `root/Makefile` & `root/.env.example` (Developer automation interface & environment inventory)  
 > - `core-api/migrations/` (PostgreSQL migration governance, sequencing, and database bootstrap roles)  
 > **Status:** Authoritative Architectural Alignment & Action Specification (Post-Submission Review)  
-> **Version:** 2.0.0 | **Date:** 25 October 2026
+> **Version:** 2.1.0 | **Date:** 28 October 2026
 
 ---
 
@@ -22,49 +23,46 @@ Member 9 serves as the platform architect, reliability engineer, and database co
 4. **Comprehensive Observability & Reliability:**
    - Standardized health endpoints across all services: `/health/live` (process responsiveness), `/health/ready` (critical core dependencies only), and `/metrics`.
    - Prometheus scraping with universal prefix `swiftdrop_*` and Grafana dashboards as code.
-   - Graceful shutdown handlers honoring 15-second SIGTERM connection draining.
+   - Graceful shutdown handlers honoring SIGTERM within the grace period (core-api 20s, doc-04 §6).
 5. **Database Governance & Migration Stewardship:**
    - Authority over `core-api/migrations/` review, guaranteeing strict foreign key creation order (`000001` through `000011`).
    - PostgreSQL 16 connection budget management (`max_connections = 150`, 105 active pool limit across services, 45 reserved).
-   - Least-privilege database role bootstrap (`swiftdrop_migrator`, `swiftdrop_app`, `swiftdrop_tracking_ro`, `swiftdrop_relay`, `swiftdrop_worker`).
+   - Least-privilege database role bootstrap (`swiftdrop_migrator`, `swiftdrop_app`, `swiftdrop_tracking_ro`, `swiftdrop_relay`, `swiftdrop_worker`, `swiftdrop_reconciler`; D6).
 6. **Web Container Ownership:** Authoring and maintaining `web/Dockerfile` and `web/nginx.conf` (port 3000, SPA fallback routing, multi-stage build).
 
-Member 9 previously submitted a complete 8-document architectural suite (`doc-01` through `doc-08`) alongside `AI-REVIEW-PROMPT.md` and `team-agreements-with-member-09.md`. This guide executes the **exact 7-point review and alignment process** applied across all team members, resolves all 5 intra-member contradictions, reconciles all 10 member boundaries, ratifies the canonical 11-step migration sequence, and provides production-ready deployment manifests.
+Member 9 previously submitted a complete 8-document architectural suite (`doc-01` through `doc-08`) alongside `AI-REVIEW-PROMPT.md` and `team-agreements-with-member-09.md`. This guide executes the **exact 7-point review and alignment process** applied across all team members, resolves all 5 intra-member contradictions, reconciles all 10 member boundaries, ratifies the canonical 11-step migration sequence, and gives **draft samples** of the main deployment files (§6). The samples are not in the repo yet; §7 lists what exists today.
 
 ---
 
-## 2. 100% Requirements Traceability Matrix
+## 2. Requirements Traceability Matrix
 
-Every requirement assigned to Member 9 across SRS v1.0, Engineering Standards v1.0, and ADR-001 through ADR-004 is mapped and verified below:
+The SRS has **no ID family for platform work**. Its platform requirements are the §11 sections, the §15.3 bonus criteria, AT-016 and a few SEC/NFR/FR items. *(Version 2.0.0 of this guide used IDs such as FR-OPS-xxx, FR-DB-xxx, NFR-REL-xxx and BONUS-xxx. None of them exist in the SRS, so they were removed. Several SEC IDs also had the wrong meaning: in the SRS, SEC-006 is input validation, SEC-008 is about logs, SEC-012 is file uploads.)*
 
-| Requirement ID | Formal Requirement Description | Covered in Member 9 Suite | Alignment Status | Architectural Specification & Invariant Enforcement |
-| :--- | :--- | :--- | :--- | :--- |
-| **FR-OPS-001** | Unified local development stack via Docker Compose. | `doc-01`, `doc-02` (Flow 1), `doc-03`, `doc-08`. | **100% Covered** | `deploy/docker-compose.yml` orchestrates PostgreSQL, RabbitMQ, Redis, MinIO, Traefik, and all application services. |
-| **FR-OPS-002** | Root Makefile developer workflow automation. | `doc-01`, `doc-03`, `doc-08`. | **100% Covered** | Root `Makefile` exposes `make up`, `make down`, `make migrate-up`, `make seed`, `make test`, and `make test-e2e`. |
-| **FR-OPS-003** | Kubernetes deployment manifests for all microservices. | `doc-01`, `doc-02` (Flow 2), `doc-03`, `doc-04`. | **100% Covered** | Organized in `deploy/kubernetes/<service>/` using standard `.yaml` extensions and pinned image tags. |
-| **FR-OPS-004** | Stateful workload persistence via Kubernetes StatefulSets. | `doc-01`, `doc-03`, `doc-05`. | **100% Covered** | `postgres-statefulset.yaml` (10Gi PVC) and `rabbitmq-statefulset.yaml` (5Gi PVC) prevent multi-attach deadlocks. |
-| **FR-OPS-005** | Production edge ingress controller integration (Traefik v3.1). | `doc-01`, `doc-03`, `doc-04`. | **100% Covered** | Traefik installed via Helm; external ports `:80`/`:443`, internal dashboard `:8090`, and Cloudflare Real-IP trust. |
-| **FR-OPS-006** | Observability stack (Prometheus scraping & Grafana). | `doc-01`, `doc-02` (Flow 4), `doc-03`, `doc-08`. | **100% Covered** | Scrapes `/metrics` across all services; enforces `swiftdrop_*` metric prefix without high-cardinality labels. |
-| **FR-OPS-007** | Standardized health probes (`/health/live`, `/health/ready`). | `doc-01`, `doc-02` (Flow 3), `doc-04`, `doc-06`. | **100% Covered** | Decoupled readiness probes: Core API readiness checks PostgreSQL only (external outages do not unready the pod). |
-| **FR-DB-001** | Canonical database migration ordering governance. | `doc-01`, `doc-05`, `team-agreements`. | **100% Covered** | Strict 11-step foreign-key sequence (`000001` to `000011`) governed by Member 9 CODEOWNERS review gate. |
-| **FR-DB-002** | Kubernetes database release migration execution Job. | `doc-03`, `doc-05`, `doc-08`. | **100% Covered** | Dedicated release Job (`core-api-migrate-job.yaml`) with `backoffLimit: 0`; replaces risky per-pod initContainers. |
-| **FR-DB-003** | Least-privilege database role architecture. | `doc-05`, `team-agreements`. | **100% Covered** | Bootstrap roles created prior to migrations: `swiftdrop_migrator`, `swiftdrop_app`, `swiftdrop_tracking_ro`, `swiftdrop_relay`, `swiftdrop_worker`. |
-| **FR-DB-004** | PostgreSQL connection budget allocation and pooling. | `doc-05`, `team-agreements`. | **100% Covered** | PostgreSQL `max_connections = 150` with 1Gi RAM; 105 active pool connections budgeted across replicas, 45 reserved. |
-| **FR-DB-005** | Database backup, snapshot, and restore automation. | `doc-05`, `doc-07`, `doc-08`. | **100% Covered** | Automated `pg_dump` backup scripts and documented restore playbooks with writer drain procedures. |
-| **SEC-001** | Edge TLS termination & in-cluster communication. | `doc-03`, `doc-07`. | **100% Covered** | Cloudflare TLS 1.3 externally; Traefik internal routing; `sslmode=disable` inside cluster private network. |
-| **SEC-006** | Request payload buffering and size limits. | `doc-04`, `doc-07`. | **100% Covered** | Gateway buffering middleware limits Core API to 10MB (courier POD photos) and JSON routes to 1MB. |
-| **SEC-008** | Secret management via Kubernetes Secrets. | `doc-03`, `doc-05`, `doc-07`. | **100% Covered** | Standardized secrets: `postgres-secrets`, `postgres-migrator-secrets`, `rabbitmq-secrets`, `jwt-secrets`, `integrations-secrets`. Zero plaintext committed. |
-| **SEC-012** | Container non-root execution and security contexts. | `doc-03`, `doc-07`, `doc-08`. | **100% Covered** | All images execute strictly under `USER 10001:10001`; root filesystem read-only where practical. |
-| **SEC-016** | Container vulnerability scanning in CI/CD pipeline. | `doc-06`, `doc-08`. | **100% Covered** | GitHub Actions runs TruffleHog (secrets) and Trivy container security scans on every pull request. |
-| **NFR-PERF-001**| Platform latency and performance budgets. | `doc-03`, `doc-06`. | **100% Covered** | Core API p95 $\le$ 500ms; database query p95 $\le$ 50ms; gateway proxy overhead p95 $\le$ 15ms. |
-| **NFR-REL-001** | Zero-downtime rolling update deployment strategy. | `doc-02` (Flow 2), `doc-08`. | **100% Covered** | RollingUpdate with `maxSurge: 1`, `maxUnavailable: 0`, and 15s preStop connection draining. |
-| **NFR-REL-002** | Graceful shutdown handling across all workloads. | `doc-07`, `doc-08`. | **100% Covered** | 15s SIGTERM grace period in pod specs allowing servers to finish in-flight HTTP and AMQP transactions. |
-| **BONUS-K8S-001**| Kubernetes production deployment for assignment bonus. | `doc-01`, `doc-03`, `doc-08`. | **100% Covered** | Full K3s single-node cluster orchestration demonstrating Deployments, StatefulSets, CronJobs, and Helm. |
-| **BONUS-AUTO-002**| Micro-scaling autoscaling demonstration profiles. | `doc-03`, `doc-08`. | **100% Covered** | HPA scaling Tracking API (1 $\to$ 2 replicas) and KEDA scaling Event Worker (1 $\to$ 2 replicas) on queue backlog. |
+**Status key:** 📄 specified in the docs · 🔧 partly in the repo · ✅ done in the repo.
+
+| Source (real ID / section) | What it requires | Where in the Member 9 suite | Status |
+| :--- | :--- | :--- | :--- |
+| **SRS §11.1** | Local Compose stack, env examples, no committed secrets | doc-02 F1, doc-08 §4, A7 | 📄 (no Compose file or `.env.example` yet) |
+| **SRS §11.2** | K8s Deployments, Services, StatefulSets for stateful data, ConfigMaps/Secrets, probes, CronJob | doc-03 §2, doc-08 §6 | 🔧 Postgres/RabbitMQ StatefulSets, reconciler CronJob, HPA and KEDA exist; app Deployments planned |
+| **SRS §11.3** | Environment variable inventory | `environment-variables.md`, doc-04 §4 | ✅ (docs) |
+| **SRS §11.4** | Metrics, logs, low-cardinality labels | doc-04 §5, doc-08 §7, A11 | 📄 |
+| **SRS §15.3** | Kubernetes bonus: full system on K8s | doc-03, doc-06, doc-08 | 📄 (milestone M4) |
+| **AT-016** | Readiness/liveness behaviour and the reconciliation CronJob demonstrated | doc-06 PLT-014…021 | 📄 |
+| **SEC-001** | HTTPS for external traffic; HTTP only locally | doc-07 §1, ADR-002 §3 | 📄 |
+| **SEC-003** | Signing keys supplied via secret configuration and rotated | A5 `jwt-secrets`, doc-07 §7 | 📄 |
+| **SEC-008** | No secrets or unneeded personal data in logs | doc-07 §2, A11 | 📄 |
+| **SEC-016** | Non-root images, pinned versions, no build-time secrets | A3, doc-06 PLT-005/006 | 🔧 manifests run as 10001 and use no `latest` |
+| **SEC-017** | K8s RBAC and network least privilege; only intended entry points public | doc-07 §1, ADR-002 §8 | 📄 |
+| **NFR-PERF-001** | p95 ≤ 500 ms at 50 concurrent users | doc-08 §7 Grafana panel, alert | 📄 |
+| **NFR-PERF-003** | Outbox event published within 5 s | doc-08 §7 outbox panel | 📄 |
+| **FR-REC-004** | Reconciliation bounded, idempotent, logged | `cronjob-reconciliation.yml` (`Forbid`, `--batch-size=50`) | ✅ (manifest) |
+| **FR-AI-005** | AI Assistant has no direct DB access | D6 (no AI login), doc-05 §2.2 | 📄 |
+| **AGENTS.md §7** | Sequential `NNNNNN_name.up.sql` migrations | D2, D3, doc-05 §3 | 📄 |
+| **Work Division §3 (Member 9)** | Acceptance criteria 1–5 | doc-06 §7 | 📄 |
 
 ---
 
-## 2. Intra-Member Contradiction Resolutions
+## 3. Intra-Member Contradiction Resolutions
 
 Detailed cross-document audit revealed 5 specific discrepancies within Member 9's drafts that have been formally resolved:
 
@@ -75,7 +73,7 @@ flowchart TD
         C2["2. Manifest File & Directory Layout<br/>(doc-03 flat .yml vs per-service .yaml)"] --> R2["Standardize on per-service layout deploy/kubernetes/<service>/<br/>using standard .yaml extensions"]
         C3["3. Database Migration Runner in K8s<br/>(doc-03 initContainer vs doc-05/D1 Job)"] --> R3["Mandate one-time Kubernetes Job (core-api-migrate-job.yaml)<br/>with backoffLimit: 0 per release (no initContainers)"]
         C4["4. CronJob Image Tagging<br/>(doc-06/C10 :latest tag vs Agreement A3)"] --> R4["Purge :latest from all manifests; pin tags strictly to<br/>ghcr.io/.../messaging:<git-sha> across all workloads"]
-        C5["5. Performance Target Ambiguity<br/>(p95 500ms in SRS vs 200ms in database-schema.md)"] --> R5["Standardize SLA: Core API p95 <= 500ms (SRS NFR-PERF-001);<br/>internal DB query execution p95 <= 50ms"]
+        C5["5. Performance Target Ambiguity<br/>(p95 500ms in SRS vs 200ms in database-schema.md)"] --> R5["Requirement: Core API p95 <= 500ms (SRS NFR-PERF-001);<br/>DB query 50ms = internal goal only, not an SRS requirement"]
     end
     style R1 fill:#d9f2d9,stroke:#2e7d32,color:#111
     style R2 fill:#d9f2d9,stroke:#2e7d32,color:#111
@@ -84,26 +82,27 @@ flowchart TD
     style R5 fill:#d9f2d9,stroke:#2e7d32,color:#111
 ```
 
-### 2.1 Contradiction 1: Migration Naming Convention (6-Digit Sequential vs Timestamps)
+### 3.1 Contradiction 1: Migration Naming Convention (6-Digit Sequential vs Timestamps)
 - **The Inconsistency:** In `team-agreements-with-member-09.md` (item D2) and `doc-08`, Member 9 proposed timestamps (`YYYYMMDDHHMMSS_module_change.up.sql`). However, in `doc-05` Section 3, `MEMBER_09_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` v1.0.0, and AGENTS.md Section 7, the **6-digit prefix format (`000NNN_name.up.sql`)** was ratified as project law.
 - **The Resolution:** Unanimously lock in the **6-digit sequential numbering convention (`000001` through `000011`)** for the initial baseline. Timestamps introduce sorting ambiguity across different operating systems. Sequential numbering guarantees deterministic migration order.
 
-### 2.2 Contradiction 2: Kubernetes Manifest Directory Layout (Flat `.yml` vs Per-Service `.yaml`)
+### 3.2 Contradiction 2: Kubernetes Manifest Directory Layout (Flat `.yml` vs Per-Service `.yaml`)
 - **The Inconsistency:** In `doc-03` lines 94–100, manifests were listed as flat files in `deploy/kubernetes/` with `.yml` extensions (`postgres-statefulset.yml`, `rabbitmq-statefulset.yml`). Conversely, in Agreement A8 and `MEMBER_09_ALIGNMENT_AND_SPECIFICATION_GUIDE.md`, Member 9 adopted Member 7's modular layout: one directory per service using `.yaml` extensions.
 - **The Resolution:** Adopt the **per-service directory structure**: `deploy/kubernetes/<service>/` (`core-api`, `tracking-api`, `messaging`, `ai-assistant`, `web`, `postgres`, `rabbitmq`, `redis`, `monitoring`), standardizing exclusively on `.yaml` extensions.
 
-### 2.3 Contradiction 3: Database Migration Execution in Kubernetes (`Job` vs `initContainer`)
+### 3.3 Contradiction 3: Database Migration Execution in Kubernetes (`Job` vs `initContainer`)
 - **The Inconsistency:** In `doc-03` line 80 and `doc-08`, Member 9 considered running migrations via an `initContainer` inside the `core-api` Deployment. In `doc-05` Section 3 and Agreement D1, Member 9 mandated a **one-time Kubernetes release Job with `backoffLimit: 0`**.
 - **The Problem:** An `initContainer` executes on every pod replica during horizontal scaling and rolling updates. Multiple pods executing DDL migrations concurrently causes database deadlocks and migration lock contention.
 - **The Resolution:** Strictly mandate a standalone **Kubernetes Job** (`deploy/kubernetes/core-api/migrate-job.yaml`) executing image `ghcr.io/phantomtroupeead/swiftdrop/core-api-migrations:<git-sha>` with `backoffLimit: 0`. The Job must complete successfully before the application deployment rolling update proceeds.
 
-### 2.4 Contradiction 4: Image Tagging in CronJob Manifests (`:latest` vs `<git-sha>`)
+### 3.4 Contradiction 4: Image Tagging in CronJob Manifests (`:latest` vs `<git-sha>`)
 - **The Inconsistency:** In `doc-06` PLT-006, Member 9 identified that their existing reconciliation CronJob manifest used `swiftdrop/messaging:latest`, directly violating Agreement A3.
-- **The Resolution:** Completely eliminate `:latest` across all manifests. Pin image tags to `<git-sha>` (e.g. `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`).
+- **The Resolution:** Completely eliminate `:latest` across all manifests. Pin image tags to `<git-sha>` (e.g. `ghcr.io/phantomtroupeead/swiftdrop/messaging:<git-sha>`). Manifests write `${IMAGE_TAG}` and the deploy step fills in the SHA.
+- **Status:** ✅ fixed in `deploy/kubernetes/cronjob-reconciliation.yml` on 2026-10-28.
 
-### 2.5 Contradiction 5: Performance Latency Target Alignment (500ms vs 200ms)
+### 3.5 Contradiction 5: Performance Latency Target Alignment (500ms vs 200ms)
 - **The Inconsistency:** In `doc-03` open questions, Member 9 noted that SRS specifies p95 $\le$ 500ms for Core API, while `database-schema.md` states 200ms.
-- **The Resolution:** Standardize the SLA: Core API end-to-end transactional HTTP requests p95 $\le$ 500ms (SRS NFR-PERF-001); internal database query execution p95 $\le$ 50ms; Edge Traefik reverse proxy overhead p95 $\le$ 15ms.
+- **The Resolution:** The requirement is Core API p95 $\le$ 500ms at 50 concurrent users (SRS NFR-PERF-001, which outranks `database-schema.md`). Internal goals such as DB query p95 $\le$ 50ms or gateway overhead p95 $\le$ 15ms may guide tuning, but they are **not SRS requirements** and are not claimed until measured.
 
 ---
 
@@ -119,7 +118,7 @@ flowchart LR
     M9 -->|"(2) Migrations 4/5/10 & Pool: 48 conns"| M2["Member 02: Parcels & Pricing"]
     M9 -->|"(3) Migrations 6/7, MinIO/R2 & Probe Decoupling"| M3["Member 03: Dispatch & Delivery"]
     M9 -->|"(4) Migration 3 & integrations-secrets"| M4["Member 04: Merchants"]
-    M9 -->|"(5) :8081, Tracking RO Role & Redis StatefulSet"| M5["Member 05: Tracking API"]
+    M9 -->|"(5) :8081, Tracking RO Role & Redis if > 1 pod"| M5["Member 05: Tracking API"]
     M9 -->|"(6) web/Dockerfile & Nginx Port :3000"| M6["Member 06: Customer Web"]
     M9 -->|"(7) Traefik Helm, :80/:443 & Dashboard :8090"| M7["Member 07: Gateway & Admin"]
     M9 -->|"(8) Migrations 8/9, RMQ StatefulSet & KEDA"| M8["Member 08: Messaging & Outbox"]
@@ -131,7 +130,7 @@ flowchart LR
 - **Secrets Management:** Member 9 provisions `jwt-secrets` mounting the RS256 private key to Core API and public key to Tracking API.
 
 ### 4.2 M9 vs M2: Parcels, Pricing & Monolith Connection Pool
-- **Migration Sequencing:** Member 2 authors Migration `000004_create_pricing_rules.up.sql`, Migration `000005_create_parcels.up.sql`, and Migration `000010_create_idempotency_keys.up.sql`.
+- **Migration Sequencing:** Member 2 authors Migration `000004_create_pricing_rules.up.sql`, Migration `000005_create_parcels_and_quotes.up.sql`, and Migration `000010_create_idempotency_keys.up.sql` (owner still to confirm, DB7).
 - **Connection Budget:** Member 9 allocates Core API connection pool: 12 open connections per pod $\times$ 4 maximum replicas = **48 connections** (`DB_MAX_OPEN_CONNS=12`, `DB_MAX_IDLE_CONNS=4`).
 
 ### 4.3 M9 vs M3: Dispatch, Couriers & Readiness Probe Decoupling
@@ -147,8 +146,8 @@ flowchart LR
 
 ### 4.5 M9 vs M5: Tracking API Deployment & Redis StatefulSet
 - **Read-Only Database Role:** Tracking API connects using `swiftdrop_tracking_ro` with a 3-second statement timeout and a pool budget of 5 connections per pod $\times$ 4 replicas = **20 connections**.
-- **Redis Multi-Replica Fan-out:** Member 9 provisions ephemeral Redis (`redis:6379`) for pub/sub fan-out across horizontally scaled tracking pods.
-- **Autoscaling:** Configures HPA scaling Tracking API between 2 and 5 replicas on CPU utilization ($> 70\%$).
+- **Redis Multi-Replica Fan-out:** Member 9 provisions ephemeral Redis (`redis:6379`) for pub/sub fan-out, needed only when Tracking API runs more than 1 replica (C8, C26).
+- **Autoscaling:** Today's HPA scales Tracking API 1 → 2 replicas at 50% CPU. The final range is open item C8 (Member 5); the DB budget allows at most 4 pods (5 connections each).
 
 ### 4.6 M9 vs M6: Web Frontend Containerization & Nginx
 - **Container Ownership:** Member 9 owns `web/Dockerfile` and `web/nginx.conf` (Agreement A3).
@@ -161,7 +160,7 @@ flowchart LR
 ### 4.8 M9 vs M8: Messaging Infrastructure & KEDA Autoscaling
 - **RabbitMQ StatefulSet:** Member 9 deploys RabbitMQ 3.13 with 5Gi PVC on `local-path` storage class.
 - **Multi-Binary Container:** Deploys single image `ghcr.io/.../messaging:<git-sha>` running as non-root `USER 10001:10001`.
-- **KEDA ScaledObject:** Configures KEDA to autoscale `event-worker` between 2 and 10 pods when RabbitMQ queues (`q.notifications.worker`, `q.webhooks.dispatcher`) exceed 10 pending messages.
+- **KEDA ScaledObject:** Configures KEDA to autoscale `event-worker` between 1 and 3 pods when RabbitMQ queues (`q.notifications.worker`, `q.webhooks.dispatcher`) exceed 10 pending messages. More than 3 pods would break the DB budget (10 connections each, D8).
 - **Singleton Daemon:** Outbox Relay is strictly locked to `replicas: 1`.
 
 ### 4.9 M9 vs M10: AI Assistant Deployment & CI Testing
@@ -172,14 +171,14 @@ flowchart LR
 
 ## 5. Database Governance & Migration Chain Protocol
 
-As Database Coordinator, Member 9 governs the authoritative 11-step migration sequence in `core-api/migrations/`:
+As Database Coordinator, Member 9 governs the authoritative 11-step migration sequence in `core-api/migrations/`. It is the hub list (`docs/drafts/README.md` §4, Agreement D3), plus `notification_deliveries` in `000009`, which the hub list forgot:
 
 ```mermaid
 flowchart TD
-    M01["000001_create_users_and_roles.up.sql<br/>(Member 1: users, roles, user_roles, oauth_identities)"] --> M02["000002_create_delivery_zones.up.sql<br/>(Member 7: delivery_zones, zone_postal_codes, system_settings)"]
+    M01["000001_create_users_and_roles.up.sql<br/>(Member 1: users, roles, user_roles, oauth_identities)"] --> M02["000002_create_delivery_zones.up.sql<br/>(Member 7: delivery_zones)"]
     M02 --> M03["000003_create_merchants_and_credentials.up.sql<br/>(Member 4: merchants, merchant_api_credentials, webhook_endpoints)"]
     M03 --> M04["000004_create_pricing_rules.up.sql<br/>(Member 2: pricing_rules)"]
-    M04 --> M05["000005_create_parcels.up.sql<br/>(Member 2: parcels, parcel_status_history)"]
+    M04 --> M05["000005_create_parcels_and_quotes.up.sql<br/>(Member 2: parcels, parcel_addresses or JSONB (DB13), pricing_quotes, parcel_status_history)"]
     M05 --> M06["000006_create_couriers.up.sql<br/>(Member 3: couriers)"]
     M06 --> M07["000007_create_dispatch_and_delivery.up.sql<br/>(Member 3: courier_assignments, delivery_attempts)"]
     M07 --> M08["000008_create_outbox_events.up.sql<br/>(Member 8: outbox_events)"]
@@ -188,29 +187,40 @@ flowchart TD
     M10 --> M11["000011_create_audit_logs.up.sql<br/>(Platform / Member 7: audit_logs)"]
 ```
 
+Extra Member 7 tables such as `zone_postal_codes` or `system_settings` are not in the first wave until they appear in `database-schema.md`. They then take the next free number.
+
 ### 5.1 Bootstrap Roles SQL (`deploy/postgres/bootstrap-roles.sql`)
-Executed once during cluster initialization prior to running database migrations:
+Executed once by the `postgres` superuser, connected to `swiftdrop_db`, before the first migration. **No passwords live in this file.** They come in as psql variables filled from the Kubernetes Secret or the local `.env`, e.g. `psql -d swiftdrop_db -v migrator_pw="$MIGRATOR_PW" -v app_pw="$APP_PW" ... -f deploy/postgres/bootstrap-roles.sql`.
 
 ```sql
--- Bootstrap PostgreSQL Roles for SwiftDrop
--- Executed by postgres superuser prior to migration execution
+-- Bootstrap PostgreSQL roles for SwiftDrop (Agreement D6)
+CREATE ROLE swiftdrop_migrator    LOGIN PASSWORD :'migrator_pw';
+CREATE ROLE swiftdrop_app         LOGIN PASSWORD :'app_pw';
+CREATE ROLE swiftdrop_tracking_ro LOGIN PASSWORD :'tracking_pw';
+CREATE ROLE swiftdrop_relay       LOGIN PASSWORD :'relay_pw';
+CREATE ROLE swiftdrop_worker      LOGIN PASSWORD :'worker_pw';
+CREATE ROLE swiftdrop_reconciler  LOGIN PASSWORD :'reconciler_pw';
 
-CREATE ROLE swiftdrop_migrator WITH LOGIN PASSWORD 'migrator_secure_password';
-ALTER ROLE swiftdrop_migrator CREATEDB;
+-- PostgreSQL 15+ no longer lets every role create tables in "public",
+-- and GRANT ... ON DATABASE does not change that: give the schema to the migrator.
+ALTER SCHEMA public OWNER TO swiftdrop_migrator;
+GRANT USAGE ON SCHEMA public
+  TO swiftdrop_app, swiftdrop_tracking_ro, swiftdrop_relay, swiftdrop_worker, swiftdrop_reconciler;
 
-CREATE ROLE swiftdrop_app WITH LOGIN PASSWORD 'app_secure_password';
-CREATE ROLE swiftdrop_tracking_ro WITH LOGIN PASSWORD 'tracking_ro_password';
-CREATE ROLE swiftdrop_relay WITH LOGIN PASSWORD 'relay_secure_password';
-CREATE ROLE swiftdrop_worker WITH LOGIN PASSWORD 'worker_secure_password';
+-- D7: every table the migrator creates later gives swiftdrop_app SELECT/INSERT/UPDATE.
+-- DELETE is granted per table, only where a module needs it.
+ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE ON TABLES TO swiftdrop_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO swiftdrop_app;
+-- tracking_ro, relay, worker and reconciler get table-level GRANTs inside the
+-- migration that creates each table (doc-05 §2.2).
 
--- Grant DDL ownership to swiftdrop_migrator
-GRANT ALL PRIVILEGES ON DATABASE swiftdrop_db TO swiftdrop_migrator;
-
--- Set default runtime timeouts
-ALTER ROLE swiftdrop_app SET statement_timeout = '5s';
-ALTER ROLE swiftdrop_app SET lock_timeout = '2s';
+-- D9 default timeouts; tracking is read-only
+ALTER ROLE swiftdrop_app         SET statement_timeout = '5s';
+ALTER ROLE swiftdrop_app         SET lock_timeout = '2s';
 ALTER ROLE swiftdrop_tracking_ro SET statement_timeout = '3s';
-ALTER ROLE swiftdrop_tracking_ro SET default_transaction_read_only = 'on';
+ALTER ROLE swiftdrop_tracking_ro SET default_transaction_read_only = on;
 ```
 
 ### 5.2 PostgreSQL Connection Budget (`max_connections = 150`)
@@ -255,7 +265,7 @@ spec:
         runAsGroup: 10001
       containers:
         - name: migrator
-          image: ghcr.io/phantomtroupeead/swiftdrop/core-api-migrations:latest
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api-migrations:${IMAGE_TAG} # git SHA, never latest (A3)
           args:
             - -path=/migrations
             - -database=$(DATABASE_URL)
@@ -289,7 +299,7 @@ spec:
     kind: Deployment
     name: event-worker
   minReplicaCount: 1
-  maxReplicaCount: 5
+  maxReplicaCount: 3 # D8 budget: 3 pods x 10 connections (same as autoscaling/keda-event-worker.yml today)
   cooldownPeriod: 30
   pollingInterval: 15
   triggers:
@@ -335,26 +345,22 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: tracking-api
-  minReplicas: 2
-  maxReplicas: 5
+  minReplicas: 1
+  maxReplicas: 2 # same as autoscaling/hpa-tracking.yml today; final range = C8 (Member 5), never above 4 (D8 budget)
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+          averageUtilization: 50
 ```
 
 ### 6.4 Web Frontend Dockerfile & Nginx Configuration
 
 #### `web/Dockerfile`
+Build context is the `web/` folder: `docker build -t ghcr.io/phantomtroupeead/swiftdrop/web:<git-sha> web/`.
+
 ```dockerfile
 # Build Stage
 FROM node:20-alpine AS builder
@@ -371,9 +377,13 @@ FROM nginx:1.27-alpine
 WORKDIR /usr/share/nginx/html
 RUN rm -rf ./*
 COPY --from=builder /app/dist .
-COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Run as non-root user
+# Stock nginx starts as root (user directive, pid in /run, cache in /var/cache/nginx).
+# To run as 10001 (A3): drop the user line, move the pid file to /tmp, and give 10001 the cache dir.
+RUN sed -i '/^user /d; s#^pid .*#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf \
+ && chown -R 10001:10001 /var/cache/nginx /usr/share/nginx/html
+
 USER 10001:10001
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]
@@ -396,59 +406,76 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Static asset caching
+    # Static asset caching (Vite adds a hash to every file name)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
         expires 1y;
         add_header Cache-Control "public, no-transform";
     }
 
-    # Disable access logs for health checks
-    location /health {
-        access_log off;
-        return 200 "healthy\n";
+    # index.html is never cached, so a new deploy is picked up at once (doc-05 §8)
+    location = /index.html {
+        add_header Cache-Control "no-cache";
     }
+
+    # Kubernetes probes use GET / (doc-08 §6); no separate /health route,
+    # because everything under / is public through the gateway
 }
 ```
 
 ### 6.5 Developer Orchestration Interface (`root/Makefile`)
 
 ```makefile
-.PHONY: up down migrate-up migrate-down seed test test-e2e verify
+.PHONY: up down reset migrate-up migrate-down seed test test-e2e verify
 
+COMPOSE = docker compose -f deploy/docker-compose.yml
+
+# Start the stack; the one-shot core-api-migrate service runs before core-api
 up:
-	docker compose -f deploy/docker-compose.yml up -d
+	$(COMPOSE) up -d
 
+# Stop the stack and KEEP the data
 down:
-	docker compose -f deploy/docker-compose.yml down -v
+	$(COMPOSE) down
 
+# Stop the stack and DELETE all volumes (data loss)
+reset:
+	$(COMPOSE) down -v
+
+# Re-run the migrate service (its default command is "up")
 migrate-up:
-	docker compose -f deploy/docker-compose.yml --profile migration run --rm migrator up
+	$(COMPOSE) run --rm core-api-migrate
 
+# Roll back one migration (local only)
 migrate-down:
-	docker compose -f deploy/docker-compose.yml --profile migration run --rm migrator down 1
+	$(COMPOSE) run --rm --entrypoint sh core-api-migrate -c 'migrate -path /migrations -database "$$DATABASE_URL" down 1'
 
+# Seed binary in the core-api image; refuses to run when APP_ENV=production (D12)
 seed:
-	docker compose -f deploy/docker-compose.yml exec core-api /app/bin/seed
+	$(COMPOSE) exec core-api /app/seed
 
+# Each Go service has its own go.mod, so test inside each folder (add tracking/messaging when they exist)
 test:
-	go test -v -race ./core-api/... ./services/tracking/... ./services/messaging/...
+	cd core-api && go test -race ./...
 
+# Command and config path to be confirmed by Member 10
 test-e2e:
 	npx playwright test --config=tests/e2e/playwright.config.ts
 
+# Windows without make: run .\scripts\verify.ps1 directly
 verify:
-	powershell -ExecutionPolicy Bypass -File scripts/verify.ps1
+	./scripts/verify.sh
 ```
 
 ---
 
 ## 7. Final Engineering Alignment Checklist & Implementation Roadmap
 
-- [x] **100% Requirements Traceability:** Verified all DevOps, Kubernetes, Observability, and Database Coordinator requirements (`FR-OPS-001` through `007`, `FR-DB-001` through `006`, `SEC-001`, `SEC-006`, `SEC-008`, `SEC-012`, `SEC-016`, `NFR-PERF-001`, `NFR-REL-001`, `NFR-REL-002`, `BONUS-K8S-001`, `BONUS-AUTO-002`).
-- [x] **Intra-Member Contradictions Resolved:** All 5 discrepancies (6-digit migration format, per-service manifest layout, migration Job vs initContainer, eliminating `:latest`, and latency targets) harmonized.
-- [x] **Database Governance Formalized:** Ratified the 11-step sequential migration chain, connection budgeting (150/105), and least-privilege bootstrap SQL roles.
-- [x] **Production Implementation Artifacts Provided:** Delivered `migrate-job.yaml`, `keda-scaledobject.yaml`, `hpa.yaml`, `web/Dockerfile`, `web/nginx.conf`, and root `Makefile`.
-- [x] **Cross-Boundary Reconciliation Completed:** Seamless integration established with all 9 other team members.
+- [x] **Requirements traceability:** mapped to the real SRS sections and IDs (§11.1–11.4, §15.3, AT-016, SEC-001/003/008/016/017, NFR-PERF-001/003, FR-REC-004, FR-AI-005), corrected 2026-10-28.
+- [x] **Intra-member contradictions resolved in the docs:** 6-digit migration names, per-service manifest layout, one migrate Job, no `:latest`, latency target wording.
+- [x] **Database governance agreed:** the hub's 11-step migration order (D3, + `notification_deliveries`), connection budget 150 / 105 (D8), DB roles (D6).
+- [x] **Fixed in the repo (2026-10-28):** `max_connections=150` in the Postgres StatefulSet; the reconciler CronJob uses `${IMAGE_TAG}` and the `swiftdrop_reconciler` URL; Go CI jobs no longer break on draft `go.mod` files.
+- [ ] **Not in the repo yet (samples in §5–§6 only):** `migrate-job.yaml`, `web/Dockerfile`, `web/nginx.conf`, root `Makefile`, `deploy/postgres/bootstrap-roles.sql`, `deploy/docker-compose.yml`. KEDA and the tracking HPA exist today as `autoscaling/keda-event-worker.yml` and `autoscaling/hpa-tracking.yml` (to be moved into the A8 folders).
+- [x] **Cross-boundary agreements:** signed by all 9 other members (`team-agreements-with-member-09.md` §6). The 2026-10-28 amendment (one DB URL key per login role) still needs a team OK.
 
 ---
-*End of Member 09 Alignment & Specification Guide (v2.0.0).*
+*End of Member 09 Alignment & Specification Guide (v2.1.0).*

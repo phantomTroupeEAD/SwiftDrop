@@ -56,7 +56,7 @@ These are the variables the **platform itself** needs. Each service's variables 
 | `POSTGRES_DB` | postgres container | `swiftdrop_db` | no |
 | `RABBITMQ_DEFAULT_USER` | rabbitmq container | `swiftdrop` | no |
 | `RABBITMQ_DEFAULT_PASS` | rabbitmq container | `<change-me-local-only>` | **yes** |
-| `DATABASE_URL` | migrate service, apps | `postgres://swiftdrop:<password>@postgres:5432/swiftdrop_db?sslmode=disable` | **yes** |
+| `DATABASE_URL` | migrate service, apps (each with its own role, D6) | `postgres://swiftdrop_app:<password>@postgres:5432/swiftdrop_db?sslmode=disable` (core-api; the migrate service uses `swiftdrop_migrator`) | **yes** |
 | `IMAGE_TAG` *(proposed)* | Compose / deploy | `dev` locally, git SHA in CI | no |
 | `REGISTRY` *(proposed)* | CI / Helm | `ghcr.io/<org-lowercase>/swiftdrop` | no |
 | `KUBECONFIG` | your shell only | path to your kubeconfig | **yes** (never commit) |
@@ -92,8 +92,11 @@ make seed                     # demo data
 k3d cluster create swiftdrop-dev --k3s-arg "--disable=traefik@server:0"
 docker build -t swiftdrop/core-api:dev core-api/          # when Dockerfiles exist
 k3d image import swiftdrop/core-api:dev -c swiftdrop-dev  # use local images without a registry
-kubectl apply -f deploy/kubernetes/namespace.yml
-kubectl apply -f deploy/kubernetes/ -n swiftdrop
+kubectl create namespace swiftdrop                        # namespace.yaml once the A8 layout exists
+helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda -n keda --create-namespace  # KEDA CRDs before the ScaledObject (pin the chart version)
+export IMAGE_TAG=dev                                      # manifests use ${IMAGE_TAG}, never latest
+find deploy/kubernetes -name "*.y*ml" -exec sh -c 'envsubst < "$1" | kubectl apply -n swiftdrop -f -' _ {} \;
 kubectl get pods -n swiftdrop -w
 ```
 
@@ -112,12 +115,12 @@ kubectl get pods -n swiftdrop -w
 | Workload | Kind | Service (port) | Probes | Requests / limits | Scaling |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | core-api | Deployment | ClusterIP 8080 | startup + ready + live (Doc 4 §2) | TBD | HPA 2–4 @ CPU 70% |
-| tracking-api | Deployment | ClusterIP 8081 | same | TBD | HPA, TBD (C8) |
+| tracking-api | Deployment | ClusterIP 8081 | same | TBD | HPA 1–2 @ CPU 50% today ✅; final range TBD (C8) |
 | ai-assistant | Deployment | ClusterIP 8000 | same | TBD | 1 replica |
 | web | Deployment (Nginx; Dockerfile by Member 9) | ClusterIP 3000 | HTTP `/` | TBD | HPA 2–3 @ CPU 80% |
 | outbox-relay | Deployment (`messaging` image, `/usr/local/bin/relay`) | internal 8082 | same | TBD | **always 1** |
-| event-worker | Deployment (`messaging` image, `/usr/local/bin/worker`) | internal 8083 | same | TBD | KEDA 1–3 (two queues) |
-| postgres | StatefulSet ✅ | `postgres` + headless ✅ | `pg_isready` ✅ (fix user, C14) | 100m/256Mi → 500m/**1Gi** (`max_connections=150`) | never |
+| event-worker | Deployment (`messaging` image, `/usr/local/bin/worker`) | internal 8083 | same | TBD | KEDA 1–3 (two queues) ✅ |
+| postgres | StatefulSet ✅ | `postgres` + headless ✅ | `pg_isready -U swiftdrop -d swiftdrop_db` ✅ (C14) | 100m/256Mi → 500m/**1Gi** ✅; `max_connections=150` set by `args` ✅ | never |
 | rabbitmq | StatefulSet ✅ | `rabbitmq` + headless ✅ | `rabbitmq-diagnostics` ✅ | 100m/256Mi → 500m/512Mi ✅ | never |
 | redis *(if needed)* | Deployment | ClusterIP 6379 | `redis-cli ping` | small | 1 |
 | migrate | Job | — | — | small | once per deploy |
@@ -152,7 +155,7 @@ This follows `deployment-guide.md` §3 with the decided names.
 | Request rate per service | `sum(rate(swiftdrop_http_requests_total[5m])) by (service)` | — |
 | p95 latency | `histogram_quantile(0.95, sum(rate(swiftdrop_http_request_duration_seconds_bucket[5m])) by (le, service))` | ≤ 500 ms (NFR-PERF-001) |
 | Error rate (5xx) | `sum(rate(swiftdrop_http_requests_total{status=~"5.."}[5m])) by (service)` | ~0 |
-| Outbox backlog / oldest age | `swiftdrop_outbox_pending_count`, `swiftdrop_outbox_oldest_pending_age_seconds` | publish ≤ 5 s (NFR-PERF-003) |
+| Outbox backlog / oldest age | `swiftdrop_outbox_pending_events`, `swiftdrop_outbox_oldest_pending_age_seconds` | publish ≤ 5 s (NFR-PERF-003) |
 | Queue depth / DLQ | RabbitMQ plugin metrics | DLQ = 0 |
 | Worker failures, webhook outcomes | `swiftdrop_dlq_messages_routed_total`, `swiftdrop_webhook_delivery_attempts_total` | — |
 | SSE connections | `swiftdrop_sse_active_connections` | — |
@@ -175,12 +178,12 @@ This follows `deployment-guide.md` §3 with the decided names.
 
 | Problem | Likely cause | Fix |
 | :--- | :--- | :--- |
-| `port is already allocated` | local Postgres or RabbitMQ, or 8080 clash (C16) | change the host port in Compose/.env; stop the local service |
+| `port is already allocated` | a local Postgres, RabbitMQ or web server already uses the port | change the host port in Compose/.env; stop the local service |
 | core-api never starts in Compose | migrate failed | `docker compose logs core-api-migrate`; fix the SQL; `force` if dirty |
 | `dirty database version N` | migration failed half-way | fix it, then `migrate ... force <last good>`, then `up` |
 | Pod `CrashLoopBackOff` | bad config or a crash at start | `kubectl logs <pod> --previous`; check env and Secrets |
 | Pod `Running` but not Ready | dependency down or wrong ready path | `kubectl describe pod`; check `/health/ready` |
-| `ImagePullBackOff` | wrong tag or no GHCR access | check the tag; for local images use `k3d image import` |
+| `ImagePullBackOff` | wrong tag, `${IMAGE_TAG}` not filled in, or no GHCR access | check the tag; for local images use `k3d image import` |
 | HPA shows `<unknown>` | no metrics yet or no CPU requests | wait about a minute; add `resources.requests.cpu` |
 | KEDA not scaling | old queue `parcel.events` still in the ScaledObject (use `q.notifications.worker` + `q.webhooks.dispatcher`), or `host` not pointing at `RABBITMQ_URL` | `kubectl describe scaledobject -n swiftdrop` |
 | `too many clients` from Postgres | pool budget exceeded | runbook Playbook A; lower the pool sizes (Doc 5 §5) |

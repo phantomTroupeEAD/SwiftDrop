@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Raw YAML first and Helm later — OK?; monitoring stack size on one server (full kube-prometheus-stack vs plain Prometheus + Grafana); web container port 3000 vs 80 (Members 6/7); performance target p95 500 ms (SRS) vs 200 ms (database-schema.md).  
+> **Open Questions / Needs Clarification:** Raw YAML first and Helm later — OK?; monitoring stack size on one server (full kube-prometheus-stack vs plain Prometheus + Grafana); performance target p95 500 ms (SRS) vs 200 ms (database-schema.md). *(Settled: web container port 3000, C15.)*  
 > **Answers:** How should the module be implemented internally, and why?  
 
 ---
@@ -91,39 +91,44 @@ deploy/
 │       ├── values.yaml                   # Traefik Helm values (M9)
 │       ├── ingressroutes.yaml            # K8s routes (M7)
 │       └── middlewares.yaml              # K8s policies (M7)
-├── kubernetes/                           ✅ (A8: per-service modular layout, .yaml)
-│   ├── base/                             # shared namespace, secrets, network policies
-│   │   ├── namespace.yaml
-│   │   ├── secrets.example.yaml          # placeholder values (A5 pattern)
-│   │   └── networkpolicies.yaml          # pod isolation (ADR-002 §8)
+├── postgres/bootstrap-roles.sql          # D6 roles, run once before migrations; passwords come from Secrets, never from this file
+├── kubernetes/                           # A8 target layout (same as deploy/README.md §2).
+│   │                                     # ✅ today, still flat: postgres-statefulset.yml, rabbitmq-statefulset.yml,
+│   │                                     #    cronjob-reconciliation.yml, autoscaling/hpa-tracking.yml, autoscaling/keda-event-worker.yml
+│   ├── namespace.yaml
+│   ├── secrets.example.yaml              # placeholder values only (A5 keys)
+│   ├── networkpolicies.yaml              # pod isolation (ADR-002 §8)
 │   ├── core-api/
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   ├── configmap.yaml
-│   │   └── migrate-job.yaml              # golang-migrate Job, backoffLimit: 0 (D1)
+│   │   ├── hpa.yaml                      # 2–4 @ 70% CPU (C9: missing today)
+│   │   ├── migrate-job.yaml              # golang-migrate Job, backoffLimit: 0 (D1)
+│   │   └── cronjob-merchants-retention.yaml  # daily, Forbid (Member 4)
 │   ├── tracking-api/
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
-│   │   └── configmap.yaml
+│   │   ├── configmap.yaml
+│   │   └── hpa.yaml                      # today 1–2 @ 50% CPU; final range open (C8)
 │   ├── messaging/
 │   │   ├── relay-deployment.yaml         # replicas: 1 (singleton)
 │   │   ├── worker-deployment.yaml
+│   │   ├── keda-scaledobject.yaml        # two triggers, 1–3 pods, host = RABBITMQ_URL (C7)
 │   │   └── cronjob-reconciliation.yaml   # messaging image + /usr/local/bin/reconcile (C10)
 │   ├── ai-assistant/
 │   │   ├── deployment.yaml
 │   │   └── service.yaml
 │   ├── web/
 │   │   ├── deployment.yaml
-│   │   └── service.yaml
+│   │   ├── service.yaml
+│   │   └── hpa.yaml                      # 2–3 @ 80% CPU (C9: missing today)
 │   ├── postgres/
-│   │   ├── postgres-statefulset.yaml     # 1Gi memory, 150 max_connections (D8)
+│   │   ├── statefulset.yaml              # 1Gi memory, max_connections=150 (D8)
 │   │   └── service.yaml
 │   ├── rabbitmq/
-│   │   ├── rabbitmq-statefulset.yaml
+│   │   ├── statefulset.yaml
 │   │   └── service.yaml
-│   ├── autoscaling/
-│   │   ├── hpa-tracking.yaml             # CPU/Memory target
-│   │   └── keda-event-worker.yaml        # two triggers: worker + webhooks; host = RABBITMQ_URL (C7)
+│   ├── redis/                            # only if tracking-api runs > 1 replica (C8, C26)
 │   └── tests/probe_test.sh               # AT-016 verification
 ├── helm/swiftdrop/                       # bonus (SRS §15.3)
 │   ├── Chart.yaml
@@ -180,7 +185,7 @@ Migrations   ──► run by the platform, owned by table owners
 | **Declarative infrastructure in git** | manifests, Helm, Compose | reviewable, reproducible from version control (Work Division acceptance, M7) |
 | **One-shot migration Job / Compose service** | migrations | runs exactly once before the apps, rather than once per pod (C22) |
 | **Health probe triad** (startup, readiness, liveness) | every HTTP workload | no traffic before ready; restart on deadlock (SRS §9.2, §11.2) |
-| **Singleton workload** | outbox-relay | prevents duplicate publishing and lock contention (AGENTS.md §4.4) |
+| **Singleton workload** | outbox-relay | prevents duplicate publishing and lock contention (ADR-002 §4) |
 | **Competing consumers + event-driven autoscaling** | event-worker + KEDA | scales with backlog; safe because consumers are idempotent |
 | **StatefulSet + PVC** | Postgres, RabbitMQ | stable identity and storage (SRS §11.2) |
 | **Rolling update + rollback** | Deployments | zero-downtime update; `rollout undo` for bad versions |
@@ -203,7 +208,7 @@ Migrations   ──► run by the platform, owned by table owners
 | :--- | :--- | :--- | :--- |
 | Kubernetes distribution | **K3s** on a VPS; **k3d** locally | minikube, kind, managed EKS/GKE | ADR-002: light, CNCF certified, `local-path` storage. k3d runs the same K3s locally. Cost: single node is a single point of failure |
 | Manifests | **raw YAML first, then Helm** for the bonus | Kustomize; Helm from day one | raw YAML is easier to learn and review in Stage 1; Helm is recommended for the bonus (SRS §11.2) |
-| Migrations in K8s | **Job** once per deploy (an initContainer only waits) | initContainer that migrates in every pod | the team said "initContainer / Job". With 2–4 core-api pods, migrating in every pod is wasteful and noisy, even though golang-migrate's lock keeps it safe |
+| Migrations in K8s | **Job** once per release, `backoffLimit: 0` (D1; an initContainer may only wait for it) | initContainer that migrates in every pod | with 2–4 core-api pods, migrating in every pod is wasteful and noisy, even though golang-migrate's lock keeps it safe |
 | Monitoring | **kube-prometheus-stack** via Helm (proposed) | plain Prometheus + Grafana; cloud monitoring | full stack fast, but heavy for one VPS. **Fallback:** plain Prometheus + Grafana if RAM is tight (VPS size TBD) |
 | Worker scaling | **KEDA** | HPA on custom metrics | fixed by the SRS (§13.1); simpler RabbitMQ trigger |
 | Ingress | own **Traefik v3**, K3s bundled Traefik disabled | bundled Traefik v2; NGINX Ingress | ADR-001 / ADR-002 |
@@ -257,5 +262,10 @@ Migrations   ──► run by the platform, owned by table owners
 | 2026-10-24 | Path-based routing on one domain | C17 |
 | 2026-10-24 | golang-migrate one-shot + Job; root Makefile | C22 |
 | 2026-10-24 | Minidu is DB coordinator; Watti leads the core-api Dockerfile | group |
-| *proposed* | Migrate with a Job, not an initContainer per pod | this doc §8 |
+| 2026-10-25 | `messaging` image, relay 8082 / worker 8083, two KEDA queues, reconciler command, DLQ | C6, C7, C10, C13 (Member 8) |
+| 2026-10-25 | Web Nginx on 3000; M9 owns `web/Dockerfile`; Traefik dashboard 8090 | C15, C16 |
+| 2026-10-25 | Postgres `max_connections=150`, memory 1Gi | D8 |
+| 2026-10-26 | 6-digit migration names; DB roles; per-service manifest folders; one migrate Job per release with `backoffLimit: 0` (not an initContainer per pod) | D2, D6, A8, D1 |
+| 2026-10-28 | Migration order = the hub list (+ `notification_deliveries` in `000009`) | D3 |
+| 2026-10-28 *(proposed)* | One DB URL key per login role in `postgres-secrets` | A5 amendment |
 | *proposed* | Raw YAML first, Helm for the bonus | this doc §8 |

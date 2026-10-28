@@ -35,30 +35,25 @@ jobs:
           check-latest: true
           cache: false
 
+      # Go jobs key on core-api/go.mod only: the draft go.mod files under docs/drafts/ must not trigger them
       - name: Check Formatting (gofmt)
+        if: hashFiles('core-api/go.mod') != ''
         run: |
-          if [ -d "core-api" ] || [ -f "go.mod" ]; then
-            UNFORMATTED=$(gofmt -l $(find . -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
-            if [ -n "$UNFORMATTED" ]; then
-              echo "Error: Unformatted Go files found:"
-              echo "$UNFORMATTED"
-              exit 1
-            fi
+          UNFORMATTED=$(gofmt -l $(find core-api -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "Error: Unformatted Go files found:"
+            echo "$UNFORMATTED"
+            exit 1
           fi
 
       - name: Run golangci-lint (with depguard)
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          working-directory: ${{ hashFiles('core-api/go.mod') != '' && 'core-api' || '.' }}
+          working-directory: core-api
           args: --timeout=5m
-        if: hashFiles('**/go.mod') != ''
+        if: hashFiles('core-api/go.mod') != ''
 
       - name: Run Tests (-race)
-        run: |
-          if [ -d "core-api" ]; then
-            cd core-api && go test -v -race ./...
-          elif [ -f "go.mod" ]; then
-            go test -v -race ./...
-          fi
-        if: hashFiles('**/go.mod') != ''
+        run: cd core-api && go test -v -race ./...
+        if: hashFiles('core-api/go.mod') != ''

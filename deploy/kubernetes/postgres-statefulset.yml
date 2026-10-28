@@ -22,12 +22,28 @@ spec:
         - name: postgres
           image: postgres:16-alpine
           imagePullPolicy: IfNotPresent
+          # Connection budget D8: 105 pooled + 45 headroom (default would be 100)
+          args: ["-c", "max_connections=150"]
           ports:
             - containerPort: 5432
               name: postgres
-          envFrom:
-            - secretRef:
-                name: postgres-secrets
+          # Only the bootstrap keys; postgres-secrets also holds the per-role app URLs (A5)
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_DB
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

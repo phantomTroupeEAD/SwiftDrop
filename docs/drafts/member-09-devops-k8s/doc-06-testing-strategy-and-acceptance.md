@@ -34,7 +34,7 @@
 | PLT-003 | Dockerfiles follow the rules | static | security-notes §6 | `hadolint` on every Dockerfile | no errors | CI | ⏳ |
 | PLT-004 | No secrets committed | security | SRS §11.1; SEC-008 | TruffleHog + `scripts/verify.sh` | PASS | CI | 🔧 |
 | PLT-005 | Images run as non-root | security | SRS SEC-016 | `docker inspect -f '{{.Config.User}}' <img>` | `10001:10001` | CI | ⏳ |
-| PLT-006 | Image versions are pinned | static | Engineering Standards §10 | grep for `:latest` in manifests and Compose | no match | CI | 🔧 (fails today: CronJob uses `:latest`, C10) |
+| PLT-006 | Image versions are pinned | static | Engineering Standards §10; SRS SEC-016 | grep for `:latest` in manifests and Compose | no match | CI | 🔧 (passes since 2026-10-28: CronJob uses `${IMAGE_TAG}`, K18) |
 | PLT-007 | Migrations apply from zero | migration | AGENTS.md §7; SRS §7.3 | fresh Postgres → `migrate up` | exit 0, `dirty = false` | CI | ⏳ |
 | PLT-008 | Migrations roll back and re-apply | migration | SRS §7.3 | `up` → `down -all` → `up` | all succeed | CI | ⏳ |
 | PLT-009 | No duplicate migration numbers; every `.up` has a `.down` | migration | DB coordinator rule | shell check (duplicate-number script in CI) | no output | CI | ⏳ |
@@ -48,11 +48,11 @@
 | PLT-017 | Postgres data survives a pod restart | cluster | SRS §11.2 | insert a row → `kubectl delete pod postgres-0` → read the row | row still there | script | 🔧 (on k3d with the existing StatefulSet) |
 | PLT-018 | Secrets come from K8s Secrets | security | Work Division M9 acceptance 3 | `kubectl get deploy -o yaml` shows `secretRef`; no literal values | pass | script | ⏳ |
 | PLT-019 | Probes and resources on every workload | static | Work Division M9 acceptance 4 | check every Deployment/StatefulSet has probes + requests/limits | none missing | CI | ⏳ |
-| PLT-020 | Reconciliation CronJob runs safely | cluster | AT-016; FR-REC-004 | `kubectl create job --from=cronjob/swiftdrop-outbox-reconciler test-run` | `Complete`, logs bounded | manual | ⏳ (needs M8's command) |
-| PLT-021 | CronJob never overlaps | cluster | ADR-002 §7.2 | start a long run, wait for the next schedule | second run skipped (`Forbid`) | manual | ⏳ |
+| PLT-020 | Reconciliation CronJob runs safely | cluster | AT-016; FR-REC-004 | `kubectl create job --from=cronjob/swiftdrop-outbox-reconciler test-run` | `Complete`, logs bounded | manual | ⏳ (command known, C10; needs the `messaging` image) |
+| PLT-021 | CronJob never overlaps | cluster | ADR-002 §4 (`concurrencyPolicy: Forbid`) | start a long run, wait for the next schedule | second run skipped (`Forbid`) | manual | ⏳ |
 | PLT-022 | HPA scales core-api | cluster | SRS §15.3 | load test → `kubectl get hpa -w` | replicas 2 → up to 4, then back | manual (demo) | ⏳ |
 | PLT-023 | KEDA scales event-worker on backlog | cluster | SRS §15.3 | publish more than 10 messages to `q.notifications.worker` or `q.webhooks.dispatcher` | replicas go up, then back to 1 | manual (demo) | ⏳ |
-| PLT-024 | Outbox Relay never scales | static | AGENTS.md §4.4 | check no HPA/ScaledObject targets `outbox-relay` and `replicas: 1` | pass | CI | ⏳ |
+| PLT-024 | Outbox Relay never scales | static | ADR-002 §4 | check no HPA/ScaledObject targets `outbox-relay` and `replicas: 1` | pass | CI | ⏳ |
 | PLT-025 | Bad deploy rolls back | resilience | runbook §7; demo | deploy a broken tag → `rollout undo` | the old version serves again | manual (demo) | ⏳ |
 | PLT-026 | Concurrent migration runs are safe | migration | Doc 2 §4 | start 2 migrate runs at once | one waits (lock), both end OK, `dirty = false` | manual | ⏳ |
 | PLT-027 | Backup and restore drill | resilience | SRS §7.3; runbook §3 | `pg_dump` → drop the DB → `pg_restore` | data back; version matches | manual | ⏳ |
@@ -129,8 +129,8 @@ kubeconform -summary -ignore-missing-schemas deploy/kubernetes/
 make up && make migrate-up && make seed
 docker compose -f deploy/docker-compose.yml ps
 
-# cluster (k3d)
-kubectl apply -f deploy/kubernetes/ -n swiftdrop
+# cluster (k3d); KEDA must be installed first (Helm), and ${IMAGE_TAG} filled in (e.g. envsubst)
+kubectl apply -R -f deploy/kubernetes/ -n swiftdrop
 kubectl wait --for=condition=ready pod --all -n swiftdrop --timeout=180s
 ./deploy/kubernetes/tests/probe_test.sh
 ```

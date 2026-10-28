@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Are cross-module foreign keys allowed (database-schema.md vs domain-boundaries.md)?; outbox table columns and processed_events table (Member 8); refresh-token table (Member 1); ai_conversations vs the AI no-database rule (Member 10); idempotency_keys owner and key (Member 2); webhook signing secret storage (Members 4/8); DB connection pool size per service.  
+> **Open Questions / Needs Clarification:** Are cross-module foreign keys allowed (DB1)?; outbox `correlation_id` and the `processed_events` table in `database-schema.md` (DB2, DB3, Member 8); ai_conversations vs the AI no-database rule (DB5, Member 10); idempotency_keys owner and key (DB7, Member 2); `parcel_addresses` table vs JSONB (DB13, Member 2); rename of the webhook `secret_hash` column (DB11). *(Settled: refresh-token table exists (DB4); pool sizes (D8); migration order (D3).)*  
 > **Answers:** What data does this module own, and how is consistency maintained?  
 > **System ERD:** not duplicated here; see `docs/architecture/database-schema.md` §1 (the template allows a reference).  
 
@@ -56,9 +56,9 @@ M9 owns **no business tables**. It owns the **places data lives**, and the **pro
 
 **Boundary rule:** a module may **read and write only its own tables**. Cross-module data goes through Go interfaces or events (`domain-boundaries.md` §4). DB-level foreign keys across modules are allowed per SRS §7.2; cross-module JOIN queries are not (DB1, to confirm).
 
-### 2.2 Database roles (proposed, DB10)
+### 2.2 Database roles (agreed, D6)
 
-Core API is **one process** (modular monolith), so all its modules share one role. Module-level ownership is enforced by **code review and the migration review**, not by the database.
+Core API is **one process** (modular monolith), so all its modules share one role. Module-level ownership is enforced by **code review and the migration review**, not by the database. Each role has its own URL key in `postgres-secrets`, mapped into the pod's `DATABASE_URL` (A5 amendment, Doc 4 §4).
 
 | Role | Used by | Permissions |
 | :--- | :--- | :--- |
@@ -67,7 +67,7 @@ Core API is **one process** (modular monolith), so all its modules share one rol
 | `swiftdrop_app` | core-api | SELECT/INSERT/UPDATE on core tables; DELETE only where a module needs it |
 | `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels`, `parcel_status_history`, `parcel_addresses` (read-only projection query) |
 | `swiftdrop_relay` | outbox-relay | SELECT/UPDATE on `outbox_events` |
-| `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on `merchant_webhook_targets_view` |
+| `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on the `merchant_webhook_targets` view (Member 4's name, DB12) |
 | *(none)* | ai-assistant | **no DB access** (FR-AI-005) |
 | `postgres` superuser | M9 admin only | never used by an app |
 
@@ -93,27 +93,23 @@ Core API is **one process** (modular monolith), so all its modules share one rol
    - run `migrate -path core-api/migrations -database "$DATABASE_URL" force <last good version>`;
    - run `up` again (`local-development.md` §5).
 
-**First-wave order (reserved numbers, by foreign-key dependency):**
+**First-wave order (D3: the hub list in `docs/drafts/README.md` §4, reserved numbers):**
 
-```mermaid
-flowchart LR
-    M1["000001 identity<br/>Umesh"] --> M3["000003 merchants<br/>Nagitha"]
-    M1 --> M4["000004 couriers<br/>Kalani"]
-    M2["000002 zones<br/>Bagya/Umesh"] --> M4
-    M2 --> M5["000005 pricing rules<br/>Hansi"]
-    M1 --> M6["000006 parcels<br/>Hansi"]
-    M2 --> M6
-    M3 --> M6
-    M5 --> M7["000007 pricing quotes<br/>Hansi"]
-    M6 --> M7
-    M4 --> M8["000008 dispatch + delivery<br/>Kalani"]
-    M6 --> M8
-    M3 --> M9["000009 events<br/>Watti"]
-    M10["000010 idempotency<br/>owner TBD"]
-    M1 --> M11["000011 audit<br/>Bagya/Umesh"]
-```
+| No. | File | Owner | Tables | Needs (foreign keys) |
+| :-: | :--- | :--- | :--- | :--- |
+| 000001 | `create_users_and_roles` | M1 Umesh | `users`, `roles`, `user_roles`, `oauth_identities` (+ `refresh_tokens`, Member 1 to confirm) | — |
+| 000002 | `create_delivery_zones` | M7 Bagya | `delivery_zones` | — |
+| 000003 | `create_merchants_and_credentials` | M4 Nagitha | `merchants`, `merchant_api_credentials`, `webhook_endpoints` | 000001 |
+| 000004 | `create_pricing_rules` | M2 Hansi | `pricing_rules` | 000002 |
+| 000005 | `create_parcels_and_quotes` | M2 Hansi | `parcels`, `parcel_addresses` (or JSONB, DB13), `pricing_quotes`, `parcel_status_history` | 000001–000004 |
+| 000006 | `create_couriers` | M3 Kalani | `couriers` | 000001, 000002 |
+| 000007 | `create_dispatch_and_delivery` | M3 Kalani | `courier_assignments`, `delivery_attempts` | 000005, 000006 |
+| 000008 | `create_outbox_events` | M8 Watti | `outbox_events` | — |
+| 000009 | `create_worker_dedup_and_webhooks` | M8 Watti | `processed_events`, `webhook_deliveries`, **`notification_deliveries`** (missing from the hub list) | 000003, 000008 |
+| 000010 | `create_idempotency_keys` | M2 / platform (DB7) | `idempotency_keys` | — |
+| 000011 | `create_audit_logs` | M7 / platform | `audit_logs` | 000001 |
 
-After the first wave, every change takes the next free number. The seed runs after all migrations.
+`pricing_quotes.accepted_parcel_id` points at `parcels`, so quotes must live in `000005` or later, never before parcels. After the first wave, every change takes the next free number. The seed runs after all migrations.
 
 ---
 
@@ -142,7 +138,7 @@ After the first wave, every change takes the next free number. The seed runs aft
 | migrations + admin + spare | — | — | ~45 | Minidu |
 | **Total** | | | **150** (105 used) | |
 
-The **defaults** in `environment-variables.md` (25 per pod) would reach about 225, so the per-service values above **must** go into each ConfigMap. If more capacity is needed, raise `max_connections` and the Postgres memory together. **Done on 2026-10-25: 150 connections, 1Gi**, so Member 8's pools fit.
+`environment-variables.md` now defaults `DB_MAX_OPEN_CONNS` to 12 (the core-api value), so the smaller per-service values above **must** still go into each ConfigMap. If more capacity is needed, raise `max_connections` and the Postgres memory together. **Done on 2026-10-25: 150 connections, 1Gi**, so Member 8's pools fit.
 
 ## 6. Data validation and integrity rules (checked in every migration review)
 
@@ -190,7 +186,7 @@ These come from SRS §7.2, `database-schema.md` §3 and the DB coordinator revie
 | PostgreSQL | none added; it is the source of truth | — |
 | Redis | **Pub/Sub fan-out only**, no cached business data | clients re-fetch after reconnect (FR-TRK-005) |
 | Traefik | no response caching | — |
-| Cloudflare | static web assets only (hashed files `max-age=31536000`, `index.html` not cached; ADR-002 §7.1) | new deploy = new hashed filenames |
+| Cloudflare | static web assets only (hashed files `max-age=31536000`, `index.html` not cached; Member 9 proposal) | new deploy = new hashed filenames |
 | API responses | not cached at the edge | — |
 
 ## 9. Seed data and test data
@@ -205,4 +201,4 @@ These come from SRS §7.2, `database-schema.md` §3 and the DB coordinator revie
 
 ## 10. Summary of open data items
 
-DB1 (FK rule), DB2 (outbox table), DB3 (`processed_events`), DB4 (refresh-token table), DB5 (`ai_conversations`), DB6 (references to two tables), DB7 (idempotency owner and key), DB8 (text primary keys), DB9 (money type), DB10 (DB roles), **DB11 (webhook secret storage)**. Each one is listed in this folder's README under "Open questions for Meeting 2"; DB11 is above.
+DB1 (FK rule), DB2 (outbox `correlation_id`), DB3 (`processed_events`), DB5 (`ai_conversations`), DB6 (references to two tables), DB7 (idempotency owner and key), DB8 (text primary keys), DB9 (money type), **DB11 (webhook secret column)**, DB12 (webhook targets view name), DB13 (`parcel_addresses` vs JSONB). Resolved: DB4 (`refresh_tokens` exists), DB10 (roles agreed in D6). Each one is listed in this folder's README under "Open questions for Meeting 2"; DB11 is above.

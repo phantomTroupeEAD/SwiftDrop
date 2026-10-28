@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Migration numbering rule (next free number, first wave reserved); Kubernetes migrations as one Job per deploy instead of a per-pod initContainer; real queue name for KEDA scaling (Member 8); Tracking API replica range (Member 5).  
+> **Open Questions / Needs Clarification:** Tracking API replica range (C8, Member 5); backup retention and off-site storage. *(Settled: 6-digit names and hub order (D2, D3); one migrate Job per release (D1); KEDA queues `q.notifications.worker` + `q.webhooks.dispatcher` (C7).)*  
 > **Answers:** When is the module used, and what happens step by step?  
 > Diagrams use Mermaid. They render on GitHub, or in VS Code with a Mermaid preview extension.  
 
@@ -72,7 +72,7 @@ sequenceDiagram
 | **Main** | as above, ending with all containers `healthy` or `exited (0)` for the migration |
 | **Alt A: no app code yet (Stage 1)** | `traefik/whoami` stubs stand in for core-api, tracking-api, ai-assistant and web, so routing is still testable |
 | **Alt B: run a service natively** | the developer stops that container and runs `go run ...`; the infra stays in Compose |
-| **Fail 1: port in use** (5432, 5672, 8080) | Compose fails to bind. Change the host port in `.env` (see `local-development.md` §5); 8080 is conflict C16 |
+| **Fail 1: port in use** (5432, 5672, 80) | Compose fails to bind. Change the host port in `.env` (see `local-development.md` §5). The Traefik dashboard uses 8090, so it no longer clashes with core-api on 8080 (C16) |
 | **Fail 2: migration fails** | the migrate container exits non-zero, so core-api never starts. Read its logs, fix the SQL, and `force` the version if the DB is dirty (Doc 5 §3) |
 | **Fail 3: dependency unhealthy** | dependants wait; `docker compose ps` shows which one |
 
@@ -138,7 +138,7 @@ stateDiagram-v2
 | Path | What happens |
 | :--- | :--- |
 | **Alt: number clash** | someone merged the same number first. CI's duplicate check fails, and the author renames to the next free number |
-| **Alt: first wave** | numbers 000001–000011 are reserved by foreign-key order (Doc 5 §3) |
+| **Alt: first wave** | numbers 000001–000011 are reserved in the hub order (D3; Doc 5 §3) |
 | **Fail: schema doc not updated** | review rejected (AGENTS.md §6.3, zero drift) |
 | **Fail: breaks the running app** | rejected. Migrations must be **backward compatible** with the previous app version during a rolling update (expand → migrate code → contract; Doc 3 §5) |
 
@@ -253,7 +253,7 @@ sequenceDiagram
 | BR5 | Secrets are injected at runtime only | SRS §11.1–11.2 |
 | BR6 | Health and metrics endpoints are never routed publicly | C1; SRS §11.4 |
 | BR7 | A restore stops the writers first | runbook §3.2 |
-| BR8 | Relay singleton; StatefulSets are never scaled | AGENTS.md §4.4 |
+| BR8 | Relay singleton; StatefulSets are never scaled | ADR-002 §4 and §7 |
 
 ## 4. Idempotency, concurrency and duplicate requests
 

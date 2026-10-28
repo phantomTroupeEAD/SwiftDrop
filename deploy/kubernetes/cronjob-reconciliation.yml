@@ -28,15 +28,17 @@ spec:
             runAsGroup: 10001
           containers:
             - name: reconciler
-              image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest
+              # Git-SHA tag (A3); ${IMAGE_TAG} is filled in at deploy time, never `latest`
+              image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
               imagePullPolicy: IfNotPresent
               command: ["/usr/local/bin/reconcile", "--stale-threshold=5m", "--batch-size=50"]
               env:
+                # swiftdrop_reconciler login (D6), mapped into the DATABASE_URL the binary reads
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
                       name: postgres-secrets
-                      key: DATABASE_URL
+                      key: RECONCILER_DATABASE_URL
                 - name: LOG_LEVEL
                   value: "info"
               resources:
