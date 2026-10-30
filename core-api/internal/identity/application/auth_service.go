@@ -13,11 +13,11 @@ import (
 
 // AuthService coordinates all identity authentication use cases.
 type AuthService struct {
-	userRepo       UserRepository
-	tokenRepo      TokenRepository
-	hasher         PasswordHasher
-	tokenProvider  TokenProvider
-	accessTokenTTL time.Duration
+	userRepo        UserRepository
+	tokenRepo       TokenRepository
+	hasher          PasswordHasher
+	tokenProvider   TokenProvider
+	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
 }
 

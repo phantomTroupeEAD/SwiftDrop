@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
-import { Role } from '@/shared/types/auth';
 import {
   Package,
   Mail,
@@ -13,25 +12,7 @@ import {
   Truck,
   Sparkles,
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
-
-interface QuickAccount {
-  role: Role;
-  name: string;
-  email: string;
-  password: string;
-  badge: string;
-}
-
-const QUICK_ACCOUNTS: QuickAccount[] = [
-  { role: 'ADMIN', name: 'System Admin', email: 'admin@swiftdrop.local', password: 'AdminPassword123!', badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-  { role: 'DISPATCHER', name: 'Dispatcher', email: 'dispatcher@swiftdrop.local', password: 'Dispatcher123!', badge: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
-  { role: 'COURIER', name: 'Courier', email: 'courier@swiftdrop.local', password: 'CourierPassword123!', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-  { role: 'MERCHANT', name: 'Merchant', email: 'merchant@vendor.com', password: 'Merchant123!', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-  { role: 'CUSTOMER', name: 'Customer', email: 'customer@swiftdrop.local', password: 'CustomerPassword123!', badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-];
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -43,7 +24,6 @@ export const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDemoBar, setShowDemoBar] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,13 +32,23 @@ export const LoginPage: React.FC = () => {
 
     try {
       const loggedUser = await login(email, password);
-      // Redirect based on role
-      if (loggedUser.role === 'ADMIN' || loggedUser.role === 'DISPATCHER') {
-        navigate('/ops/dashboard');
-      } else if (loggedUser.role === 'COURIER') {
-        navigate('/courier/dashboard');
-      } else {
-        navigate('/portal/dashboard');
+      // Redirect dynamically based on canonical role
+      switch (loggedUser.role) {
+        case 'ADMIN':
+          navigate('/admin/dashboard');
+          break;
+        case 'DISPATCHER':
+          navigate('/dispatcher/dashboard');
+          break;
+        case 'COURIER':
+          navigate('/courier/dashboard');
+          break;
+        case 'MERCHANT':
+          navigate('/merchant/dashboard');
+          break;
+        default:
+          navigate('/customer/dashboard');
+          break;
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -69,12 +59,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillQuickAccount = (acc: QuickAccount) => {
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setError(null);
   };
 
   return (
@@ -259,7 +243,7 @@ export const LoginPage: React.FC = () => {
             {/* Google OAuth Button */}
             <button
               type="button"
-              onClick={() => alert("Google OAuth flow initiated per SRS §8.1. Redirecting to Google OIDC...")}
+              onClick={() => alert("Redirecting to Google Sign-In...")}
               className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 flex items-center justify-center gap-2.5 transition"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -290,36 +274,6 @@ export const LoginPage: React.FC = () => {
                 Create an account
               </a>
             </p>
-
-            {/* Subtle, Collapsible Team Demo Switcher at Bottom */}
-            <div className="pt-4 border-t border-slate-900">
-              <button
-                type="button"
-                onClick={() => setShowDemoBar(!showDemoBar)}
-                className="w-full flex items-center justify-between text-[11px] text-slate-500 hover:text-slate-400 py-1 transition"
-              >
-                <span>🧪 Quick Demo Roles (For Team Development)</span>
-                {showDemoBar ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-
-              {showDemoBar && (
-                <div className="mt-2.5 p-2 rounded-xl bg-slate-900/40 border border-slate-800/60 flex flex-wrap gap-1.5 justify-center">
-                  {QUICK_ACCOUNTS.map((acc) => (
-                    <button
-                      key={acc.role}
-                      type="button"
-                      onClick={() => fillQuickAccount(acc)}
-                      className={`text-[10px] font-medium px-2 py-1 rounded-lg border transition hover:opacity-100 ${
-                        email === acc.email ? 'ring-1 ring-blue-500 opacity-100' : 'opacity-70'
-                      } ${acc.badge}`}
-                      title={acc.email}
-                    >
-                      {acc.role}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
