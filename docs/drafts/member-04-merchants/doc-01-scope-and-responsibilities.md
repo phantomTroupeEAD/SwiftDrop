@@ -324,8 +324,8 @@ Proposed route inventory (final paths and DTOs in Document 4; see U-05 for path 
 | Variable (proposed) | Purpose | Owner |
 |---|---|---|
 | `MERCHANT_API_KEY_PREFIX` | Key prefix, e.g. `sd_live_` / `sd_test_` | M4 |
-| `MERCHANT_API_KEY_PEPPER` | Server-side secret mixed into key hash (secret) | M4 defines, M9 injects |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Key to encrypt webhook signing secrets at rest (secret) | M4 defines, M9 injects; M8 also needs it to decrypt |
+| `MERCHANT_API_KEY_PEPPER` | Server-side secret mixed into key hash (secret) | M4 defines, M9 injects via `integrations-secrets` |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Key to encrypt webhook signing secrets at rest (secret) | M4 defines, M9 injects via `integrations-secrets`, shared by core-api and M8's worker (which decrypts) |
 | `WEBHOOK_ALLOW_HTTP` | Allow `http://` URLs (`true` only in `local`) | M4 |
 | `WEBHOOK_MAX_ENDPOINTS_PER_MERCHANT` | Resource limit (e.g. 10) | M4 |
 | `MERCHANT_MAX_ACTIVE_KEYS` | Resource limit (e.g. 5) | M4 |
@@ -384,7 +384,7 @@ Member 4 is responsible for steps 2–4 and 7. Member 2 owns steps 5–6. Member
 | **U-05** | Route naming | Self-service: `/api/v1/merchants/me/*`. Admin: `/api/v1/admin/merchants/{id}/status`. B2B orders: **`/api/v1/merchant/parcels`**. |
 | **U-06** | Webhook event names | Versioned catalog: `parcel.booked.v1`, `parcel.picked_up.v1`, `parcel.in_transit.v1`, `parcel.out_for_delivery.v1`, `parcel.delivered.v1`, `parcel.delivery_failed.v1`, `parcel.returned.v1`. |
 | **U-07** | `merchant.webhook_dispatch.v1` producer | **Member 8 Event Worker** owns it. Removed from Member 4's domain event catalog. |
-| **U-08** | How Member 8 reads webhook config | Member 8 daemon connects via `swiftdrop_worker` PostgreSQL role and queries **`merchant_webhook_targets_view`** (SELECT only). |
+| **U-08** | How Member 8 reads webhook config | Member 8 daemon connects via `swiftdrop_worker` PostgreSQL role and queries the view **`merchant_webhook_targets`** (SELECT only). Name confirmed by Member 9 on 28 Oct 2026; the `_view` suffix in the Master Audit is wrong. |
 | **U-09** | Merchant lifecycle domain events | **Yes** — on admin approval, Member 4 commits `merchant.approved.v1` to `outbox_events` for Member 8's welcome email worker. |
 | **U-10** | Admin approval interface | Member 7 Admin UI calls `PUT /api/v1/admin/merchants/{id}/status`. Member 4 evaluates legal transitions, increments `version`, and writes audit in one transaction. |
 | **U-11** | `version` column | **`version INT NOT NULL DEFAULT 1 CHECK (version >= 1)`** added to `merchants` table. All updates use `WHERE id = $1 AND version = $2`. |

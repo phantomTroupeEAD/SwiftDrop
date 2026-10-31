@@ -36,7 +36,7 @@ This document executes the **exact same rigorous 7-point review and alignment pr
 | **FR-MER-006** | Idempotent merchant order submission using `Idempotency-Key`. | Covered in `doc-01`, `doc-02`, `doc-04`. | **100% Complete** | Delegated through to shared `idempotency_keys` table. |
 | **FR-MER-007** | Merchant order listing and filtering scoped to authenticated tenant. | Covered in `doc-01`, `doc-03`, `doc-04`. | **100% Complete** | Standardized `GET /api/v1/merchant/parcels` contract. |
 | **FR-MER-008** | Webhook endpoint registration, listing, and event subscriptions. | Covered in `doc-01`, `doc-02` (Flow 4), `doc-04`. | **100% Complete** | Standardized `POST /api/v1/merchants/me/webhooks`. |
-| **FR-MER-009** | Read-only webhook configuration contract for Member 8's Event Worker. | Covered in `doc-01`, `doc-03`, `doc-05`, `contracts/`. | **100% Complete** | Ratified `merchant_webhook_targets_view` with AES-256-GCM. |
+| **FR-MER-009** | Read-only webhook configuration contract for Member 8's Event Worker. | Covered in `doc-01`, `doc-03`, `doc-05`, `contracts/`. | **100% Complete** | Ratified view `merchant_webhook_targets` with AES-256-GCM. |
 | **FR-MER-010** | Webhook signing secret generation (`whsec_*`) and secure storage. | Covered in `doc-01`, `doc-02`, `doc-05`, `doc-07`. | **100% Complete** | Symmetrically encrypted `secret_ciphertext BYTEA`. |
 | **FR-MER-011** | Delivery attempt logging and webhook delivery observability. | Covered in `doc-01`, `doc-04`. | **100% Complete** | Read-only delivery history delegated to Member 8. |
 | **SEC-010–011**| Registration-time SSRF URL validation and port restrictions. | Covered in `doc-01`, `doc-03`, `doc-07`, `doc6-tests`. | **100% Complete** | Pre-dial DNS resolution & private CIDR blacklist. |
@@ -56,7 +56,7 @@ Member 4 cataloged 14 architectural dilemmas across `doc-01` Section 9.2. All 14
 | **U-05** | **Route Naming Conventions:** | **Resolved:** Standardize on: <br>1. Self-service merchant config: `/api/v1/merchants/me/*` (credentials, webhooks).<br>2. Admin approval: `/api/v1/admin/merchants/{id}/status`.<br>3. B2B Order Ingestion: `/api/v1/merchant/parcels`. |
 | **U-06** | **Webhook Subscribed Event Names:** Naming divergence across documents. | **Resolved:** Standardize on versioned event contracts: `parcel.booked.v1`, `parcel.picked_up.v1`, `parcel.in_transit.v1`, `parcel.out_for_delivery.v1`, `parcel.delivered.v1`, `parcel.delivery_failed.v1`, `parcel.returned.v1`. |
 | **U-07** | **`merchant.webhook_dispatch.v1` Producer Ownership:** | **Resolved:** Producer is Member 8's Event Worker. Internal to worker processing; removed from Core API domain event catalog. |
-| **U-08** | **How Member 8 Reads Webhook Targets:** | **Resolved:** Member 8's external daemon connects using least-privilege PostgreSQL role `swiftdrop_worker` and queries the dedicated view **`merchant_webhook_targets_view`**. |
+| **U-08** | **How Member 8 Reads Webhook Targets:** | **Resolved:** Member 8's external daemon connects using least-privilege PostgreSQL role `swiftdrop_worker` and queries the dedicated view **`merchant_webhook_targets`**. |
 | **U-09** | **Merchant Lifecycle Domain Events:** Should `merchant.approved.v1` be published to outbox? | **Resolved:** **Yes.** On admin approval, Member 4 commits `merchant.approved.v1` to `outbox_events` so Member 8's worker can dispatch a welcome/onboarding email to `contact_email`. |
 | **U-10** | **Admin Approval Interface Collaboration:** | **Resolved:** Member 7's Admin UI calls `PUT /api/v1/admin/merchants/{id}/status`. Member 4's application service evaluates legal transitions, increments `version`, and writes audit records in one transaction. |
 | **U-11** | **Optimistic Concurrency Control:** | **Resolved:** Add **`version INT NOT NULL DEFAULT 1`** to `merchants` table. All updates execute with `WHERE id = $1 AND version = $2`. |
@@ -84,7 +84,7 @@ flowchart TD
   - In `doc-05` line 90, `migrations-draft/20261101000400_...sql`, and `contracts/webhook-config-read-contract.sql`, the view is created as `merchant_webhook_targets`.
   - In `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` and Member 8's documents (`MEMBER_08_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` and `doc-05`), the view is named **`merchant_webhook_targets_view`**.
 - **The Problem:** If Member 8 executes `SELECT ... FROM merchant_webhook_targets_view`, but Member 4 created `merchant_webhook_targets`, the query will fail with `relation "merchant_webhook_targets_view" does not exist`.
-- **The Fix:** Standardize canonical view name as **`merchant_webhook_targets_view`**. Provide a backward-compatible view alias `merchant_webhook_targets` during migration.
+- **The Fix (corrected 28 Oct 2026, confirmed by Member 9):** The canonical view name is **`merchant_webhook_targets`**, the name Member 8's worker already uses. No `_view` suffix and no alias view. Earlier versions of this guide and the Master Audit said `merchant_webhook_targets_view`; that was wrong.
 
 ### 4.2 Contradiction 2: Migration Sequencing & Timestamp Naming
 - **The Inconsistency:**
@@ -106,7 +106,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph CrossMemberAlignment ["Member 04 Cross-Boundary Reconciliation"]
-        M4M8["M4 vs M8: Webhook Secret Cryptographic Storage<br/>(AES-256-GCM secret_ciphertext & merchant_webhook_targets_view)"]
+        M4M8["M4 vs M8: Webhook Secret Cryptographic Storage<br/>(AES-256-GCM secret_ciphertext & merchant_webhook_targets)"]
         M4M1["M4 vs M1: Identity & JWT Tenant Injection<br/>(TenantResolver interface injects tenant_id into JWT)"]
         M4M2["M4 vs M2: B2B Parcel Order Delegation<br/>(CreateParcelForMerchant service & fee snapshot)"]
         M4M7["M4 vs M7: Admin Merchant Approval UI<br/>(PUT /admin/merchants/{id}/status & M7-UI-08 screen)"]
@@ -116,7 +116,7 @@ flowchart TD
 
 ### 5.1 M4 vs M8: Webhook Secret Storage & Worker Decryption
 - **The Conflict:** Initial draft schemas defined `secret_hash VARCHAR(255)`. Member 8 requires the plaintext secret at send time to compute `HMAC-SHA256(payload, secret)`. A one-way hash cannot be decrypted.
-- **The Resolution:** Member 4 stores `secret_ciphertext BYTEA NOT NULL` encrypted symmetrically with AES-256-GCM using `WEBHOOK_SECRET_ENCRYPTION_KEY`. Member 4 exposes `merchant_webhook_targets_view`. Member 8 connects using least-privilege PostgreSQL role `swiftdrop_worker`, selects `secret_ciphertext` from the view, and decrypts the secret before computing the HMAC-SHA256 signature.
+- **The Resolution:** Member 4 stores `secret_ciphertext BYTEA NOT NULL` encrypted symmetrically with AES-256-GCM using `WEBHOOK_SECRET_ENCRYPTION_KEY`. Member 4 exposes the view `merchant_webhook_targets`. Member 8 connects using least-privilege PostgreSQL role `swiftdrop_worker`, selects `secret_ciphertext` from the view, and decrypts the secret before computing the HMAC-SHA256 signature.
 
 ### 5.2 M4 vs M1: Merchant Tenant ID Claim Injection in JWT
 - **The Conflict:** When a merchant user logs in via Member 1's `POST /api/v1/auth/login`, Member 1’s JWT payload example had `"tenant_id": null`. Member 4 requires a valid `tenant_id` claim in the JWT to scope all merchant dashboard queries.
@@ -150,97 +150,24 @@ flowchart TD
 
 ### 5.5 M4 vs M9: DevOps, DB Privileges & Secret Management
 - **The Alignment:**
-  - **Migration Sequence:** Authoritative file `core-api/migrations/000003_create_merchants_and_credentials.up.sql`.
-  - **Database Privileges:** Core API runs as `swiftdrop_app`. Member 8's worker runs as `swiftdrop_worker`, granted `SELECT` on `merchant_webhook_targets_view` only.
-  - **Secrets:** `WEBHOOK_SECRET_ENCRYPTION_KEY` and `API_KEY_PEPPER` are injected via Kubernetes secret `integrations-secrets`.
+  - **Migration Sequence:** Authoritative file `core-api/migrations/000003_create_merchants_and_credentials.up.sql` (hub order in `docs/drafts/README.md` §4, final per Member 9 on 28 Oct 2026).
+  - **Database Privileges:** Core API runs as `swiftdrop_app`. Member 8's worker runs as `swiftdrop_worker`, granted `SELECT` on the view `merchant_webhook_targets` only.
+  - **Secrets:** `WEBHOOK_SECRET_ENCRYPTION_KEY` and `MERCHANT_API_KEY_PEPPER` are injected via Kubernetes secret `integrations-secrets`, shared by core-api and Member 8's worker.
 
 ---
 
 ## 6. Authoritative Database Migration: `000003_create_merchants_and_credentials.up.sql`
 
-```sql
--- ============================================================================
--- SwiftDrop Core API: Migration 000003 - Merchant Integration & Webhooks
--- Author: Member 04 (Merchant Integration)
--- ============================================================================
+> **Corrected 28 Oct 2026.** An earlier version of this section held a hand-written SQL block that used `target_url`, `event_types`, `is_active`, a `merchant_webhook_targets_view` view and an alias view. None of that matches the tested migrations, so the block was removed. The source of truth is:
 
--- 1. Table: merchants
-CREATE TABLE merchants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    business_name VARCHAR(150) NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'PENDING' 
-        CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED', 'DISABLED')),
-    status_reason VARCHAR(500),
-    contact_phone VARCHAR(32) NOT NULL,
-    contact_email VARCHAR(255) NOT NULL,
-    address JSONB NOT NULL,
-    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    approved_at TIMESTAMPTZ,
-    version INT NOT NULL DEFAULT 1 CHECK (version >= 1),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+| Content of `000003` | Source file (merged in this order at graduation) |
+|---|---|
+| `merchants` | [`migrations-draft/20261101000100_create_merchants.up.sql`](./migrations-draft/20261101000100_create_merchants.up.sql) |
+| `merchant_api_credentials` | [`migrations-draft/20261101000200_create_merchant_api_credentials.up.sql`](./migrations-draft/20261101000200_create_merchant_api_credentials.up.sql) |
+| `webhook_endpoints` (`url`, `subscribed_event_types`, `enabled`, `secret_ciphertext`, `secret_key_version`) | [`migrations-draft/20261101000300_create_webhook_endpoints.up.sql`](./migrations-draft/20261101000300_create_webhook_endpoints.up.sql) |
+| View `merchant_webhook_targets` + `swiftdrop_worker` grant | [`migrations-draft/20261101000400_create_merchant_webhook_targets_view.up.sql`](./migrations-draft/20261101000400_create_merchant_webhook_targets_view.up.sql) |
 
--- 2. Table: merchant_api_credentials
-CREATE TABLE merchant_api_credentials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-    key_prefix VARCHAR(16) NOT NULL, -- e.g. 'sd_live_a1b2c3d4'
-    key_hash VARCHAR(64) NOT NULL UNIQUE, -- HMAC-SHA256 hash of plaintext key with pepper
-    label VARCHAR(64) NOT NULL,
-    scopes TEXT[] NOT NULL DEFAULT ARRAY['parcels:read', 'parcels:write'],
-    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    expires_at TIMESTAMPTZ,
-    revoked_at TIMESTAMPTZ,
-    last_used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Table: webhook_endpoints
-CREATE TABLE webhook_endpoints (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-    target_url VARCHAR(512) NOT NULL,
-    secret_ciphertext BYTEA NOT NULL, -- AES-256-GCM encrypted signing secret
-    event_types TEXT[] NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ
-);
-
--- 4. Read-Only Target View for Member 8 Event Worker
-CREATE OR REPLACE VIEW merchant_webhook_targets_view AS
-SELECT 
-    w.id AS endpoint_id,
-    w.merchant_id,
-    w.target_url,
-    w.secret_ciphertext,
-    w.event_types,
-    m.status AS merchant_status
-FROM webhook_endpoints w
-JOIN merchants m ON m.id = w.merchant_id
-WHERE w.is_active = TRUE 
-  AND w.deleted_at IS NULL 
-  AND m.status = 'APPROVED';
-
--- Backward-compatibility alias
-CREATE OR REPLACE VIEW merchant_webhook_targets AS
-SELECT * FROM merchant_webhook_targets_view;
-
--- Performance & Integrity Indexes
-CREATE INDEX idx_merchants_owner ON merchants(owner_user_id);
-CREATE UNIQUE INDEX uq_merchants_active_owner ON merchants(owner_user_id) 
-    WHERE status IN ('PENDING', 'APPROVED', 'SUSPENDED');
-CREATE INDEX idx_merchants_status ON merchants(status);
-CREATE INDEX idx_api_keys_lookup ON merchant_api_credentials(key_hash) 
-    WHERE revoked_at IS NULL;
-CREATE INDEX idx_api_keys_merchant ON merchant_api_credentials(merchant_id);
-CREATE INDEX idx_webhooks_merchant ON webhook_endpoints(merchant_id) 
-    WHERE deleted_at IS NULL;
-```
+Column-level rationale is in [`doc-05`](./doc-05-data-and-persistence.md) §3; the worker-facing contract is [`contracts/webhook-config-read-contract.sql`](./contracts/webhook-config-read-contract.sql).
 
 ---
 
@@ -427,8 +354,8 @@ Before Team Meeting 2 sign-off, Member 4 must verify the following items:
 
 - [x] **Audit Approved:** All 8 submitted drafts (`doc-01` through `doc-08`), OpenAPI specs, and test outputs cross-checked.
 - [x] **Open Questions Resolved:** All 14 dilemmas (U-01 through U-14) authoritatively answered and documented.
-- [x] **Migrations Consolidated:** 4 draft files unified into `core-api/migrations/000003_create_merchants_and_credentials.up.sql`.
-- [x] **Webhook Secret Encryption Binding:** AES-256-GCM `secret_ciphertext BYTEA` and `merchant_webhook_targets_view` ratified with Member 8.
+- [ ] **Migrations Consolidated:** Number `000003` is final, but the 4 draft files are not yet merged into `core-api/migrations/000003_create_merchants_and_credentials.up.sql` (done at graduation, see `doc-05` §5.3).
+- [x] **Webhook Secret Encryption Binding:** AES-256-GCM `secret_ciphertext BYTEA` and view `merchant_webhook_targets` ratified with Member 8.
 - [x] **Tenant Injection Aligned:** `TenantResolver` integration agreed with Member 1 for JWT `tenant_id` claim.
 - [x] **Order Ingestion Harmonized:** `POST /api/v1/merchant/parcels` calls Member 2's `CreateParcelForMerchant` use case.
 - [x] **SSRF Defense Verified:** Registration-time HTTPS enforcement, port checks, and DNS IP blacklist validated.

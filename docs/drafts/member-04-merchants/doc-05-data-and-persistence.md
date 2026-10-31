@@ -3,7 +3,7 @@
 > **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/infrastructure/`, `core-api/migrations/`  
-> **Key Upstream Dependencies:** Member 1 (`users`, `audit_logs`), Member 2 (`parcels.merchant_id`, `idempotency_keys`), Member 8 (`webhook_deliveries` FK, worker DB role via `merchant_webhook_targets_view`), Member 9 (DB roles, secrets), DB coordinator (migration ordering)  
+> **Key Upstream Dependencies:** Member 1 (`users`, `audit_logs`), Member 2 (`parcels.merchant_id`, `idempotency_keys`), Member 8 (`webhook_deliveries` FK, worker DB role via view `merchant_webhook_targets`), Member 9 (DB roles, secrets), DB coordinator (migration ordering)  
 > **Alignment Status:** All open questions U-01–U-31 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 This document references the system ERD in [`docs/architecture/database-schema.md`](../../architecture/database-schema.md) and only details Member 4's tables. [§10](#10-requested-changes-to-the-canonical-schema) lists the changes Member 4 asks the canonical schema to adopt.
@@ -174,7 +174,7 @@ Address is `jsonb` (as in the canonical ERD) because merchant address is display
 
 ### 3.4 View `merchant_webhook_targets`
 
-> **Naming note (2026-10-26 audit):** The canonical view name is `merchant_webhook_targets`. The alignment guide had proposed `merchant_webhook_targets_view`; the new system audit overruled this because Member 8's worker already references the shorter name in its implementation.
+> **Naming note (2026-10-26 audit, confirmed by Member 9 on 2026-10-28):** The canonical view name is `merchant_webhook_targets`. The alignment guide had proposed `merchant_webhook_targets_view`; the new system audit overruled this because Member 8's worker already references the shorter name in its implementation. The Master Audit still says `_view`; ignore it.
 
 | Column | From |
 |---|---|
@@ -236,7 +236,9 @@ flowchart LR
     E --> F["000006_create_couriers\n(Member 3)"]
     F --> G["000007_create_dispatch_and_delivery\n(Member 3)"]
     G --> H["000008_create_outbox_events\n(Member 8)"]
-    H --> I["000009_create_worker_dedup_and_webhooks\n(Member 8 — webhook_deliveries)"]
+    H --> I["000009_create_worker_dedup_and_webhooks\n(Member 8 — processed_events, webhook_deliveries, notification_deliveries)"]
+    I --> J["000010_create_idempotency_keys\n(Member 2 / Platform)"]
+    J --> K["000011_create_audit_logs\n(Member 7 / Platform)"]
 ```
 
 | Order | Migration file | Owner | Hard dependency |
@@ -250,11 +252,11 @@ flowchart LR
 
 **Important for Member 2:** `parcels` cannot be created before `merchants`. Version numbers must reflect this (U-28).
 
-### 5.3 Migration naming — PENDING GROUP DECISION (D2/D3)
+### 5.3 Migration naming — DECIDED (D2/D3)
 
-> **Status (2026-10-26 audit):** The migration naming decision (D2) is **still open** — the audit confirms no binding vote has been recorded. Additionally, `000003` is **in collision** with Member 3's draft migrations. This must be resolved in the next group meeting before Member 4's migration file can be named.
+> **Status (2026-10-28, Member 9):** The order in [`docs/drafts/README.md` §4](../README.md#4-canonical-database-migration-sequence-ratified-d3) is final. Member 4 owns **`000003_create_merchants_and_credentials`** (6-digit sequential); Member 3 owns `000006`/`000007`, so the earlier `000003` collision is gone.
 >
-> **Current proposal:** 6-digit sequential (`000003`) once the collision is resolved with M3. Until then, Member 4's draft retains the placeholder name `000003_create_merchants_and_credentials.up.sql` with the understanding that the final number may change.
+> The four timestamped files in `migrations-draft/` (`20261101000100`–`000400`) and their copies in `doc8-local/` stay as they are for the local demo and its recorded evidence. When the module graduates to `core-api/migrations/`, they are merged in the same order into one `000003_create_merchants_and_credentials.up.sql` / `.down.sql` pair.
 
 ### 5.4 Changing the schema later (expand → migrate → contract)
 

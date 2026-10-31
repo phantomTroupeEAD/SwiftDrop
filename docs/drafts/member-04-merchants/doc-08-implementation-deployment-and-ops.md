@@ -205,7 +205,7 @@ The merchants module has **no separate Deployment**: it ships inside `core-api` 
 | Topic | Merchants requirement |
 |---|---|
 | ConfigMap | `core-api-merchants-config` (non-secret vars from §4.2) |
-| Secret | `core-api-merchants-secrets`: `MERCHANT_API_KEY_PEPPER`, `WEBHOOK_SECRET_ENCRYPTION_KEY`. The encryption key is also mounted read-only into Member 8's worker |
+| Secret | Member 9's shared `integrations-secrets`: `MERCHANT_API_KEY_PEPPER`, `WEBHOOK_SECRET_ENCRYPTION_KEY`. The same secret is mounted into Member 8's worker, which needs the encryption key to decrypt signing secrets |
 | Service | Existing `core-api` ClusterIP on 8080; nothing new |
 | Probes | liveness `/livez` (10 s, 3 failures); readiness `/readyz` (3 s, 1 failure); startup `/livez` (2 s × 15) |
 | Security context | `runAsNonRoot`, `runAsUser: 10001`, `readOnlyRootFilesystem`, drop ALL capabilities |
@@ -214,7 +214,7 @@ The merchants module has **no separate Deployment**: it ships inside `core-api` 
 | Scaling | Stateless; scales with `core-api` replicas (≥ 2 for availability). No sticky sessions. The only per-replica state is the `last_used_at` throttle map (harmless if lost) and the Member 2 stand-in, which disappears at integration |
 | Network | Egress DNS only (registration-time resolution). Merchants never connects to merchant URLs — Member 8 does |
 | Migrations | Run by Member 9's `core-api-migrate` Job before rollout (`deployment-guide.md` step 7) |
-| DB role for worker | `swiftdrop_worker` must exist **before** migration `000400` so the view grant applies (otherwise the grant is skipped silently) |
+| DB role for worker | `swiftdrop_worker` must exist **before** migration `000003` (draft file `20261101000400`) so the view grant applies (otherwise the grant is skipped silently) |
 
 ---
 
