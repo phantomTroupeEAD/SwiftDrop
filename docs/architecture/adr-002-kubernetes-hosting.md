@@ -30,6 +30,13 @@ We adopt a **single Ubuntu VPS (Virtual Private Server) running K3s** as the pri
 2. **Kubernetes Distribution:** **K3s** (Rancher/SUSE lightweight Kubernetes).
    - *Rationale:* K3s is fully CNCF-certified, packages control-plane and worker components into a single binary, consumes minimal memory overhead (<512 MB RAM), and includes a built-in `local-path` PersistentVolume provisioner suitable for single-node stateful storage.
 3. **Local Development Parity:** Developers run the system via Docker Compose (`deploy/docker-compose.yml`). The Kubernetes manifests in `deploy/kubernetes/` mirror the container images, environment variable schemas, and networking routes used in Compose.
+4. **Provider and size** (⏳ open; the team left this choice to Member 9, who decides after trying Azure; status 2026-10-28):
+   - **Size rule:** at least **8 GB RAM**, x86. K3s, PostgreSQL (1 GiB limit), RabbitMQ (512 MiB limit), six app workloads, Traefik and the monitoring stack do not fit in 4 GB.
+   - **Trying first: Azure for Students,** VM size B2ms (2 vCPU, 8 GB RAM). It uses the $100 student credit and needs no card. Deallocate the VM whenever it is not in use, so the credit lasts.
+   - **Paid backup: Hetzner Cloud CX33.** x86, 4 vCPU, 8 GB RAM, 80 GB disk, in Nuremberg, Falkenstein or Helsinki. About €8.49/month plus €0.50 for the IPv4 address (Hetzner price list of 15 June 2026, excluding VAT). Billing is hourly, so it would be rented only from milestone M4. Hetzner had limited CX capacity in 2026.
+   - **Practice only: Oracle Cloud trial** ($300 credit, 30 days). Good for a practice K3s cluster on an x86 VM now, not for the demo: the credit and the servers made with it end after 30 days.
+   - **Fallback:** a local k3d cluster on the Member 9 laptop (about 16 GB RAM) for the demo, if no server is available.
+   - **Rejected:** Hetzner CPX31/CPX32 (about €35/month or more after the June 2026 price rise); DigitalOcean (the student credit ended in August 2026); Oracle Always Free (ARM only, cut to 2 OCPU / 12 GB in 2026 and often out of capacity).
 
 ---
 
@@ -161,4 +168,4 @@ Operating on a single VPS represents an acknowledged single point of failure (SP
 - [ ] Update `deploy/gateway/README.md` to document Cloudflare proxy integration and Kubernetes deployment flow.
 - [ ] Update ADR-001 verification checklist with Cloudflare real-IP and SSE tests.
 - [ ] Update `docs/architecture/domain-boundaries.md` topology diagram to include Cloudflare proxy.
-- [ ] Generate baseline Kubernetes manifests (`deploy/k8s/`) covering Deployments, StatefulSets, CronJob, and Traefik IngressRoutes.
+- [ ] Generate baseline Kubernetes manifests (`deploy/kubernetes/`, per-service folders, A8) covering Deployments, StatefulSets, CronJob, and Traefik IngressRoutes.

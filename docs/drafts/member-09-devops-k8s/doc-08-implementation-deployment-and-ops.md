@@ -197,7 +197,7 @@ This follows `deployment-guide.md` §3 with the decided names.
 - GitHub (repo, Actions, GHCR);
 - Docker Hub (base images);
 - Cloudflare (M4);
-- the VPS provider (TBD);
+- the VPS provider (open: Azure for Students first, Hetzner CX33 as the paid backup; ADR-002 §2);
 - off-site backup storage (TBD).
 
 **Startup:** Postgres and RabbitMQ healthy → migrations → apps → gateway. **Shutdown:** SIGTERM → apps drain (core-api 20s) → stop. Stateful pods stop last.

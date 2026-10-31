@@ -126,11 +126,11 @@ flowchart LR
 ```
 
 ### 4.1 M9 vs M1: Identity & Authentication Secrets
-- **Migration Sequencing:** Member 1 authors Migration `000001_create_users_and_roles.up.sql` establishing core auth tables (`users`, `roles`, `user_roles`, `oauth_identities`).
+- **Migration Sequencing:** Member 1 authors Migration `000001_create_users_and_roles.up.sql` establishing core auth tables (`roles`, `users`, `oauth_identities`, `refresh_tokens`, as in `database-schema.md`; `user_roles` only if Member 1 keeps it).
 - **Secrets Management:** Member 9 provisions `jwt-secrets` mounting the RS256 private key to Core API and public key to Tracking API.
 
 ### 4.2 M9 vs M2: Parcels, Pricing & Monolith Connection Pool
-- **Migration Sequencing:** Member 2 authors Migration `000004_create_pricing_rules.up.sql`, Migration `000005_create_parcels_and_quotes.up.sql`, and Migration `000010_create_idempotency_keys.up.sql` (owner still to confirm, DB7).
+- **Migration Sequencing:** Member 2 authors Migration `000004_create_pricing_rules.up.sql`, Migration `000005_create_parcels_and_quotes.up.sql`, and Migration `000010_create_idempotency_keys.up.sql` (owner confirmed by Member 2, 2026-11-01). Addresses are JSONB snapshots on `parcels`; there is no `parcel_addresses` table (DB13).
 - **Connection Budget:** Member 9 allocates Core API connection pool: 12 open connections per pod $\times$ 4 maximum replicas = **48 connections** (`DB_MAX_OPEN_CONNS=12`, `DB_MAX_IDLE_CONNS=4`).
 
 ### 4.3 M9 vs M3: Dispatch, Couriers & Readiness Probe Decoupling
@@ -165,7 +165,7 @@ flowchart LR
 
 ### 4.9 M9 vs M10: AI Assistant Deployment & CI Testing
 - **Stateless AI Deployment:** Deploys `ai-assistant` on container port `:8000` with zero database credentials or PVC mounts.
-- **CI Test Suite:** Provisions headless Chromium in GitHub Actions (`npx playwright install --with-deps chromium`) for Member 10's end-to-end smoke test suite.
+- **CI Test Suite:** Provisions headless Chromium in GitHub Actions (Python: `pip install -r tests/e2e/requirements-test.txt`, then `playwright install --with-deps chromium`; tests run with `pytest tests/e2e/ -v`) for Member 10's end-to-end smoke test suite.
 
 ---
 
@@ -175,15 +175,15 @@ As Database Coordinator, Member 9 governs the authoritative 11-step migration se
 
 ```mermaid
 flowchart TD
-    M01["000001_create_users_and_roles.up.sql<br/>(Member 1: users, roles, user_roles, oauth_identities)"] --> M02["000002_create_delivery_zones.up.sql<br/>(Member 7: delivery_zones)"]
+    M01["000001_create_users_and_roles.up.sql<br/>(Member 1: roles, users, oauth_identities, refresh_tokens)"] --> M02["000002_create_delivery_zones.up.sql<br/>(Member 7: delivery_zones)"]
     M02 --> M03["000003_create_merchants_and_credentials.up.sql<br/>(Member 4: merchants, merchant_api_credentials, webhook_endpoints)"]
     M03 --> M04["000004_create_pricing_rules.up.sql<br/>(Member 2: pricing_rules)"]
-    M04 --> M05["000005_create_parcels_and_quotes.up.sql<br/>(Member 2: parcels, parcel_addresses or JSONB (DB13), pricing_quotes, parcel_status_history)"]
+    M04 --> M05["000005_create_parcels_and_quotes.up.sql<br/>(Member 2: parcels with JSONB addresses, pricing_quotes, parcel_status_history)"]
     M05 --> M06["000006_create_couriers.up.sql<br/>(Member 3: couriers)"]
     M06 --> M07["000007_create_dispatch_and_delivery.up.sql<br/>(Member 3: courier_assignments, delivery_attempts)"]
     M07 --> M08["000008_create_outbox_events.up.sql<br/>(Member 8: outbox_events)"]
     M08 --> M09["000009_create_worker_dedup_and_webhooks.up.sql<br/>(Member 8: processed_events, webhook_deliveries, notification_deliveries)"]
-    M09 --> M10["000010_create_idempotency_keys.up.sql<br/>(Platform / Member 2: idempotency_keys)"]
+    M09 --> M10["000010_create_idempotency_keys.up.sql<br/>(Member 2: idempotency_keys)"]
     M10 --> M11["000011_create_audit_logs.up.sql<br/>(Platform / Member 7: audit_logs)"]
 ```
 
@@ -457,9 +457,10 @@ seed:
 test:
 	cd core-api && go test -race ./...
 
-# Command and config path to be confirmed by Member 10
+# Member 10's Python suite (pytest + pytest-playwright). First time only:
+#   pip install -r tests/e2e/requirements-test.txt && playwright install chromium
 test-e2e:
-	npx playwright test --config=tests/e2e/playwright.config.ts
+	pytest tests/e2e/ -v
 
 # Windows without make: run .\scripts\verify.ps1 directly
 verify:

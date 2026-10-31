@@ -13,8 +13,8 @@ All deployed services provide standard Kubernetes Liveness and Readiness probes:
 | :--- | :--- | :--- | :--- | :--- |
 | **Core API** | `8080` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (process up)<br>Readiness (PostgreSQL pool connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY","database":"UP"}`<br>`200 OK` (metrics) |
 | **Tracking API** | `8081` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (process up)<br>Readiness (DB connection)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
-| **AI Assistant** | `8000` | `GET /health/live`<br>`GET /health/ready` | Liveness (process up)<br>Readiness (local model cache up) | `200 OK` `{"status":"healthy"}`<br>`200 OK` `{"status":"ready"}` |
-| **Outbox Relay** | `8082` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (daemon up)<br>Readiness (DB pool connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
+| **AI Assistant** | `8000` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (process up)<br>Readiness (local config/cache only; never pings Core API)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
+| **Outbox Relay** | `8082` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (daemon up)<br>Readiness (DB pool + RabbitMQ connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
 | **Event Worker** | `8083` | `GET /health/live`<br>`GET /health/ready`<br>`GET /metrics` | Liveness (worker up)<br>Readiness (RabbitMQ + DB connected)<br>Prometheus metrics | `200 OK` `{"status":"UP"}`<br>`200 OK` `{"status":"READY"}`<br>`200 OK` (metrics) |
 | **Traefik Ingress**| `9000` (ping)<br>`8090` (dashboard) | `GET /ping` (9000)<br>`GET /dashboard/` (8090) | Internal proxy liveness<br>Local admin dashboard | `200 OK` `OK`<br>`200 OK` (dashboard UI) |
 

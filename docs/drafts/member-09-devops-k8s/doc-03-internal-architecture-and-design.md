@@ -209,7 +209,7 @@ Migrations   ──► run by the platform, owned by table owners
 | Kubernetes distribution | **K3s** on a VPS; **k3d** locally | minikube, kind, managed EKS/GKE | ADR-002: light, CNCF certified, `local-path` storage. k3d runs the same K3s locally. Cost: single node is a single point of failure |
 | Manifests | **raw YAML first, then Helm** for the bonus | Kustomize; Helm from day one | raw YAML is easier to learn and review in Stage 1; Helm is recommended for the bonus (SRS §11.2) |
 | Migrations in K8s | **Job** once per release, `backoffLimit: 0` (D1; an initContainer may only wait for it) | initContainer that migrates in every pod | with 2–4 core-api pods, migrating in every pod is wasteful and noisy, even though golang-migrate's lock keeps it safe |
-| Monitoring | **kube-prometheus-stack** via Helm (proposed) | plain Prometheus + Grafana; cloud monitoring | full stack fast, but heavy for one VPS. **Fallback:** plain Prometheus + Grafana if RAM is tight (VPS size TBD) |
+| Monitoring | **kube-prometheus-stack** via Helm (proposed) | plain Prometheus + Grafana; cloud monitoring | full stack fast, but heavy for one VPS. **Fallback:** plain Prometheus + Grafana if RAM or CPU is tight on the 8 GB server (Azure B2ms has only 2 vCPU) |
 | Worker scaling | **KEDA** | HPA on custom metrics | fixed by the SRS (§13.1); simpler RabbitMQ trigger |
 | Ingress | own **Traefik v3**, K3s bundled Traefik disabled | bundled Traefik v2; NGINX Ingress | ADR-001 / ADR-002 |
 | Compose location | **`deploy/docker-compose.yml` + Makefile** | repo root | C3 decision; the Makefile hides the `-f` flag |
@@ -233,7 +233,7 @@ Migrations   ──► run by the platform, owned by table owners
 | traefik | 1–2 | TBD (ADR-001: about 50–80 MB RAM) | TBD |
 | monitoring | 1 each | TBD | TBD |
 
-- **Rule:** the sum of all *requests* at **max replicas** must fit the VPS, leaving headroom for K3s itself (its exact footprint is TBD and depends on the VPS size).
+- **Rule:** the sum of all *requests* at **max replicas** must fit the VPS (at least 8 GB RAM; provider open, ADR-002 §2), leaving headroom for K3s itself (under 512 MB, ADR-002 §2).
 - **DB connections:** the sum of `max replicas × pool size` must stay within `max_connections` = **150** (C11; Doc 5 §5).
 - **Performance targets** I must make measurable:
   - NFR-PERF-001: p95 ≤ 500 ms at 50 users. `database-schema.md` §4 says < 200 ms, so the team should pick one.
@@ -268,4 +268,6 @@ Migrations   ──► run by the platform, owned by table owners
 | 2026-10-26 | 6-digit migration names; DB roles; per-service manifest folders; one migrate Job per release with `backoffLimit: 0` (not an initContainer per pod) | D2, D6, A8, D1 |
 | 2026-10-28 | Migration order = the hub list (+ `notification_deliveries` in `000009`) | D3 |
 | 2026-10-28 *(proposed)* | One DB URL key per login role in `postgres-secrets` | A5 amendment |
+| 2026-10-28 | `make test-e2e` = `pytest tests/e2e/ -v` (Member 10's Python suite) | doc-04 §3 |
+| *open* | Hosting provider: trying Azure for Students first, Hetzner CX33 as the paid backup | ADR-002 §2 |
 | *proposed* | Raw YAML first, Helm for the bonus | this doc §8 |

@@ -49,12 +49,14 @@ Search my files especially for:
 - Dockerfile HEALTHCHECK using curl/wget in slim or distroless images (they don't have them)
 - Kubernetes secret names (postgres-secrets, postgres-migrator-secrets, rabbitmq-secrets, jwt-secrets,
   integrations-secrets, <service>-<module>-secrets) — flag postgres-credentials, *-owner-credentials, others
-- DB login roles (swiftdrop_migrator, swiftdrop_app, swiftdrop_tracking_ro, swiftdrop_relay, swiftdrop_worker)
-  — flag swiftdrop_owner, swiftdrop_core_api, swiftdrop_tracking, or apps using the postgres superuser
+- DB URL: every service reads only the env var DATABASE_URL; in Kubernetes it comes from its own key in
+  postgres-secrets (DATABASE_URL, TRACKING_/RELAY_/WORKER_/RECONCILER_DATABASE_URL, rule A5)
+- DB login roles (swiftdrop_migrator, swiftdrop_app, swiftdrop_tracking_ro, swiftdrop_relay, swiftdrop_worker,
+  swiftdrop_reconciler) — flag swiftdrop_owner, swiftdrop_core_api, swiftdrop_tracking, or apps using the postgres superuser
 - "sslmode=require" (in-cluster must be sslmode=disable, rule D11)
 - Compose file location (must be deploy/docker-compose.yml + root Makefile; flag root docker-compose.yml)
-- migration files: naming (6-digit 000NNN_ vs timestamps — rule D2 is a TEAM VOTE, just report what I use),
-  foreign-key ORDER (my tables must be created after the tables they reference, rule D3),
+- migration files: naming must be 6-digit 000NNN_name.up.sql / .down.sql (rule D2, flag timestamps),
+  and my first-wave files must use the exact numbers in rule D3 (000001–000011),
   stub tables that belong to other members (rule D4), seed SQL inside migrations folders (rule D12)
 - /health/ready that checks optional/external services (object storage, LLM, email, webhooks) — rule A2
 - env var names: VITE_API_BASE_URL, RABBITMQ_URL, S3_* / STORAGE_DRIVER, and any new variable
@@ -76,7 +78,7 @@ RULES FOR YOU (the AI):
   any other member's folder.
 - Do NOT commit, push, or open pull requests. I will review and commit myself.
 - Quote exact lines with file:line. If you can't find something, write "not found" — never guess.
-- Rules marked as a team vote (D2 migration names, hosting) are NOT yours to decide: report them only.
+- Items still open (hosting, the A5 DB URL amendment, anything marked ⏳) are NOT yours to decide: report them only.
 - If I think an agreement is wrong, help me write the reason (Part 3 "No: ..."); don't silently ignore it.
 - If my folder has no doc-0X files yet, skip Part 1 and instead give me a checklist of the agreements
   I must follow while writing my 8 documents (doc-01 ... doc-08).

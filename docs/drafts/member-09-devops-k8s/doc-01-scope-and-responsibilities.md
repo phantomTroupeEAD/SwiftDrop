@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Hosting provider and size for the K3s server (Hetzner vs Azure for Students); who has GitHub admin rights for branch protection and code-owner review; domain for Cloudflare; whether Redis and object storage run inside Kubernetes (Members 5 and 3).  
+> **Open Questions / Needs Clarification:** Hosting provider (trying Azure for Students first; Hetzner CX33 as the paid backup; ADR-002 §2); who has GitHub admin rights for branch protection and code-owner review; domain for Cloudflare; whether Redis and object storage run inside Kubernetes (Members 5 and 3).  
 > **Answers:** What does this module own, and what must it never own?  
 
 ---
@@ -33,7 +33,7 @@ Without a platform module:
 | # | Responsibility | Source |
 | :-: | :--- | :--- |
 | R1 | Dockerfiles for all 6 services, written **together with** each owner (templates from me, each owner understands their own). The core-api Dockerfile is led by Watti (M8); the **`messaging`** image (relay, worker and reconcile in one Dockerfile) is Watti's; **`web/Dockerfile` + the Nginx config are mine** (Sajini, M6, 2026-10-25) | Work Division §3 and §9; group decision |
-| R2 | Local **Docker Compose** stack (`deploy/docker-compose.yml`) with Postgres, RabbitMQ, Redis, MinIO, Traefik and the app services | SRS §11.1; C3 decision |
+| R2 | Local **Docker Compose** stack (`deploy/docker-compose.yml`) with Postgres, RabbitMQ, Redis, MinIO, Mailpit (local email inbox), Traefik and the app services | SRS §11.1; C3 decision |
 | R3 | Root **Makefile**: `make up`, `make migrate-up`, `make seed`, `make test-e2e` | C22 decision |
 | R4 | **Kubernetes** manifests (and the Helm chart for the bonus): Deployments, Services, StatefulSets, Job, CronJob, ConfigMap and Secret templates, NetworkPolicies | SRS §11.2; ADR-002 |
 | R5 | Probes, resource requests and limits, graceful shutdown settings, and **HPA/KEDA** autoscaling | SRS §11.2; ADR-002 §7 |
@@ -70,7 +70,7 @@ Without a platform module:
 | M7 Bagya | route map, the `IngressRoute`/`Middleware` CRDs, CORS and rate limits | path-based routing decided (C17) |
 | M8 Watti | queue names for KEDA, reconciler command and image, relay/worker metrics | ✅ answered 2026-10-25 (queues, reconciler, ports 8082/8083, metrics, pools); ⏳ health paths, `correlation_id`, `processed_events` |
 | M5 Senuji | SSE paths, Redis need, HPA numbers | TBD (C8, C18, C26) |
-| M2 Hansi | seed command, core-api pool size confirmation, idempotency table owner | TBD (C11, DB7) |
+| M2 Hansi | seed command, core-api pool size confirmation, idempotency table owner | ✅ seed `/app/seed` via `make seed`, owns `idempotency_keys`, JSONB addresses (2026-11-01); ⏳ core-api pool size (C11) |
 | Every table owner | migrations that follow the rules in Doc 5 | rules announced to the team |
 | Coordinator | milestone dates, VPS + Cloudflare + domain, GitHub admin rights, GHCR access | TBD |
 
@@ -158,7 +158,7 @@ Without a platform module:
 ## 9. Assumptions, unresolved decisions, out-of-scope work
 
 **Assumptions:**
-- the target is one Ubuntu VPS running **K3s** (ADR-002), with **k3d** used locally;
+- the target is one Ubuntu VPS with at least 8 GB RAM running **K3s** (provider open: Azure for Students first, Hetzner CX33 as the paid backup; ADR-002 §2). **k3d** is used locally;
 - Cloudflare sits in front;
 - images are stored in **GHCR**;
 - PostgreSQL and RabbitMQ run **inside** the cluster, because the bonus rubric may require it (SRS §15.3, Work Division §9).
@@ -169,7 +169,7 @@ Without a platform module:
 
 **Still open:**
 - infra conflicts C5, C8, C9, C13 (`correlation_id`), C18–C20, C23, C24 (domain), C25 (pinning, web/Python jobs), C26 (Redis);
-- schema problems DB1–DB3, DB5–DB13 (DB4 is resolved);
-- the VPS provider and size, the domain, and GitHub admin rights.
+- schema problems DB1–DB3, DB5, DB6, DB8, DB9, DB11, DB12 (DB4, DB7, DB10 and DB13 are resolved);
+- the hosting provider (ADR-002 §2), the domain, and GitHub admin rights.
 
 **Out of scope:** multi-region or HA clusters, disaster recovery with a formal RPO/RTO (SRS §1.5), managed cloud Kubernetes, a service mesh, GitOps tools (Argo CD/Flux), and 24/7 on-call.

@@ -4,7 +4,7 @@
 > - **Member 9:** DevOps, Kubernetes Manifests, Helm Charts, CI/CD, Observability & Database Coordinator  
 > - **Member 7:** API Gateway & Edge Routing Policies (`deploy/gateway/`)  
 > - **Member 8:** Outbox Reconciliation CronJob & Event Worker Deployment  
-> **Target Environment:** K3s Lightweight Kubernetes on single-node VPS / Cloud Provider | Local Docker Compose
+> **Target Environment:** K3s Lightweight Kubernetes on a single-node VPS (at least 8 GB RAM; provider open, see ADR-002 §2) | Local Docker Compose
 
 ---
 
