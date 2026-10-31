@@ -67,3 +67,19 @@ internal/parcels/
 | 2026-10-25 | Aligned with Audit v2.0.0: Crockford Base32 tracking, JSONB addresses, 9-state machine, integer LKR cents, and migrations 000005 & 000010 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Immutable accepted price snapshot, quote validation, 30 kg operational limits, and backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Added cancellation endpoint `POST /api/v1/parcels/{id}/cancel`, updated `parcel_status_history` fields (`reason_code`, `note`, `RESTRICT`), `caller_scope`, and dual address specification notice | Member 2 |
+
+---
+
+## 6. Authoritative Architecture & Flow Diagrams
+
+The following authoritative engineering diagrams govern the `parcels` module:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts |
+| :--- | :--- | :--- | :--- |
+| **01 Parcel Management & Pricing Use-Case Diagram** | UML Use Case | [Lucidchart Document](https://lucid.app/lucidchart/da53bbf3-1b48-450c-9945-b1816a32ae17/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/01-parcel-pricing-use-case.png) |
+| **04 Customer Parcel Booking Activity (5 Swimlanes)** | UML Activity Diagram (5 Swimlanes) | [Lucidchart Document](https://lucid.app/lucidchart/48f368fa-a237-4fea-bb84-c454dd788216/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/04-parcel-booking-activity.png) |
+| **05 Customer Parcel Booking Sequence** | UML Sequence Diagram | [Lucidchart Document](https://lucid.app/lucidchart/c2b3114e-a7b8-4313-8172-1a82336a8cc1/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/05-parcel-booking-sequence.png) |
+| **06 Parcel Lifecycle State Machine** | UML State Machine | [Lucidchart Document](https://lucid.app/lucidchart/43a950d5-3596-4bb5-84c7-64f813f48a7c/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/06-parcel-lifecycle-state-machine.png) |
+| **07 Parcel & Pricing Component Architecture** | UML Component Diagram | [Lucidchart Document](https://lucid.app/lucidchart/983208a4-c9f1-44f3-a6d8-118b89757207/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/07-parcel-pricing-component.png) |
+| **08 Parcel & Pricing Entity-Relationship Diagram** | Logical ERD (Crow's-Foot) | [Lucidchart Document](https://lucid.app/lucidchart/d51127dc-51ad-4542-843a-423d44d6fd16/edit) | [PNG Preview](../../../docs/drafts/member-02-parcels-pricing/diagrams/08-parcel-pricing-erd.png) |
+

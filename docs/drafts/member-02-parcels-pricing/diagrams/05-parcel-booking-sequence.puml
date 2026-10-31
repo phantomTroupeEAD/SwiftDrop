@@ -1,0 +1,93 @@
+title SwiftDrop - 05 Customer Parcel Booking Sequence Diagram
+
+actor Customer as "Customer"
+participant Handler as "Parcel HTTP Handler"
+participant UseCase as "Booking Application Use Case"
+participant PricingIf as "Pricing Interface"
+participant IdempRepo as "Idempotency Repository"
+participant ParcelRepo as "Parcel Repository"
+participant HistoryRepo as "Status History Repository"
+participant Outbox as "Shared Outbox Writer"
+database DB as "PostgreSQL"
+
+Customer -> Handler: POST /api/v1/parcels\nHeaders: Authorization: Bearer <JWT>, Idempotency-Key: <UUID>\nBody: {pickup_zone, dropoff_zone, weight_kg, quote_id}
+activate Handler
+
+Handler -> Handler: Validate JSON syntax & Auth Context
+alt Invalid request syntax
+    Handler --> Customer: 400 Bad Request (INVALID_SYNTAX)
+else Valid request
+    Handler -> UseCase: Execute(CreateParcelCommand)
+    activate UseCase
+
+    UseCase -> IdempRepo: CheckIdempotencyKey(key_uuid, caller_id)
+    activate IdempRepo
+    IdempRepo -> DB: SELECT status, response FROM idempotency_keys WHERE ...
+    activate DB
+    DB --> IdempRepo: Key status
+    deactivate DB
+
+    alt Key already completed (Duplicate request)
+        IdempRepo --> UseCase: CachedParcelResponseDTO
+        UseCase --> Handler: CachedParcelResponseDTO
+        Handler --> Customer: 200 OK (Cached Booking Response)
+    else Key not found (New request)
+        deactivate IdempRepo
+
+        UseCase -> PricingIf: ValidateAcceptedQuote(quote_id, weight_kg, zones)
+        activate PricingIf
+        alt Quote expired or invalid
+            PricingIf --> UseCase: ErrQuoteExpiredOrInvalid
+            UseCase --> Handler: ErrQuoteExpiredOrInvalid
+            Handler --> Customer: 422 Unprocessable Entity (QUOTE_INVALID_OR_EXPIRED)
+        else Quote valid
+            PricingIf --> UseCase: QuoteSnapshot(fee_cents, rule_version)
+            deactivate PricingIf
+
+            UseCase -> UseCase: Instantiate Parcel Aggregate\n- Status: CREATED\n- Generate Tracking Number\n- Freeze Price Snapshot
+
+            note over UseCase, DB: ATOMIC DATABASE TRANSACTION BOUNDARY
+            UseCase -> DB: BEGIN TRANSACTION
+            activate DB
+
+            UseCase -> ParcelRepo: Save(parcelAggregate)
+            activate ParcelRepo
+            ParcelRepo -> DB: INSERT INTO parcels (...)
+            ParcelRepo --> UseCase: OK
+            deactivate ParcelRepo
+
+            UseCase -> HistoryRepo: AppendStatus(parcel_id, CREATED)
+            activate HistoryRepo
+            HistoryRepo -> DB: INSERT INTO parcel_status_history (...)
+            HistoryRepo --> UseCase: OK
+            deactivate HistoryRepo
+
+            UseCase -> Outbox: Enqueue(parcel.booked.v1)
+            activate Outbox
+            Outbox -> DB: INSERT INTO outbox_events (...)
+            Outbox --> UseCase: OK
+            deactivate Outbox
+
+            UseCase -> IdempRepo: SaveResponse(key_uuid, response_dto)
+            activate IdempRepo
+            IdempRepo -> DB: UPDATE idempotency_keys SET status='COMPLETED'
+            IdempRepo --> UseCase: OK
+            deactivate IdempRepo
+
+            alt Transaction persistence fails
+                UseCase -> DB: ROLLBACK TRANSACTION
+                UseCase --> Handler: ErrTransactionFailed
+                Handler --> Customer: 500 Internal Server Error (TRANSACTION_FAILED)
+            else All records written successfully
+                UseCase -> DB: COMMIT TRANSACTION
+                deactivate DB
+
+                UseCase --> Handler: ParcelBookingResultDTO(tracking_number, parcel_id, price_cents)
+                deactivate UseCase
+
+                Handler --> Customer: 201 Created {tracking_number, status: "CREATED", price_cents}
+            end
+        end
+    end
+end
+deactivate Handler

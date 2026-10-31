@@ -1,0 +1,131 @@
+@startuml
+title Customer Parcel Booking – Activity Diagram
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 14
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam roundCorner 8
+
+skinparam title {
+    FontSize 24
+    FontColor #172554
+    FontStyle bold
+}
+
+skinparam swimlane {
+    BorderColor #2563EB
+    BorderThickness 1.5
+    TitleBackgroundColor #F8FBFF
+    TitleFontColor #172554
+    TitleFontSize 16
+    TitleFontStyle bold
+}
+
+skinparam activity {
+    StartColor #172554
+    EndColor #172554
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 14
+    DiamondBackgroundColor #DBEAFE
+    DiamondBorderColor #2563EB
+    DiamondFontColor #172554
+    DiamondFontSize 13
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 13
+}
+
+|#F8FBFF|Client| Customer Client (Web / Mobile)
+|#F8FBFF|Gateway| API Gateway / Authentication (Member 1)
+|#F8FBFF|Handler| Core API / Parcel Handler (Transport)
+|#F8FBFF|App| Parcel Application & Domain
+|#F8FBFF|DB| Persistence / Outbox & Database (Infrastructure)
+
+|Client|
+start
+:Enter parcel booking details;
+:Submit parcel booking request\nwith Idempotency-Key;
+
+|Gateway|
+:Authenticate customer\nand verify authorization;
+
+if (Is customer\nauthenticated & authorized?) then ([unauthorized])
+  :Construct authorization\nerror response;
+  |Client|
+  :Receive authorization error response;
+else ([authorized])
+  |Handler|
+  :Receive authenticated\nbooking request;
+  :Validate request structure\nand required headers;
+  if (Is booking\nrequest valid?) then ([invalid])
+    :Construct validation\nerror response;
+    |Client|
+    :Receive validation error response;
+  else ([valid])
+    |App|
+    :Coordinate parcel booking use case\nand validate quote eligibility;
+    if (Is pricing quote\nvalid & acceptable?) then ([invalid or expired])
+      |Handler|
+      :Construct quote error\nresponse;
+      |Client|
+      :Receive quote error response;
+    else ([valid])
+      |DB|
+      :Query idempotency record\nfor key and caller context;
+      |App|
+      if (Has idempotency key\nalready been processed?) then ([completed request])
+        |Handler|
+        :Construct previously stored\nbooking response;
+        |Client|
+        :Receive previously stored result;
+      elseif () then ([conflicting or in-progress])
+        |Handler|
+        :Construct conflict\nresponse;
+        |Client|
+        :Receive conflict response;
+      else ([new key])
+        |App|
+        :Validate parcel details\nagainst approved limits;
+        if (Are parcel details\nwithin approved limits?) then ([invalid])
+          |Handler|
+          :Construct parcel validation\nerror response;
+          |Client|
+          :Receive parcel validation error;
+        else ([valid])
+          |App|
+          :Create Parcel aggregate\nand generate tracking number;
+          :Prepare initial parcel status and\naccepted-price snapshot;
+          |DB|
+          :Begin database transaction;
+          :Persist parcel, initial status history,\nrequired outbox event, and\ncompleted idempotency result;
+          if (Did database transaction\ncommit successfully?) then ([failed])
+            :Roll back database transaction;
+            |Handler|
+            :Construct server error response;
+            |Client|
+            :Receive server error response;
+          else ([committed])
+            :Commit database transaction;
+            |Handler|
+            :Construct booking confirmation\nresponse;
+            |Client|
+            :Receive booking confirmation;
+          endif
+        endif
+      endif
+    endif
+  endif
+endif
+
+|Client|
+stop
+
+@enduml

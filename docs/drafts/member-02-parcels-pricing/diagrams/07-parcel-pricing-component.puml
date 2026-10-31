@@ -1,0 +1,170 @@
+@startuml
+title Parcel & Pricing – UML Component Diagram
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 14
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam componentStyle uml2
+
+skinparam title {
+    FontSize 26
+    FontColor #172554
+    FontStyle bold
+}
+
+skinparam package {
+    BackgroundColor #F8FBFF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 18
+    FontStyle bold
+}
+
+skinparam component {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 16
+    FontStyle bold
+    AttributeFontColor #172554
+    AttributeFontSize 13
+}
+
+skinparam interface {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    FontColor #172554
+    FontSize 13
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 13
+}
+
+skinparam database {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 16
+    FontStyle bold
+}
+
+' ====================================================================
+' External Collaborators (Outside Member 2 System Boundary)
+' ====================================================================
+component "Member 1 – Identity & Access Context\n--\nValidates JWT tokens & injects authenticated caller claims" as Ext_M1
+
+package "External Module Collaborators" as ExtCollaborators #FFFFFF {
+    component "Member 4 – Merchant Integration Context\n--\nHandles merchant order intake & delegates booking" as Ext_M4
+    component "Member 3 – Dispatch & Delivery Context\n--\nCoordinates courier dispatch & delivery execution" as Ext_M3
+    component "Member 5 – Tracking API Service\n--\nConsumes tracking milestones for SSE & public read" as Ext_M5
+    component "Member 8 – Event-Driven Backend\n--\nRelays committed outbox events to RabbitMQ" as Ext_M8
+}
+
+Ext_M4 -[hidden]down-> Ext_M3
+Ext_M3 -[hidden]down-> Ext_M5
+Ext_M5 -[hidden]down-> Ext_M8
+
+' ====================================================================
+' Member 2 System Boundary
+' ====================================================================
+package "SwiftDrop Core API – Parcel Management & Pricing" as SystemBoundary {
+
+    ' Area A: Transport Layer
+    package "Transport Layer (transport/)" as TransportLayer {
+        component "Parcel HTTP Handler\n--\nHandles /api/v1/parcels/* routes, validates bearer JWT\nand idempotency headers, serializes REST responses" as Comp_ParcelHandler
+
+        component "Pricing HTTP Handler\n--\nHandles /api/v1/pricing/quotes routes, parses weight\nand dimensions, serializes fee estimation quotes" as Comp_PricingHandler
+    }
+
+    ' Area B: Application Layer
+    package "Application Layer (application/)" as ApplicationLayer {
+        interface "IParcelUseCase" as IParcelUC
+        interface "IPricingUseCase" as IPricingUC
+
+        component "Parcel Application Service\n--\nCoordinates parcel booking, cancellation, queries,\nand transactional state history" as Comp_ParcelApp
+
+        component "Pricing Application Service\n--\nCoordinates delivery fee estimation, quote caching,\nand backend expiry verification" as Comp_PricingApp
+
+        interface "IParcelRepository" as IParcelRepo
+        interface "ITransactionManager" as ITxManager
+        interface "IOutboxWriter" as IOutboxWriter
+        interface "IPricingRepository" as IPricingRepo
+    }
+
+    ' Area C: Domain Layer
+    package "Domain Layer (domain/ - Pure Business Rules)" as DomainLayer {
+        component "Parcel Domain Aggregate\n--\nEnforces 9-state parcel lifecycle transitions,\nbooking invariants, and attempt ceiling" as Comp_ParcelDomain
+
+        component "Pricing Domain Engine\n--\nCalculates delivery fees using approved tariffs\nand volumetric weight rules" as Comp_PricingDomain
+    }
+
+    ' Area D: Infrastructure Layer
+    package "Infrastructure Layer (infrastructure/)" as InfrastructureLayer {
+        component "PostgreSQL Parcel Repository\n--\nPersists parcel aggregate records and\nimmutable parcel_status_history audit rows" as Comp_ParcelRepoImpl
+
+        component "Shared Transaction Manager\n--\nCoordinates PostgreSQL connection pool\ntransaction boundaries (*sql.Tx / pgxpool)" as Comp_TxImpl
+
+        component "PostgreSQL Outbox Adapter\n--\nAppends domain events into outbox_events\ntable within the active transaction" as Comp_OutboxImpl
+
+        component "PostgreSQL Pricing Repository\n--\nQueries active pricing_rules and\npersists pricing_quotes cache records" as Comp_PricingRepoImpl
+    }
+
+    ' Authoritative Persistence Store
+    database "PostgreSQL Database\n(Authoritative Persistence Store)" as Comp_DB
+}
+
+' ====================================================================
+' Relationships & Connections
+' ====================================================================
+
+' Top: Member 1 Identity Integration
+Ext_M1 -down-> Comp_ParcelHandler : <<auth claims>>
+Ext_M1 -down-> Comp_PricingHandler : <<auth claims>>
+
+' Left: Inbound Collaborators to IParcelUseCase
+Ext_M4 -right-> IParcelUC : <<delegates booking>>
+Ext_M3 -right-> IParcelUC : <<status updates>>
+Ext_M5 -right-> IParcelUC : <<milestone queries>>
+
+' Transport Layer to Application Use Cases
+Comp_ParcelHandler -down-> IParcelUC : <<invokes>>
+Comp_PricingHandler -down-> IPricingUC : <<invokes>>
+
+IParcelUC -down- Comp_ParcelApp
+IPricingUC -down- Comp_PricingApp
+
+' Application to Domain (Pure Invariant Dependency)
+Comp_ParcelApp -down-> Comp_ParcelDomain : <<evaluates invariants>>
+Comp_PricingApp -down-> Comp_PricingDomain : <<calculates fee>>
+
+' Application to Outbound Ports (Downwards)
+Comp_ParcelApp -down-> IParcelRepo : <<uses>>
+Comp_ParcelApp -down-> ITxManager : <<uses>>
+Comp_ParcelApp -down-> IOutboxWriter : <<uses>>
+Comp_PricingApp -down-> IPricingRepo : <<uses>>
+
+' Infrastructure Realizations (Upwards to Ports)
+Comp_ParcelRepoImpl .up.|> IParcelRepo : <<realizes>>
+Comp_TxImpl .up.|> ITxManager : <<realizes>>
+Comp_OutboxImpl .up.|> IOutboxWriter : <<realizes>>
+Comp_PricingRepoImpl .up.|> IPricingRepo : <<realizes>>
+
+' Infrastructure to Database (Downwards to DB)
+Comp_ParcelRepoImpl -down-> Comp_DB : SQL
+Comp_TxImpl -down-> Comp_DB : *sql.Tx
+Comp_OutboxImpl -down-> Comp_DB : SQL
+Comp_PricingRepoImpl -down-> Comp_DB : SQL
+
+' Outbox Relay Event Integration
+Comp_OutboxImpl -left-> Ext_M8 : <<async event feed>>
+
+@enduml

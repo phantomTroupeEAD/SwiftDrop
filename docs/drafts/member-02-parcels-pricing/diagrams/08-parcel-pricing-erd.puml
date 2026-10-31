@@ -1,0 +1,173 @@
+@startuml
+scale 1.15
+hide circle
+skinparam linetype ortho
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 14
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam roundCorner 8
+
+skinparam nodesep 180
+skinparam ranksep 110
+
+skinparam classHeaderBackgroundColor #DBEAFE
+
+skinparam title {
+    FontSize 26
+    FontColor #172554
+    FontStyle bold
+}
+
+skinparam entity {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    HeaderBackgroundColor #DBEAFE
+    FontColor #172554
+    FontSize 18
+    FontStyle bold
+    AttributeFontColor #172554
+    AttributeFontSize 14
+    AttributeFontStyle normal
+    StereotypeFontColor #1E3A8A
+    StereotypeFontSize 12
+    StereotypeFontStyle italic
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 13
+    FontStyle normal
+}
+
+title **Parcel & Pricing – Entity Relationship Diagram**
+
+' =============================================================================
+' TOP ROW: Reference Zones & Pricing Rule Specification
+' =============================================================================
+entity "delivery_zones" as delivery_zones <<Shared Reference>> {
+    * id : VARCHAR(64) [PK]
+    --
+    * code : VARCHAR(32) [UK]
+    * name : VARCHAR(128)
+    * is_active : BOOLEAN
+    created_at : TIMESTAMPTZ
+}
+
+entity "pricing_rules" as pricing_rules {
+    * id : VARCHAR(64) [PK]
+    * version : INT [PK]
+    --
+    * name : VARCHAR(128)
+    * pickup_zone_id : VARCHAR(64) [FK]
+    * destination_zone_id : VARCHAR(64) [FK]
+    * weight_band_id : INT
+    * min_weight_kg : NUMERIC(6,2)
+    * max_weight_kg : NUMERIC(6,2)
+    * fee_cents : BIGINT
+    * currency : VARCHAR(3)
+    * effective_from : TIMESTAMPTZ
+    effective_to : TIMESTAMPTZ
+    * is_active : BOOLEAN
+    * created_at : TIMESTAMPTZ
+}
+
+' =============================================================================
+' MIDDLE ROW: Status Audit History, Core Parcel Aggregate & Pricing Quotes
+' =============================================================================
+entity "parcel_status_history" as status_history {
+    * id : UUID [PK]
+    --
+    * parcel_id : UUID [FK]
+    from_status : VARCHAR(32)
+    * to_status : VARCHAR(32)
+    actor_id : UUID [nullable]
+    * actor_role : VARCHAR(32)
+    reason_code : VARCHAR(64)
+    note : TEXT
+    * parcel_version : INT
+    * occurred_at : TIMESTAMPTZ
+}
+
+entity "parcels" as parcels {
+    * id : UUID [PK]
+    --
+    * tracking_number : VARCHAR(32) [UK]
+    customer_id : UUID [nullable]
+    merchant_id : UUID [nullable]
+    * current_status : VARCHAR(32)
+    * service_level : VARCHAR(32)
+    * weight_kg : NUMERIC(6,2)
+    * chargeable_weight_kg : NUMERIC(6,2)
+    * price_cents : BIGINT
+    * currency : VARCHAR(3)
+    * pricing_rule_id : VARCHAR(64) [FK]
+    * pricing_rule_version : INT [FK]
+    * pickup_address : JSONB
+    * dropoff_address : JSONB
+    * attempt_count : INT
+    * version : INT
+    * created_at : TIMESTAMPTZ
+}
+
+entity "pricing_quotes" as pricing_quotes {
+    * id : UUID [PK]
+    --
+    * pricing_rule_id : VARCHAR(64) [FK]
+    * pricing_rule_version : INT [FK]
+    * service_level : VARCHAR(32)
+    * fee_cents : BIGINT
+    * currency : VARCHAR(3)
+    * input_snapshot : JSONB
+    * expires_at : TIMESTAMPTZ
+    accepted_parcel_id : UUID [FK, nullable]
+    * created_at : TIMESTAMPTZ
+}
+
+' =============================================================================
+' BOTTOM ROW: Transactional Outbox Events & Platform Idempotency Store
+' =============================================================================
+entity "outbox_events" as outbox_events <<Shared Infrastructure>> {
+    * id : UUID [PK]
+    --
+    * aggregate_type : VARCHAR(64)
+    * aggregate_id : UUID
+    * aggregate_version : INT
+    * event_type : VARCHAR(64)
+    * payload : JSONB
+    * status : VARCHAR(32)
+    * created_at : TIMESTAMPTZ
+}
+
+entity "idempotency_keys" as idempotency_keys <<Platform Infrastructure>> {
+    * key : VARCHAR(255) [PK]
+    * caller_scope : VARCHAR(64) [PK]
+    --
+    * operation : VARCHAR(64)
+    * request_hash : CHAR(64)
+    * response_status : INT
+    * response_body : JSONB
+    resource_id : UUID [nullable]
+    * created_at : TIMESTAMPTZ
+    * expires_at : TIMESTAMPTZ
+}
+
+' Structural grid constraints
+delivery_zones -[hidden]down- status_history
+pricing_rules -[hidden]down- pricing_quotes
+status_history -[hidden]right- parcels
+parcels -[hidden]right- pricing_quotes
+parcels -[hidden]down- outbox_events
+pricing_quotes -[hidden]down- idempotency_keys
+
+' Relationships
+delivery_zones ||-right-o{ pricing_rules : "zoned route tariffs"
+pricing_rules ||-down-o{ pricing_quotes : "quoted tariff"
+pricing_quotes ||-left-o| parcels : "accepted quote\nsnapshot"
+parcels ||-left-o{ status_history : "records audit trail"
+parcels ||-down-o{ outbox_events : "writes transactional events"
+
+@enduml

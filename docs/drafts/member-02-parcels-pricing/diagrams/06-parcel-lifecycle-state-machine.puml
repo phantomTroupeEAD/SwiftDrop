@@ -1,0 +1,76 @@
+@startuml
+scale 1.2
+title Parcel Lifecycle – UML State Machine Diagram
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 14
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam roundCorner 8
+
+skinparam title {
+    FontSize 26
+    FontColor #172554
+    FontStyle bold
+}
+
+skinparam state {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 17
+    FontStyle bold
+    AttributeFontColor #172554
+    AttributeFontSize 14
+    AttributeFontStyle normal
+    StartColor #172554
+    EndColor #172554
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 13
+    FontStyle normal
+}
+
+' States Definition
+state "CREATED" as CREATED : Parcel booking confirmed
+state "ASSIGNED" as ASSIGNED : Courier assigned
+state "PICKED_UP" as PICKED_UP : Parcel collected
+state "IN_TRANSIT" as IN_TRANSIT : Moving through delivery network
+state "OUT_FOR_DELIVERY" as OUT_FOR_DELIVERY : Courier performing final delivery
+state "DELIVERED" as DELIVERED : Delivery successfully completed
+state "ATTEMPT_FAILED" as ATTEMPT_FAILED : Delivery attempt unsuccessful
+state "RETURNED" as RETURNED : Parcel returned to sender
+state "CANCELLED" as CANCELLED : Booking cancelled
+
+state c_end <<end>>
+state d_end <<end>>
+state r_end <<end>>
+
+' Main Horizontal Progression
+[*] -right-> CREATED : ParcelBooked\n[Valid quote snapshot]
+CREATED -right-> ASSIGNED : AssignCourier\n[Active courier within capacity]
+ASSIGNED -right-> PICKED_UP : ConfirmPickup\n[Pickup scan verified]
+PICKED_UP -right-> IN_TRANSIT : ProcessAtFacility\n[Hub intake scan]
+IN_TRANSIT -right-> OUT_FOR_DELIVERY : DispatchForDelivery\n[Manifest verified]
+
+' Delivery Outcome (Terminal DELIVERED)
+OUT_FOR_DELIVERY -right-> DELIVERED : ConfirmDelivery\n[Proof of delivery attached]
+DELIVERED -right-> d_end
+
+' Cancellation Transitions (Terminal CANCELLED)
+CREATED -up-> CANCELLED : CancelBooking\n[status == CREATED]\n(Sender / Admin)
+ASSIGNED -up-> CANCELLED : CancelAssignment\n[Courier unassigned before pickup]\n(Dispatcher / Admin)
+CANCELLED -right-> c_end
+
+' Delivery Attempt & Return Transitions (ADR-004)
+OUT_FOR_DELIVERY -down-> ATTEMPT_FAILED : RecordFailedAttempt\n[Standard reason provided;\nattempt_count incremented]\n(Assigned Courier)
+ATTEMPT_FAILED -up-> OUT_FOR_DELIVERY : AuthorizeReattempt\n[attempt_count < 3]\n(Dispatcher / Admin ONLY)
+ATTEMPT_FAILED -right-> RETURNED : MaxAttemptsExceeded\n[attempt_count >= 3]\n(Dispatcher / Hub Operator)
+RETURNED -right-> r_end
+
+@enduml
