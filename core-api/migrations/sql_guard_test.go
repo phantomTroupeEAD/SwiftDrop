@@ -213,4 +213,3 @@ func TestSQLColumnGuard_NonTestGoFiles(t *testing.T) {
 		})
 	}
 }
-

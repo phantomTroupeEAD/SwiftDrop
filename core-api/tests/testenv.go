@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // register postgres driver for integration tests
 	"github.com/swiftdrop/core-api/migrations"
 )
 

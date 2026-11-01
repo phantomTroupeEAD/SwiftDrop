@@ -90,6 +90,7 @@ func GenerateUUIDv7() (string, error) {
 	var raw [16]byte
 
 	// 48-bit timestamp in milliseconds
+	//nolint:gosec // UnixMilli is guaranteed non-negative for post-1970 timestamps
 	milli := uint64(time.Now().UnixMilli())
 	raw[0] = byte(milli >> 40)
 	raw[1] = byte(milli >> 32)

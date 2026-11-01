@@ -69,4 +69,19 @@ func TestHealthEndpoints(t *testing.T) {
 			t.Errorf("expected healthy, got %v", body["status"])
 		}
 	})
+
+	t.Run("GET /swagger/events/ returns 404 when SWAGGER_ENABLED=false with APP_ENV=production", func(t *testing.T) {
+		_ = os.Setenv("APP_ENV", "production")
+		_ = os.Setenv("SWAGGER_ENABLED", "false")
+		defer os.Unsetenv("SWAGGER_ENABLED")
+
+		container := BuildAppContainer()
+		req := httptest.NewRequest(http.MethodGet, "/swagger/events/", nil)
+		rec := httptest.NewRecorder()
+
+		container.Mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 Not Found, got %d", rec.Code)
+		}
+	})
 }

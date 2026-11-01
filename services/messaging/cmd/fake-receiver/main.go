@@ -67,7 +67,14 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("[fake-receiver] Listening on http://localhost%s/webhook (secret=%s)", addr, secStr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	srv := &http.Server{
+		Addr:              addr,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("[fake-receiver] Server error: %v", err)
 	}
 }

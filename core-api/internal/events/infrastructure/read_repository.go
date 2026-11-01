@@ -76,7 +76,6 @@ func (r *PostgresEventsRepository) ListOutbox(ctx context.Context, filter applic
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))
@@ -251,7 +250,6 @@ func (r *PostgresEventsRepository) ListDeliveries(ctx context.Context, filter ap
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" WHERE (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))
@@ -367,7 +365,6 @@ func (r *PostgresEventsRepository) ListMerchantWebhookDeliveries(ctx context.Con
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))

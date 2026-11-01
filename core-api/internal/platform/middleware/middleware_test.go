@@ -89,6 +89,7 @@ func TestRequestID_Table(t *testing.T) {
 }
 
 func TestCorrelationID_Accessor(t *testing.T) {
+	//nolint:staticcheck // explicitly testing nil context safety
 	if CorrelationID(nil) != "" {
 		t.Error("expected empty string for nil context")
 	}

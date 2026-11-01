@@ -24,6 +24,7 @@ var requestIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,128}$`)
 // generateUUIDv7 generates an RFC 9562 UUIDv7 identifier for tracing and correlation.
 func generateUUIDv7() string {
 	var raw [16]byte
+	//nolint:gosec // UnixMilli is guaranteed non-negative for post-1970 timestamps
 	milli := uint64(time.Now().UnixMilli())
 	raw[0] = byte(milli >> 40)
 	raw[1] = byte(milli >> 32)
