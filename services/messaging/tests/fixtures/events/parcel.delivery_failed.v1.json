@@ -1,0 +1,23 @@
+{
+  "event_id": "0192e2b3-7c8a-7890-a123-000000000004",
+  "event_type": "parcel.delivery_failed.v1",
+  "aggregate_type": "PARCEL",
+  "aggregate_id": "0192e2b3-7c8a-7890-a123-000000000010",
+  "aggregate_version": 4,
+  "schema_version": "1.0.0",
+  "occurred_at": "2026-11-01T13:00:00Z",
+  "correlation_id": "0192e2b3-7c8a-7890-a123-000000000099",
+  "producer": "core-api",
+  "payload": {
+    "parcel_id": "0192e2b3-7c8a-7890-a123-000000000010",
+    "tracking_number": "SD-20261101-0001",
+    "merchant_id": "0192e2b3-7c8a-7890-a123-000000000042",
+    "status": "DELIVERY_FAILED",
+    "failure_reason": "Recipient unavailable at delivery address",
+    "notify": {
+      "recipient_name": "Kasun Perera",
+      "recipient_email": "kasun.perera@example.lk"
+    }
+  }
+}
+

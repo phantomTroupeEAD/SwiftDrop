@@ -253,7 +253,7 @@ SwiftDrop Repository
 
 ### 7.3 RabbitMQ Topology
 - **Exchange:** `swiftdrop.events.topic` (Topic, Durable)
-- **Dead-Letter Exchange (DLX):** `swiftdrop.dlq.exchange` (Direct, Durable)
+- **Dead-Letter Exchange (DLX):** `swiftdrop.dlq.exchange` (Fanout, Durable) bound to `swiftdrop.dlq`
 - **Queues:**
   - `q.notifications.worker` (Durable, bound to `parcel.#`)
   - `q.webhooks.dispatcher` (Durable, bound to `parcel.#`, `courier.#`, `merchant.#`)

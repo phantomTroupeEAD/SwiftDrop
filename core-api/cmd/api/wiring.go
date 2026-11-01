@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -138,6 +139,7 @@ func BuildAppContainer() *AppContainer {
 		),
 	))
 
+	// Legacy Health Endpoint
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -146,6 +148,61 @@ func BuildAppContainer() *AppContainer {
 			"storage": storageType,
 		})
 	})
+
+	// Standard Kubernetes / Infrastructure Health Probes (Phase 8B)
+	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "ok",
+		})
+	})
+
+	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		appEnv := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+		if appEnv == "" {
+			appEnv = "local"
+		}
+
+		if dbConn == nil {
+			if appEnv == "local" {
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"status":   "ok",
+					"database": "mock",
+				})
+				return
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":   "degraded",
+				"database": "down",
+			})
+			return
+		}
+
+		pingCtx, pingCancel := context.WithTimeout(r.Context(), 1*time.Second)
+		defer pingCancel()
+
+		if err := dbConn.PingContext(pingCtx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":   "degraded",
+				"database": "down",
+			})
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":   "ok",
+			"database": "connected",
+		})
+	})
+
+	// 8. Register Member 08 Events & Messaging Operations & Swagger UI
+	registerEventsModules(mux, dbConn, security)
 
 	return &AppContainer{
 		Mux:         mux,

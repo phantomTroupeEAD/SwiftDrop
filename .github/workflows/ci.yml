@@ -22,7 +22,7 @@ jobs:
           extra_args: --only-verified
 
   go-checks:
-    name: Go Quality & Architecture Verification
+    name: Core API Quality & Architecture Verification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -38,7 +38,7 @@ jobs:
       - name: Check Formatting (gofmt)
         run: |
           if [ -d "core-api" ] || [ -f "go.mod" ]; then
-            UNFORMATTED=$(gofmt -l $(find . -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
+            UNFORMATTED=$(gofmt -l $(find core-api -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
             if [ -n "$UNFORMATTED" ]; then
               echo "Error: Unformatted Go files found:"
               echo "$UNFORMATTED"
@@ -62,3 +62,41 @@ jobs:
             go test -v -race ./...
           fi
         if: hashFiles('**/go.mod') != ''
+
+  messaging-checks:
+    name: Messaging Service Quality & Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'services/messaging/go.mod'
+          check-latest: true
+          cache: false
+
+      - name: Check Formatting (gofmt)
+        run: |
+          UNFORMATTED=$(gofmt -l $(find services/messaging -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "Error: Unformatted Go files found:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Go Vet
+        run: |
+          cd services/messaging && go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/messaging
+          args: --timeout=5m
+
+      - name: Run Tests (-race)
+        run: |
+          cd services/messaging && go test -v -race ./...
