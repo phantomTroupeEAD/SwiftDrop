@@ -110,7 +110,7 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 }
 
 // Helper to generate a cryptographically random token and its SHA-256 hash
-func generateOpaqueToken() (raw string, hash string, error error) {
+func generateOpaqueToken() (raw string, hash string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", "", err
