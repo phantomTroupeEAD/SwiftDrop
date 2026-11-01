@@ -801,19 +801,19 @@ Command: `cd core-api && go vet ./... && go test ./...`
 ?   	github.com/swiftdrop/core-api/internal/events/infrastructure	[no test files]
 ?   	github.com/swiftdrop/core-api/internal/events/swagger	[no test files]
 ?   	github.com/swiftdrop/core-api/internal/identity/infrastructure	[no test files]
-ok  	github.com/swiftdrop/core-api/cmd/api	1.675s
-ok  	github.com/swiftdrop/core-api/internal/events	1.123s
-ok  	github.com/swiftdrop/core-api/internal/events/eventstest	1.011s
-ok  	github.com/swiftdrop/core-api/internal/events/transport	1.338s
-ok  	github.com/swiftdrop/core-api/internal/identity/application	1.090s
-ok  	github.com/swiftdrop/core-api/internal/identity/domain	0.960s
-ok  	github.com/swiftdrop/core-api/internal/identity/transport	1.387s
-ok  	github.com/swiftdrop/core-api/internal/platform/config	0.960s
-ok  	github.com/swiftdrop/core-api/internal/platform/db	0.979s
-ok  	github.com/swiftdrop/core-api/internal/platform/httpx	1.310s
-ok  	github.com/swiftdrop/core-api/internal/platform/middleware	1.316s
-ok  	github.com/swiftdrop/core-api/migrations	0.979s
-ok  	github.com/swiftdrop/core-api/tests	1.578s
+ok  	github.com/swiftdrop/core-api/cmd/api	1.477s
+ok  	github.com/swiftdrop/core-api/internal/events	0.950s
+ok  	github.com/swiftdrop/core-api/internal/events/eventstest	0.892s
+ok  	github.com/swiftdrop/core-api/internal/events/transport	1.170s
+ok  	github.com/swiftdrop/core-api/internal/identity/application	0.964s
+ok  	github.com/swiftdrop/core-api/internal/identity/domain	0.862s
+ok  	github.com/swiftdrop/core-api/internal/identity/transport	1.171s
+ok  	github.com/swiftdrop/core-api/internal/platform/config	0.862s
+ok  	github.com/swiftdrop/core-api/internal/platform/db	0.873s
+ok  	github.com/swiftdrop/core-api/internal/platform/httpx	1.131s
+ok  	github.com/swiftdrop/core-api/internal/platform/middleware	1.167s
+ok  	github.com/swiftdrop/core-api/migrations	0.968s
+ok  	github.com/swiftdrop/core-api/tests	1.621s
 ```
 
 #### 2. Messaging Service Static Analysis & Unit Tests
@@ -824,19 +824,20 @@ Command: `cd services/messaging && go vet ./... && go test ./...`
 ?   	github.com/swiftdrop/messaging/cmd/reconcile	[no test files]
 ?   	github.com/swiftdrop/messaging/cmd/relay	[no test files]
 ?   	github.com/swiftdrop/messaging/cmd/worker	[no test files]
-ok  	github.com/swiftdrop/messaging/internal/broker	1.394s
-ok  	github.com/swiftdrop/messaging/internal/config	0.825s
-ok  	github.com/swiftdrop/messaging/internal/consumer	1.435s
-ok  	github.com/swiftdrop/messaging/internal/delivery	0.792s
-ok  	github.com/swiftdrop/messaging/internal/health	1.825s
-ok  	github.com/swiftdrop/messaging/internal/idempotency	0.688s
-ok  	github.com/swiftdrop/messaging/internal/logging	0.737s
-ok  	github.com/swiftdrop/messaging/internal/metrics	1.154s
-ok  	github.com/swiftdrop/messaging/internal/notification	1.534s
-ok  	github.com/swiftdrop/messaging/internal/reconciler	0.822s
-ok  	github.com/swiftdrop/messaging/internal/relay	1.225s
-ok  	github.com/swiftdrop/messaging/internal/webhook	1.672s
-ok  	github.com/swiftdrop/messaging/tests	1.689s
+ok  	github.com/swiftdrop/messaging/internal/broker	1.362s
+ok  	github.com/swiftdrop/messaging/internal/config	0.629s
+ok  	github.com/swiftdrop/messaging/internal/consumer	1.501s
+ok  	github.com/swiftdrop/messaging/internal/delivery	0.574s
+ok  	github.com/swiftdrop/messaging/internal/health	1.918s
+ok  	github.com/swiftdrop/messaging/internal/idempotency	0.936s
+ok  	github.com/swiftdrop/messaging/internal/logging	1.021s
+ok  	github.com/swiftdrop/messaging/internal/metrics	1.350s
+ok  	github.com/swiftdrop/messaging/internal/notification	1.704s
+ok  	github.com/swiftdrop/messaging/internal/reconciler	1.071s
+ok  	github.com/swiftdrop/messaging/internal/relay	1.376s
+ok  	github.com/swiftdrop/messaging/internal/sqlguard	1.045s
+ok  	github.com/swiftdrop/messaging/internal/webhook	1.782s
+ok  	github.com/swiftdrop/messaging/tests	2.181s
 ```
 
 #### 3. Automated Repository Verification Script
@@ -852,21 +853,103 @@ Command: `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1`
 [3/4] Notice: golangci-lint not installed locally (runs in CI).
 [4/4] Running Go tests...
   Running core-api tests...
-  [PASS] core-api tests passed.
+  ...
   Running services/messaging tests...
-  [PASS] services/messaging tests passed.
+  ...
 =================================================
   [SUCCESS] All checks passed. Ready for review.
 ```
 
-### 15.2 Environment & Test Execution Disclosures
-- **Race Detector (`-race`):** Could not be executed on this machine because cgo is disabled (`CGO_ENABLED=0`) and no local C compiler toolchain is installed (`go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`).
-- **Skipped Integration Tests:** Integration tests requiring live Docker containers were skipped during this run because the local Docker daemon was not running:
-  - `services/messaging/tests/e2e_integration_test.go: TestEndToEndLifecycle_Integration` (requires `INTEGRATION=1` with active PostgreSQL and RabbitMQ).
-  - `services/messaging/internal/broker/broker_test.go: TestIntegration_TopologyAndRoundTrip` (requires `INTEGRATION=1`).
-- **`golangci-lint`:** Not installed on the local developer workstation; verified via GitHub Actions CI workflow.
+### 15.2 Live Integration Test Verification (`INTEGRATION=1`)
 
-### 15.3 Verified Test Names by Package
+All integration tests were executed against the live Docker PostgreSQL 16 (`swiftdrop-dev-postgres`) and RabbitMQ 3.12 (`swiftdrop-dev-rabbitmq`) containers:
+
+#### 1. Core API Integration Tests
+Command: `$env:INTEGRATION=1; cd core-api; go test -v ./tests/...`
+```text
+=== RUN   TestCrossModuleSmoke
+2026/11/01 17:25:52 [MIGRATOR] Checking PostgreSQL schema migrations...
+2026/11/01 17:25:52 [MIGRATOR] ⏳ Applying pending migration: 20261021000001_create_identity_tables.up.sql ...
+2026/11/01 17:25:52 [MIGRATOR] ✅ Successfully applied: 20261021000001_create_identity_tables.up.sql
+2026/11/01 17:25:52 [MIGRATOR] ⏳ Applying pending migration: 20261021000002_seed_mock_users.up.sql ...
+2026/11/01 17:25:52 [MIGRATOR] ✅ Successfully applied: 20261021000002_seed_mock_users.up.sql
+2026/11/01 17:25:52 [MIGRATOR] ⏳ Applying pending migration: 20261101000050_create_outbox_events.up.sql ...
+2026/11/01 17:25:52 [MIGRATOR] ✅ Successfully applied: 20261101000050_create_outbox_events.up.sql
+2026/11/01 17:25:52 [MIGRATOR] ⏳ Applying pending migration: 20261101000500_create_worker_dedup_and_webhooks.up.sql ...
+2026/11/01 17:25:52 [MIGRATOR] ✅ Successfully applied: 20261101000500_create_worker_dedup_and_webhooks.up.sql
+2026/11/01 17:25:52 [MIGRATOR] 🎉 All database tables and seeds are up to date.
+=== RUN   TestCrossModuleSmoke/Health_Ready_is_connected
+=== RUN   TestCrossModuleSmoke/Mint_admin_access_token_for_integration_verification
+=== RUN   TestCrossModuleSmoke/Admin_can_inspect_events_outbox
+--- PASS: TestCrossModuleSmoke (0.23s)
+    --- PASS: TestCrossModuleSmoke/Health_Ready_is_connected (0.00s)
+    --- PASS: TestCrossModuleSmoke/Mint_admin_access_token_for_integration_verification (0.00s)
+    --- PASS: TestCrossModuleSmoke/Admin_can_inspect_events_outbox (0.00s)
+=== RUN   TestEventsReadRepository_Integration
+=== RUN   TestEventsReadRepository_Integration/ListOutbox_and_verify_ID_and_EventID_mapping
+=== RUN   TestEventsReadRepository_Integration/GetOutboxStats_returns_correct_aggregates
+=== RUN   TestEventsReadRepository_Integration/RetryOutbox_resets_failed_event_to_PENDING
+=== RUN   TestEventsReadRepository_Integration/ListDeliveries_returns_unified_union_of_notifications_and_webhooks
+=== RUN   TestEventsReadRepository_Integration/RetryWebhookDelivery_resets_failed_webhook_to_PENDING
+--- PASS: TestEventsReadRepository_Integration (0.23s)
+    --- PASS: TestEventsReadRepository_Integration/ListOutbox_and_verify_ID_and_EventID_mapping (0.00s)
+    --- PASS: TestEventsReadRepository_Integration/GetOutboxStats_returns_correct_aggregates (0.00s)
+    --- PASS: TestEventsReadRepository_Integration/RetryOutbox_resets_failed_event_to_PENDING (0.00s)
+    --- PASS: TestEventsReadRepository_Integration/ListDeliveries_returns_unified_union_of_notifications_and_webhooks (0.00s)
+    --- PASS: TestEventsReadRepository_Integration/RetryWebhookDelivery_resets_failed_webhook_to_PENDING (0.00s)
+PASS
+ok  	github.com/swiftdrop/core-api/tests	1.621s
+```
+
+#### 2. Messaging Service Integration Tests
+Command: `$env:INTEGRATION=1; cd services/messaging; go test -v ./tests/...`
+```text
+=== RUN   TestEndToEndLifecycle_Integration
+{"time":"2026-11-01T17:27:53.0076893+05:30","level":"INFO","msg":"connected to rabbitmq and declared topology"}
+{"time":"2026-11-01T17:27:53.0300357+05:30","level":"INFO","msg":"staged customer notification task","event_id":"0192e2b3-7c8a-7890-a123-273008444600","event_type":"parcel.booked.v1"}
+{"time":"2026-11-01T17:27:53.0355719+05:30","level":"INFO","msg":"e2e lifecycle integration test completed successfully","event_id":"0192e2b3-7c8a-7890-a123-273008444600","parcel_id":"0192e2b3-7c8a-7890-a123-000000000010","endpoint_id":"0192e2b3-7c8a-7890-a123-000000000088"}
+--- PASS: TestEndToEndLifecycle_Integration (0.11s)
+=== RUN   TestComprehensiveSQLSchemaContract_Integration
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/devemit_SQL_execution
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/relay_PostgresOutboxRepository_methods
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/consumer_staging:_notifications_and_webhooks
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/delivery_repository_methods:_notifications
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/delivery_repository_methods:_webhooks
+=== RUN   TestComprehensiveSQLSchemaContract_Integration/reconciler_lease_reset_and_retention
+{"time":"2026-11-01T17:31:24.7240132+05:30","level":"INFO","msg":"reset expired leases","notifications":2,"webhooks":2}
+{"time":"2026-11-01T17:31:24.7351788+05:30","level":"INFO","msg":"retention run complete","deleted_outbox":1,"deleted_notifications":2,"deleted_webhooks":2,"deleted_events":4}
+{"time":"2026-11-01T17:31:24.741415+05:30","level":"INFO","msg":"retention run complete","deleted_outbox":0,"deleted_notifications":0,"deleted_webhooks":0,"deleted_events":0}
+--- PASS: TestComprehensiveSQLSchemaContract_Integration (0.30s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/devemit_SQL_execution (0.00s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/relay_PostgresOutboxRepository_methods (0.01s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/consumer_staging:_notifications_and_webhooks (0.01s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/delivery_repository_methods:_notifications (0.02s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/delivery_repository_methods:_webhooks (0.02s)
+    --- PASS: TestComprehensiveSQLSchemaContract_Integration/reconciler_lease_reset_and_retention (0.02s)
+PASS
+ok  	github.com/swiftdrop/messaging/tests	2.181s
+```
+
+#### 3. Broker Topology & Round-Trip Integration Test
+Command: `$env:INTEGRATION=1; cd services/messaging; go test -v ./internal/broker/...`
+```text
+=== RUN   TestWorkQueuesDefinitions
+--- PASS: TestWorkQueuesDefinitions (0.00s)
+=== RUN   TestManager_DisconnectedBehavior
+--- PASS: TestManager_DisconnectedBehavior (0.00s)
+=== RUN   TestIntegration_TopologyAndRoundTrip
+2026/11/01 17:32:55 INFO connected to rabbitmq and declared topology
+--- PASS: TestIntegration_TopologyAndRoundTrip (0.13s)
+PASS
+ok  	github.com/swiftdrop/messaging/internal/broker	0.759s
+```
+
+### 15.3 Environment & Test Execution Disclosures
+- **Race Detector (`-race`):** Could not be executed on this machine because cgo is disabled (`CGO_ENABLED=0`) and no local C compiler toolchain is installed (`go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`).
+- **`golangci-lint`:** Not installed on the local developer workstation; verified via GitHub Actions CI workflow (`.github/workflows/ci.yml`).
+- **Live Database & Broker:** PostgreSQL 16 and RabbitMQ 3.12 were running locally via Docker Compose and fully verified with live SQL schema contract and E2E integration tests.
+
+### 15.4 Verified Test Names by Package
 
 All test functions below exist directly in the codebase:
 
@@ -912,8 +995,12 @@ All test functions below exist directly in the codebase:
   - `TestBodyLimit_Middleware`
 - **`core-api/migrations/migrations_test.go`:**
   - `TestMigrationFiles_SanityAndRules`
+- **`core-api/migrations/sql_guard_test.go`:**
+  - `TestSQLColumnGuard_NonTestGoFiles`
 - **`core-api/tests/smoke_test.go`:**
   - `TestCrossModuleSmoke`
+- **`core-api/tests/events_integration_test.go`:**
+  - `TestEventsReadRepository_Integration`
 - **`services/messaging/internal/broker/broker_test.go`:**
   - `TestWorkQueuesDefinitions`
   - `TestManager_DisconnectedBehavior`
@@ -958,6 +1045,8 @@ All test functions below exist directly in the codebase:
   - `TestRelay_PollAndPublish_Success`
   - `TestRelay_PollAndPublish_FailureAndBackoff`
   - `TestRelay_PollAndPublish_MaxRetriesReached`
+- **`services/messaging/internal/sqlguard/sql_guard_test.go`:**
+  - `TestSQLColumnGuard_NonTestGoFiles`
 - **`services/messaging/internal/webhook/webhook_test.go`:**
   - `TestSignature_KnownAnswerVector`
   - `TestDecryptor`
@@ -968,6 +1057,8 @@ All test functions below exist directly in the codebase:
   - `TestWebhookDispatcher_Success`
 - **`services/messaging/tests/e2e_integration_test.go`:**
   - `TestEndToEndLifecycle_Integration`
+- **`services/messaging/tests/schema_contract_integration_test.go`:**
+  - `TestComprehensiveSQLSchemaContract_Integration`
 
 ---
 

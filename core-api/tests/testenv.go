@@ -26,7 +26,7 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 		testDBURL = os.Getenv("DATABASE_URL")
 	}
 	if testDBURL == "" {
-		testDBURL = "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable"
+		testDBURL = "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable"
 	}
 
 	db, err := sql.Open("postgres", testDBURL)
