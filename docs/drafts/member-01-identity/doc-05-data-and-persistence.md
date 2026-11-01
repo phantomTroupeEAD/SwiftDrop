@@ -20,21 +20,21 @@ Stores authoritative credentials and global application roles for all human acto
 | `id` | `UUID` | `PRIMARY KEY DEFAULT gen_random_uuid()` | Immutable unique account identifier (UUIDv7 recommended). |
 | `email` | `VARCHAR(255)` | `NOT NULL UNIQUE` | Normalized lower-case login email. |
 | `password_hash` | `VARCHAR(255)` | `NULL` | Argon2id/bcrypt salted hash. Nullable for Google-only users. |
-| `full_name` | `VARCHAR(255)` | `NOT NULL` | User's full display name. |
-| `phone` | `VARCHAR(30)` | `NULL` | Contact phone number. |
-| `role` | `VARCHAR(20)` | `NOT NULL DEFAULT 'CUSTOMER'` | Role enum: `CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`. |
-| `is_active` | `BOOLEAN` | `NOT NULL DEFAULT true` | Soft-state flag. If `false`, login and token refresh fail. |
+| `full_name` | `VARCHAR(120)` | `NOT NULL` | User's full display name. |
+| `phone` | `VARCHAR(32)` | `NULL` | Contact phone number. |
+| `role` | `VARCHAR(32)` | `NOT NULL DEFAULT 'CUSTOMER' REFERENCES roles(id) ON DELETE RESTRICT` | Role enum: `CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`, `ADMIN`. |
+| `status` | `VARCHAR(32)` | `NOT NULL DEFAULT 'ACTIVE'` | Status enum: `PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`, `DEACTIVATED`. |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL DEFAULT NOW()` | UTC account creation timestamp. |
 | `updated_at` | `TIMESTAMPTZ` | `NOT NULL DEFAULT NOW()` | UTC last modification timestamp. |
 
 #### Check Constraints & Indexes:
 ```sql
-ALTER TABLE users ADD CONSTRAINT chk_users_role 
-CHECK (role IN ('CUSTOMER', 'MERCHANT', 'COURIER', 'DISPATCHER', 'ADMIN'));
+ALTER TABLE users ADD CONSTRAINT chk_users_status 
+CHECK (status IN ('PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED'));
 
 CREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));
 CREATE INDEX idx_users_role ON users (role);
-CREATE INDEX idx_users_active ON users (is_active) WHERE is_active = true;
+CREATE INDEX idx_users_status ON users (status);
 ```
 
 ---
@@ -51,7 +51,7 @@ Maintains active and historical refresh tokens for session rotation and reuse de
 | `family_id` | `UUID` | `NOT NULL` | Shared identifier across an entire lineage of rotated tokens. |
 | `is_revoked` | `BOOLEAN` | `NOT NULL DEFAULT false` | Revocation status (set to true on rotation or logout). |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL DEFAULT NOW()` | UTC issuance timestamp. |
-| `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | Absolute expiry (typically `created_at + 7 days`). |
+| `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | Absolute expiry (web: `created_at + 7 days`; courier: `created_at + 14 days` per ADR-003). |
 | `used_at` | `TIMESTAMPTZ` | `NULL` | Timestamp when exchanged during token rotation. |
 
 #### Indexes:
@@ -103,7 +103,7 @@ erDiagram
         varchar full_name
         varchar phone
         varchar role
-        boolean is_active
+        varchar status
         timestamptz created_at
         timestamptz updated_at
     }
@@ -132,14 +132,14 @@ erDiagram
 
 ## 3. Migration Strategy & Ordering
 
-In accordance with team agreements with Member 9 (Database Coordinator §2, D3):
+In accordance with team agreements with Member 9 (Database Coordinator §2, D2 & D3):
 - **Foreign Key Ordering:** `users` is the **first table created** in the entire system because `merchants`, `parcels`, `couriers`, and `audit_logs` reference `users.id`.
 - **Tooling:** Managed via `golang-migrate`.
-- **Migration Script Name:**
-  - `migrations/20261021000001_create_identity_tables.up.sql`
-  - `migrations/20261021000001_create_identity_tables.down.sql`
+- **Migration Script Name (6-Digit Sequential):**
+  - `core-api/migrations/000001_create_users_and_roles.up.sql`
+  - `core-api/migrations/000001_create_users_and_roles.down.sql`
 - **Database Role Grants:**
-  - Grants `SELECT, INSERT, UPDATE` on `users`, `refresh_tokens`, and `oauth_identities` to the application role `swiftdrop_app`.
+  - Grants `SELECT, INSERT, UPDATE` on `roles`, `users`, `refresh_tokens`, and `oauth_identities` to the application role `swiftdrop_app`.
   - `DELETE` is prohibited on `users` in production.
 
 ---
@@ -155,8 +155,8 @@ In accordance with team agreements with Member 9 (Database Coordinator §2, D3):
 
 | Email | Role | Full Name | Purpose |
 |:---|:---|:---|:---|
-| `admin@swiftdrop.local` | `ADMIN` | Super Administrator | System configuration & role management |
-| `dispatcher@swiftdrop.local` | `DISPATCHER` | Fleet Dispatcher | Courier routing & parcel assignments |
-| `courier1@swiftdrop.local` | `COURIER` | Kamal Perera | Mobile delivery execution & POD uploads |
-| `merchant@vendor.com` | `MERCHANT` | Urban Store Logistics | Merchant portal & order management |
-| `customer@swiftdrop.local` | `CUSTOMER` | Jane Customer | Parcel booking & personal tracking |
+| `admin@swiftdrop.com` | `ADMIN` | Super Administrator | System configuration & role management |
+| `dispatcher@swiftdrop.com` | `DISPATCHER` | Fleet Dispatcher | Courier routing & parcel assignments |
+| `courier.bob@swiftdrop.com` | `COURIER` | Kamal Perera | Mobile delivery execution & POD uploads |
+| `merchant.acme@swiftdrop.com` | `MERCHANT` | Urban Store Logistics | Merchant portal & order management |
+| `customer.alice@swiftdrop.com` | `CUSTOMER` | Jane Customer | Parcel booking & personal tracking |

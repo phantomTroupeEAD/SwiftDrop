@@ -32,7 +32,7 @@ Per **SRS §12.2**, the following 16 acceptance tests are strictly required and 
 | **AT-002** | Invalid parcel inputs (negative weight, missing address) rejected with 422; no partial DB write. | Member 2 | `FR-PAR-004`, `SEC-006` | **Automated** (Unit/API) |
 | **AT-003** | Idempotency enforcement: repeating booking request with same key returns cached response, single parcel. | Member 2, Platform | `FR-PAR-007` | **Automated** (Integration) |
 | **AT-004** | Tenant & Object Isolation (IDOR): Customer A cannot read Customer B's parcels or receipts (HTTP 403/404). | Member 1, Member 2 | `SEC-002`, `SEC-005` | **Automated** (Security test) |
-| **AT-005** | Public Tracking Masking: `/tracking/public/{num}` returns milestones without recipient address or phone. | Member 5 | `SEC-016`, `FR-TRK-001` | **Automated** (Tracking test) |
+| **AT-005** | Public Tracking Masking: `/tracking/public/{num}` returns milestones without recipient address or phone. | Member 5 | `SEC-009`, `FR-TRK-001` | **Automated** (Tracking test) |
 | **AT-006** | Courier Authorization: Valid courier can update assigned parcel; unauthorized courier is rejected (HTTP 403). | Member 3 | `FR-COU-002`, `SEC-002` | **Automated** (Dispatch test) |
 | **AT-007** | State Machine Guard: Illegal transition (`CREATED` $\rightarrow$ `DELIVERED`) rejected; zero outbox events written. | Member 2 | `FR-LIFE-002`, `ADR-004` | **Automated** (Domain unit) |
 | **AT-008** | Atomic Commit: Status update atomically writes to `parcels`, `parcel_status_history`, and `outbox_events`. | Member 2, Member 8 | `FR-LIFE-005`, `FR-EVT-001` | **Automated** (DB Integration) |
@@ -43,7 +43,7 @@ Per **SRS §12.2**, the following 16 acceptance tests are strictly required and 
 | **AT-013** | Dispatcher Concurrency: Concurrent courier assignments on same parcel handled via optimistic locking (409 Conflict). | Member 3 | `FR-ADM-002`, `SRS §7.2` | **Automated** (Dispatch test) |
 | **AT-014** | Google OIDC Validation: OIDC code exchange validates state/nonce and safely rejects forged tokens. | Member 1 | `FR-IAM-002`, `ADR-003` | **Automated** (Auth test) |
 | **AT-015** | AI Assistant Tool Sandbox: AI uses read-only backend endpoints, respects RBAC, and never invents unverified facts. | Member 10 | `FR-AI-001` to `FR-AI-008` | **Automated** (AI test suite) |
-| **AT-016** | Deployment & Probes: Kubernetes `/livez` & `/readyz` probes functional; reconciliation CronJob executes safely. | Member 9 | `SRS §11.2`, `ADR-002` | **Automated** (K8s verification) |
+| **AT-016** | Deployment & Probes: Kubernetes `/health/live` & `/health/ready` probes functional; reconciliation CronJob executes safely. | Member 9 | `SRS §11.2`, `ADR-002` | **Automated** (K8s verification) |
 
 ---
 

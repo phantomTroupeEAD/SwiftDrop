@@ -2,8 +2,8 @@ package domain
 
 // PrefixOwner is a prefix already stored for some zone.
 type PrefixOwner struct {
-	Prefix   PostalPrefix
-	ZoneCode string
+	Prefix PostalPrefix
+	ZoneID string
 }
 
 // Clash is a new prefix that overlaps a prefix owned by another zone.
@@ -16,11 +16,11 @@ type Clash struct {
 // prefixes owned by other zones. The use case runs it under an advisory lock.
 type PrefixOverlapPolicy struct{}
 
-func (PrefixOverlapPolicy) Clashes(zoneCode string, newPrefixes []PostalPrefix, existing []PrefixOwner) []Clash {
+func (PrefixOverlapPolicy) Clashes(zoneID string, newPrefixes []PostalPrefix, existing []PrefixOwner) []Clash {
 	var out []Clash
 	for _, n := range newPrefixes {
 		for _, e := range existing {
-			if e.ZoneCode == zoneCode {
+			if e.ZoneID == zoneID {
 				continue // the zone's own prefixes never clash with themselves
 			}
 			if n.Overlaps(e.Prefix) {

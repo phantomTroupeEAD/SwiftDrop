@@ -31,7 +31,9 @@ psql_su -d swiftdrop_db -f "$ROOT/scripts/db-bootstrap.sql"
 set -a; . "$ROOT/.env.example"; [ -f "$ROOT/.env" ] && . "$ROOT/.env"; set +a
 export DATABASE_URL=${DATABASE_URL/:5432/:$PGPORT} MIGRATE_DATABASE_URL=${MIGRATE_DATABASE_URL/:5432/:$PGPORT}
 
-echo "[3/7] Migrations (golang-migrate, owner role)"
+echo "[3/7] Migrations (golang-migrate, swiftdrop_migrator role)"
+# Member 1's real 000001 (users) is not in this folder, so a local stub stands in for it (D4).
+psql "$MIGRATE_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$ROOT/scripts/dev-stub-users.sql"
 "$MIGRATE" -path "$ROOT/core-api/migrations" -database "$MIGRATE_DATABASE_URL" up 2>&1 | sed 's/^/      /'
 
 echo "[4/7] Seed (7 zones, 3 settings, demo users)"
@@ -43,8 +45,8 @@ echo "[5/7] Dev JWT key pair"
 echo "[6/7] core-api on $HTTP_ADDR (app role)"
 (cd "$ROOT/core-api" && go build -o "$RUN/core-api" ./cmd/api)
 (cd "$ROOT/core-api" && exec "$RUN/core-api" >> "$RUN/logs/core-api.log" 2>&1 < /dev/null) & echo $! > "$RUN/core-api.pid"
-for i in $(seq 1 50); do curl -sf localhost:8080/readyz >/dev/null && break; sleep 0.2; done
-curl -s localhost:8080/readyz; echo
+for i in $(seq 1 50); do curl -sf localhost:8080/health/ready >/dev/null && break; sleep 0.2; done
+curl -s localhost:8080/health/ready; echo
 
 echo "[7/7] Traefik gateway on :$GW_PORT (+ stand-ins for other members' services)"
 mkdir -p "$RUN/gw/dynamic"

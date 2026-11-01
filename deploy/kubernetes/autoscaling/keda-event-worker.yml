@@ -15,14 +15,22 @@ spec:
   pollingInterval: 15
   cooldownPeriod: 30
   minReplicaCount: 1
-  maxReplicaCount: 2 # Micro-scaling demonstration limit (safe for single-node VPS)
+  maxReplicaCount: 3 # Micro-scaling demonstration limit (safe for single-node VPS, Agreement C7)
   triggers:
     - type: rabbitmq
       metadata:
         protocol: amqp
-        queueName: parcel.events
+        queueName: q.notifications.worker
         mode: QueueLength
-        value: "10" # Demonstrates scale-up when queue backlog exceeds 10 messages
+        value: "10" # Scale up when notification queue backlog exceeds 10 messages
+      authenticationRef:
+        name: keda-rabbitmq-auth
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.webhooks.dispatcher
+        mode: QueueLength
+        value: "10" # Scale up when webhook queue backlog exceeds 10 messages
       authenticationRef:
         name: keda-rabbitmq-auth
 ---
@@ -35,4 +43,4 @@ spec:
   secretTargetRef:
     - parameter: host
       name: rabbitmq-secrets
-      key: amqp-uri
+      key: RABBITMQ_URL

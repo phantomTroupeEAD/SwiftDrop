@@ -13,18 +13,18 @@ import (
 
 type Service struct {
 	Store Store
-	NewID func() string
 }
 
+// ZoneView has no money fields: fees, including any zone surcharge, are
+// Member 2's pricing rules (Doc 1 R-04).
 type ZoneView struct {
-	ID                 string   `json:"id"`
-	Code               string   `json:"code"`
-	Name               string   `json:"name"`
-	BaseSurchargeCents int64    `json:"base_surcharge_cents"`
-	Currency           string   `json:"currency"`
-	PostalPrefixes     []string `json:"postal_prefixes"`
-	Enabled            bool     `json:"enabled"`
-	Version            int      `json:"version"`
+	ID             string   `json:"id"`
+	Code           string   `json:"code"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	PostalPrefixes []string `json:"postal_prefixes"`
+	Enabled        bool     `json:"enabled"`
+	Version        int      `json:"version"`
 }
 
 func View(z *domain.Zone) ZoneView {
@@ -32,23 +32,32 @@ func View(z *domain.Zone) ZoneView {
 	for _, x := range z.Prefixes() {
 		p = append(p, x.String())
 	}
-	return ZoneView{ID: z.ID(), Code: z.Code().String(), Name: z.Name(), BaseSurchargeCents: z.Surcharge().Cents(),
-		Currency: z.Surcharge().Currency(), PostalPrefixes: p, Enabled: z.Enabled(), Version: z.Version()}
+	return ZoneView{ID: z.ID().String(), Code: z.Code().String(), Name: z.Name(), Description: z.Description(),
+		PostalPrefixes: p, Enabled: z.Enabled(), Version: z.Version()}
+}
+
+// PublicZone is what GET /api/v1/zones shows to anyone (Doc 1 R-18).
+type PublicZone struct {
+	ID   string `json:"id"`
+	Code string `json:"code"`
+	Name string `json:"name"`
 }
 
 type CreateZoneInput struct {
-	Code               string   `json:"code"`
-	Name               string   `json:"name"`
-	BaseSurchargeCents int64    `json:"base_surcharge_cents"`
-	PostalPrefixes     []string `json:"postal_prefixes"`
+	ID             string   `json:"id"`
+	Code           string   `json:"code"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	PostalPrefixes []string `json:"postal_prefixes"`
 }
 
 type UpdateZoneInput struct {
-	Version            int      `json:"version"`
-	Name               *string  `json:"name,omitempty"`
-	BaseSurchargeCents *int64   `json:"base_surcharge_cents,omitempty"`
-	PostalPrefixes     []string `json:"postal_prefixes,omitempty"`
-	Reason             string   `json:"reason,omitempty"`
+	Version        int      `json:"version"`
+	Code           *string  `json:"code,omitempty"`
+	Name           *string  `json:"name,omitempty"`
+	Description    *string  `json:"description,omitempty"`
+	PostalPrefixes []string `json:"postal_prefixes,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
 }
 
 type StatusInput struct {
@@ -57,11 +66,8 @@ type StatusInput struct {
 	Reason  string `json:"reason"`
 }
 
-// MaxSurchargeCents is LKR 100 000 (Doc 7 section 6.1).
-const MaxSurchargeCents = 10_000_000
-
 func domainErr(err error) error {
-	for _, e := range []error{domain.ErrInvalidZoneCode, domain.ErrInvalidZoneName, domain.ErrInvalidPrefix, domain.ErrNegativeMoney,
+	for _, e := range []error{domain.ErrInvalidZoneID, domain.ErrInvalidZoneCode, domain.ErrInvalidZoneName, domain.ErrInvalidDescription, domain.ErrInvalidPrefix,
 		domain.ErrNoPrefixes, domain.ErrDuplicatePrefixInZone, domain.ErrAlreadyEnabled, domain.ErrAlreadyDisabled} {
 		if errors.Is(err, e) {
 			return fmt.Errorf("%w: %v", apperr.ErrValidation, err)
@@ -85,40 +91,32 @@ func prefixes(in []string) ([]domain.PostalPrefix, error) {
 	return out, nil
 }
 
-func money(c int64) (domain.Money, error) {
-	if c > MaxSurchargeCents {
-		return domain.Money{}, fmt.Errorf("%w: surcharge above LKR 100,000", apperr.ErrValidation)
-	}
-	m, err := domain.NewLKR(c)
-	return m, domainErr(err)
-}
-
 // checkOverlap must run inside the transaction, after LockZonePrefixes.
 func checkOverlap(ctx context.Context, tx Tx, z *domain.Zone) error {
-	others, err := tx.OtherZonePrefixes(ctx, z.ID())
+	others, err := tx.OtherZonePrefixes(ctx, z.ID().String())
 	if err != nil {
 		return err
 	}
-	if c := (domain.PrefixOverlapPolicy{}).Clashes(z.Code().String(), z.Prefixes(), others); len(c) > 0 {
-		return fmt.Errorf("%w: %s overlaps %s in %s", apperr.ErrPrefixConflict, c[0].New, c[0].Existing.Prefix, c[0].Existing.ZoneCode)
+	if c := (domain.PrefixOverlapPolicy{}).Clashes(z.ID().String(), z.Prefixes(), others); len(c) > 0 {
+		return fmt.Errorf("%w: %s overlaps %s in %s", apperr.ErrPrefixConflict, c[0].New, c[0].Existing.Prefix, c[0].Existing.ZoneID)
 	}
 	return nil
 }
 
 func (s *Service) CreateZone(ctx context.Context, a Actor, in CreateZoneInput) (ZoneView, error) {
-	code, err := domain.NewZoneCode(strings.TrimSpace(in.Code))
+	id, err := domain.NewZoneID(strings.TrimSpace(in.ID))
 	if err != nil {
 		return ZoneView{}, domainErr(err)
 	}
-	m, err := money(in.BaseSurchargeCents)
+	code, err := domain.NewZoneCode(strings.TrimSpace(in.Code))
 	if err != nil {
-		return ZoneView{}, err
+		return ZoneView{}, domainErr(err)
 	}
 	p, err := prefixes(in.PostalPrefixes)
 	if err != nil {
 		return ZoneView{}, err
 	}
-	z, err := domain.NewZone(s.NewID(), code, in.Name, m, p)
+	z, err := domain.NewZone(id, code, in.Name, in.Description, p)
 	if err != nil {
 		return ZoneView{}, domainErr(err)
 	}
@@ -130,10 +128,10 @@ func (s *Service) CreateZone(ctx context.Context, a Actor, in CreateZoneInput) (
 		if err := checkOverlap(ctx, tx, z); err != nil {
 			return err
 		}
-		if err := tx.InsertZone(ctx, z, a.ID); err != nil {
+		if err := tx.InsertZone(ctx, z); err != nil {
 			return err
 		}
-		return tx.Audit(ctx, a, AuditEntry{Action: "ZONE_CREATED", TargetType: "ZONE", TargetID: z.ID(), After: toMap(View(z))})
+		return tx.Audit(ctx, a, AuditEntry{Action: "ZONE_CREATED", TargetType: "ZONE", TargetID: z.ID().String(), After: toMap(View(z))})
 	})
 	if err != nil {
 		return ZoneView{}, err
@@ -144,11 +142,6 @@ func (s *Service) CreateZone(ctx context.Context, a Actor, in CreateZoneInput) (
 func (s *Service) UpdateZone(ctx context.Context, a Actor, id string, in UpdateZoneInput) (ZoneView, error) {
 	if in.Version < 1 {
 		return ZoneView{}, fmt.Errorf("%w: version is required", apperr.ErrValidation)
-	}
-	if in.BaseSurchargeCents != nil {
-		if err := ValidateReason(in.Reason); err != nil {
-			return ZoneView{}, err // money changes always need a reason
-		}
 	}
 	var out ZoneView
 	err := s.Store.InTx(ctx, func(tx Tx) error {
@@ -170,12 +163,17 @@ func (s *Service) UpdateZone(ctx context.Context, a Actor, id string, in UpdateZ
 				return domainErr(err)
 			}
 		}
-		if in.BaseSurchargeCents != nil {
-			m, err := money(*in.BaseSurchargeCents)
+		if in.Code != nil {
+			c, err := domain.NewZoneCode(strings.TrimSpace(*in.Code))
 			if err != nil {
-				return err
+				return domainErr(err)
 			}
-			if err := z.ChangeSurcharge(m); err != nil {
+			if err := z.ChangeCode(c); err != nil {
+				return domainErr(err)
+			}
+		}
+		if in.Description != nil {
+			if err := z.ChangeDescription(*in.Description); err != nil {
 				return domainErr(err)
 			}
 		}
@@ -195,7 +193,7 @@ func (s *Service) UpdateZone(ctx context.Context, a Actor, id string, in UpdateZ
 			out = View(z)
 			return nil // nothing changed: no write, no audit row
 		}
-		if err := tx.SaveZone(ctx, z, in.Version, a.ID); err != nil {
+		if err := tx.SaveZone(ctx, z, in.Version); err != nil {
 			return err
 		}
 		out = View(z)
@@ -226,7 +224,7 @@ func (s *Service) SetZoneEnabled(ctx context.Context, a Actor, id string, in Sta
 		if err != nil {
 			return domainErr(err)
 		}
-		if err := tx.SaveZone(ctx, z, in.Version, a.ID); err != nil {
+		if err := tx.SaveZone(ctx, z, in.Version); err != nil {
 			return err
 		}
 		out = View(z)
