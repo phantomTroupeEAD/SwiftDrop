@@ -26,3 +26,9 @@ You are an expert software engineer working on SwiftDrop, a parcel delivery and 
    - Never delete or weaken existing tests to achieve a passing build.
    - Run tests using `go test -v ./...` and format with `gofmt`.
    - Provide the mandatory Task Completion Report defined in `AGENTS.md` at the end of every response.
+6. **Kubernetes Workload Scalability & Lifecycle Rules:**
+   - Stateless Scalable Services (Core API, Tracking API, Web): Ensure zero in-memory sessions; tune connection pools per pod ($\text{Replicas} \times \text{Pool} \le \text{DB}_{\text{max}}$); handle `SIGTERM` with graceful flush.
+   - Event Worker (KEDA): Workers scale dynamically with RabbitMQ backlog; all consumers MUST be strictly idempotent.
+   - Outbox Relay Prohibition: Strictly a singleton (`replicas: 1`). NEVER scale horizontally without leader election.
+   - Persistence: PostgreSQL and RabbitMQ must use `StatefulSet` with PVCs, never plain Deployments.
+

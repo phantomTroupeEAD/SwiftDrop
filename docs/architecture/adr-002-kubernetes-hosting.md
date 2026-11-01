@@ -123,18 +123,32 @@ Traefik is then deployed declaratively into namespace `traefik` using official H
 
 ---
 
-## 7. Autoscaling Strategy (HPA & KEDA)
+## 7. Autoscaling Strategy (HPA & KEDA) & Workload Scaling Rules
 
-On a single Ubuntu VPS, compute and memory resources are constrained by the physical host. Uncontrolled horizontal autoscaling risks CPU throttling and OOM kills of critical stateful workloads (PostgreSQL).
+On a single Ubuntu VPS or managed Kubernetes cluster, compute and memory resources must be managed predictably. Workloads are categorized into **Horizontally Scalable**, **Event-Driven Scalable**, **Strict Singletons**, and **Stateful Infrastructure**:
 
-1. **Baseline Strategy:** Static replica counts with conservative resource requests and limits:
-   - Core API: `requests.cpu: 100m`, `limits.cpu: 500m`, `requests.memory: 128Mi`, `limits.memory: 512Mi`
-   - Tracking API: `requests.cpu: 50m`, `limits.cpu: 250m`, `requests.memory: 64Mi`, `limits.memory: 256Mi`
-   - PostgreSQL: `requests.cpu: 100m`, `limits.cpu: 500m`, `requests.memory: 256Mi`, `limits.memory: 1Gi` (as in `deploy/kubernetes/postgres-statefulset.yml`)
-2. **Demonstration Autoscaling (Bonus Requirement):**
-   - **HorizontalPodAutoscaler (HPA):** Core API 2–4 replicas at 70% CPU. Tracking API: the manifest today scales 1–2 at 50% CPU; the final range is open item C8 (Member 5), and the DB connection budget allows at most 4 pods.
-   - **KEDA (Kubernetes Event-driven Autoscaling):** `ScaledObject` for the `event-worker` with two RabbitMQ triggers, `q.notifications.worker` and `q.webhooks.dispatcher` (`queueLength: 10` each), scaling workers from 1 to 3 pods. The KEDA trigger reads the `RABBITMQ_URL` key of `rabbitmq-secrets`.
-   - **Never autoscaled:** `outbox-relay` (singleton), PostgreSQL and RabbitMQ (StatefulSets).
+### 7.1 Scalable Systems & Autoscaling Profiles
+
+| Workload | Scaling Engine | Min / Max Replicas | Scaling Metric Target | Mandatory Invariants & Rules |
+| :--- | :--- | :--- | :--- | :--- |
+| **Core API** | **HPA** | `2` / `4` | CPU Utilization $\ge$ 70% | **Stateless:** Zero session storage or in-memory state. **Connection Pool Ceiling:** Per-pod DB pool must satisfy: $\text{Replicas}_{\text{max}} \times \text{MaxOpenConns} \le \text{PostgreSQL MaxConnections}$ (e.g. $4 \times 20 = 80 \le 100$). Handles `SIGTERM` with 20s graceful flush. |
+| **Tracking API** | **HPA** | `2` / `4` | CPU $\ge$ 70% or Active Conns | **Read-Optimized Projection:** Queries read replicas or cached views. When scaled $>1$ pod, live SSE broadcasts require **Redis Pub/Sub** inter-pod message fan-out. Emits `X-Accel-Buffering: no` and 15s keepalive pings. |
+| **Event Worker** | **KEDA** | `1` / `3` | RabbitMQ `queueLength > 10` | **Strict Consumer Idempotency:** Worker pods scale dynamically with RabbitMQ backlog. Every consumer MUST deduplicate messages against `idempotency_keys` table to prevent duplicate notifications or webhook dispatches. |
+| **Web Frontend** | **HPA** | `2` / `3` | CPU Utilization $\ge$ 80% | **Stateless SPA:** Nginx serving static bundle. Assets hashed immutably (`Cache-Control: max-age=31536000`), `index.html` non-cached. |
+| **Traefik Gateway** | **HPA** | `1` / `2` | Ingress Request Rate | **Edge Reverse Proxy:** Real IP restoration via `trustedIPs` across all replicas. Session affinity not required (stateless JWT). |
+
+### 7.2 Non-Scalable & Restricted Systems
+
+1. **Outbox Relay Daemon (STRICT SINGLETON — `replicas: 1`):**
+   - **PROHIBITION:** The Outbox Relay MUST NEVER be scaled to $>1$ replica unless using distributed leader election (`client-go/tools/leaderelection`) or explicit row-level locking (`SELECT ... FOR UPDATE SKIP LOCKED`).
+   - Multiple active relay instances without coordination will cause database lock contention, outbox query race conditions, and duplicate event publication to RabbitMQ.
+2. **AI Assistant (`replicas: 1`):**
+   - Single replica baseline. Upstream edge gateway enforces rate limiting (10 req/min per user) to safeguard LLM costs and prevent backend saturation.
+3. **PostgreSQL 16 & RabbitMQ 3.13 (`StatefulSet`):**
+   - **PROHIBITION:** Stateful infrastructure must NEVER be scaled by incrementing `replicas` on a standard Deployment. The PostgreSQL primary is single-writer. Storage is permanently bound via `volumeClaimTemplates` to the `local-path` StorageClass.
+4. **Reconciliation Sweeper (`CronJob`):**
+   - Runs on schedule `*/10 * * * *` with `concurrencyPolicy: Forbid` ensuring only one instance runs at any given time.
+
 
 ---
 

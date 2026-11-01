@@ -282,10 +282,16 @@ This is the team's proposed engineering baseline, not a claim that every item is
 - When fronted by Cloudflare edge proxy, enforce origin-access firewalling (restricting host ports 80 and 443 strictly to Cloudflare CIDR blocks) and configure `forwardedHeaders.trustedIPs` on Traefik entrypoints to guarantee real client IP restoration and preserve rate limiting.
 - Ensure Server-Sent Events (SSE) streams emit `X-Accel-Buffering: no` and send periodic keepalive heartbeats to prevent edge proxy timeouts.
 - Use Services for stable in-cluster discovery and namespaces/labels consistently.
-- Use HPA for appropriate stateless APIs; use queue-depth-based scaling such as KEDA for workers only when metrics and scaling behavior are configured and tested. For single-VPS deployments, static replicas with conservative resource requests are preferred to protect node capacity.
-- Do not put persistent database/broker state on ephemeral container filesystems. For K3s single-node deployments, use the built-in `local-path` StorageClass for PersistentVolumeClaims, paired with automated off-node database backup dumps.
+- **Kubernetes Horizontal Scalability & Invariant Rules:**
+  - **Core API Scaling (HPA):** Scales between 2 and 4 replicas based on CPU ($\ge$ 70%). Must remain strictly stateless (no in-memory sessions; zero local file uploads). Database connection pooling per pod must be configured to guarantee: $\text{MaxReplicas} \times \text{MaxOpenConns} \le \text{PostgreSQL MaxConnections}$ to prevent connection exhaustion during scale-out. Must handle `SIGTERM` with graceful connection flushing (20s timeout).
+  - **Tracking API Scaling (HPA):** Read-optimized SSE projection service scaling from 2 to 4 replicas. To support multi-pod realtime event streaming, pods must use Redis Pub/Sub for cross-replica SSE fan-out. Streams must emit `X-Accel-Buffering: no` and periodic 15s keepalive comments (`: ping\n\n`) to prevent edge proxy timeouts.
+  - **Event Worker Scaling (KEDA):** Scales from 1 to 3 replicas using a `ScaledObject` monitoring RabbitMQ queue depth (`queueLength > 10`). Every worker consumer MUST be **strictly idempotent** (verifying message IDs against `idempotency_keys` table) because scaling out increases concurrent and redelivered messages.
+  - **Web Frontend Scaling (HPA):** Scales based on HTTP traffic. Static Nginx container serving immutable hashed JS/CSS assets (`Cache-Control: max-age=31536000`) and un-cached `index.html`.
+  - **Strict Singleton Prohibition (Outbox Relay):** The Outbox Relay MUST remain a strict singleton (`replicas: 1`). Never scale the Outbox Relay horizontally without distributed leader election; multiple uncoordinated relay instances cause database row lock contention and duplicate message publication.
+  - **Stateful Infrastructure (PostgreSQL & RabbitMQ):** Do not put persistent database/broker state on ephemeral container filesystems or scale via Deployments. Use `StatefulSets` with `volumeClaimTemplates` on the built-in `local-path` StorageClass, paired with off-node backup dumps.
 - Pin image tags for repeatable demos; avoid relying on `latest` for the final submission.
 - Provide a clean-clone setup test and a documented teardown/reset procedure.
+
 
 ## 11. Observability and operational readiness
 

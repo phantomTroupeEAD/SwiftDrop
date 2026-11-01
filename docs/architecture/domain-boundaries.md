@@ -137,3 +137,23 @@ stateDiagram-v2
    - Direct database access from outside the Core API is strictly forbidden:
      - Tracking API reads from read-optimized views/tables.
      - AI Assistant connects ONLY through approved Core API HTTP/REST endpoints.
+
+---
+
+## 5. Kubernetes Workload Scalability & Lifecycle Rules
+
+All SwiftDrop deployable units must comply with strict Kubernetes scalability and lifecycle contracts:
+
+| Workload | K8s Resource | Scalability Mode | Autoscaling Driver | Concurrency & Scaling Rules |
+| :--- | :--- | :--- | :--- | :--- |
+| **Core API** | `Deployment` | **Horizontally Scalable** | HPA (CPU $\ge$ 70%) | **Stateless:** Zero local disk or session memory. Database pool tuned per pod: $\text{Replicas} \times \text{MaxOpenConns} \le \text{PostgreSQL MaxConnections}$. Handles `SIGTERM` with 20s graceful flush. |
+| **Tracking API** | `Deployment` | **Horizontally Scalable** | HPA (CPU / Conn) | **Read-Optimized:** Serves SSE & milestone queries. Inter-pod live event fan-out via Redis Pub/Sub broadcast. Must emit `X-Accel-Buffering: no` and 15s keepalive pings. |
+| **Event Worker** | `Deployment` | **Event-Driven Scalable** | KEDA (`queueLength > 10`) | **Strictly Idempotent:** Worker pods scale dynamically with RabbitMQ backlog. Every consumer MUST deduplicate messages against `idempotency_keys` table. |
+| **Web Frontend** | `Deployment` | **Horizontally Scalable** | HPA (Traffic / CPU) | **Stateless:** Nginx serving pre-built SPA bundle with immutable asset hashing. |
+| **Traefik Gateway** | `Deployment` | **Horizontally Scalable** | HPA (Ingress Load) | **Edge Proxy:** Real IP restoration via `trustedIPs` across all replicas. Session affinity not required (stateless JWT). |
+| **Outbox Relay** | `Deployment` | **STRICT SINGLETON** | **None** (`replicas: 1`) | **PROHIBITION:** MUST NEVER scale to $>1$ replica. Single poller guarantees strict outbox ordering and prevents lock contention / duplicate message publishing. |
+| **AI Assistant** | `Deployment` | **Single Replica** | None (`replicas: 1`) | Sandboxed read-only tools calling Core API. Ingress rate-limited (10 req/min). |
+| **PostgreSQL 16** | `StatefulSet` | **Single Primary** | None (`replicas: 1`) | **Authoritative Store:** Durable volume via `volumeClaimTemplates` on `local-path` StorageClass. Do not scale writes horizontally. |
+| **RabbitMQ 3.13** | `StatefulSet` | **Persistent Broker** | None (`replicas: 1`) | **Message Bus:** Durable queues backed by PVC. |
+| **Reconciler** | `CronJob` | **Periodic Batch** | Cron (`*/10 * * * *`) | Sweeps stuck outbox entries. Enforces `concurrencyPolicy: Forbid` to prevent overlapping runs. |
+

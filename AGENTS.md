@@ -123,6 +123,18 @@ Within any bounded context (e.g., `internal/parcels/`):
      - Integration event record in `outbox` table
   5. Outbox Relay publishes the committed outbox record to RabbitMQ asynchronously.
 
+### 4.4 Kubernetes Workload Scalability & Lifecycle Rules
+AI coding agents must strictly adhere to Kubernetes scaling rules when writing service logic or deployment manifests:
+- **Stateless Scaling (Core API, Tracking API, Web):**
+  - Core API pods must store zero session or local disk state. Total DB connection pool across all pods must not exceed database limits: $\text{Replicas}_{\text{max}} \times \text{MaxOpenConns} \le \text{PostgreSQL MaxConnections}$. Gracefully flush connections on `SIGTERM` (20s timeout).
+  - Tracking API pods must emit `X-Accel-Buffering: no` on SSE streams, send 15s keepalive pings, and use Redis Pub/Sub for cross-pod realtime event fan-out.
+- **Event-Driven Scaling (Event Worker via KEDA):**
+  - Workers scale with RabbitMQ queue backlog. All consumers MUST be **strictly idempotent** to tolerate duplicate message deliveries during scaling events.
+- **Strict Singleton Prohibition (Outbox Relay):**
+  - The Outbox Relay is a **strict singleton (`replicas: 1`)**. AI agents must NEVER configure autoscaling or multiple replicas for the Outbox Relay without distributed leader election.
+- **Stateful Infrastructure (PostgreSQL & RabbitMQ):**
+  - Must use `StatefulSet` with `volumeClaimTemplates` on durable storage (`local-path`). Never use plain Deployments or scale write primaries horizontally.
+
 ---
 
 ## 5. 10-Member Capability Ownership Matrix

@@ -99,10 +99,51 @@ All backend HTTP requests flow through a central client configured in `src/share
 - **Tenant Context:** Multi-tenant isolation is derived server-side from authenticated JWT claims (`tenant_id`); client-supplied headers cannot override server-verified tenant identity.
 - **Zero Client-Side Calculation:** Frontend components **never calculate delivery fees or determine valid status transitions independently**. All prices and statuses are fetched authoritatively from Core API endpoints.
 - **One-Time Secret Display:** Newly created API keys (`sd_live_*`) and webhook secrets (`whsec_*`) are presented in an emergency modal dialog and held only in transient component memory; they are permanently purged upon closing.
+- **Idempotency Header:** All non-idempotent mutation requests (`POST /api/v1/parcels`, etc.) MUST inject `Idempotency-Key: <uuid-v4>`.
+- **Public Masking:** Public tracking views (`/track/:trackingNumber`) MUST redact recipient phone, full street address, and proof attachments.
 
 ---
 
-## 5. Development & Verification Commands
+## 5. Frontend Engineering Ruleset & Invariant Enforcement
+
+Every developer and AI agent contributing to `web/` must adhere to the formal rulesets:
+- **Cursor IDE Rule:** [`.cursor/rules/frontend.mdc`](../.cursor/rules/frontend.mdc)
+- **Antigravity Rule:** [`.agents/rules/frontend.md`](../.agents/rules/frontend.md)
+- **Claude Code Guide:** [`web/CLAUDE.md`](CLAUDE.md)
+- **Master Ruleset & Implementation Plan:** Detailed plan covering state management, tokens, role guards, and design tokens is located in the repository artifacts.
+
+### Key Invariants Summary:
+1. **Pricing Invariant:** Quotes must be obtained via `POST /api/v1/pricing/quote`; pass the returned `quote_id` during booking. Never compute fee totals client-side.
+2. **State Transition Invariant:** Aggregate transitions are governed solely by the backend `Parcel` root; never simulate or update statuses directly.
+3. **Dual-Token Storage Invariant:** Access tokens remain strictly in-memory (`AuthContext`); refresh tokens remain in `HttpOnly`, `SameSite=Strict` cookies. Never use `localStorage` or `sessionStorage` for tokens.
+4. **Currency Invariant:** Financial values are stored and transferred as integer cents in Sri Lankan Rupees (LKR). Format using `formatLKR(cents)` (e.g. `45000` &rarr; `LKR 450.00`).
+
+---
+
+## 6. Testing Strategy & Execution
+
+### 6.1 Unit & Component Testing (Vitest + React Testing Library)
+- **Tooling:** Vitest with `@testing-library/react` and `@testing-library/jest-dom`.
+- **Target Coverage:**
+  - Currency and date formatting utilities (`formatLKR`).
+  - Custom hooks (`useAuth`, `useSSE`, `useDebounce`).
+  - Zod validation schemas for booking and merchant ingestion.
+  - Route guards (`RequireAuth`, `RoleGuard`, `GuestOnly`).
+  - Five core component states (`Loading`, `Empty`, `Validation Error`, `Server Error`, `Success`).
+
+### 6.2 End-to-End Testing (Playwright)
+- **Tooling:** `@playwright/test` running in headless CI and interactive UI modes.
+- **Architecture:** Page Object Models (POM) in `web/tests/e2e/pages/`.
+- **Critical Journeys Covered:**
+  1. **Customer Booking Journey:** Form completion &rarr; live pricing quote countdown &rarr; idempotent submission &rarr; tracking number & receipt view.
+  2. **Public Tracking Redaction Journey:** Visit `/track/:trackingNumber` as anonymous visitor &rarr; verify milestone timeline &rarr; verify phone, address, and proof photos are scrubbed.
+  3. **Dispatch & Courier POD Journey:** Dispatcher assigns parcel &rarr; Courier accepts on mobile viewport &rarr; captures signature canvas and photo &rarr; status updates to `DELIVERED`.
+  4. **Failed Attempt & Reschedule Journey:** Courier logs failure with reason code &rarr; `ATTEMPT_FAILED` &rarr; Dispatcher authorizes re-attempt.
+  5. **RBAC Guard Enforcement:** Customer attempting to access `/ops/*` receives 403 Forbidden.
+
+---
+
+## 7. Development & Verification Commands
 
 ```bash
 # Navigate to web frontend workspace
@@ -117,6 +158,18 @@ npm run dev
 # Run TypeScript type-checking & ESLint
 npm run lint
 
+# Run unit and component tests (Vitest)
+npm run test:unit
+
+# Run unit tests with coverage
+npm run test:unit:coverage
+
+# Run End-to-End tests (Playwright)
+npm run test:e2e
+
+# Run Playwright tests with interactive UI
+npx playwright test --ui
+
 # Build production bundle with minification and gzip optimization
 npm run build
 
@@ -126,7 +179,7 @@ npm run preview
 
 ---
 
-## 6. Living Documentation Maintenance Policy
+## 8. Living Documentation Maintenance Policy
 - **Member 6** synchronously updates this document and [`web/API.md`](./API.md) whenever new customer or merchant routes, workflows, or views are introduced.
 - **Member 7** synchronously updates this document and [`web/API.md`](./API.md) whenever new dispatcher boards, courier mobile workflows, or admin views are added.
 - **Zero Drift:** Any change affecting routing, shared API contracts, or role guards must be documented here synchronously with code modifications.

@@ -81,7 +81,33 @@ Because Cloudflare sits in front of the cluster edge, Traefik is configured with
 
 ---
 
-## 5. Micro-Scaling Profile (HPA & KEDA)
+## 5. Workload Scalability Rules & Autoscaling Profiles (HPA & KEDA)
+
+To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (OOM) crashes and database connection saturation on a single-node VPS, cluster workloads adhere to strict scalability profiles:
+
+### 5.1 Scalable Workloads
+1. **Core API (HorizontalPodAutoscaler):**
+   - **Metrics:** Scales between `2` and `4` replicas when CPU utilization exceeds 70%.
+   - **Stateless Invariant:** Pods store zero session state in memory and zero files on local disk (shared S3/MinIO for attachments).
+   - **Connection Pool Ceiling:** Per-pod DB pool is tuned such that: $\text{Replicas}_{\text{max}} \times \text{MaxOpenConns} \le \text{PostgreSQL MaxConnections}$ (e.g. $4 \times 20 = 80 \le 100$).
+   - **Graceful Termination:** Listens for `SIGTERM` and allows a 20-second grace period for in-flight requests and database transactions to commit cleanly.
+2. **Tracking API (HorizontalPodAutoscaler):**
+   - **Metrics:** Scales from `1` &rarr; `2` (or `2` &rarr; `4`) replicas when CPU exceeds 50% or active HTTP/2 connections peak.
+   - **Realtime Fan-Out Invariant:** When $>1$ replica is active, live Server-Sent Events (SSE) streams are broadcasted across pods via **Redis Pub/Sub**.
+   - **Edge Proxy Safety:** Emits `X-Accel-Buffering: no` and sends 15-second keepalive pings (`: ping\n\n`) to prevent Cloudflare/Traefik stream termination.
+3. **Event Worker (KEDA ScaledObject):**
+   - **Metrics:** Scales from `1` &rarr; `3` replicas based on the RabbitMQ `events` queue backlog (`queueLength > 10`).
+   - **Consumer Idempotency Invariant:** Every consumer MUST verify incoming event IDs against the authoritative `idempotency_keys` table before executing side-effects (SMS/email notifications, merchant webhooks). Duplicate message deliveries must be safely acknowledged without duplicate actions.
+4. **Web Frontend (HorizontalPodAutoscaler):**
+   - **Metrics:** Scales from `2` &rarr; `3` replicas based on traffic volume. Stateless Nginx container serving immutable hashed JS/CSS assets.
+
+### 5.2 Non-Scalable Singletons & Stateful Systems
+1. **Outbox Relay Daemon (STRICT SINGLETON — `replicas: 1`):**
+   - **PROHIBITION:** The Outbox Relay MUST NEVER be scaled horizontally. A single poller guarantees transactional outbox row ordering and prevents database lock contention or duplicate publishing to RabbitMQ.
+2. **PostgreSQL 16 & RabbitMQ 3.13 (`StatefulSet`):**
+   - Primary database and message broker run as single-instance StatefulSets bound to dedicated `local-path` PersistentVolumeClaims. They must NEVER be scaled via standard Deployment replicas.
+3. **Outbox Reconciler (`CronJob`):**
+   - Scheduled periodic job (`*/10 * * * *`) configured with `concurrencyPolicy: Forbid` to prevent concurrent overlapping executions.
 
 To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (OOM) crashes on a single-node VPS, autoscalers are configured with **Micro-Scaling demonstration envelopes**:
 - **Tracking API (HPA):** Scales from `1` &rarr; `2` replicas when CPU utilization exceeds 50% (`autoscaling/hpa-tracking.yml`). The final range is open item C8 (Member 5); the DB budget below allows at most 4 pods, and more than 1 pod needs Redis.

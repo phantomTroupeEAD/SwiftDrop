@@ -142,6 +142,15 @@ kubectl apply -f deploy/gateway/traefik/middlewares.yaml -n swiftdrop
 kubectl apply -f deploy/gateway/traefik/ingressroutes.yaml -n swiftdrop
 ```
 
+### Step 10: Apply Horizontal Autoscaling Profiles (HPA & KEDA)
+In accordance with **ADR-002** and **Engineering Standards §10**, apply autoscalers to approved stateless workloads:
+```bash
+kubectl apply -f deploy/kubernetes/autoscaling/hpa-core-api.yaml -n swiftdrop
+kubectl apply -f deploy/kubernetes/autoscaling/hpa-tracking.yaml -n swiftdrop
+kubectl apply -f deploy/kubernetes/autoscaling/keda-event-worker.yaml -n swiftdrop
+```
+> **STRICT PROHIBITION:** Never apply HPA/KEDA to `outbox-relay` (must remain strict singleton `replicas: 1`) or `postgres`/`rabbitmq` (must remain single-primary StatefulSets).
+
 ---
 
 ## 4. Post-Deployment Verification Checklist
@@ -153,6 +162,12 @@ Verify system health across all layers:
   kubectl get pods -n swiftdrop
   # Expected: All pods in Running status, 0 restarts
   ```
+- [ ] **Autoscaling Profiles (HPA & KEDA) Ready:**
+  ```bash
+  kubectl get hpa,scaledobject -n swiftdrop
+  # Expected: Core API & Tracking API reporting CPU utilization; KEDA monitoring queue depth
+  ```
+
 - [ ] **Ingress Routes Active:**
   ```bash
   kubectl get ingressroutes -n swiftdrop

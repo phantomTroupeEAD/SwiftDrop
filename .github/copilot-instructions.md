@@ -10,3 +10,5 @@ All GitHub Copilot completions and chat interactions in this repository must com
 - **Tenant & Ownership Isolation:** Every database query involving merchant data or parcel access must strictly enforce tenant/user isolation. Never assume frontend checks are sufficient.
 - **Living Documentation Requirement:** Any code change modifying domain rules, tables, or API contracts must concurrently update the module's co-located `README.md` and `API.md`.
 - **Testing Integrity:** When fixing or refactoring code, never delete, mock out, or weaken existing test assertions. Always add test coverage for new edge cases and failure paths.
+- **Kubernetes Scalability Rules:** Stateless services (Core API, Tracking API, Web) must support horizontal scaling with HPA, bounded DB connection pools, and graceful `SIGTERM` shutdown; Event Worker scales with KEDA and requires strict consumer idempotency; Outbox Relay is strictly a singleton (`replicas: 1`); PostgreSQL and RabbitMQ run as StatefulSets with PVCs.
+

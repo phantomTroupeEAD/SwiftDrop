@@ -1,0 +1,131 @@
+# SwiftDrop Frontend Rules & Engineering Standards
+
+> **Workspace:** `web/`  
+> **Tech Stack:** React 18+, TypeScript (strict mode), Vite, Tailwind CSS, TanStack Query, React Router v6.  
+> **Authority:** Strictly obey `AGENTS.md`, `SWD-SRS-001`, and `docs/intial/SwiftDrop_Engineering_Standards_and_Best_Practices_v1.0.md`.
+
+---
+
+## 1. Feature Ownership & Directory Boundaries
+
+All code inside `web/` must maintain strict module isolation:
+- **Member 6 (Customer & Merchant Portal):** `src/features/customer-merchant/`
+  - Customer booking wizard, live quote preview, booking confirmation, and receipts.
+  - Public & authenticated tracking view with real-time SSE stream.
+  - Merchant dashboard, batch CSV parcel creation, API keys, and webhook configurations.
+  - Address book and recipient directory.
+- **Member 7 (Dispatcher & Admin Backoffice, Courier Mobile):** `src/features/dispatcher-admin/`
+  - Live dispatch board, unassigned parcel queues, courier assignment & reassignment.
+  - Fleet management, courier active status, and vehicle load capacity.
+  - Courier mobile web (`/courier/tasks`), barcode scanner simulation, and POD capture (photo/signature).
+  - Failed delivery reporting with standard reason codes (`RECIPIENT_UNAVAILABLE`, `INVALID_ADDRESS`, etc.).
+  - Admin management: delivery zones, base tariffs, pricing rules, user/merchant approval, and SLA reports.
+- **Shared Application Shell:** `src/app/` (routes, guards, layouts, providers) and `src/shared/` (components, API client, hooks, types, utils).
+  - **Rule:** Never import directly between `src/features/customer-merchant/` and `src/features/dispatcher-admin/`. Shared code must reside in `src/shared/`.
+
+---
+
+## 2. Inviolable Domain Invariants & Non-Negotiables
+
+1. **Zero Client-Side Pricing or Fee Calculation:**
+   - Frontend **NEVER** calculates delivery fees, base charges, weight surcharges, or volumetric weight independently.
+   - All quotes must be fetched authoritatively from `POST /api/v1/pricing/quote`.
+   - The returned `quote_id` (15-minute validity) must be submitted with `POST /api/v1/parcels`.
+2. **Zero Client-Side State Transitions:**
+   - Frontend **NEVER** decides or enforces valid parcel lifecycle transitions.
+   - Transitions are evaluated solely by the backend `Parcel` aggregate root.
+3. **Strict Dual-Token Authentication Security:**
+   - **Access Token:** Short-lived JWT (15 min) kept **in-memory only** within `AuthContext`.
+   - **Prohibition:** NEVER store access tokens or refresh tokens in `localStorage` or `sessionStorage`.
+   - **Refresh Token:** Transmitted in `HttpOnly`, `SameSite=Strict`, `Secure` cookie handled by the browser.
+   - Token refresh via `/api/v1/auth/refresh` must execute transparently on `401 Unauthorized` responses.
+4. **Public Tracking Privacy Masking (SEC-016):**
+   - The public tracking view (`/track/:trackingNumber`) must **NEVER** render recipient phone numbers, full street addresses, sender details, proof images, or internal notes.
+   - Only milestone statuses, timestamps, and city/province locations may be displayed publicly.
+5. **Idempotency Guarantee:**
+   - All non-idempotent mutation requests (parcel booking, batch order creation) must include an `Idempotency-Key` header with a unique UUID v4.
+6. **Financial Units & Formatting:**
+   - All money is represented in Sri Lankan Rupees (LKR) integer cents (`bigint` / minor units).
+   - Format cents into decimal display using the shared utility `formatLKR(cents)` (e.g. `45000` &rarr; `LKR 450.00`). Never perform floating-point arithmetic on currency.
+
+---
+
+## 3. UI Aesthetics & Experience Standards
+
+- **No Basic or Plain Designs:** Every view must feel modern, polished, and responsive.
+- **Color Palette:** Curated, harmonious palette (Slate/Zinc neutral base with Indigo/Electric Violet primary accents and semantic status indicators).
+- **Glassmorphism & Depth:** Use subtle backdrop blurs (`backdrop-blur-md`), elegant borders (`border-slate-200 dark:border-slate-800`), and layered card shadows.
+- **Micro-Animations:** Smooth hover, active, and modal transitions (150ms-250ms).
+- **Explicit View States:** Every data-driven component must render:
+  - `Loading`: Skeleton loaders mimicking target content (no raw empty screens).
+  - `Empty`: Graphic/iconography with helpful text and clear action button.
+  - `Validation Error`: Inline field error text and highlighted border.
+  - `Server Error`: Alert banner with friendly explanation and backend `correlation_id`.
+  - `Success`: Visual confirmation toasts and status badges.
+- **Responsive Layouts:**
+  - Courier views (`/courier/*`) must be strictly mobile-first (large touch targets, thumb-accessible navigation).
+  - Dispatcher views (`/ops/dispatch`) must be high-density desktop views (resizable columns, dense tables).
+
+---
+
+## 4. TypeScript & Code Quality Rules
+
+- TypeScript `strict: true` must be enabled in `tsconfig.json`.
+- Zero `any` policy. Use explicit TypeScript interfaces for all API request and response DTOs.
+- Isolate API calls inside dedicated client services (`src/shared/api/` or feature API files); never scatter raw `fetch` or `axios` calls across React components.
+- Use `react-hook-form` + `zod` for robust client-side form validation before submitting to API.
+- Keep components focused, reusable, and under 250 lines when possible. Decompose complex screens into sub-components.
+
+---
+
+## 5. Unit & Component Testing Standards (Vitest + React Testing Library)
+
+- **Test Co-location:** Place test files adjacent to their implementation (`<Component>.test.tsx`) or inside `__tests__/`.
+- **Framework & Libraries:** Vitest, `@testing-library/react`, `@testing-library/jest-dom`, and `@testing-library/user-event`.
+- **Mandatory Unit Test Scope:**
+  - **Financial & Domain Utilities:** `formatLKR(cents)` boundary checks (e.g. `0`, `45000` &rarr; `LKR 450.00`), volumetric weight calculations, and date formatters.
+  - **Custom Hooks:** `useAuth` (login flow, token refresh, unauthorized redirection), `useSSE` (event streaming, reconnection handling), `useDebounce`.
+  - **Zod Validation Schemas:** Parcel dimensions, phone number formats, email constraints, address fields.
+  - **Route Guards:** Verify `RequireAuth`, `RoleGuard`, and `GuestOnly` allow or reject roles properly.
+  - **UI Component States:** Explicitly test all five visual states: `Loading` skeleton, `Empty` state, `Validation Error` messages, `Server Error` banner, and `Success` confirmation.
+- **Assertion Integrity:** Never delete, weaken, or mock away invariant assertions to make tests pass.
+
+---
+
+## 6. End-to-End (E2E) Testing Standards with Playwright
+
+- **Test Location:** All Playwright tests reside in `web/tests/e2e/`.
+  ```
+  web/tests/e2e/
+  ├── fixtures/                       # Authentication and role setup fixtures
+  ├── pages/                          # Page Object Models (POM)
+  │   ├── LoginPage.ts
+  │   ├── BookingWizardPage.ts
+  │   ├── TrackingPage.ts
+  │   ├── DispatchBoardPage.ts
+  │   └── CourierTasksPage.ts
+  └── specs/                          # Journey spec files
+      ├── auth.spec.ts
+      ├── customer-booking.spec.ts
+      ├── public-tracking.spec.ts
+      ├── dispatch-assignment.spec.ts
+      ├── courier-pod.spec.ts
+      └── delivery-failure.spec.ts
+  ```
+- **Page Object Model (POM) Mandatory:** Encapsulate all browser interactions, form fills, and element selections inside dedicated Page Object classes in `tests/e2e/pages/`. Spec files must only contain high-level journey steps and assertions.
+- **Resilient Locators:** Use semantic locators (`page.getByRole()`, `page.getByLabel()`, `page.getByText()`) or explicit test IDs (`page.getByTestId('quote-price-cents')`). Avoid fragile CSS selector hierarchies.
+- **Mandatory Critical Journeys:**
+  1. **Customer Booking Journey:** Customer logs in &rarr; fills parcel dimensions &rarr; verifies backend quote countdown preview &rarr; submits booking &rarr; verifies generated tracking number and receipt view.
+  2. **Public Tracking Masking Journey:** Public visitor views `/track/:trackingNumber` without logging in &rarr; verifies milestone progress &rarr; asserts recipient phone, full street address, sender details, and proof images are completely masked/redacted.
+  3. **Dispatch & Courier POD Journey:** Dispatcher assigns parcel from queue to courier &rarr; Courier switches to mobile task view (`/courier/tasks`) &rarr; marks picked up &rarr; captures signature canvas & photo &rarr; verifies transition to `DELIVERED`.
+  4. **Failed Attempt & Reschedule Journey:** Courier logs failure with reason code (`RECIPIENT_UNAVAILABLE`) &rarr; parcel moves to `ATTEMPT_FAILED` &rarr; Dispatcher reviews attempt (1 of 3) and authorizes reattempt &rarr; status returns to `OUT_FOR_DELIVERY`.
+  5. **Role & Guard Boundary Journey:** Customer attempting direct URL navigation to `/ops/dispatch` or `/ops/zones` is redirected to 403 Forbidden.
+- **Commands:** Run headless with `npm run test:e2e` or interactive mode with `npx playwright test --ui`.
+
+---
+
+## 7. Living Documentation & Task Completion Protocol
+
+- **Synchronous Updates Required:** Whenever a route, API contract, or feature behavior changes, synchronously update `web/README.md`.
+- **Completion Report:** At the conclusion of every frontend task, provide the mandatory Task Completion Report defined in `AGENTS.md`.
+
