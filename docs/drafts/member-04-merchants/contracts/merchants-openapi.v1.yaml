@@ -1,0 +1,1060 @@
+openapi: 3.1.0
+info:
+  title: SwiftDrop Merchant Integration API
+  version: 1.0.0-draft
+  description: |
+    Contract for the Merchant Integration module (`core-api/internal/merchants`, Member 4).
+
+    Status: DRAFT for Team Meeting 2. Not yet binding.
+
+    - Self-service merchant endpoints (`/merchants/...`) use a user JWT (Member 1).
+    - Merchant integration endpoints (`/merchant/orders...`) accept an API key (`X-API-Key`)
+      or a merchant user JWT.
+    - Admin endpoints (`/admin/merchants/...`) are hosted by the admin module (Member 7) and
+      delegate to Member 4's `merchants.AdminService` Go interface (decision U-10).
+
+    Error envelope, pagination, and idempotency follow `docs/contracts/api-conventions.md`.
+  contact:
+    name: Member 4 — Merchant Integration
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local (Docker Compose)
+  - url: https://api.swiftdrop.example/api/v1
+    description: Placeholder for deployed environment
+
+tags:
+  - name: merchant-onboarding
+    description: Application and own profile (JWT)
+  - name: merchant-api-keys
+    description: API key management (JWT, merchant admin)
+  - name: merchant-webhooks
+    description: Webhook endpoint configuration (JWT, merchant admin)
+  - name: merchant-orders
+    description: Machine-to-machine order integration (API key or JWT)
+  - name: admin-merchants
+    description: Admin merchant management. Route hosted by Member 7; business logic owned by Member 4.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /merchants/applications:
+    post:
+      tags: [merchant-onboarding]
+      operationId: submitMerchantApplication
+      summary: Submit a merchant application
+      description: Creates a merchant in status PENDING owned by the calling user (BR-M-05, BR-M-06).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MerchantApplicationRequest' }
+            example:
+              business_name: Ceylon Tea Shop
+              contact_email: ops@ceylontea.lk
+              contact_phone: '+94771234567'
+              address: { line1: 12 Temple Rd, city: Kandy, postal_code: '20000', country: LK }
+      responses:
+        '201':
+          description: Application created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /merchants/me:
+    get:
+      tags: [merchant-onboarding]
+      operationId: getMyMerchant
+      summary: Get the caller's merchant profile and status
+      responses:
+        '200':
+          description: Merchant profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [merchant-onboarding]
+      operationId: updateMyMerchant
+      summary: Update contact details
+      description: Status and business_name cannot be changed here (BR-M-11). Uses optimistic locking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMerchantRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /merchants/me/api-keys:
+    get:
+      tags: [merchant-api-keys]
+      operationId: listApiKeys
+      summary: List API keys (metadata only, never the secret)
+      responses:
+        '200':
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [merchant-api-keys]
+      operationId: createApiKey
+      summary: Create an API key
+      description: |
+        Merchant must be APPROVED. The plaintext `api_key` is returned ONCE in this response and
+        is never retrievable again (BR-K-04). Not idempotent by design (Doc 2 §5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiKeyCreateRequest' }
+            example: { label: prod-server, scopes: ['parcels:create', 'parcels:read'] }
+      responses:
+        '201':
+          description: Key created
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ApiKeyCreated' }
+              example:
+                data:
+                  key_id: 6f1e2d3c-4b5a-4968-8776-655443322110
+                  label: prod-server
+                  key_prefix: Ab3dE9xK
+                  api_key: sd_live_Ab3dE9xK_q7Lm2Np4Rs6Tu8Vw0Yz1Bc3De5Fg7Hi9
+                  scopes: ['parcels:create', 'parcels:read']
+                  status: ACTIVE
+                  created_at: '2026-10-24T09:00:00Z'
+                  expires_at: null
+                  revoked_at: null
+                  last_used_at: null
+                  note: Save this key now. It will not be shown again.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /merchants/me/api-keys/{key_id}:
+    parameters:
+      - $ref: '#/components/parameters/KeyId'
+    delete:
+      tags: [merchant-api-keys]
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: Idempotent. Revoking an already-revoked key returns 204 (BR-K-11).
+      responses:
+        '204': { description: Revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /merchants/webhook-event-types:
+    get:
+      tags: [merchant-webhooks]
+      operationId: listWebhookEventTypes
+      summary: List event types a webhook can subscribe to
+      description: Catalog is owned by Member 8 (`event-contracts.md`); served here for the merchant UI (U-06).
+      responses:
+        '200':
+          description: Event type catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookEventType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /merchants/me/webhooks:
+    get:
+      tags: [merchant-webhooks]
+      operationId: listWebhooks
+      summary: List webhook endpoints (secret never included)
+      responses:
+        '200':
+          description: Webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Webhook' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [merchant-webhooks]
+      operationId: registerWebhook
+      summary: Register a webhook endpoint
+      description: |
+        URL is validated server-side (BR-W-02..06): HTTPS only, port 443, no private/loopback/
+        link-local/metadata destinations. The signing secret is generated by the server and
+        returned ONCE (BR-W-10). A client-supplied `secret` field is rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookCreateRequest' }
+            example:
+              url: https://ceylontea.lk/hooks/swiftdrop
+              events: [parcel.booked.v1, parcel.delivered.v1]
+      responses:
+        '201':
+          description: Webhook created
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/WebhookWithSecret' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /merchants/me/webhooks/{webhook_id}:
+    parameters:
+      - $ref: '#/components/parameters/WebhookId'
+    get:
+      tags: [merchant-webhooks]
+      operationId: getWebhook
+      summary: Get one webhook endpoint
+      responses:
+        '200':
+          description: Webhook
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Webhook' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [merchant-webhooks]
+      operationId: updateWebhook
+      summary: Update URL, events, or enabled flag
+      description: Changing `url` or setting `enabled=true` re-runs URL validation (BR-W-11).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Webhook' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [merchant-webhooks]
+      operationId: deleteWebhook
+      summary: Delete a webhook endpoint
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /merchants/me/webhooks/{webhook_id}/rotate-secret:
+    parameters:
+      - $ref: '#/components/parameters/WebhookId'
+    post:
+      tags: [merchant-webhooks]
+      operationId: rotateWebhookSecret
+      summary: Replace the signing secret
+      description: The old secret stops being used immediately. New secret returned ONCE.
+      responses:
+        '200':
+          description: Secret rotated
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/WebhookWithSecret' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /merchant/orders:
+    post:
+      tags: [merchant-orders]
+      operationId: createMerchantOrder
+      summary: Create a parcel order for the authenticated merchant
+      description: |
+        Requires scope `parcels:create`. `Idempotency-Key` is mandatory (FR-MER-006).
+        Parcel validation, pricing, tracking number, and initial status are owned by Member 2;
+        their error codes are passed through unchanged. Any `merchant_id` in the body is ignored.
+      security:
+        - merchantApiKey: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MerchantOrderCreateRequest' }
+            example:
+              merchant_reference: CTS-ORDER-1001
+              service_level: STANDARD
+              pickup:
+                name: Ceylon Tea Shop Warehouse
+                phone: '+94812223344'
+                address_lines: [12 Temple Rd]
+                city: Kandy
+                zone_id: ZONE-KANDY
+              dropoff:
+                name: Kamala Perera
+                phone: '+94771234567'
+                address_lines: [45 Galle Rd, Apt 3]
+                city: Colombo
+                zone_id: ZONE-COL-03
+              parcel:
+                weight_kg: 1.2
+                dimensions_cm: { length: 20, width: 15, height: 10 }
+                description: Tea gift box
+      responses:
+        '201':
+          description: Order created, or idempotent replay of a previous identical request
+          headers:
+            Idempotent-Replay:
+              description: Present and `true` when the response is a stored replay.
+              schema: { type: string, enum: ['true'] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MerchantOrder' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [merchant-orders]
+      operationId: listMerchantOrders
+      summary: List the merchant's own orders
+      description: Requires scope `parcels:read`. Always filtered to the authenticated merchant (FR-MER-004, FR-MER-007).
+      security:
+        - merchantApiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ParcelStatus' }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MerchantOrder' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /merchant/orders/{parcel_id}:
+    get:
+      tags: [merchant-orders]
+      operationId: getMerchantOrder
+      summary: Get one of the merchant's own orders
+      description: Returns 404 if the parcel does not exist OR belongs to another merchant (BR-O-07).
+      security:
+        - merchantApiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: parcel_id
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MerchantOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/merchants:
+    get:
+      tags: [admin-merchants]
+      operationId: adminListMerchants
+      summary: List merchants (admin)
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/MerchantStatus' }
+        - name: q
+          in: query
+          description: Case-insensitive search on business name or contact email
+          schema: { type: string, maxLength: 100 }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Page of merchants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Merchant' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/merchants/{merchant_id}:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    get:
+      tags: [admin-merchants]
+      operationId: adminGetMerchant
+      summary: Get merchant details (admin)
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      responses:
+        '200':
+          description: Merchant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/merchants/{merchant_id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      tags: [admin-merchants]
+      operationId: adminApproveMerchant
+      summary: PENDING → APPROVED
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusChangeRequest' }
+            example: { expected_version: 1 }
+      responses: &statusChangeResponses
+        '200':
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /admin/merchants/{merchant_id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      tags: [admin-merchants]
+      operationId: adminRejectMerchant
+      summary: PENDING → REJECTED (reason required)
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusChangeWithReasonRequest' }
+      responses: *statusChangeResponses
+
+  /admin/merchants/{merchant_id}/suspend:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      tags: [admin-merchants]
+      operationId: adminSuspendMerchant
+      summary: APPROVED → SUSPENDED (reason required)
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusChangeWithReasonRequest' }
+      responses: *statusChangeResponses
+
+  /admin/merchants/{merchant_id}/reinstate:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      tags: [admin-merchants]
+      operationId: adminReinstateMerchant
+      summary: SUSPENDED → APPROVED
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusChangeRequest' }
+      responses: *statusChangeResponses
+
+  /admin/merchants/{merchant_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/MerchantId'
+    post:
+      tags: [admin-merchants]
+      operationId: adminDisableMerchant
+      summary: APPROVED/SUSPENDED → DISABLED (reason required; revokes all keys, disables all webhooks)
+      x-route-owner: member-7
+      x-logic-owner: member-4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusChangeWithReasonRequest' }
+      responses: *statusChangeResponses
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token issued by Member 1 (ADR-003). Role MERCHANT or ADMIN as stated per operation.
+        For MERCHANT tokens the `tenant_id` claim is the merchant ID; Member 4 still checks the
+        merchant's current status on every request so suspension takes effect immediately.
+    merchantApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Merchant API key `sd_live_<8-char prefix>_<32-char secret>` (ADR-003 §6.1; `sd_test_` locally). Header only; never query string (EC-04).
+
+  parameters:
+    MerchantId:
+      name: merchant_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WebhookId:
+      name: webhook_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID v4. Scope is (MERCHANT:<merchant_id>, POST /api/v1/merchant/orders). Retained 24h.
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    BadRequest:
+      description: Malformed request, missing/invalid Idempotency-Key, prohibited webhook URL, or disallowed field
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ssrf:
+              value:
+                error:
+                  code: SSRF_PROHIBITED_URL
+                  message: Webhook URL resolves to a prohibited network address.
+                  correlation_id: corr_3b1e0c1a
+                  timestamp: '2026-10-24T09:20:00Z'
+                  details: [{ field: url, issue: 'resolved address 10.0.0.12 is in 10.0.0.0/8' }]
+            idempotencyMissing:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REQUIRED
+                  message: Idempotency-Key header is required.
+                  correlation_id: corr_3b1e0c1b
+                  timestamp: '2026-10-24T09:20:00Z'
+    Unauthorized:
+      description: Missing/invalid JWT, or API key missing/invalid/revoked/expired
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: API_KEY_REVOKED
+              message: This API key has been revoked.
+              correlation_id: corr_3b1e0c1c
+              timestamp: '2026-10-24T09:20:00Z'
+    Forbidden:
+      description: Authenticated but not allowed (role, scope, or merchant status)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: MERCHANT_NOT_APPROVED
+              message: Merchant account is not approved for this action.
+              correlation_id: corr_3b1e0c1d
+              timestamp: '2026-10-24T09:20:00Z'
+    NotFound:
+      description: Resource does not exist or is not owned by the caller's merchant
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: State conflict (version, duplicate, limit, invalid transition, idempotency mismatch)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            version:
+              value:
+                error:
+                  code: MERCHANT_VERSION_CONFLICT
+                  message: Merchant was modified by another request. Reload and retry.
+                  correlation_id: corr_3b1e0c1e
+                  timestamp: '2026-10-24T09:20:00Z'
+            idempotencyMismatch:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_PAYLOAD_MISMATCH
+                  message: Idempotency-Key was already used with a different request body.
+                  correlation_id: corr_3b1e0c1f
+                  timestamp: '2026-10-24T09:20:00Z'
+    ValidationFailed:
+      description: Semantic validation failure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: Rate limit exceeded (enforced at gateway, Member 7)
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Unexpected error; safe to retry order creation with the same Idempotency-Key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlation_id, timestamp]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            correlation_id: { type: string }
+            timestamp: { type: string, format: date-time }
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, issue]
+                properties:
+                  field: { type: string }
+                  issue: { type: string }
+
+    ErrorCode:
+      description: Member 4 codes. Codes from Member 2 (parcel validation/pricing) are passed through and are also valid.
+      type: string
+      examples:
+        - API_KEY_MISSING
+      anyOf:
+        - enum:
+            - VALIDATION_FAILED
+            - REASON_REQUIRED
+            - IDEMPOTENCY_KEY_REQUIRED
+            - IDEMPOTENCY_KEY_INVALID
+            - IDEMPOTENCY_KEY_PAYLOAD_MISMATCH
+            - API_KEY_MISSING
+            - API_KEY_INVALID
+            - API_KEY_REVOKED
+            - API_KEY_EXPIRED
+            - API_KEY_NOT_FOUND
+            - API_KEY_LIMIT_REACHED
+            - API_KEY_LABEL_DUPLICATE
+            - MERCHANT_NOT_FOUND
+            - MERCHANT_ALREADY_EXISTS
+            - MERCHANT_NOT_APPROVED
+            - MERCHANT_SCOPE_DENIED
+            - MERCHANT_STATUS_FORBIDS_ACTION
+            - MERCHANT_INVALID_TRANSITION
+            - MERCHANT_VERSION_CONFLICT
+            - WEBHOOK_NOT_FOUND
+            - WEBHOOK_SECRET_NOT_ALLOWED
+            - WEBHOOK_URL_INVALID
+            - WEBHOOK_URL_SCHEME_NOT_ALLOWED
+            - WEBHOOK_URL_UNRESOLVABLE
+            - WEBHOOK_URL_DUPLICATE
+            - WEBHOOK_EVENT_UNSUPPORTED
+            - WEBHOOK_LIMIT_REACHED
+            - SSRF_PROHIBITED_URL
+            - ORDER_NOT_FOUND
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+        - pattern: '^[A-Z][A-Z0-9_]+$'
+
+    PageMeta:
+      type: object
+      required: [page, per_page, total_items, total_pages]
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total_items: { type: integer }
+        total_pages: { type: integer }
+
+    MerchantStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED]
+
+    Address:
+      type: object
+      required: [line1, city, country]
+      additionalProperties: false
+      properties:
+        line1: { type: string, minLength: 1, maxLength: 200 }
+        line2: { type: string, maxLength: 200 }
+        city: { type: string, minLength: 1, maxLength: 100 }
+        postal_code: { type: string, maxLength: 20 }
+        country: { type: string, pattern: '^[A-Z]{2}$', description: ISO 3166-1 alpha-2 }
+
+    MerchantApplicationRequest:
+      type: object
+      required: [business_name, contact_email, contact_phone, address]
+      additionalProperties: false
+      properties:
+        business_name: { type: string, minLength: 2, maxLength: 150 }
+        contact_email: { type: string, format: email, maxLength: 254 }
+        contact_phone: { type: string, pattern: '^\+[1-9][0-9]{6,14}$' }
+        address: { $ref: '#/components/schemas/Address' }
+
+    UpdateMerchantRequest:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      minProperties: 2
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        contact_email: { type: string, format: email, maxLength: 254 }
+        contact_phone: { type: string, pattern: '^\+[1-9][0-9]{6,14}$' }
+        address: { $ref: '#/components/schemas/Address' }
+
+    Merchant:
+      type: object
+      required: [merchant_id, business_name, status, contact_email, contact_phone, address, version, created_at, updated_at]
+      properties:
+        merchant_id: { type: string, format: uuid }
+        business_name: { type: string }
+        status: { $ref: '#/components/schemas/MerchantStatus' }
+        contact_email: { type: string, format: email }
+        contact_phone: { type: string }
+        address: { $ref: '#/components/schemas/Address' }
+        approved_at: { type: [string, 'null'], format: date-time }
+        version: { type: integer, description: Use as expected_version for updates }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    MerchantEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Merchant' }
+
+    StatusChangeRequest:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+
+    StatusChangeWithReasonRequest:
+      type: object
+      required: [expected_version, reason]
+      additionalProperties: false
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 5, maxLength: 500 }
+
+    Scope:
+      type: string
+      description: ADR-003 scope names. `webhooks:manage` is not grantable to API keys in v1 (Doc 7 C-3).
+      enum: ['parcels:create', 'parcels:read']
+
+    ApiKeyStatus:
+      type: string
+      enum: [ACTIVE, REVOKED, EXPIRED]
+
+    ApiKeyCreateRequest:
+      type: object
+      required: [label]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1, maxLength: 60 }
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Scope' }
+          default: ['parcels:create', 'parcels:read']
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional; 1–365 days in the future (BR-K-08)
+
+    ApiKey:
+      type: object
+      required: [key_id, label, key_prefix, scopes, status, created_at]
+      properties:
+        key_id: { type: string, format: uuid }
+        label: { type: string }
+        key_prefix: { type: string, pattern: '^[0-9A-Za-z]{8}$' }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/Scope' }
+        status: { $ref: '#/components/schemas/ApiKeyStatus' }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+
+    ApiKeyCreated:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          required: [api_key, note]
+          properties:
+            api_key:
+              type: string
+              pattern: '^sd_(live|test)_[0-9A-Za-z]{8}_[0-9A-Za-z]{32}$'
+              description: Plaintext key. Returned only in this response. `sd_test_` in local/test environments (U-30).
+            note: { type: string }
+
+    WebhookEventType:
+      type: object
+      required: [event_type, description]
+      properties:
+        event_type: { type: string, pattern: '^[a-z_]+\.[a-z_]+\.v[0-9]+$', examples: [parcel.delivered.v1] }
+        description: { type: string }
+
+    WebhookCreateRequest:
+      type: object
+      required: [url, events]
+      additionalProperties: false
+      properties:
+        url: { type: string, format: uri, maxLength: 2048 }
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string }
+        enabled: { type: boolean, default: true }
+
+    WebhookUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        url: { type: string, format: uri, maxLength: 2048 }
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string }
+        enabled: { type: boolean }
+
+    Webhook:
+      type: object
+      required: [webhook_id, url, events, enabled, created_at, updated_at]
+      properties:
+        webhook_id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        secret_last4: { type: string, description: 'Last 4 chars of the signing secret, for identification' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    WebhookWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          required: [signing_secret, note]
+          properties:
+            signing_secret:
+              type: string
+              pattern: '^whsec_[0-9A-Za-z]{43}$'
+              description: Plaintext signing secret. Returned only in this response.
+            note: { type: string }
+
+    # --- Merchant orders: shape aligned with Member 2 doc-04 §4.3; final fields owned by Member 2 ---
+
+    ParcelStatus:
+      type: string
+      description: Owned by Member 2 (domain-boundaries.md §3)
+      enum: [CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, ATTEMPT_FAILED, RETURNED, CANCELLED]
+
+    PartyAddress:
+      type: object
+      required: [name, phone, address_lines, city, zone_id]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{6,14}$' }
+        address_lines:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { type: string, maxLength: 200 }
+        city: { type: string, maxLength: 100 }
+        zone_id: { type: string, maxLength: 50 }
+
+    ParcelSpec:
+      type: object
+      required: [weight_kg]
+      properties:
+        weight_kg: { type: number, exclusiveMinimum: 0 }
+        dimensions_cm:
+          type: object
+          required: [length, width, height]
+          properties:
+            length: { type: number, exclusiveMinimum: 0 }
+            width: { type: number, exclusiveMinimum: 0 }
+            height: { type: number, exclusiveMinimum: 0 }
+        description: { type: string, maxLength: 500 }
+
+    Money:
+      type: object
+      required: [currency, amount_minor]
+      properties:
+        currency: { type: string, pattern: '^[A-Z]{3}$', examples: [LKR] }
+        amount_minor: { type: integer, minimum: 0, description: Integer minor units (pending M2 decision) }
+
+    MerchantOrderCreateRequest:
+      type: object
+      required: [pickup, dropoff, parcel]
+      description: Unknown fields (including merchant_id) are ignored, never used for ownership (BR-O-04).
+      properties:
+        merchant_reference: { type: string, maxLength: 64, description: Merchant's own order ID (U-18) }
+        quote_id: { type: string, description: Optional; semantics owned by Member 2 }
+        service_level: { type: string, examples: [STANDARD] }
+        pickup: { $ref: '#/components/schemas/PartyAddress' }
+        dropoff: { $ref: '#/components/schemas/PartyAddress' }
+        parcel: { $ref: '#/components/schemas/ParcelSpec' }
+
+    MerchantOrder:
+      type: object
+      required: [parcel_id, tracking_number, status, fee, created_at]
+      properties:
+        parcel_id: { type: string }
+        tracking_number: { type: string, examples: [SD-20261024-00042] }
+        merchant_reference: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ParcelStatus' }
+        fee: { $ref: '#/components/schemas/Money' }
+        dropoff_city: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

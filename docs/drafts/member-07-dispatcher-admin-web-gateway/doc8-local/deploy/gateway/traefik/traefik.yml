@@ -1,0 +1,109 @@
+# [Proposed] hardened static config (Doc 7). Same file is used locally and in Docker Compose.
+# Traefik Static Configuration (SwiftDrop Gateway)
+# Version: 3.x
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"
+
+api:
+  dashboard: true      # [Proposed] served only on the internal "traefik" entry point below
+  insecure: false      # [Proposed] never expose the dashboard on its own open port (Doc 7 GS-12)
+
+entryPoints:
+  web:
+    address: ":80"
+    forwardedHeaders:
+      trustedIPs:
+        # Local & Private Networks (Docker / K3s internal pod & host routing)
+        - "127.0.0.1/32"
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+        # Cloudflare IPv4 CIDR Blocks (https://www.cloudflare.com/ips-v4/)
+        - "173.245.48.0/20"
+        - "103.21.244.0/22"
+        - "103.22.200.0/22"
+        - "103.31.4.0/22"
+        - "141.101.64.0/18"
+        - "108.162.192.0/18"
+        - "190.93.240.0/20"
+        - "188.114.96.0/20"
+        - "197.234.240.0/22"
+        - "198.41.128.0/17"
+        - "162.158.0.0/15"
+        - "104.16.0.0/13"
+        - "104.24.0.0/14"
+        - "172.64.0.0/13"
+        - "131.0.72.0/22"
+        # Cloudflare IPv6 ranges (https://www.cloudflare.com/ips-v6/)
+        - "2400:cb00::/32"
+        - "2606:4700::/32"
+        - "2803:f800::/32"
+        - "2405:b500::/32"
+        - "2405:8100::/32"
+        - "2a06:98c0::/29"
+        - "2c0f:f248::/32"
+    transport:            # [Proposed] Doc 7 section 6.1
+      respondingTimeouts:
+        readTimeout: 60s    # slow-upload guard (slowloris)
+        writeTimeout: 0s    # must stay 0: SSE streams are long-lived
+        idleTimeout: 180s
+  websecure:
+    address: ":443"
+    forwardedHeaders:
+      trustedIPs:
+        # Local & Private Networks (Docker / K3s internal pod & host routing)
+        - "127.0.0.1/32"
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+        # Cloudflare IPv4 CIDR Blocks (https://www.cloudflare.com/ips-v4/)
+        - "173.245.48.0/20"
+        - "103.21.244.0/22"
+        - "103.22.200.0/22"
+        - "103.31.4.0/22"
+        - "141.101.64.0/18"
+        - "108.162.192.0/18"
+        - "190.93.240.0/20"
+        - "188.114.96.0/20"
+        - "197.234.240.0/22"
+        - "198.41.128.0/17"
+        - "162.158.0.0/15"
+        - "104.16.0.0/13"
+        - "104.24.0.0/14"
+        - "172.64.0.0/13"
+        - "131.0.72.0/22"
+        # Cloudflare IPv6 ranges (https://www.cloudflare.com/ips-v6/)
+        - "2400:cb00::/32"
+        - "2606:4700::/32"
+        - "2803:f800::/32"
+        - "2405:b500::/32"
+        - "2405:8100::/32"
+        - "2a06:98c0::/29"
+        - "2c0f:f248::/32"
+    transport:            # [Proposed] Doc 7 section 6.1
+      respondingTimeouts:
+        readTimeout: 60s    # slow-upload guard (slowloris)
+        writeTimeout: 0s    # must stay 0: SSE streams are long-lived
+        idleTimeout: 180s
+  traefik:                # [Proposed] internal only: dashboard + ping. Never published by Service/Ingress.
+    address: ":8090"
+
+ping:
+  entryPoint: traefik
+
+providers:
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true

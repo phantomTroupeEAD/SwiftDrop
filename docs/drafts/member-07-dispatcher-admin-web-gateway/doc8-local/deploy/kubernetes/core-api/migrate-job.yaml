@@ -1,0 +1,29 @@
+# Runs migrations once per release, BEFORE the new Deployment rolls out (deployment-guide step 7).
+# Image = migrate tool + this release's SQL (core-api/Dockerfile.migrate), same git SHA as core-api.
+# Uses the OWNER role; core-api itself runs as the app role.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: core-api-migrate
+  namespace: swiftdrop
+  labels: {app.kubernetes.io/name: core-api-migrate, app.kubernetes.io/part-of: swiftdrop}
+spec:
+  backoffLimit: 0            # a failed migration needs a person, not a retry loop
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: migrate
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api-migrations:GIT_SHA
+          args: ["-database", "$(MIGRATE_DATABASE_URL)", "up"]
+          env:
+            - name: MIGRATE_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: postgres-owner-credentials, key: MIGRATE_DATABASE_URL}}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}

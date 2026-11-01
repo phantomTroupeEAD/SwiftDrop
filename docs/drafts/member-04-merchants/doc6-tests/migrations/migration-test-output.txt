@@ -1,0 +1,73 @@
+# Migration test re-run 2026-10-24 (after ADR-003 alignment) on PostgreSQL 16.15 on x86_64-pc-linux-musl
+== reset schema
+NOTICE:  drop cascades to 5 other objects
+DETAIL:  drop cascades to table users
+drop cascades to table merchants
+drop cascades to table merchant_api_credentials
+drop cascades to table webhook_endpoints
+drop cascades to view merchant_webhook_targets
+  > 00_prereq_stub.sql
+== up (1st)
+  > 20261101000100_create_merchants.up.sql
+  > 20261101000200_create_merchant_api_credentials.up.sql
+  > 20261101000300_create_webhook_endpoints.up.sql
+  > 20261101000400_create_merchant_webhook_targets_view.up.sql
+== assertions (1st)
+  PASS  M-01 insert PENDING merchant A
+  PASS  M-02 defaults: status PENDING, version 1
+  PASS  M-03 second active merchant for same owner (BR-M-05)  (rejected with 23505)
+  PASS  M-04 invalid status value  (rejected with 23514)
+  PASS  M-05 APPROVED without approved_by/approved_at  (rejected with 23514)
+  PASS  M-06 phone not E.164  (rejected with 23514)
+  PASS  M-07 business name 1 char  (rejected with 23514)
+  PASS  M-08 address missing city  (rejected with 23514)
+  PASS  M-09 version 0  (rejected with 23514)
+  PASS  M-10 owner must exist (FK)  (rejected with 23503)
+  PASS  M-11 approve with approval fields + optimistic version bump
+  PASS  M-12 stale version updates 0 rows (BR-M-09)
+  PASS  M-13 rejected owner may reapply (partial unique index)
+  PASS  K-01 insert valid credential with default scopes
+  PASS  K-02 duplicate key_prefix (global)  (rejected with 23505)
+  PASS  K-03 prefix with invalid char  (rejected with 23514)
+  PASS  K-04 hash not lowercase hex  (rejected with 23514)
+  PASS  K-05 scope outside allowed set  (rejected with 23514)
+  PASS  K-05b old draft scope parcels:write rejected (ADR-003 names only)  (rejected with 23514)
+  PASS  K-05c webhooks:manage not grantable to API keys (Doc 7 C-3)  (rejected with 23514)
+  PASS  K-05d default scopes are parcels:create + parcels:read
+  PASS  K-06 empty scopes  (rejected with 23514)
+  PASS  K-07 same active label for same merchant (BR-K-05)  (rejected with 23505)
+  PASS  K-08 label reusable after revoke
+  PASS  K-09 same label allowed for a different merchant
+  PASS  K-10 expires_at before created_at  (rejected with 23514)
+  PASS  K-11 merchant with credentials cannot be hard-deleted (RESTRICT)  (rejected with 23503)
+  PASS  W-01 insert webhook for A
+  PASS  W-02 duplicate live URL for same merchant (BR-W-08)  (rejected with 23505)
+  PASS  W-03 non-http(s) scheme  (rejected with 23514)
+  PASS  W-04 empty event list  (rejected with 23514)
+  PASS  W-05 ciphertext too short  (rejected with 23514)
+  PASS  W-06 soft-deleted but still enabled  (rejected with 23514)
+  PASS  W-07 soft delete then re-register same URL
+  PASS  V-01 setup: B webhook enabled but B is PENDING; A disabled webhook
+  PASS  V-02 view returns only enabled + not deleted + APPROVED (exactly endpoint ...0002)
+  PASS  V-03 worker query by merchant + event type
+  PASS  V-04 suspending merchant removes its endpoints from the view (BR-W-13)
+  PASS  V-05 worker role can SELECT view and NOT base tables
+  PASS  I-01 all planned indexes exist
+  PASS  I-02 auth lookup by key_prefix uses unique index
+ALL ASSERTIONS PASSED
+== down
+  > 20261101000400_create_merchant_webhook_targets_view.down.sql
+  > 20261101000300_create_webhook_endpoints.down.sql
+  > 20261101000200_create_merchant_api_credentials.down.sql
+  > 20261101000100_create_merchants.down.sql
+== verify nothing left behind
+  PASS  down removed all Member 4 objects
+== up (2nd, proves down is clean and up is repeatable)
+  > 20261101000100_create_merchants.up.sql
+  > 20261101000200_create_merchant_api_credentials.up.sql
+  > 20261101000300_create_webhook_endpoints.up.sql
+  > 20261101000400_create_merchant_webhook_targets_view.up.sql
+== assertions (2nd)
+  PASS count: 41
+  ALL ASSERTIONS PASSED
+== migration test complete

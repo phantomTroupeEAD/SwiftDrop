@@ -1,0 +1,7 @@
+# Migrations image: the migrate tool plus this release's SQL files, tagged with the
+# same git SHA as core-api, so schema and code always match.
+#   docker build -f core-api/Dockerfile.migrate -t ghcr.io/<org>/swiftdrop/core-api-migrations:<git-sha> core-api
+FROM migrate/migrate:v4.17.1
+COPY migrations /migrations
+USER 10001:10001
+ENTRYPOINT ["migrate", "-path", "/migrations"]

@@ -1,0 +1,22 @@
+bash scripts/local-down.sh --wipe
+wiped /tmp/m7-local
+bash scripts/local-up.sh
+[1/7] PostgreSQL 16 on :5432
+[2/7] Roles and grants (scripts/db-bootstrap.sql)
+[3/7] Migrations (golang-migrate, owner role)
+      20261025090000/u identity_create_users_stub (9.723943ms)
+      20261025100000/u admin_create_delivery_zones (21.141922ms)
+      20261025100100/u admin_create_zone_postal_codes (30.18107ms)
+      20261025100200/u admin_create_system_settings (38.68396ms)
+      20261025100300/u admin_create_audit_logs (49.360921ms)
+      20261025100400/u admin_audit_logs_append_only_trigger (56.570999ms)
+[4/7] Seed (7 zones, 3 settings, demo users)
+      seed: done (7 zones, 3 settings, 3 demo users)
+[5/7] Dev JWT key pair
+[6/7] core-api on :8080 (app role)
+{"status":"READY","database":"UP"}
+[7/7] Traefik gateway on :8088 (+ stand-ins for other members' services)
+
+Ready. Gateway: http://localhost:8088  core-api: http://localhost:8080  Traefik dashboard (internal): http://localhost:8090/dashboard/
+Token:  (cd core-api && go run ./cmd/devtoken -role ADMIN)
+Logs:   /tmp/m7-local/logs/

@@ -1,0 +1,18 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: core-api-hpa
+  namespace: swiftdrop
+  labels: {app.kubernetes.io/name: core-api, app.kubernetes.io/part-of: swiftdrop}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: core-api}
+  minReplicas: 2
+  maxReplicas: 4             # 4 x DB_MAX_OPEN_CONNS 20 = 80 <= 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # do not drop pods after a short quiet spell

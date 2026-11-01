@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  namespace: swiftdrop
+  labels: {app.kubernetes.io/name: core-api, app.kubernetes.io/part-of: swiftdrop}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5            # kubectl rollout undo needs history (runbook 7)
+  selector:
+    matchLabels: {app.kubernetes.io/name: core-api}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}   # never below 2 ready pods during a deploy
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: core-api, app.kubernetes.io/part-of: swiftdrop}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30   # drain 5 s + grace 20 s + margin
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: core-api
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api:GIT_SHA   # set by CI, never "latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080}
+          envFrom:
+            - configMapRef: {name: core-api-config}
+            - secretRef: {name: postgres-credentials}
+          volumeMounts:
+            - {name: jwt-public-key, mountPath: /run/keys, readOnly: true}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 256Mi}   # no CPU limit: avoids throttling; HPA uses the request
+          startupProbe:
+            httpGet: {path: /livez, port: http}
+            periodSeconds: 2
+            failureThreshold: 15
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}   # checks the database
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: {path: /livez, port: http}    # process only: a DB outage must NOT restart pods
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      volumes:
+        - name: jwt-public-key
+          secret: {secretName: jwt-public-key}

@@ -1,0 +1,10 @@
+bash scripts/shutdown-demo.sh
+1. readyz before:  {"status":"READY","database":"UP"}
+2. readyz 1 s after SIGTERM: {"status":"SHUTTING_DOWN"}  <- Kubernetes stops sending traffic
+3. livez at the same time:   {"status":"UP"}  <- not restarted, just draining
+4. process exited after 6.3 s (READINESS_DRAIN_SECONDS + finishing requests)
+5. requests sent during drain got: 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 
+6. shutdown log lines:
+     {"timestamp":"2026-10-24T05:59:47.054327956Z","level":"INFO","msg":"shutdown started","service":"core-api","module":"admin","signal":"terminated","drain":"5s"}
+     {"timestamp":"2026-10-24T05:59:52.05804579Z","level":"INFO","msg":"shutdown complete","service":"core-api","module":"admin"}
+7. restarted, readyz: {"status":"READY","database":"UP"}

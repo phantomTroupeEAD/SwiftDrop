@@ -1,0 +1,177 @@
+# [Proposed] hardened routes (Doc 7). Backend hosts are Docker Compose service names.
+# Each change is tagged with the Doc 7 check that proves it (GS-xx).
+# The gateway still does NOT check tokens or roles. Core API does that (security-notes, rule 2).
+
+http:
+  routers:
+    # 1. Tracking API. Exact prefix so /api/v1/trackingX is not caught (GS-03).
+    tracking-router:
+      rule: "Path(`/api/v1/tracking`) || PathPrefix(`/api/v1/tracking/`)"
+      entryPoints: ["web"]
+      service: "tracking-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "tracking-ratelimit"]
+
+    # 1b. SSE streams: also cap open connections per visitor (M5: 5 per IP) (GS-09).
+    tracking-stream-router:
+      rule: "PathRegexp(`^/api/v1/tracking/public/[^/]+/stream$`)"
+      priority: 100   # must beat tracking-router, whose rule text is longer (Traefik ranks by rule length)
+      entryPoints: ["web"]
+      service: "tracking-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "tracking-ratelimit", "stream-inflight"]
+
+    # 2. AI Assistant (GS-03 exact prefix).
+    ai-router:
+      rule: "Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`)"
+      entryPoints: ["web"]
+      service: "ai-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "json-limit"]
+
+    # 3a. Login: brute-force guard, 5 per minute per visitor, burst 3 (security-notes 3) (GS-06).
+    login-router:
+      rule: "Path(`/api/v1/auth/login`)"
+      entryPoints: ["web"]
+      service: "core-api-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "login-ratelimit", "json-limit"]
+
+    # 3b. Photo upload paths only: 10 MB. Exact path waits for U-25 (GS-08).
+    upload-router:
+      rule: "PathRegexp(`^/api/v1/(deliveries/[^/]+/complete|courier/parcels/[^/]+/deliver)$`)"
+      entryPoints: ["web"]
+      service: "core-api-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "upload-limit-middleware"]
+
+    # 3c. Everything else in v1: JSON bodies up to 1 MB (SEC-006) (GS-07).
+    core-api-router:
+      rule: "PathPrefix(`/api/v1`)"
+      entryPoints: ["web"]
+      service: "core-api-service"
+      middlewares: ["strip-identity-headers", "security-headers", "cors-middleware", "json-limit"]
+
+    # 3d. Unknown API versions (/api/v2, /api/x) go to core-api, which answers 404 JSON,
+    #     instead of the SPA answering 200 HTML (GS-04).
+    api-catchall-router:
+      rule: "PathPrefix(`/api`)"
+      priority: 2
+      entryPoints: ["web"]
+      service: "core-api-service"
+      middlewares: ["strip-identity-headers", "security-headers", "json-limit"]
+
+    # 4. SPA.
+    frontend-router:
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      entryPoints: ["web"]
+      service: "frontend-service"
+      middlewares: ["security-headers", "spa-csp"]
+
+    # 5. Dashboard, internal entry point only (GS-12).
+    dashboard-router:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      entryPoints: ["traefik"]
+      service: "api@internal"
+
+  services:
+    core-api-service:
+      loadBalancer:
+        serversTransport: "backend-transport"
+        servers: [{url: "http://core-api:8080"}]
+    tracking-service:
+      loadBalancer:
+        serversTransport: "stream-transport"
+        servers: [{url: "http://tracking-api:8081"}]
+    ai-service:
+      loadBalancer:
+        serversTransport: "ai-transport"
+        servers: [{url: "http://ai-assistant:8000"}]
+    frontend-service:
+      loadBalancer:
+        serversTransport: "backend-transport"
+        servers: [{url: "http://web:3000"}]
+
+  # Dependency timeouts (GS-13, GS-14). No retry middleware anywhere: a write must never be
+  # sent twice by the gateway (Doc 2 R-GW-03). The client retries with the same Idempotency-Key.
+  serversTransports:
+    backend-transport:
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 30s
+        idleConnTimeout: 90s
+    stream-transport:
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 10s   # SSE sends headers at once; the body may stay open for hours
+        idleConnTimeout: 90s
+    ai-transport:
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 60s   # LLM answers are slow [TBD with AI owner]
+        idleConnTimeout: 90s
+
+  middlewares:
+    # Identity comes only from the token, checked by Core API. Remove look-alike headers
+    # a client might send, as defence in depth (GS-10). Empty value = Traefik removes it.
+    strip-identity-headers:
+      headers:
+        customRequestHeaders:
+          X-User-ID: ""
+          X-User-Role: ""
+          X-Tenant-ID: ""
+          X-Merchant-ID: ""
+          X-Forwarded-User: ""
+
+    security-headers:
+      headers:
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000          # sent only over HTTPS
+        stsIncludeSubdomains: true
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+
+    spa-csp:
+      headers:
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+    # CORS now matches security-notes section 4 (GS-11). X-Tenant-ID removed: tenant comes from the token.
+    cors-middleware:
+      headers:
+        accessControlAllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        accessControlAllowHeaders: ["Authorization", "Content-Type", "X-API-Key", "Idempotency-Key", "X-Request-ID"]
+        accessControlExposeHeaders: ["X-Request-ID", "Content-Length", "Retry-After", "Idempotent-Replay"]
+        accessControlAllowCredentials: true
+        accessControlAllowOriginList:
+          - "http://localhost:3000"
+          - "http://localhost:5173"
+        accessControlMaxAge: 86400
+        addVaryHeader: true
+
+    # Per-visitor buckets. Behind Cloudflare the real client is the right-most X-Forwarded-For
+    # entry (depth 1). If another proxy is added in front of Traefik, depth must change (U-46).
+    tracking-ratelimit:
+      rateLimit:
+        average: 30
+        burst: 10                     # security-notes says 10; repo had 50 (U-15)
+        period: "1m"
+        sourceCriterion: {ipStrategy: {depth: 1}}
+
+    login-ratelimit:
+      rateLimit:
+        average: 5
+        burst: 3
+        period: "1m"
+        sourceCriterion: {ipStrategy: {depth: 1}}
+
+    stream-inflight:
+      inFlightReq:
+        amount: 5
+        sourceCriterion: {ipStrategy: {depth: 1}}
+
+    json-limit:
+      buffering:
+        maxRequestBodyBytes: 1048576   # 1 MB (SEC-006)
+
+    upload-limit-middleware:
+      buffering:
+        maxRequestBodyBytes: 10485760  # 10 MB

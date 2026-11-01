@@ -1,0 +1,7 @@
+# Startup with missing/invalid secrets (APP_ENV=production, no pepper, bad key, WEBHOOK_ALLOW_HTTP=true)
+core-api: invalid configuration:
+  - JWT_PUBLIC_KEY_PEM: file cannot be read
+  - MERCHANT_API_KEY_PEPPER: is required, at least 32 characters
+  - WEBHOOK_SECRET_ENCRYPTION_KEY: must be base64 of exactly 32 bytes
+  - WEBHOOK_ALLOW_HTTP: may be true only when APP_ENV=local
+exit code: 1

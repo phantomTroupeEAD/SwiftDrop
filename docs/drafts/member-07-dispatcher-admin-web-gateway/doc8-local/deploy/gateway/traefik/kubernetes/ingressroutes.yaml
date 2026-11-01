@@ -1,0 +1,49 @@
+# Kubernetes (CRD) form of the routers in ../dynamic-routes.yml. Member 7 owns this file.
+# One host, paths decide the service (U-11: paths, not subdomains). TLS = Cloudflare Origin cert.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: swiftdrop, namespace: swiftdrop}
+spec:
+  entryPoints: ["websecure"]
+  tls: {secretName: cloudflare-origin-cert}   # name differs in deploy/gateway/README (U-58)
+  routes:
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/tracking/public/[^/]+/stream$`)
+      kind: Rule
+      priority: 100
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}, {name: stream-inflight}]
+      services: [{name: tracking-api, port: 8081, serversTransport: stream-transport}]
+    - match: Host(`swiftdrop.example.com`) && (Path(`/api/v1/tracking`) || PathPrefix(`/api/v1/tracking/`))
+      kind: Rule
+      priority: 90
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}]
+      services: [{name: tracking-api, port: 8081, serversTransport: stream-transport}]
+    - match: Host(`swiftdrop.example.com`) && (Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`))
+      kind: Rule
+      priority: 80
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: json-limit}]
+      services: [{name: ai-assistant, port: 8000, serversTransport: ai-transport}]
+    - match: Host(`swiftdrop.example.com`) && Path(`/api/v1/auth/login`)
+      kind: Rule
+      priority: 70
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: login-ratelimit}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/(deliveries/[^/]+/complete|courier/parcels/[^/]+/deliver)$`)
+      kind: Rule
+      priority: 60
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: upload-limit-middleware}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api/v1`)
+      kind: Rule
+      priority: 50
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 2
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    - match: Host(`swiftdrop.example.com`)
+      kind: Rule
+      priority: 1
+      middlewares: [{name: security-headers}, {name: spa-csp}]
+      services: [{name: web, port: 3000}]

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api
+  namespace: swiftdrop
+  labels: {app.kubernetes.io/name: core-api, app.kubernetes.io/part-of: swiftdrop}
+spec:
+  type: ClusterIP            # inside the cluster only; Traefik is the only way in
+  selector: {app.kubernetes.io/name: core-api}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

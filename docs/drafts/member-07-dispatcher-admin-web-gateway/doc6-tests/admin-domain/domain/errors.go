@@ -1,0 +1,17 @@
+// Package domain holds the admin module's zone rules. It has no imports of
+// net/http, database/sql or messaging packages (depguard rule domain_purity).
+package domain
+
+import "errors"
+
+var (
+	ErrInvalidZoneCode       = errors.New("invalid zone code")
+	ErrInvalidZoneName       = errors.New("invalid zone name")
+	ErrInvalidPrefix         = errors.New("invalid postal code prefix")
+	ErrNegativeMoney         = errors.New("money cannot be negative")
+	ErrUnsupportedCurrency   = errors.New("only LKR is supported")
+	ErrNoPrefixes            = errors.New("zone needs at least one postal code prefix")
+	ErrDuplicatePrefixInZone = errors.New("postal code prefix listed twice in the same zone")
+	ErrAlreadyEnabled        = errors.New("zone is already enabled")
+	ErrAlreadyDisabled       = errors.New("zone is already disabled")
+)

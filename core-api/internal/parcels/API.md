@@ -1,109 +1,218 @@
 # Parcel Management API Specifications (`/api/v1/parcels`)
 
-> **Module:** `internal/parcels` | **Owner:** Member 2 | **Status:** Baseline
+> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Aligned (Post-Audit v2.0.0 Alignment)
 
 ---
 
 ## 1. Book Parcel
-Creates a new parcel booking for the authenticated sender (Customer or Merchant).
+Creates a new parcel booking for the authenticated sender (Customer or Merchant). Supports both quoted booking (with unexpired `quote_id`) and direct booking.
 
 - **Method / Path:** `POST /api/v1/parcels`
 - **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `ADMIN`)
 - **Headers:** 
   - `Authorization: Bearer <jwt>`
   - `Content-Type: application/json`
-  - `Idempotency-Key: <uuid-v4>` (Mandatory)
+  - `Idempotency-Key: <uuid-or-string>` (Mandatory, max 255 chars)
 
 ### Request Body
 ```json
 {
-  "recipient_name": "Jane Smith",
-  "recipient_phone": "+15559876543",
-  "recipient_address": {
-    "street": "742 Evergreen Terrace",
-    "unit": "Apt 2B",
-    "city": "Springfield",
-    "state": "IL",
-    "postal_code": "62704",
-    "country": "USA"
-  },
+  "quote_id": "d3b07384-d113-494b-9c8e-aa672580c822",
+  "service_level": "STANDARD",
+  "weight_kg": 2.50,
   "dimensions": {
-    "weight_kg": 2.5,
     "length_cm": 30.0,
-    "width_cm": 20.0,
+    "width_cm": 25.0,
     "height_cm": 15.0
   },
-  "pickup_notes": "Ring doorbell twice"
+  "pickup": {
+    "contact_name": "Kasun Perera",
+    "contact_phone": "+94771234567",
+    "address_line1": "45 Galle Road",
+    "address_line2": "Apartment 3B",
+    "city": "Colombo 03",
+    "postal_code": "00300",
+    "zone_id": "ZONE-WESTERN-01",
+    "instructions": "Ring intercom 3B"
+  },
+  "dropoff": {
+    "contact_name": "Nimal Fernando",
+    "contact_phone": "+94719876543",
+    "address_line1": "12 Kandy Road",
+    "address_line2": "",
+    "city": "Peradeniya",
+    "postal_code": "20400",
+    "zone_id": "ZONE-CENTRAL-01",
+    "instructions": "Leave at front security desk"
+  },
+  "item_description": "Electronics - Replacement Laptop Battery",
+  "special_instructions": "Handle with care. Fragile."
 }
 ```
 
 ### Success Response (`201 Created`)
 ```json
 {
-  "data": {
-    "id": "prcl_01HXYZ1234567890",
-    "tracking_number": "SD-20261021-04921",
-    "status": "CREATED",
-    "sender_id": "usr_01HABC1234567890",
-    "recipient_name": "Jane Smith",
-    "fee": {
-      "currency": "USD",
-      "amount": "14.50"
-    },
-    "created_at": "2026-10-21T09:00:00Z"
-  }
+  "id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "customer_id": "usr-8812c9b4-3312-4aa8-b112-998877665544",
+  "status": "CREATED",
+  "service_level": "STANDARD",
+  "weight_kg": 2.50,
+  "dimensions": {
+    "length_cm": 30.0,
+    "width_cm": 25.0,
+    "height_cm": 15.0
+  },
+  "chargeable_weight_kg": 2.50,
+  "price": {
+    "currency": "LKR",
+    "base_fee_cents": 35000,
+    "additional_fee_cents": 20000,
+    "price_cents": 55000,
+    "pricing_rule_id": "pr-rule-zone-w-c-v2",
+    "pricing_rule_version": 2
+  },
+  "pickup": {
+    "contact_name": "Kasun Perera",
+    "contact_phone": "+94771234567",
+    "address_line1": "45 Galle Road",
+    "address_line2": "Apartment 3B",
+    "city": "Colombo 03",
+    "postal_code": "00300",
+    "zone_id": "ZONE-WESTERN-01",
+    "instructions": "Ring intercom 3B"
+  },
+  "dropoff": {
+    "contact_name": "Nimal Fernando",
+    "contact_phone": "+94719876543",
+    "address_line1": "12 Kandy Road",
+    "address_line2": "",
+    "city": "Peradeniya",
+    "postal_code": "20400",
+    "zone_id": "ZONE-CENTRAL-01",
+    "instructions": "Leave at front security desk"
+  },
+  "attempt_count": 0,
+  "max_attempts": 3,
+  "version": 1,
+  "created_at": "2026-10-25T14:32:00Z",
+  "updated_at": "2026-10-25T14:32:00Z"
 }
 ```
 
 ### Error Responses
-- `400 Bad Request`: `PARCEL_INVALID_DIMENSIONS` — Negative weight or dimensions exceed max limits.
+- `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY` or `MALFORMED_JSON`.
 - `401 Unauthorized`: Missing or invalid Bearer token.
-- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` — Reusing idempotency key with different body.
+- `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` — Reusing idempotency key with different payload body.
+- `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m), `QUOTE_PARAM_MISMATCH`, or `WEIGHT_LIMIT_EXCEEDED` (> 50 kg).
 
 ---
 
 ## 2. Get Parcel Details
-Retrieves authoritative parcel details and history for authorized parties.
+Retrieves authoritative parcel details for authorized parties (Customer [own parcel], Merchant [own tenant], Courier [assigned], Admin).
 
 - **Method / Path:** `GET /api/v1/parcels/{id}`
-- **Auth Required:** Bearer JWT (`CUSTOMER` [own parcel], `COURIER` [assigned], `DISPATCHER`, `ADMIN`)
+- **Auth Required:** Bearer JWT
 - **Headers:** `Authorization: Bearer <jwt>`
+
+### Success Response (`200 OK`)
+Returns the complete parcel response payload as described in Section 1.
+
+---
+
+## 3. List Visible Parcels
+Retrieves a paginated list of parcels visible to the calling principal.
+
+- **Method / Path:** `GET /api/v1/parcels`
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `ADMIN`)
+- **Query Parameters:**
+  - `status` (string, optional): Filter by status (`CREATED`, `IN_TRANSIT`, etc.).
+  - `page` (integer, default 1): Page number.
+  - `page_size` (integer, default 20, max 100): Results per page.
 
 ### Success Response (`200 OK`)
 ```json
 {
-  "data": {
-    "id": "prcl_01HXYZ1234567890",
-    "tracking_number": "SD-20261021-04921",
-    "status": "OUT_FOR_DELIVERY",
-    "sender_id": "usr_01HABC1234567890",
-    "courier_id": "usr_courier_99",
-    "recipient": {
-      "name": "Jane Smith",
-      "phone": "+15559876543",
-      "address": "742 Evergreen Terrace, Springfield, IL"
-    },
-    "history": [
-      {
-        "status": "CREATED",
-        "timestamp": "2026-10-21T09:00:00Z",
-        "actor_role": "CUSTOMER"
-      },
-      {
-        "status": "ASSIGNED",
-        "timestamp": "2026-10-21T09:30:00Z",
-        "actor_role": "DISPATCHER"
-      },
-      {
-        "status": "OUT_FOR_DELIVERY",
-        "timestamp": "2026-10-21T11:00:00Z",
-        "actor_role": "COURIER"
-      }
-    ]
+  "items": [
+    {
+      "id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+      "tracking_number": "SD-20261025-A3X9K7",
+      "status": "CREATED",
+      "service_level": "STANDARD",
+      "price_cents": 55000,
+      "currency": "LKR",
+      "pickup_city": "Colombo 03",
+      "dropoff_city": "Peradeniya",
+      "created_at": "2026-10-25T14:32:00Z"
+    }
+  ],
+  "pagination": {
+    "current_page": 1,
+    "page_size": 20,
+    "total_items": 1,
+    "total_pages": 1
   }
 }
 ```
 
-### Error Responses
-- `403 Forbidden`: `ACCESS_DENIED` — Requesting user is neither sender, recipient, assigned courier, nor dispatcher.
-- `404 Not Found`: `PARCEL_NOT_FOUND` — Parcel ID does not exist.
+---
+
+## 4. Get Status History
+Retrieves the append-only audit trail of parcel status transitions.
+
+- **Method / Path:** `GET /api/v1/parcels/{id}/history`
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `COURIER`, `ADMIN`)
+
+### Success Response (`200 OK`)
+```json
+{
+  "parcel_id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "history": [
+    {
+      "id": "his-11a2b3c4-9988-4433-2211-abcdef012345",
+      "from_status": null,
+      "to_status": "CREATED",
+      "actor_id": "usr-8812c9b4-3312-4aa8-b112-998877665544",
+      "actor_role": "CUSTOMER",
+      "reason": "Initial customer booking confirmation",
+      "occurred_at": "2026-10-25T14:32:00Z",
+      "parcel_version": 1
+    }
+  ]
+}
+```
+
+---
+
+## 5. Get Booking Receipt
+Retrieves the financial receipt snapshot for a booking, using the immutable accepted-price record.
+
+- **Method / Path:** `GET /api/v1/parcels/{id}/receipt`
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT`, `ADMIN`)
+
+### Success Response (`200 OK`)
+```json
+{
+  "receipt_number": "RCP-SD-20261025-A3X9K7",
+  "parcel_id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+  "tracking_number": "SD-20261025-A3X9K7",
+  "booking_date": "2026-10-25T14:32:00Z",
+  "customer_name": "Kasun Perera",
+  "service_level": "STANDARD",
+  "financial_summary": {
+    "currency": "LKR",
+    "base_fee_cents": 35000,
+    "additional_fee_cents": 20000,
+    "total_fee_cents": 55000,
+    "total_fee_formatted": "LKR 550.00"
+  },
+  "package_summary": {
+    "chargeable_weight_kg": 2.50,
+    "origin_zone": "ZONE-WESTERN-01",
+    "destination_zone": "ZONE-CENTRAL-01"
+  },
+  "payment_status": "PAID"
+}
+```

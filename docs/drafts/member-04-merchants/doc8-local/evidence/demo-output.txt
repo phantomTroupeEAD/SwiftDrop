@@ -1,0 +1,60 @@
+# ./scripts/demo.sh on a fresh stack, 2026-10-24T13:33Z
+== Health and metrics
+PASS  1  livez                                                                  200
+PASS  2  readyz (database UP)                                                   200
+== Application and approval (F-01, F-02)
+PASS  3  apply without token -> 401                                             401
+PASS  4  owner A applies -> 201 PENDING                                         201
+PASS  5  second active application -> 409 MERCHANT_ALREADY_EXISTS               409
+PASS  6  local phone format -> 422 VALIDATION_FAILED (contact_phone)            422
+PASS  7  applicant sees own PENDING merchant (no tenant_id yet)                 200
+PASS  8  create key while PENDING -> 403 MERCHANT_NOT_APPROVED                  403
+PASS  9  non-admin approve -> 403                                               403
+PASS 10  suspend a PENDING merchant -> 409 MERCHANT_INVALID_TRANSITION          409
+PASS 11  approve with stale version -> 409 MERCHANT_VERSION_CONFLICT            409
+PASS 12  admin approves -> 200 APPROVED version 2                               200
+== API keys (F-04, F-06)
+PASS 13  create key -> 201, ADR-003 format, Cache-Control no-store              201
+PASS 14  list keys shows prefix, never the secret                               200
+PASS 15  API key on key-management route -> 401 API_KEY_NOT_ALLOWED             401
+PASS 16  key in query string ignored -> 401 API_KEY_MISSING                     401
+PASS 17  tampered key -> 401 API_KEY_INVALID                                    401
+PASS 18  both X-API-Key and Authorization -> 400                                400
+== Merchant orders (F-07, stand-in for Member 2)
+PASS 19  order without Idempotency-Key -> 400 IDEMPOTENCY_KEY_REQUIRED          400
+PASS 20  order with key -> 201 tracking number                                  201
+PASS 21  same key + same body -> same parcel, Idempotent-Replay: true           201
+PASS 22  same key + different body -> 409 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH      409
+== Webhooks and SSRF (F-09)
+PASS 23  cloud metadata URL -> 400 SSRF_PROHIBITED_URL                          400
+PASS 24  localhost URL -> 400 SSRF_PROHIBITED_URL                               400
+PASS 25  internal service on port 5432 -> 422 WEBHOOK_URL_INVALID (port rule)   422
+PASS 26  hostname resolving to private Docker IP -> 400 SSRF (DNS check)        400
+PASS 27  client-supplied secret -> 400 WEBHOOK_SECRET_NOT_ALLOWED               400
+PASS 28  unknown event type -> 422                                              422
+PASS 29  register webhook -> 201, whsec_ secret shown once                      201
+PASS 30  list webhooks has secret_last4, never the secret                       200
+== Tenant isolation (AT-011)
+PASS 31  merchant B deletes A's webhook -> 404                                  404
+PASS 32  merchant B revokes A's key -> 404                                      404
+PASS 33  merchant B lists orders -> none of A's                                 200
+== Suspend, reinstate, revoke, disable
+PASS 34  admin suspends A (reason)                                              200
+PASS 35  suspended merchant's key -> 403 MERCHANT_NOT_APPROVED (next request)   403
+PASS 36  admin reinstates A                                                     200
+PASS 37  same key works again after reinstate                                   201
+PASS 38  revoke key -> 204                                                      204
+PASS 39  revoke again -> 204 (idempotent)                                       204
+PASS 40  revoked key -> 401 API_KEY_REVOKED on next request                     401
+PASS 41  admin disables A                                                       200
+PASS 42  disable revoked every key (no ACTIVE left)                             200
+PASS 43  DISABLED is terminal -> 409                                            409
+== Evidence in the database and logs
+PASS 44  audit trail for A is complete and in order
+PASS 45  no API key secret or webhook secret in audit rows
+PASS 46  database holds only key hash and encrypted webhook secret
+PASS 47  disabled merchant's webhooks are gone from Member 8's view
+PASS 48  api logs contain no key, webhook secret or bearer token
+PASS 49  metrics expose auth results and SSRF blocks                            200
+
+RESULT: 49 passed, 0 failed (of 49)

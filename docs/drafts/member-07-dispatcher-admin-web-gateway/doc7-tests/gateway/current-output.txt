@@ -1,0 +1,28 @@
+== Routing edges ==
+PASS  GS-01  /api/v1/tracking/public/SD-1 goes to tracking-api
+PASS  GS-02  /api/v1/admin/zones goes to core-api
+FAIL  GS-03  /api/v1/trackingX is NOT taken by the tracking router              expected=core-api actual=tracking-api
+FAIL  GS-04  /api/v2/parcels goes to core-api (404 JSON), not the SPA           expected=core-api actual=web
+== Abuse limits ==
+FAIL  GS-05  visitor A used up tracking quota; visitor B still gets 200         expected=200 actual=429
+PASS  GS-05b faking an extra left-hand X-Forwarded-For entry does not reset A's quota
+FAIL  GS-06  8 quick logins from one visitor: some get 429                      expected=yes actual=no
+FAIL  GS-07  2 MB body to a JSON route (/admin/zones) is refused with 413       expected=413 actual=200
+PASS  GS-08  9 MB photo upload passes, 11 MB is refused
+FAIL  GS-09  6 open SSE streams from one visitor: exactly 1 refused (limit 5)   expected=1 actual=6
+== Identity headers and CORS ==
+FAIL  GS-10  client-sent X-Tenant-ID and X-User-Role are removed before core-api expected=None None actual=mrc_other ADMIN
+PASS  GS-10b Authorization header still reaches core-api unchanged
+FAIL  GS-11  CORS allows X-Request-ID (security-notes 4) and not X-Tenant-ID    expected=yes no actual=no yes
+FAIL  GS-12  Traefik dashboard API is NOT reachable on open port 8080           expected=no actual=yes
+== Dependency failure ==
+FAIL  GS-13  slow core-api: gateway answers 504 before the backend does         expected=504 fast actual=200 slow
+PASS  GS-14  after that timeout the POST reached core-api exactly once (no retry)
+PASS  GS-15  AI service down: 502 within 2 s, other routes unaffected
+== Response hardening ==
+FAIL  GS-16  API and SPA responses carry nosniff and frame DENY                 expected=nosniff DENY nosniff DENY actual=   
+FAIL  GS-17  backend X-Powered-By header is removed                             expected= actual=stub
+FAIL  GS-18  SPA has a Content-Security-Policy with frame-ancestors 'none'      expected=yes actual=no
+PASS  GS-19  SSE is still not buffered with the new middlewares and timeouts
+
+Summary: 8 passed, 13 failed

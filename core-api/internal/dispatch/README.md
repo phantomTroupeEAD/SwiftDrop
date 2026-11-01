@@ -38,8 +38,8 @@ internal/dispatch/
 ---
 
 ## 4. Database Ownership
-- `couriers`: Courier ID, user ID reference, vehicle type, max capacity, active shift status.
-- `courier_assignments`: Courier ID, parcel ID, assigned by, assigned at, completed at.
+- `couriers`: Courier ID, user ID reference (`users.id`), vehicle type, max capacity, active shift status, `current_zone_id` (`delivery_zones.id`). Migrated via `000006_create_couriers.up.sql`.
+- `courier_assignments`: Courier ID, parcel ID, assigned by, status (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`), assigned at, ended at. Migrated via `000007_create_dispatch_and_delivery.up.sql`.
 
 ---
 
@@ -53,3 +53,4 @@ internal/dispatch/
 | Date | Change Summary | Author / Agent |
 | :--- | :--- | :--- |
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
+| 2026-10-25 | Standardized migration splitting (000006/000007), current_zone_id FK to delivery_zones, and assignment status enum (ACTIVE) | Member 3 & Review Agent |
