@@ -32,7 +32,7 @@ The platform does no user login. Its security is about **who can change, deploy 
 | :--- | :--- | :--- |
 | DB passwords, the per-role DB URLs | `postgres-secrets`, `postgres-migrator-secrets` | git, images, logs, CI output |
 | RabbitMQ credentials, `RABBITMQ_URL` | `rabbitmq-secrets` | same |
-| JWT private key | `jwt-secrets` | same, and never in ConfigMaps |
+| JWT private key | `jwt-secrets`, mounted as a file at `/etc/secrets/jwt/private.pem` (core-api only) | same, and never in ConfigMaps or env vars |
 | Google client secret, LLM key, SendGrid/Twilio, object storage keys, AI service token | `integrations-secrets` | same |
 | Cloudflare Origin certificate key | `traefik-origin-tls` (C5) | same |
 | kubeconfig, VPS SSH key, GHCR token | the admin's machine / GitHub secrets | the repo, chat messages, screenshots |

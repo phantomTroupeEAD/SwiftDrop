@@ -442,3 +442,15 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 4. **Referential Integrity & History Protection:** Deleting a parcel with associated history entries is strictly prevented (`ON DELETE RESTRICT`) to protect regulatory audit and financial records; deleting an active pricing rule referenced by historical parcels is blocked (`ON DELETE RESTRICT`).
 5. **Snapshot Isolation:** Modifying a user's address in the `users` table does not alter existing `parcels.pickup_address` JSONB records.
 6. **Transaction Atomicity:** Outbox event insertion and parcel persistence commit or roll back together under all failure scenarios.
+
+---
+
+## Diagrams
+
+### 8. Authoritative Database Entity Relationship Diagram (ERD)
+
+The authoritative logical Entity-Relationship Diagram (ERD) for Member 2 data persistence is maintained directly under `docs/drafts/member-02-parcels-pricing/diagrams/` with native Lucidchart ERD tables, primary keys, foreign keys, exact data types, and crow's-foot cardinality lines:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts | Status & Key Rules Enforced |
+| :--- | :--- | :--- | :--- | :--- |
+| **08 Parcel & Pricing Entity Relationship Diagram** | Logical ERD (Crow's-Foot Notation) | [Lucidchart Document](https://lucid.app/lucidchart/d51127dc-51ad-4542-843a-423d44d6fd16/edit) | [PlantUML Source](./diagrams/08-parcel-pricing-erd.puml) \| [PNG Preview](./diagrams/08-parcel-pricing-erd.png) | **Authoritative:** Native ERD entities (`parcels`, `parcel_status_history`, `pricing_rules`, `pricing_quotes`, `delivery_zones`, `outbox_events`, `idempotency_keys`); exact `BIGINT` integer minor units for money; immutable address JSONB snapshot; explicit FK constraints. |

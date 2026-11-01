@@ -413,4 +413,19 @@ For every completed capability, Member 2 must verify that:
 - Changes are verified against a local PostgreSQL instance before pull request review.itted on an appropriate feature branch and reviewed before merging.
 - The feature can be demonstrated using the agreed local development environment.
 
+---
 
+## 12. Subsystem Use-Case Architecture
+
+The functional responsibilities, external actors, and module integration boundaries for the Member 2 subsystem are formalized in the authoritative Use-Case Diagram:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts |
+| :--- | :--- | :--- | :--- |
+| **01 Parcel Management & Pricing Use-Case Diagram** | UML Use-Case Diagram | [Lucidchart Document](https://lucid.app/lucidchart/da53bbf3-1b48-450c-9945-b1816a32ae17/edit) | [PlantUML Source](./diagrams/01-parcel-pricing-use-case.puml) \| [PNG Preview](./diagrams/01-parcel-pricing-use-case.png) |
+
+> **Key Architectural Notes:**
+> - Encloses all 15 module use cases within the formal `Parcel Management & Pricing Subsystem` system boundary.
+> - Clearly delineates human actors (`Customer`, `Approved Merchant Client`, `System Administrator / Pricing Officer`) from module integrations (`Member 1 Identity & Auth`, `Member 3 Dispatch & Delivery`, `Member 5 Tracking API`, `Member 8 Event Backend`, `Member 10 AI Assistant`).
+> - Accurately models `<<include>>` relationships for mandatory subprocesses (`Generate Unique Tracking Number`, `Persist Accepted Price Snapshot`, `Persist Parcel Status History`, `Record Transactional Outbox Entry`, `Validate Pricing Eligibility`, `Select Applicable Pricing Rule`).
+> - Accurately models `<<extend>>` for conditional quote acceptance (`Validate Accepted Quote` extends `Create Customer Parcel Booking` and `Create Merchant Parcel Order`).
+> - Corrected: `Cancel Parcel Booking` and `Retrieve Parcel Details` are strictly independent use cases without any invalid inheritance or extension.

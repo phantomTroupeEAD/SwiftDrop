@@ -704,3 +704,15 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 4. **Optimistic Locking:** Concurrent state mutations on the same parcel verify that stale `version` increments trigger `409 Conflict`.
 5. **Address Immutability:** Updating a user profile address in the Identity module has zero effect on existing parcel records in `parcels.pickup_address`.
 6. **Transaction Atomicity:** An error during outbox event creation rolls back the entire parcel booking transaction, ensuring zero orphan records.
+
+---
+
+## Diagrams
+
+### 11. Authoritative Architecture & Component Design Diagram
+
+The authoritative Clean Architecture component design diagram for Member 2 is maintained directly under `docs/drafts/member-02-parcels-pricing/diagrams/` with native editable vector containers representing all four Clean Architecture layers, ports, adapters, dependency inversion arrows, and external module boundaries:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts | Status & Key Rules Enforced |
+| :--- | :--- | :--- | :--- | :--- |
+| **07 Parcel & Pricing Component Architecture Diagram** | UML Component Diagram (Clean Architecture) | [Lucidchart Document](https://lucid.app/lucidchart/983208a4-c9f1-44f3-a6d8-118b89757207/edit) | [PlantUML Source](./diagrams/07-parcel-pricing-component.puml) \| [PNG Preview](./diagrams/07-parcel-pricing-component.png) | **Authoritative:** Strict Clean Architecture layer isolation (Transport, Application, Domain, Infrastructure); pure zero-dependency domain layer; Dependency Inversion Principle (DIP) interfaces; clean boundaries with external modules (Members 1, 3, 4, 5, 8) and PostgreSQL 16 persistence. |

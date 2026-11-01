@@ -28,13 +28,14 @@ Primary backend modular monolith (HTTP Port `8080`, Probes at `/health/live`, `/
 | Variable Name | Description | Default / Example Value | Required? | Secret? |
 | :--- | :--- | :--- | :--- | :--- |
 | `HTTP_ADDR` | TCP address and port for HTTP server to listen on. | `:8080` | **Yes** | No |
-| `PUBLIC_BASE_URL` | Public-facing base domain URL. | `https://api.swiftdrop.io` (local: `http://localhost:8080`) | **Yes** | No |
-| `JWT_PRIVATE_KEY_PEM` | RSA private key PEM for minting access tokens. | *(File path or PEM string)* | **Yes** | **Yes** |
-| `JWT_PUBLIC_KEY_PEM` | RSA public key PEM for validating tokens. | *(File path or PEM string)* | **Yes** | No |
+| `PUBLIC_BASE_URL` | Public-facing base domain URL. | `https://swiftdrop.example.com` (one domain, path routing C17; real domain still open) (local: `http://localhost`) | **Yes** | No |
+| `JWT_PRIVATE_KEY_PEM` | Path to the RSA private key PEM file for minting access tokens. In Kubernetes, `jwt-secrets` is mounted as files under `/etc/secrets/jwt/`, because multi-line PEM text in env vars breaks line endings (Member 1, 2026-11-01). | `/etc/secrets/jwt/private.pem` | **Yes** | **Yes** |
+| `JWT_PUBLIC_KEY_PEM` | Path to the RSA public key PEM file for validating tokens. | `/etc/secrets/jwt/public.pem` | **Yes** | No |
 | `JWT_ACCESS_EXP_MINUTES`| Lifetime duration for access tokens. | `15` | No | No |
+| `COOKIE_SECURE` | Secure flag on the refresh-token cookie. Must be `true` in production (HTTPS only). Local Docker runs plain HTTP, so it must be `false` there, or the browser drops the cookie (Member 1, 2026-11-01). | `false` (local), `true` (production) | **Yes** | No |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud Console. | `123456789-abc.apps.googleusercontent.com` | **Yes** | No |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret. | `GOCSPX-abc123xyz...` | **Yes** | **Yes** |
-| `GOOGLE_REDIRECT_URI` | Authorized OAuth redirect callback URL. | `http://localhost:8080/api/v1/auth/google/callback` | **Yes** | No |
+| `GOOGLE_REDIRECT_URI` | Authorized OAuth redirect callback URL, through the gateway. The path `/api/v1/auth/google/callback` follows SRS §6.2 (confirmed by Member 1, 2026-11-01). It must match the URI registered in Google Cloud Console exactly, or sign-in fails with `redirect_uri_mismatch`. | `http://localhost/api/v1/auth/google/callback` (production: `https://swiftdrop.example.com/api/v1/auth/google/callback`) | **Yes** | No |
 | `IDEMPOTENCY_EXPIRY_HOURS`| Lifetime before stored idempotency cache rows expire. | `24` | No | No |
 | `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for encrypting merchant webhook secrets (shared with Event Worker). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
 | `MERCHANT_API_KEY_PEPPER`| Server-side pepper string for merchant API key HMAC hashing. | *(Secret pepper string)* | **Yes** | **Yes** |
@@ -52,7 +53,7 @@ Read-optimized public milestone and SSE projection service (HTTP Port `8081`, Pr
 | Variable Name | Description | Default / Example Value | Required? | Secret? |
 | :--- | :--- | :--- | :--- | :--- |
 | `TRACKING_HTTP_ADDR` | Listen address for Tracking service. | `:8081` | **Yes** | No |
-| `JWT_PUBLIC_KEY_PEM` | Shared public key for optional authenticated stream validation. | *(Same as Core API)* | No | No |
+| `JWT_PUBLIC_KEY_PEM` | Path to the shared public key file for optional authenticated stream validation. Tracking mounts only `public.pem` from `jwt-secrets`. | `/etc/secrets/jwt/public.pem` | No | No |
 | `SSE_HEARTBEAT_SECONDS` | Interval in seconds between keep-alive SSE comments (`: ping` or `:keepalive`). | `15` | No | No |
 | `REDIS_URL` | Optional Redis URL for cross-replica SSE fan-out. | `redis://redis:6379/0` | No | No |
 
@@ -127,7 +128,7 @@ Standardized secret naming scheme per Member 9 Agreement A5:
 | Database App Credentials | `postgres-secrets` | `Secret` | One key per login role, mapped into each pod's `DATABASE_URL`: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL` (`swiftdrop_tracking_ro`), `RELAY_DATABASE_URL` (`swiftdrop_relay`), `WORKER_DATABASE_URL` (`swiftdrop_worker`), `RECONCILER_DATABASE_URL` (`swiftdrop_reconciler`); plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` for the Postgres container only |
 | Database Migration Credentials | `postgres-migrator-secrets` | `Secret` | `DATABASE_URL` (role `swiftdrop_migrator`) |
 | RabbitMQ Credentials | `rabbitmq-secrets` | `Secret` | `RABBITMQ_URL` (user `swiftdrop`) |
-| JWT Private Keys | `jwt-secrets` | `Secret` | `JWT_PRIVATE_KEY_PEM` |
+| JWT Keys | `jwt-secrets` | `Secret` (mounted as files at `/etc/secrets/jwt/`, not env vars) | `private.pem` (core-api only), `public.pem` (core-api, tracking-api) |
 | Third-Party API Keys & Encryption | `integrations-secrets` | `Secret` | `WEBHOOK_SECRET_ENCRYPTION_KEY`, `MERCHANT_API_KEY_PEPPER`, `GOOGLE_CLIENT_SECRET`, `LLM_API_KEY`, `SMTP_PASSWORD` |
 | Module-Specific Secrets | `<service>-<module>-secrets` | `Secret` | E.g. `core-api-merchants-secrets` |
 | Traefik Configuration | `traefik-config` | `ConfigMap` | `traefik.yml` static configuration |

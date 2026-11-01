@@ -390,3 +390,20 @@ go test -v -tags=integration ./internal/parcels/infrastructure/...
 - [ ] Concurrency verified: simultaneous duplicate requests under same idempotency key create exactly 1 parcel.
 - [ ] Public tracking privacy tests confirm complete redaction of customer phone and street address.
 - [ ] Clean migration up and down tests succeed against real PostgreSQL.
+
+---
+
+## Diagrams & Test Specification References
+
+The following authoritative diagrams provide visual models of the workflows, state machines, and schemas under test, helping verify acceptance criteria and test coverage:
+
+| Diagram Title | Associated Acceptance Test Cases | Lucidchart Editable URL | Repository Artifacts |
+| :--- | :--- | :--- | :--- |
+| **01 Parcel Management & Pricing Use-Case Diagram** | Actor boundary validation, RBAC tests (`TC-SEC-001` to `TC-SEC-004`) | [Lucidchart Document](https://lucid.app/lucidchart/da53bbf3-1b48-450c-9945-b1816a32ae17/edit) | [PlantUML Source](./diagrams/01-parcel-pricing-use-case.puml) \| [PNG Preview](./diagrams/01-parcel-pricing-use-case.png) |
+| **02 Delivery Fee Estimation Activity Diagram** | `TC-PRC-001` through `TC-PRC-011` (Band assignment, volumetric thresholds, limit rejections) | [Lucidchart Document](https://lucid.app/lucidchart/e9ac9f8d-5d88-4e74-9a52-5e09e5c696b4/edit) | [PlantUML Source](./diagrams/02-delivery-fee-estimation-activity.puml) \| [PNG Preview](./diagrams/02-delivery-fee-estimation-activity.png) \| [SVG](./diagrams/02-delivery-fee-estimation-activity.svg) |
+| **03 Delivery Fee Estimation Sequence Diagram** | `TC-PRC-008` (Zone/rule lookup), `TC-PRC-009` (Quote 15m expiration & persistence) | [Lucidchart Document](https://lucid.app/lucidchart/456c449a-5f68-4d12-a051-027a04e87663/edit) | [PlantUML Source](./diagrams/03-delivery-fee-estimation-sequence.puml) \| [PNG Preview](./diagrams/03-delivery-fee-estimation-sequence.png) |
+| **04 Customer Parcel Booking Activity Diagram** | `TC-BKG-001` to `TC-BKG-005` (Syntax, zone validation, quote binding, single transaction) | [Lucidchart Document](https://lucid.app/lucidchart/48f368fa-a237-4fea-bb84-c454dd788216/edit) | [PlantUML Source](./diagrams/04-parcel-booking-activity.puml) \| [PNG Preview](./diagrams/04-parcel-booking-activity.png) |
+| **05 Customer Parcel Booking Sequence Diagram** | `TC-BKG-001` through `TC-BKG-007`, `TC-IDM-001` to `TC-IDM-002` (Idempotency, atomic commit, outbox) | [Lucidchart Document](https://lucid.app/lucidchart/c2b3114e-a7b8-4313-8172-1a82336a8cc1/edit) | [PlantUML Source](./diagrams/05-parcel-booking-sequence.puml) \| [PNG Preview](./diagrams/05-parcel-booking-sequence.png) |
+| **06 Parcel Lifecycle State Machine Diagram** | `TC-LCY-001` through `TC-LCY-006` (9-state machine, ADR-004 3-attempt ceiling, transitions) | [Lucidchart Document](https://lucid.app/lucidchart/43a950d5-3596-4bb5-84c7-64f813f48a7c/edit) | [PlantUML Source](./diagrams/06-parcel-lifecycle-state-machine.puml) \| [PNG Preview](./diagrams/06-parcel-lifecycle-state-machine.png) |
+| **07 Parcel & Pricing Component Architecture** | Clean architecture isolation, repository interfaces, dependency inversion | [Lucidchart Document](https://lucid.app/lucidchart/983208a4-c9f1-44f3-a6d8-118b89757207/edit) | [PlantUML Source](./diagrams/07-parcel-pricing-component.puml) \| [PNG Preview](./diagrams/07-parcel-pricing-component.png) |
+| **08 Parcel & Pricing ERD (Logical Schema)** | `TC-SEC-001` to `TC-SEC-004`, schema integrity, migrations `000004`, `000005`, `000010` | [Lucidchart Document](https://lucid.app/lucidchart/d51127dc-51ad-4542-843a-423d44d6fd16/edit) | [PlantUML Source](./diagrams/08-parcel-pricing-erd.puml) \| [PNG Preview](./diagrams/08-parcel-pricing-erd.png) |

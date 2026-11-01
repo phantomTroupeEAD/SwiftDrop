@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Are cross-module foreign keys allowed (DB1)?; outbox `correlation_id` and the `processed_events` table in `database-schema.md` (DB2, DB3, Member 8); ai_conversations vs the AI no-database rule (DB5, Member 10); idempotency_keys owner and key (DB7, Member 2); `parcel_addresses` table vs JSONB (DB13, Member 2); rename of the webhook `secret_hash` column (DB11). *(Settled: refresh-token table exists (DB4); pool sizes (D8); migration order (D3).)*  
+> **Open Questions / Needs Clarification:** Are cross-module foreign keys allowed (DB1)?; outbox `correlation_id` and the `processed_events` table in `database-schema.md` (DB2, DB3, Member 8); ai_conversations vs the AI no-database rule (DB5, Member 10); rename of the webhook `secret_hash` column (DB11). *(Settled: refresh-token table exists (DB4); pool sizes (D8); migration order (D3); `idempotency_keys` owned by Member 2 (DB7); addresses as JSONB on `parcels` (DB13); both Member 2, 2026-11-01.)*  
 > **Answers:** What data does this module own, and how is consistency maintained?  
 > **System ERD:** not duplicated here; see `docs/architecture/database-schema.md` §1 (the template allows a reference).  
 
@@ -43,15 +43,15 @@ M9 owns **no business tables**. It owns the **places data lives**, and the **pro
 
 | Table(s) | Owner | Module path |
 | :--- | :--- | :--- |
-| `users`, `roles`, `user_roles`, `oauth_identities` | M1 Umesh | `core-api/internal/identity` |
+| `users`, `roles`, `oauth_identities`, `refresh_tokens` | M1 Umesh | `core-api/internal/identity` (`user_roles` from the hub list is not in `database-schema.md`, which uses one `users.role` column; Member 1 decides) |
 | `pricing_rules`, `pricing_quotes` | M2 Hansi | `core-api/internal/pricing` |
-| `parcels`, `parcel_addresses`, `parcel_status_history` | M2 Hansi | `core-api/internal/parcels` |
+| `parcels` (addresses as JSONB `pickup_address` / `dropoff_address`, DB13), `parcel_status_history` | M2 Hansi | `core-api/internal/parcels` |
 | `couriers`, `courier_assignments` | M3 Kalani | `core-api/internal/dispatch` |
 | `delivery_attempts` | M3 Kalani | `core-api/internal/delivery` |
 | `merchants`, `merchant_api_credentials`, `webhook_endpoints` | M4 Nagitha | `core-api/internal/merchants` |
 | `delivery_zones`, `audit_logs` | M7 Bagya / M1 Umesh | `core-api/internal/admin`, audit middleware |
 | `outbox_events`, `notification_deliveries`, `webhook_deliveries` (+ `processed_events`, DB3) | M8 Watti | `core-api/internal/events`, `services/messaging` |
-| `idempotency_keys` | **TBD (DB7)**, proposed M2 Hansi | platform middleware |
+| `idempotency_keys` | M2 Hansi (DB7, confirmed 2026-11-01) | platform middleware; primary key (`key`, `caller_scope`), 24-hour TTL |
 | `ai_conversations` | M10 Kakkaya | **on hold (DB5)**: the AI service has no DB access |
 
 **Boundary rule:** a module may **read and write only its own tables**. Cross-module data goes through Go interfaces or events (`domain-boundaries.md` §4). DB-level foreign keys across modules are allowed per SRS §7.2; cross-module JOIN queries are not (DB1, to confirm).
@@ -65,7 +65,7 @@ Core API is **one process** (modular monolith), so all its modules share one rol
 | `swiftdrop_migrator` | migrate Job / Compose service only | owns the schema; DDL (CREATE/ALTER/DROP) |
 | `swiftdrop_reconciler` | reconciler CronJob (`messaging` image, Member 8) | SELECT on core consistency views; UPDATE on `outbox_events`, `webhook_deliveries`, `notification_deliveries` |
 | `swiftdrop_app` | core-api | SELECT/INSERT/UPDATE on core tables; DELETE only where a module needs it |
-| `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels`, `parcel_status_history`, `parcel_addresses` (read-only projection query) |
+| `swiftdrop_tracking_ro` | tracking-api | **SELECT only** on `parcels` and `parcel_status_history` (read-only projection query; destination city comes from `dropoff_address->>'city'`) |
 | `swiftdrop_relay` | outbox-relay | SELECT/UPDATE on `outbox_events` |
 | `swiftdrop_worker` | event-worker | INSERT/UPDATE on `notification_deliveries`, `webhook_deliveries`, `processed_events`; SELECT on the `merchant_webhook_targets` view (Member 4's name, DB12) |
 | *(none)* | ai-assistant | **no DB access** (FR-AI-005) |
@@ -97,16 +97,16 @@ Core API is **one process** (modular monolith), so all its modules share one rol
 
 | No. | File | Owner | Tables | Needs (foreign keys) |
 | :-: | :--- | :--- | :--- | :--- |
-| 000001 | `create_users_and_roles` | M1 Umesh | `users`, `roles`, `user_roles`, `oauth_identities` (+ `refresh_tokens`, Member 1 to confirm) | — |
+| 000001 | `create_users_and_roles` | M1 Umesh | `roles`, `users`, `oauth_identities`, `refresh_tokens` (+ `user_roles` only if Member 1 keeps it) | — |
 | 000002 | `create_delivery_zones` | M7 Bagya | `delivery_zones` | — |
 | 000003 | `create_merchants_and_credentials` | M4 Nagitha | `merchants`, `merchant_api_credentials`, `webhook_endpoints` | 000001 |
 | 000004 | `create_pricing_rules` | M2 Hansi | `pricing_rules` | 000002 |
-| 000005 | `create_parcels_and_quotes` | M2 Hansi | `parcels`, `parcel_addresses` (or JSONB, DB13), `pricing_quotes`, `parcel_status_history` | 000001–000004 |
+| 000005 | `create_parcels_and_quotes` | M2 Hansi | `parcels` (JSONB addresses, DB13), `pricing_quotes`, `parcel_status_history` | 000001–000004 |
 | 000006 | `create_couriers` | M3 Kalani | `couriers` | 000001, 000002 |
 | 000007 | `create_dispatch_and_delivery` | M3 Kalani | `courier_assignments`, `delivery_attempts` | 000005, 000006 |
 | 000008 | `create_outbox_events` | M8 Watti | `outbox_events` | — |
 | 000009 | `create_worker_dedup_and_webhooks` | M8 Watti | `processed_events`, `webhook_deliveries`, **`notification_deliveries`** (missing from the hub list) | 000003, 000008 |
-| 000010 | `create_idempotency_keys` | M2 / platform (DB7) | `idempotency_keys` | — |
+| 000010 | `create_idempotency_keys` | M2 Hansi (DB7) | `idempotency_keys` | — |
 | 000011 | `create_audit_logs` | M7 / platform | `audit_logs` | 000001 |
 
 `pricing_quotes.accepted_parcel_id` points at `parcels`, so quotes must live in `000005` or later, never before parcels. After the first wave, every change takes the next free number. The seed runs after all migrations.
@@ -201,4 +201,4 @@ These come from SRS §7.2, `database-schema.md` §3 and the DB coordinator revie
 
 ## 10. Summary of open data items
 
-DB1 (FK rule), DB2 (outbox `correlation_id`), DB3 (`processed_events`), DB5 (`ai_conversations`), DB6 (references to two tables), DB7 (idempotency owner and key), DB8 (text primary keys), DB9 (money type), **DB11 (webhook secret column)**, DB12 (webhook targets view name), DB13 (`parcel_addresses` vs JSONB). Resolved: DB4 (`refresh_tokens` exists), DB10 (roles agreed in D6). Each one is listed in this folder's README under "Open questions for Meeting 2"; DB11 is above.
+DB1 (FK rule), DB2 (outbox `correlation_id`), DB3 (`processed_events`), DB5 (`ai_conversations`), DB6 (references to two tables), DB8 (text primary keys), DB9 (money type), **DB11 (webhook secret column)**, DB12 (webhook targets view name). Resolved: DB4 (`refresh_tokens` exists), DB7 (Member 2 owns `idempotency_keys`), DB10 (roles agreed in D6), DB13 (JSONB addresses on `parcels`). Each one is listed in this folder's README under "Open questions for Meeting 2"; DB11 is above.

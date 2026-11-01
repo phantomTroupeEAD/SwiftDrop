@@ -474,3 +474,17 @@ flowchart TD
 4. **State Machine Verification:** Direct SQL updates to parcel status are blocked; all status transitions pass through the domain aggregate and record an immutable entry in `parcel_status_history`.
 5. **Outbox Atomicity Contract:** Every successful parcel booking commits an outbox event (`parcel.booked.v1`) within the same PostgreSQL transaction.
 6. **Privacy Masking Compliance:** Public tracking projections exclude recipient contact names, phone numbers, and street addresses.
+
+---
+
+## Diagrams
+
+### 11. Authoritative Interface & Integration Sequence Diagram
+
+The authoritative customer parcel booking sequence diagram is maintained directly under `docs/drafts/member-02-parcels-pricing/diagrams/` with native PlantUML lifelines, activation blocks, and alt/opt fragments:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts | Status & Key Rules Enforced |
+| :--- | :--- | :--- | :--- | :--- |
+| **05 Customer Parcel Booking Sequence Diagram** | UML Sequence Diagram | [Lucidchart Document](https://lucid.app/lucidchart/c2b3114e-a7b8-4313-8172-1a82336a8cc1/edit) | [PlantUML Source](./diagrams/05-parcel-booking-sequence.puml) \| [PNG Preview](./diagrams/05-parcel-booking-sequence.png) | **Authoritative:** End-to-end customer booking flow; JWT verification, idempotency replay, quote validation (<15m), tracking number generation, atomic DB transaction, and outbox event emission. |
+
+*Note: As part of the single-version consolidation, redundant cross-boundary integration sequence drafts were consolidated into the core booking contract (05) and domain boundaries. Merchant ingestion contracts are collaboratively governed with Member 4, and courier dispatch / POD status transition workflows are owned by Member 3.*

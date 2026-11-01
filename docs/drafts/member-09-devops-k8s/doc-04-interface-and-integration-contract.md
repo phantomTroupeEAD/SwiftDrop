@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Metric names to confirm with each owner; public tracking and SSE paths (C18, Member 5); rate-limit and CORS values (C19, C20, Member 7); the Google callback path (Member 1); team OK for one DB URL key per login role (A5 amendment). *(Settled: relay 8082 / worker 8083 (Member 8); web variable `VITE_API_BASE_URL` (Member 6).)*  
+> **Open Questions / Needs Clarification:** Metric names to confirm with each owner; public tracking and SSE paths (C18, Member 5); rate-limit and CORS values (C19, C20, Member 7); team OK for one DB URL key per login role (A5 amendment). *(Settled: relay 8082 / worker 8083 (Member 8); web variable `VITE_API_BASE_URL` (Member 6); Google callback `/api/v1/auth/google/callback`, JWT keys mounted as files, `COOKIE_SECURE=false` locally (Member 1, 2026-11-01).)*  
 > **Answers:** Exactly how does this module communicate with other modules?  
 > **Note:** the platform exposes **no business API**. Its "interfaces" are the contracts every service must meet to be built, run, probed, scraped and deployed. They are written below as **machine-readable** YAML where possible.  
 
@@ -102,7 +102,7 @@ The example bodies follow `runbook.md` §1 (`{"status":"UP"}`, `{"status":"READY
 | `make up` | `docker compose -f deploy/docker-compose.yml up -d` | M9 |
 | `make migrate-up` | run the one-shot golang-migrate container (`up`) | M9 (runner) |
 | `make seed` | load deterministic demo data | command from M2 Hansi |
-| `make test-e2e` | run the Playwright end-to-end suite | command from M10 / M6 / M7 |
+| `make test-e2e` | `pytest tests/e2e/ -v`: Member 10's Python suite (pytest-playwright for the UI, httpx + pika for API and broker tests) | M10 (command decided 2026-10-28) |
 | `make down` / `make reset` *(proposed extras)* | stop the stack / stop it and delete the volumes | M9 |
 
 Targets are **stable names**. If the command behind one changes, the target name stays the same.
@@ -125,7 +125,7 @@ conventions:
                              WORKER_DATABASE_URL, RECONCILER_DATABASE_URL]
       postgres-migrator-secrets: [DATABASE_URL]                                    # migrate Job (swiftdrop_migrator)
       rabbitmq-secrets:     [RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS, RABBITMQ_URL]   # C6: KEDA reads RABBITMQ_URL
-      jwt-secrets:          [JWT_PRIVATE_KEY_PEM]
+      jwt-secrets:          [private.pem, public.pem]   # mounted as files at /etc/secrets/jwt/ (Member 1); tracking-api mounts public.pem only
       integrations-secrets: [WEBHOOK_SECRET_ENCRYPTION_KEY, MERCHANT_API_KEY_PEPPER, GOOGLE_CLIENT_SECRET, LLM_API_KEY,
                              SMTP_PASSWORD, OBJECT_STORAGE_ACCESS_KEY, OBJECT_STORAGE_SECRET_KEY, AI_SERVICE_ROLE_TOKEN,
                              SENDGRID_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]       # last three optional (production providers)

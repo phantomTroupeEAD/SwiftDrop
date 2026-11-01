@@ -191,7 +191,7 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 
 ## UML Sequence Diagram
 
-![UML Sequence Diagram — Delivery Fee Estimate](./Document2-Functional-Flows-Business-Rules-Revised_assets/Delivery%20Fee%20Estimate%20Sequence%20Diagram.png)
+![UML Sequence Diagram — Delivery Fee Estimate](./diagrams/03-delivery-fee-estimation-sequence.png)
 
 *Figure 4.1: UML Sequence Diagram — Delivery Fee Estimation*
 
@@ -248,7 +248,7 @@ An authenticated customer confirms a delivery booking. The system supports two d
 
 ## UML Sequence Diagram
 
-![UML Sequence Diagram — Customer Parcel Booking](./Document2-Functional-Flows-Business-Rules-Revised_assets/Customer%20Parcel%20Booking%20Sequence%20Diagram.png)
+![UML Sequence Diagram — Customer Parcel Booking](./diagrams/05-parcel-booking-sequence.png)
 
 *Figure 5.1: UML Sequence Diagram — Customer Parcel Booking*
 
@@ -495,7 +495,7 @@ To prevent race conditions when multiple couriers or dispatchers interact with t
 
 # 10. UML Activity Diagram — Booking Decision Flow
 
-![UML Activity Diagram — Parcel Booking Decision Flow](./Document2-Functional-Flows-Business-Rules-Revised_assets/SwiftDrop_Parcel_Booking_Activity_Diagram.png)
+![UML Activity Diagram — Parcel Booking Decision Flow](./diagrams/04-parcel-booking-activity.png)
 
 *Figure 10.1: UML Activity Diagram — Parcel Booking Decision Flow*
 
@@ -578,3 +578,19 @@ The workflows are considered ready for implementation review when:
 5. Parcel lifecycle transitions are strictly governed by the `Parcel` aggregate root, rejecting direct SQL status modifications and enforcing the 3-attempt ceiling.
 6. Customers and merchants can only access data within their authenticated scope; public tracking views mask recipient phone numbers and street addresses.
 7. Automated tests verify quote calculation, booking atomicity, idempotency, state transitions, and database rollback.
+
+---
+
+## Diagrams
+
+### 15. Authoritative Engineering Diagrams for Functional Flows & Lifecycle
+
+The following authoritative, fully editable engineering diagrams govern Member 2 functional flows, pricing rules, booking, and parcel lifecycle state transitions. They are maintained directly under `docs/drafts/member-02-parcels-pricing/diagrams/` with native vector elements in Lucidchart:
+
+| Diagram Title | Type & Standard | Lucidchart Editable URL | Repository Artifacts | Status & Key Rules Enforced |
+| :--- | :--- | :--- | :--- | :--- |
+| **02 Delivery Fee Estimation Activity Diagram** | UML Activity Diagram (5 Swimlanes) | [Lucidchart Document](https://lucid.app/lucidchart/e9ac9f8d-5d88-4e74-9a52-5e09e5c696b4/edit) | [PlantUML Source](./diagrams/02-delivery-fee-estimation-activity.puml) \| [PNG Preview](./diagrams/02-delivery-fee-estimation-activity.png) \| [SVG](./diagrams/02-delivery-fee-estimation-activity.svg) | **Authoritative:** 4 clean architectural swimlanes (Client, Transport, Application & Domain, Repository); approved chargeable weight policy; deterministic tariff matching; integer minor units (LKR cents); single blue UML palette. |
+| **03 Delivery Fee Estimation Sequence Diagram** | UML Sequence Diagram | [Lucidchart Document](https://lucid.app/lucidchart/456c449a-5f68-4d12-a051-027a04e87663/edit) | [PlantUML Source](./diagrams/03-delivery-fee-estimation-sequence.puml) \| [PNG Preview](./diagrams/03-delivery-fee-estimation-sequence.png) | **Authoritative:** Complete sequence between Client, Pricing Handler, Pricing UseCase, Pricing Domain Engine, Tariff Repo, and DB; explicit error branches (400/422); returns 201 Created Quote. |
+| **04 Customer Parcel Booking Activity Diagram** | UML Activity Diagram (5 Swimlanes) | [Lucidchart Document](https://lucid.app/lucidchart/48f368fa-a237-4fea-bb84-c454dd788216/edit) | [PlantUML Source](./diagrams/04-parcel-booking-activity.puml) \| [PNG Preview](./diagrams/04-parcel-booking-activity.png) \| [SVG](./diagrams/04-parcel-booking-activity.svg) | **Authoritative:** 5 clean architectural swimlanes (Customer Client, API Gateway / Auth, Core API Handler Transport, Application & Domain, Persistence / Outbox & DB Infrastructure); atomic single-transaction commit; outbox event persistence; idempotency key validation; single blue UML palette. |
+| **05 Customer Parcel Booking Sequence Diagram** | UML Sequence Diagram | [Lucidchart Document](https://lucid.app/lucidchart/c2b3114e-a7b8-4313-8172-1a82336a8cc1/edit) | [PlantUML Source](./diagrams/05-parcel-booking-sequence.puml) \| [PNG Preview](./diagrams/05-parcel-booking-sequence.png) | **Authoritative:** End-to-end booking execution; JWT auth verification, idempotency replay check, quote validation (<15m), tracking number generation, single DB transaction commit, and outbox event publishing. |
+| **06 Parcel Lifecycle State Machine Diagram** | UML State Machine Diagram | [Lucidchart Document](https://lucid.app/lucidchart/43a950d5-3596-4bb5-84c7-64f813f48a7c/edit) | [PlantUML Source](./diagrams/06-parcel-lifecycle-state-machine.puml) \| [PNG Preview](./diagrams/06-parcel-lifecycle-state-machine.png) | **Authoritative:** Strictly conforms to ADR-004 9 canonical states (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`); 3-attempt ceiling logic; terminal states. |
