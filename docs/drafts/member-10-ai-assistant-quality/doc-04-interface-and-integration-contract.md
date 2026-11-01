@@ -1,0 +1,605 @@
+# Document 4 — Interface & Integration Contract: AI Assistant, MCP Tools & Playwright Standards
+
+> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Author:** Member 10 — AI Assistant & Cross-Workflow Quality  
+> **Target Module:** `services/ai-assistant/` & System-Wide E2E Testing (`tests/e2e/`)  
+> **Upstream Contracts Consumed:** Member 1 (Auth), Member 2 (Pricing/Parcels), Member 5 (Tracking)  
+> **Frontend Consumers:** Member 6 & Member 7 (React Frontend & UI Chatbot)
+
+---
+
+## 1. Overview & Architectural Role
+
+The **AI Delivery Assistant** acts as an intelligent conversational layer and MCP server. It does not own persistent parcel state. Instead, it exposes:
+1. **Chatbot HTTP API (`/api/v1/ai/chat`)**: Consumed by the React Web Frontend.
+2. **MCP Server (`mcp_server.py`)**: Exposes standardized tools to external MCP clients (Cursor, Claude Desktop, autonomous evaluators).
+3. **Upstream Consumed APIs**: Calls authoritative Core API and Tracking API REST endpoints.
+4. **Playwright `data-testid` Contract**: Standardized selector contract for cross-workflow UI testing.
+
+---
+
+## 2. Upstream Core APIs Consumed by the AI Assistant & MCP Tools
+
+The AI Assistant and MCP server execute the following HTTP calls against backend services:
+
+```mermaid
+flowchart LR
+    AIA["AI Assistant Service / MCP"] -->|"1. GET /api/v1/tracking/public/{id}"| TRK["Tracking API (Member 5)"]
+    AIA -->|"2. GET /api/v1/parcels (Bearer JWT)"| PAR["Core API Parcels (Member 2)"]
+    AIA -->|"3. POST /api/v1/pricing/quotes"| PRC["Core API Pricing (Member 2)"]
+    AIA -->|"4. GET /api/v1/parcels (Bearer JWT)"| HIS["Core API History (Member 2)"]
+```
+
+---
+
+### Endpoint 1: Public Parcel Tracking
+- **Consumed By Tool:** `track_parcel(tracking_number: str)`
+- **Owner Service:** Member 5 — Tracking API (`services/tracking`)
+- **HTTP Method & Path:** `GET /api/v1/tracking/public/{trackingNumber}`
+- **Authentication:** None (Public)
+- **Headers:** `Accept: application/json`
+
+#### Expected Request
+- Path Parameter: `trackingNumber` (string, e.g., `"SD-20261021-04921"`)
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "tracking_number": "SD-20261021-04921",
+    "status": "OUT_FOR_DELIVERY",
+    "status_description": "Parcel is out for delivery with the local courier.",
+    "destination": {
+      "city": "Kandy",
+      "district": "Central Province"
+    },
+    "estimated_delivery": "2026-10-22T14:30:00Z",
+    "milestones": [
+      {
+        "status": "CREATED",
+        "timestamp": "2026-10-21T08:30:00Z",
+        "description": "Parcel booking confirmed"
+      },
+      {
+        "status": "PICKED_UP",
+        "timestamp": "2026-10-21T11:00:00Z",
+        "description": "Collected from sender"
+      },
+      {
+        "status": "IN_TRANSIT",
+        "timestamp": "2026-10-21T15:45:00Z",
+        "description": "Processed at Colombo Sorting Facility"
+      },
+      {
+        "status": "OUT_FOR_DELIVERY",
+        "timestamp": "2026-10-22T08:15:00Z",
+        "description": "Dispatched for final delivery in Kandy"
+      }
+    ]
+  }
+}
+```
+
+#### Expected Error Responses
+- `404 Not Found`: Parcel not found or invalid format.
+  ```json
+  {
+    "error": {
+      "code": "PARCEL_NOT_FOUND",
+      "message": "No shipment found matching tracking number SD-20261021-04921"
+    }
+  }
+  ```
+- `429 Too Many Requests`: Public query rate limit exceeded.
+
+---
+
+### Endpoint 2: Authenticated Active Shipments (Disambiguation)
+- **Consumed By Tool:** `get_my_active_parcels()`
+- **Owner Service:** Member 2 — Parcel Management (`core-api/internal/parcels`)
+- **HTTP Method & Path:** `GET /api/v1/parcels` (with query parameter `status=active` or customer tenant scope)
+- **Authentication:** Required (`Authorization: Bearer <customer_jwt>`)
+- **Purpose:** Used when a logged-in user asks *"Where is my parcel?"* without specifying a tracking code.
+
+#### Expected Request
+- Headers: `Authorization: Bearer <jwt>`, `Accept: application/json`
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": [
+    {
+      "id": "prcl_01HXYZ101",
+      "tracking_number": "SD-20261021-04921",
+      "status": "OUT_FOR_DELIVERY",
+      "recipient_name": "Kasun Perera",
+      "destination_city": "Kandy",
+      "created_at": "2026-10-21T08:30:00Z"
+    },
+    {
+      "id": "prcl_01HXYZ102",
+      "tracking_number": "SD-20261022-09112",
+      "status": "IN_TRANSIT",
+      "recipient_name": "Nimal Silva",
+      "destination_city": "Galle",
+      "created_at": "2026-10-22T09:15:00Z"
+    }
+  ]
+}
+```
+
+#### Expected Error Responses
+- `401 Unauthorized`: Token missing or expired.
+- `403 Forbidden`: Caller lacks customer role.
+
+---
+
+### Endpoint 3: Delivery Fee Estimation
+- **Consumed By Tool:** `estimate_shipping_fee(...)`
+- **Owner Service:** Member 2 — Pricing Engine (`core-api/internal/pricing`)
+- **HTTP Method & Path:** `POST /api/v1/pricing/quotes`
+- **Authentication:** None (Publicly callable for quoting)
+- **Headers:** `Content-Type: application/json`, `Accept: application/json`
+
+#### Expected Request Body
+```json
+{
+  "origin_zone_id": "ZONE_COLOMBO_01",
+  "destination_zone_id": "ZONE_KANDY_01",
+  "actual_weight_kg": 2.5,
+  "length_cm": 25.0,
+  "width_cm": 15.0,
+  "height_cm": 10.0
+}
+```
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "currency": "LKR",
+    "fee_cents": 65000,
+    "base_fee_cents": 35000,
+    "weight_surcharge_cents": 20000,
+    "volumetric_surcharge_cents": 10000,
+    "origin_zone_id": "ZONE_COLOMBO_01",
+    "destination_zone_id": "ZONE_KANDY_01",
+    "estimated_transit_days": 1,
+    "pricing_version": "v1.0"
+  }
+}
+```
+
+#### Expected Error Responses
+- `400 Bad Request`: Negative weight or missing required zones.
+- `422 Unprocessable Entity`: Unknown or unsupported zone codes.
+
+---
+
+### Endpoint 4: Authenticated Customer Delivery History
+- **Consumed By Tool:** `get_my_deliveries(status_filter: str = None)`
+- **Owner Service:** Member 2 — Parcel Management (`core-api/internal/parcels`)
+- **HTTP Method & Path:** `GET /api/v1/parcels`
+- **Authentication:** Required (`Authorization: Bearer <customer_jwt>`)
+- **Query Parameters:** `?status=DELIVERED&page=1&per_page=10`
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": [
+    {
+      "id": "prcl_01HXYZ001",
+      "tracking_number": "SD-20261015-00129",
+      "status": "DELIVERED",
+      "delivered_at": "2026-10-16T16:20:00Z",
+      "destination_city": "Colombo",
+      "fee_paid": "450.00",
+      "currency": "LKR"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "per_page": 10,
+    "total_items": 1
+  }
+}
+```
+
+---
+
+### Endpoint 5: Company Policies & Operational Rules (Dynamic Knowledge Base)
+- **Consumed By:** AI Assistant Service Context Hydrator & React Public Portal
+- **Owner Service:** Member 7 / Member 1 — Admin & System Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `GET /api/v1/system/policies`
+- **Authentication:** None (Public / Internal Service)
+- **Purpose:** Supplies active company rules, prohibited goods, transit SLAs, and operating hours for prompt grounding.
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "version": "v1.4",
+    "updated_at": "2026-10-23T10:00:00Z",
+    "operating_hours": "Monday - Saturday 08:00 - 18:00",
+    "same_day_cutoff": "14:00",
+    "max_delivery_attempts": 3,
+    "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids, explosives, and fireworks...\n\n## 2. Packaging Guidelines\n- Maximum weight per parcel: 30 kg...\n\n## 3. Delivery SLAs\n- Western Province: 1 business day..."
+  }
+}
+```
+
+---
+
+### Endpoint 6: Admin View Policy Specification
+- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `GET /api/v1/admin/policies`
+- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
+- **Headers:** `Accept: application/json`
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "version": "v1.4",
+    "updated_at": "2026-10-23T10:00:00Z",
+    "updated_by": "usr_admin_001",
+    "operating_hours": "Monday - Saturday 08:00 - 18:00",
+    "same_day_cutoff": "14:00",
+    "max_delivery_attempts": 3,
+    "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids..."
+  }
+}
+```
+
+---
+
+### Endpoint 7: Admin Edit Policy Text & Rules
+- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `PUT /api/v1/admin/policies`
+- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
+- **Headers:** `Content-Type: application/json`
+
+#### Expected Request Body
+```json
+{
+  "operating_hours": "Monday - Saturday 08:00 - 18:00",
+  "same_day_cutoff": "14:00",
+  "max_delivery_attempts": 3,
+  "markdown_content": "# SwiftDrop Company Policies\n\n## 1. Prohibited Items\n- Flammable liquids, chemicals, cash...\n\n## 2. Packaging Guidelines\n- Maximum weight: 30 kg..."
+}
+```
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "message": "Company policy and operational rules updated successfully",
+    "version": "v1.5",
+    "updated_at": "2026-10-24T00:55:00Z"
+  }
+}
+```
+
+---
+
+### Endpoint 8: Admin Upload Entire New Policy File (.md)
+- **Owner Service:** Member 7 / Member 1 — Admin Context (`core-api/internal/admin`)
+- **HTTP Method & Path:** `POST /api/v1/admin/policies/upload`
+- **Authentication:** Required (`Authorization: Bearer <admin_jwt>`)
+- **Headers:** `Content-Type: multipart/form-data`
+
+#### Expected Request
+- Form Field: `file` (Markdown file, e.g., `company_policies_v2.md`, max size 2 MB)
+
+#### Expected Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "message": "New policy document uploaded and activated successfully",
+    "filename": "company_policies_v2.md",
+    "file_size_bytes": 4820,
+    "version": "v2.0",
+    "updated_at": "2026-10-24T00:55:00Z"
+  }
+}
+```
+
+---
+
+## 3. Public & Internal APIs Exposed by the AI Assistant
+
+The AI Assistant service exposes two HTTP endpoints:
+
+### 3.1 Conversational Chat Gateway: `POST /api/v1/ai/chat`
+- **Purpose:** Processes user queries, manages context, triggers tools, and returns humanized answers with structured UI navigation actions.
+- **Authentication:** Optional. If caller is logged in, pass `Authorization: Bearer <jwt>`.
+- **Headers:** `Content-Type: application/json`
+
+#### Request Payload Schema
+```json
+{
+  "message": "How much does it cost to send a 2.5 kg box from Colombo to Kandy?",
+  "conversation_id": "conv_01HXYZ99"
+}
+```
+
+#### Success Response Payload (`200 OK`)
+```json
+{
+  "data": {
+    "conversation_id": "conv_01HXYZ99",
+    "message": "Sending a 2.5 kg package from Colombo to Kandy is estimated at LKR 650.00 (Base fare LKR 350.00 + weight surcharge LKR 300.00). Delivery typically takes 1 business day.\n\nWould you like to book this delivery now?",
+    "tools_used": ["estimate_shipping_fee"],
+    "action": {
+      "type": "NAVIGATE_BOOKING",
+      "label": "Book this Delivery",
+      "url": "/customer/book?origin=WESTERN_ZONE&dest=CENTRAL_ZONE&weight=2.5&fee=650.00",
+      "prefill_data": {
+        "origin_zone": "WESTERN_ZONE",
+        "destination_zone": "CENTRAL_ZONE",
+        "weight_kg": 2.5,
+        "estimated_fee": 650.00,
+        "currency": "LKR"
+      }
+    }
+  }
+}
+```
+
+#### Error Envelopes
+- `400 Bad Request`: Message empty or exceeds maximum character length (1,000 chars).
+- `429 Too Many Requests`: Rate limit exceeded (`AI_RATE_LIMIT_ANONYMOUS_RPM` or `AI_RATE_LIMIT_AUTHENTICATED_RPM`).
+- `503 Service Unavailable`: LLM provider unreachable (safe graceful failure envelope).
+
+---
+
+### 3.2 Cache Invalidation Webhook: `POST /api/v1/ai/admin/refresh-knowledge`
+- **Purpose:** Called by Core API whenever an Admin edits or uploads a new policy to immediately invalidate the AI service's in-memory policy cache.
+- **Authentication:** Internal Secret Header (`X-Internal-Service-Key: <secret>`)
+- **Headers:** `Content-Type: application/json`
+
+#### Request Payload
+```json
+{
+  "event": "POLICY_UPDATED",
+  "version": "v1.5",
+  "timestamp": "2026-10-24T00:55:00Z"
+}
+```
+
+#### Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "status": "CACHE_INVALIDATED",
+    "message": "In-memory knowledge cache cleared. Next query will re-fetch latest policy."
+  }
+}
+```
+
+---
+
+## 4. MCP Server Tool Registry & Client Connection Architecture (`mcp_server.py`)
+
+The Model Context Protocol (MCP) server allows external AI developer tools (Cursor IDE, Claude Desktop, and autonomous agents) to connect directly to SwiftDrop's tools (**+5 Bonus Marks**).
+
+### 4.1 Connection Modes & Authentication Model
+
+```mermaid
+flowchart TD
+    subgraph Client["External MCP Client (Cursor / Claude Desktop)"]
+        User["User prompt in Cursor: 'How much to send 2kg to Kandy?'"]
+    end
+
+    subgraph Transport["Transport Layer"]
+        STDIO["STDIO Transport (Local Child Process)"]
+        SSE["SSE Transport (Remote HTTP: /api/v1/ai/mcp/sse)"]
+    end
+
+    subgraph MCPServer["FastMCP Server (services/ai-assistant/mcp_server.py)"]
+        PublicGate{"Public Tool?"}
+        AuthGate{"SWIFTDROP_AUTH_TOKEN present or logged in?"}
+        ToolExec["Execute Tool via Core/Tracking API"]
+    end
+
+    Client --> STDIO
+    Client --> SSE
+    STDIO --> PublicGate
+    SSE --> PublicGate
+    
+    PublicGate -- Yes (track_parcel, estimate_fee) --> ToolExec
+    PublicGate -- No (get_my_active_parcels) --> AuthGate
+    
+    AuthGate -- Yes --> ForwardAuth["Forward JWT to Core API"] --> ToolExec
+    AuthGate -- No --> PromptLogin["Return error: 'Authentication required. Please call login_to_swiftdrop or set SWIFTDROP_AUTH_TOKEN'"]
+```
+
+#### Authentication Rules:
+1. **Public Tools (`track_parcel`, `estimate_shipping_fee`):**
+   - **No login or credentials required.**
+   - Evaluators can immediately test parcel tracking or tariff estimation in Cursor or Claude Desktop without creating an account.
+2. **Authenticated Tools (`get_my_active_parcels`, `get_my_deliveries`):**
+   - Require a customer JWT. The MCP client can provide it in two ways:
+     - **Option A (Environment Variable):** Set `"SWIFTDROP_AUTH_TOKEN": "jwt_..."` in the MCP client config.
+     - **Option B (Conversational Login Tool):** Invoke `login_to_swiftdrop(email, password)` directly inside the chat conversation. The MCP server stores the session token in memory for subsequent tool calls.
+
+---
+
+### 4.2 Client Configuration Snippets
+
+#### 1. Claude Desktop Configuration (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "swiftdrop": {
+      "command": "python",
+      "args": ["E:/Projects/SwiftDrop/services/ai-assistant/mcp_server.py"],
+      "env": {
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081",
+        "SWIFTDROP_AUTH_TOKEN": ""
+      }
+    }
+  }
+}
+```
+
+#### 2. Cursor IDE Configuration (`.cursor/mcp.json` or Global Settings):
+```json
+{
+  "mcpServers": {
+    "swiftdrop": {
+      "command": "python",
+      "args": ["services/ai-assistant/mcp_server.py"],
+      "env": {
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 4.3 Exposed Tool Manifests (JSON-RPC Schema)
+
+The FastMCP server exposes 5 tools conforming to the official Model Context Protocol schema:
+
+```json
+[
+  {
+    "name": "track_parcel",
+    "description": "Look up public tracking milestones for a specific SwiftDrop tracking number. Does not require login.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "tracking_number": {
+          "type": "string",
+          "description": "Public tracking number (e.g. SD-20261021-04921)"
+        }
+      },
+      "required": ["tracking_number"]
+    }
+  },
+  {
+    "name": "estimate_shipping_fee",
+    "description": "Calculate estimated delivery fee between two delivery zones based on weight and dimensions. Does not require login.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "origin_zone": {
+          "type": "string",
+          "description": "Origin delivery zone (e.g., WESTERN_ZONE, CENTRAL_ZONE, SOUTHERN_ZONE)"
+        },
+        "destination_zone": {
+          "type": "string",
+          "description": "Destination delivery zone"
+        },
+        "weight_kg": {
+          "type": "number",
+          "description": "Package gross weight in kilograms"
+        },
+        "length_cm": { "type": "number" },
+        "width_cm": { "type": "number" },
+        "height_cm": { "type": "number" }
+      },
+      "required": ["origin_zone", "destination_zone", "weight_kg"]
+    }
+  },
+  {
+    "name": "get_my_active_parcels",
+    "description": "Retrieve active in-flight parcels for the authenticated customer. Requires active login session or SWIFTDROP_AUTH_TOKEN.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_my_deliveries",
+    "description": "Retrieve past completed or failed delivery history for the authenticated customer. Requires active login session.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status_filter": {
+          "type": "string",
+          "enum": ["DELIVERED", "FAILED", "RETURNED"]
+        }
+      }
+    }
+  },
+  {
+    "name": "login_to_swiftdrop",
+    "description": "Authenticate as a SwiftDrop user directly through MCP chat to unlock personal delivery history tools.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "User email (e.g. customer.a@swiftdrop.lk)"
+        },
+        "password": {
+          "type": "string",
+          "description": "User password"
+        }
+      },
+      "required": ["email", "password"]
+    }
+  }
+]
+```
+
+---
+
+## 5. Frontend Integration Contract: Playwright `data-testid` Standards
+
+To enable full-stack browser E2E testing with **Playwright** without flakiness from CSS/Tailwind changes, **Members 6 and 7 must attach the following standard `data-testid` attributes** to interactive React components:
+
+### 5.1 AI Chatbot Widget Elements (`web/src/features/chat/`)
+| Element | `data-testid` | Description |
+| :--- | :--- | :--- |
+| Chat Toggle Button | `ai-chat-toggle-btn` | Button that opens/closes the floating chat drawer |
+| Chat Input Field | `ai-chat-input` | Textarea / input for typing user queries |
+| Chat Submit Button | `ai-chat-send-btn` | Button that submits the message |
+| Assistant Message Bubble | `ai-chat-message-assistant` | Container element for AI responses |
+| Deep-Link Action Button | `ai-chat-action-btn` | Button rendering pre-filled navigation actions |
+
+### 5.2 Customer Booking Wizard (`web/src/features/customer-merchant/`)
+| Element | `data-testid` | Description |
+| :--- | :--- | :--- |
+| Origin Zone Select | `booking-origin-zone-select` | Dropdown for sender origin zone |
+| Destination Zone Select | `booking-dest-zone-select` | Dropdown for recipient destination zone |
+| Parcel Weight Input | `booking-weight-input` | Number input for weight in kg |
+| Estimate Fee Button | `booking-estimate-btn` | Button triggering fee calculation |
+| Displayed Estimated Fee | `booking-estimated-fee-display` | Text element displaying the calculated fee |
+| Recipient Name Input | `booking-recipient-name-input` | Text input for recipient |
+| Recipient Address Input | `booking-recipient-address-input` | Text input for delivery address |
+| Confirm Booking Button | `booking-submit-btn` | Button submitting the parcel creation |
+| Tracking Number Badge | `booking-success-tracking-number` | Displays generated tracking number |
+
+### 5.3 Public Tracking Page (`web/src/features/tracking/`)
+| Element | `data-testid` | Description |
+| :--- | :--- | :--- |
+| Tracking Input Field | `public-tracking-input` | Input for searching tracking number |
+| Search Tracking Button | `public-tracking-search-btn` | Button to execute lookup |
+| Parcel Status Badge | `public-tracking-status-badge` | Displays current status (e.g. `OUT_FOR_DELIVERY`) |
+| Milestone Timeline List | `public-tracking-timeline` | Container element for status milestones |
+
+### 5.4 Dispatcher & Courier Views (`web/src/features/dispatcher-admin/`)
+| Element | `data-testid` | Description |
+| :--- | :--- | :--- |
+| Unassigned Parcels Table | `dispatch-unassigned-table` | Table listing unassigned shipments |
+| Courier Select Dropdown | `dispatch-courier-select` | Courier selector for parcel assignment |
+| Assign Parcel Button | `dispatch-assign-btn` | Button confirming courier assignment |
+| Courier Daily Route Table | `courier-assignments-table` | Courier view of assigned parcels |
+| Status Update Select | `courier-status-select` | Dropdown to advance parcel state |
+| Proof File Upload Input | `courier-proof-file-input` | File input for photo of delivery |
+| Submit Proof Button | `courier-submit-proof-btn` | Button finalizing delivery with proof |
+
+---
+
+## 6. Open Questions for Team Meeting 2
+
+1. **Member 2 (Pricing):** Please confirm the zone enum identifiers (e.g., `ZONE_COLOMBO_01` vs `ZONE_KANDY_01`) and whether `POST /api/v1/pricing/quotes` expects dimensions as individual floats with integer cents outputs.
+2. **Member 5 (Tracking):** Please confirm that `GET /api/v1/tracking/public/{trackingNumber}` redacts recipient street address and phone number at the API level as specified in `docs/contracts/api-conventions.md`.
+3. **Members 6 & 7 (Frontend):** Please confirm adoption of the `data-testid` attributes listed in Section 5 so our automated Playwright E2E test suite can run reliably without breaking on CSS refactors.

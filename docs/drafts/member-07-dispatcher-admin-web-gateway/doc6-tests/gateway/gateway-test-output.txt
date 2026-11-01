@@ -1,0 +1,34 @@
+== Routing (INV-06) ==
+PASS  GW-01   /api/v1/tracking/public/SD-1 goes to tracking-api              
+PASS  GW-02   /api/v1/ai/chat goes to ai-assistant                           
+PASS  GW-03   /api/v1/dispatch/board goes to core-api                        
+PASS  GW-04   /api/v1/admin/zones goes to core-api                           
+PASS  GW-05   /ops/dispatch goes to web                                      
+PASS  GW-06   /api/v1/trackingX is taken by tracking router (R-GW-04)        [FINDING: works as configured today, needs fix]
+PASS  GW-07   /api/v2/parcels falls through to web, not 404 (Doc 2 E-15)     [FINDING: works as configured today, needs fix]
+== Internal paths not public (INV-05) ==
+PASS  GW-08   /health/live does not reach core-api                           
+PASS  GW-09   /metrics does not reach core-api                               
+PASS  GW-10   dashboard reachable on :8080 because api.insecure=true (M7-GW-06) [FINDING: works as configured today, needs fix]
+== Auth headers and 401/403 pass through unchanged (INV-04, M7-GW-10) ==
+PASS  GW-11   Authorization header reaches backend unchanged                 
+PASS  GW-12   X-API-Key header reaches backend unchanged                     
+PASS  GW-13   401 status passes through                                      
+PASS  GW-14   401 WWW-Authenticate header passes through                     
+PASS  GW-15   401 body passes through                                        
+PASS  GW-16   403 status and body pass through                               
+== Upload size limit 10 MB on core-api (M7-GW-03) ==
+PASS  GW-17   9 MB POST to core-api passes                                   
+PASS  GW-18   11 MB POST to core-api is refused with 413                     
+== CORS (M7-GW-04) ==
+PASS  GW-19   preflight from http://localhost:3000 is allowed                
+PASS  GW-20   preflight from https://evil.example gets no allow-origin       
+PASS  GW-21   X-Request-ID is NOT in allowed headers (differs from security-notes) [FINDING: works as configured today, needs fix]
+== SSE through the gateway is not buffered (INV-07) ==
+PASS  GW-22   first SSE event arrives before the stream ends                 
+== Tracking rate limit 30/min burst 50 (M7-GW-02) ==
+PASS  GW-23   60 quick requests from one visitor get some 429s               
+PASS  GW-24   a DIFFERENT visitor (X-Forwarded-For) shares the same bucket (Doc 2 G-02) [FINDING: works as configured today, needs fix]
+PASS  GW-25   core-api routes have no rate limit today (login limit missing, U-06) [FINDING: works as configured today, needs fix]
+
+Summary: 25 passed, 0 failed (6 of the passes document known gaps). Rate-limit result:      51 200       9 429 

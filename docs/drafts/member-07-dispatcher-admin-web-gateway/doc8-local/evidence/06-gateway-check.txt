@@ -1,0 +1,35 @@
+python3 scripts/gateway_parity.py
+Middleware: 9 in file, 9 in Kubernetes
+ServersTransport: 3 in file, 3 in Kubernetes
+PARITY OK
+kubeconform -strict -summary -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' deploy/kubernetes/core-api deploy/gateway/traefik/kubernetes
+Summary: 20 resources found in 9 files - Valid: 20, Invalid: 0, Errors: 0, Skipped: 0
+bash tools/security_gateway_test.sh deploy/gateway/traefik/traefik.yml deploy/gateway/traefik/dynamic-routes.yml ${TRAEFIK:-traefik}
+== Routing edges ==
+PASS  GS-01  /api/v1/tracking/public/SD-1 goes to tracking-api
+PASS  GS-02  /api/v1/admin/zones goes to core-api
+PASS  GS-03  /api/v1/trackingX is NOT taken by the tracking router
+PASS  GS-04  /api/v2/parcels goes to core-api (404 JSON), not the SPA
+== Abuse limits ==
+PASS  GS-05  visitor A used up tracking quota; visitor B still gets 200
+PASS  GS-05b faking an extra left-hand X-Forwarded-For entry does not reset A's quota
+PASS  GS-06  8 quick logins from one visitor: some get 429
+PASS  GS-07  2 MB body to a JSON route (/admin/zones) is refused with 413
+PASS  GS-08  9 MB photo upload passes, 11 MB is refused
+PASS  GS-09  6 open SSE streams from one visitor: exactly 1 refused (limit 5)
+== Identity headers and CORS ==
+PASS  GS-10  client-sent X-Tenant-ID and X-User-Role are removed before core-api
+PASS  GS-10b Authorization header still reaches core-api unchanged
+PASS  GS-11  CORS allows X-Request-ID (security-notes 4) and not X-Tenant-ID
+PASS  GS-12  Traefik dashboard API is NOT reachable on open port 8080
+== Dependency failure ==
+PASS  GS-13  slow core-api: gateway answers 504 before the backend does
+PASS  GS-14  after that timeout the POST reached core-api exactly once (no retry)
+PASS  GS-15  AI service down: 502 within 2 s, other routes unaffected
+== Response hardening ==
+PASS  GS-16  API and SPA responses carry nosniff and frame DENY
+PASS  GS-17  backend X-Powered-By header is removed
+PASS  GS-18  SPA has a Content-Security-Policy with frame-ancestors 'none'
+PASS  GS-19  SSE is still not buffered with the new middlewares and timeouts
+
+Summary: 21 passed, 0 failed

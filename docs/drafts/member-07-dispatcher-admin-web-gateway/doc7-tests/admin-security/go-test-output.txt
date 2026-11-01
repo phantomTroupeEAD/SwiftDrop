@@ -1,0 +1,38 @@
+=== RUN   TestRequireRole_AdminOnlyMatrix
+=== RUN   TestRequireRole_AdminOnlyMatrix/no_token
+=== RUN   TestRequireRole_AdminOnlyMatrix/empty_principal
+=== RUN   TestRequireRole_AdminOnlyMatrix/customer
+=== RUN   TestRequireRole_AdminOnlyMatrix/merchant
+=== RUN   TestRequireRole_AdminOnlyMatrix/courier
+=== RUN   TestRequireRole_AdminOnlyMatrix/dispatcher
+=== RUN   TestRequireRole_AdminOnlyMatrix/lower-case_admin_is_not_admin
+=== RUN   TestRequireRole_AdminOnlyMatrix/admin
+--- PASS: TestRequireRole_AdminOnlyMatrix (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/no_token (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/empty_principal (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/customer (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/merchant (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/courier (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/dispatcher (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/lower-case_admin_is_not_admin (0.00s)
+    --- PASS: TestRequireRole_AdminOnlyMatrix/admin (0.00s)
+=== RUN   TestRequireRole_IgnoresClientRoleHeaders
+--- PASS: TestRequireRole_IgnoresClientRoleHeaders (0.00s)
+=== RUN   TestRequireRole_DispatchBoard
+--- PASS: TestRequireRole_DispatchBoard (0.00s)
+=== RUN   TestWriteError_HidesInternalDetails
+2026/10/24 05:29:21 ERROR admin request failed correlation_id=corr_da43cd584171c126d5f09572 err="pq: duplicate key value violates unique constraint \"delivery_zones_code_key\" password=hunter2"
+--- PASS: TestWriteError_HidesInternalDetails (0.00s)
+=== RUN   TestWriteError_KnownWrapped
+--- PASS: TestWriteError_KnownWrapped (0.00s)
+=== RUN   TestCorrelationID
+--- PASS: TestCorrelationID (0.00s)
+=== RUN   TestValidateSetting
+--- PASS: TestValidateSetting (0.00s)
+=== RUN   TestValidateReason
+--- PASS: TestValidateReason (0.00s)
+=== RUN   TestRedactForAudit
+--- PASS: TestRedactForAudit (0.00s)
+PASS
+coverage: 100.0% of statements
+ok  	swiftdrop.local/m7/adminsec	1.025s	coverage: 100.0% of statements

@@ -1,0 +1,27 @@
+
+ RUN  v2.1.8 /tmp/claude-0/-home-claude/f6490b69-5f2b-599f-addf-c2385bbe24e0/scratchpad/t6/web-client
+      Coverage enabled with v8
+
+ ✓ test/refreshLock.test.ts (3 tests) 7ms
+ ✓ test/errors.test.ts (4 tests) 7ms
+ ✓ test/client.test.ts (7 tests) 34ms
+ ✓ test/idempotency.test.ts (4 tests) 5ms
+ ✓ test/courier.test.ts (2 tests) 3ms
+
+ Test Files  5 passed (5)
+      Tests  20 passed (20)
+   Start at  04:57:46
+   Duration  985ms (transform 260ms, setup 0ms, collect 324ms, tests 56ms, environment 1ms, prepare 567ms)
+
+ % Coverage report from v8
+-----------------|---------|----------|---------|---------|-------------------
+File             | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-----------------|---------|----------|---------|---------|-------------------
+All files        |   98.36 |    98.43 |     100 |   98.36 |                   
+ client.ts       |   96.55 |    96.15 |     100 |   96.55 | 75-76             
+ courier.ts      |     100 |      100 |     100 |     100 |                   
+ errors.ts       |     100 |      100 |     100 |     100 |                   
+ idempotency.ts  |     100 |      100 |     100 |     100 |                   
+ memoryTokens.ts |     100 |      100 |     100 |     100 |                   
+ refreshLock.ts  |     100 |      100 |     100 |     100 |                   
+-----------------|---------|----------|---------|---------|-------------------

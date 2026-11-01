@@ -1,0 +1,39 @@
+bash scripts/demo.sh
+== Health (direct to the pod, never through the gateway) ==
+PASS  DEMO-01  GET :8080/livez
+PASS  DEMO-02  GET :8080/readyz shows the database
+PASS  DEMO-03  /readyz is not public through the gateway
+== Access control ==
+PASS  DEMO-04  no token: 401
+PASS  DEMO-05  courier token: 403
+PASS  DEMO-06  tampered token: 401
+PASS  DEMO-07  admin token: 7 seeded zones
+== Zone rules ==
+PASS  DEMO-08  create ZONE_MATARA: version 1, LKR cents
+PASS  DEMO-09  same code again: 409 ZONE_CODE_ALREADY_EXISTS
+PASS  DEMO-10  prefix 003 overlaps Colombo 00300: 409
+PASS  DEMO-11  surcharge as a decimal string: 400
+PASS  DEMO-12  unknown field (created_by) refused: 400
+PASS  DEMO-13  surcharge change without reason: 422
+PASS  DEMO-14  surcharge change with reason: version 2
+PASS  DEMO-15  stale version 1 after that: 409
+PASS  DEMO-16  disable zone with reason: enabled false
+PASS  DEMO-17  setting not on allowlist: 422
+PASS  DEMO-18  board refresh setting to 45 s
+== Audit trail ==
+PASS  DEMO-19  4 audit rows, newest first
+PASS  DEMO-20  audit row has reason and request id
+PASS  DEMO-21  app role cannot UPDATE audit_logs
+PASS  DEMO-22  even the owner cannot DELETE (trigger)
+== Gateway behaviour ==
+PASS  DEMO-23  /api/v2/zones: JSON 404 from core-api
+PASS  DEMO-24  /ops/zones served by web (SPA stand-in)
+PASS  DEMO-25  AI service not running: 502, rest fine
+PASS  DEMO-26  X-Request-ID sent by client comes back
+== Observability ==
+PASS  DEMO-27  metrics count admin changes
+PASS  DEMO-28  metrics count conflicts by kind
+PASS  DEMO-29  access log line is JSON with route and request id
+PASS  DEMO-30  no token or password in logs
+
+Summary: 30 passed, 0 failed

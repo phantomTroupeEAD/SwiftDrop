@@ -1,0 +1,4 @@
+.dev
+*.pem
+.env
+**/*_test.go

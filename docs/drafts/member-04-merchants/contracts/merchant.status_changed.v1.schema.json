@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.example/schemas/events/merchant.status_changed.v1.json",
+  "title": "merchant.status_changed.v1",
+  "description": "PROPOSED integration event (decision U-09). Emitted by core-api.merchants through Member 8's OutboxWriter in the same transaction as the status change. Only built if a consumer (e.g. notification email to the merchant) is approved. Wrapped in the canonical envelope from docs/contracts/event-contracts.md §1.",
+  "type": "object",
+  "required": ["event_id", "event_type", "aggregate_type", "aggregate_id", "version", "timestamp", "correlation_id", "producer", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "description": "UUIDv7 or ULID, used for consumer deduplication" },
+    "event_type": { "const": "merchant.status_changed.v1" },
+    "aggregate_type": { "const": "merchant" },
+    "aggregate_id": { "type": "string", "format": "uuid", "description": "merchants.id" },
+    "version": { "type": "integer", "description": "Merchant aggregate version after the change" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string" },
+    "producer": { "const": "core-api.merchants" },
+    "payload": {
+      "type": "object",
+      "required": ["merchant_id", "previous_status", "new_status", "actor_role", "occurred_at"],
+      "additionalProperties": false,
+      "properties": {
+        "merchant_id": { "type": "string", "format": "uuid" },
+        "previous_status": { "$ref": "#/$defs/MerchantStatus" },
+        "new_status": { "$ref": "#/$defs/MerchantStatus" },
+        "actor_id": { "type": "string", "format": "uuid" },
+        "actor_role": { "const": "ADMIN" },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "MerchantStatus": { "enum": ["PENDING", "APPROVED", "REJECTED", "SUSPENDED", "DISABLED"] }
+  },
+  "examples": [
+    {
+      "event_id": "01JB8Z3K4M5N6P7Q8R9S0T1V2W",
+      "event_type": "merchant.status_changed.v1",
+      "aggregate_type": "merchant",
+      "aggregate_id": "3f0c8a52-2b9e-4d1a-9f3e-7c6b5a4d3e21",
+      "version": 2,
+      "timestamp": "2026-10-24T08:30:00Z",
+      "correlation_id": "corr_a1b2c3d4",
+      "producer": "core-api.merchants",
+      "payload": {
+        "merchant_id": "3f0c8a52-2b9e-4d1a-9f3e-7c6b5a4d3e21",
+        "previous_status": "PENDING",
+        "new_status": "APPROVED",
+        "actor_id": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+        "actor_role": "ADMIN",
+        "occurred_at": "2026-10-24T08:29:59Z"
+      }
+    }
+  ]
+}

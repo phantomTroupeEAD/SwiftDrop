@@ -1,0 +1,58 @@
+# Member 7's slice of the local stack, as a PROPOSAL for Member 9's docker-compose.yml.
+# Not run here (no Docker daemon in this environment); `docker compose config` is checked.
+#   cd core-api && go run ./cmd/devtoken -genkey .dev && cd ..
+#   docker compose -f docker-compose.m7.yml up -d --build
+#   docker compose -f docker-compose.m7.yml run --rm --entrypoint /seed core-api
+name: swiftdrop-m7
+
+services:
+  postgres:
+    image: postgres:16.4-alpine3.20
+    environment:
+      POSTGRES_DB: swiftdrop_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_only   # local only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db-bootstrap.sql:/docker-entrypoint-initdb.d/10-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "swiftdrop_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports: ["127.0.0.1:5432:5432"]   # localhost only, never 0.0.0.0
+
+  migrate:
+    image: migrate/migrate:v4.17.1
+    command: ["-path", "/migrations", "-database", "postgres://swiftdrop_owner:owner_dev_only@postgres:5432/swiftdrop_db?sslmode=disable", "up"]
+    volumes: ["./core-api/migrations:/migrations:ro"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  core-api:
+    build: {context: ./core-api, dockerfile: Dockerfile}
+    env_file: .env.example
+    environment:
+      DATABASE_URL: postgres://swiftdrop_app:app_dev_only@postgres:5432/swiftdrop_db?sslmode=disable
+      JWT_PUBLIC_KEY_PEM: /run/keys/jwt_public.pem
+    volumes: ["./core-api/.dev/jwt_public.pem:/run/keys/jwt_public.pem:ro"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    stop_grace_period: 30s   # READINESS_DRAIN_SECONDS + SHUTDOWN_GRACE_SECONDS + margin
+
+  traefik:
+    image: traefik:v3.1.7
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    volumes:
+      - ./deploy/gateway/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./deploy/gateway/traefik/dynamic-routes.yml:/etc/traefik/dynamic/dynamic-routes.yml:ro
+    ports:
+      - "80:80"
+      - "127.0.0.1:8090:8090"   # dashboard + ping, localhost only (Doc 7 GS-12)
+    depends_on: [core-api]
+
+volumes:
+  pgdata: {}

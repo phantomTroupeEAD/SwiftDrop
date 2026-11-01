@@ -1,0 +1,88 @@
+# Kubernetes (CRD) form of the middlewares in ../dynamic-routes.yml. Member 7 owns this file.
+# Keep both files in step: scripts/gateway_parity.py fails CI if a value differs (Doc 3 DD-12).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: strip-identity-headers, namespace: swiftdrop}
+spec:
+  headers:
+    customRequestHeaders: {X-User-ID: "", X-User-Role: "", X-Tenant-ID: "", X-Merchant-ID: "", X-Forwarded-User: ""}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: security-headers, namespace: swiftdrop}
+spec:
+  headers:
+    contentTypeNosniff: true
+    frameDeny: true
+    referrerPolicy: "strict-origin-when-cross-origin"
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    customResponseHeaders: {Server: "", X-Powered-By: ""}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: spa-csp, namespace: swiftdrop}
+spec:
+  headers:
+    contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: cors-middleware, namespace: swiftdrop}
+spec:
+  headers:
+    accessControlAllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    accessControlAllowHeaders: ["Authorization", "Content-Type", "X-API-Key", "Idempotency-Key", "X-Request-ID"]
+    accessControlExposeHeaders: ["X-Request-ID", "Content-Length", "Retry-After", "Idempotent-Replay"]
+    accessControlAllowCredentials: true
+    accessControlAllowOriginList: ["https://swiftdrop.example.com"]   # real domain: U-09
+    accessControlMaxAge: 86400
+    addVaryHeader: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: tracking-ratelimit, namespace: swiftdrop}
+spec:
+  rateLimit: {average: 30, burst: 10, period: 1m, sourceCriterion: {ipStrategy: {depth: 1}}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: login-ratelimit, namespace: swiftdrop}
+spec:
+  rateLimit: {average: 5, burst: 3, period: 1m, sourceCriterion: {ipStrategy: {depth: 1}}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: stream-inflight, namespace: swiftdrop}
+spec:
+  inFlightReq: {amount: 5, sourceCriterion: {ipStrategy: {depth: 1}}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: json-limit, namespace: swiftdrop}
+spec:
+  buffering: {maxRequestBodyBytes: 1048576}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: upload-limit-middleware, namespace: swiftdrop}
+spec:
+  buffering: {maxRequestBodyBytes: 10485760}
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata: {name: backend-transport, namespace: swiftdrop}
+spec:
+  forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 30s, idleConnTimeout: 90s}
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata: {name: stream-transport, namespace: swiftdrop}
+spec:
+  forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 10s, idleConnTimeout: 90s}
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata: {name: ai-transport, namespace: swiftdrop}
+spec:
+  forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 60s, idleConnTimeout: 90s}

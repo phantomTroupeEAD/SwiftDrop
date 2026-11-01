@@ -11,7 +11,7 @@ Every domain and integration event emitted in SwiftDrop must use the following s
 ```json
 {
   "event_id": "evt_01HXYZ9876543210ABC",
-  "event_type": "parcel.status_changed.v1",
+  "event_type": "parcel.delivered.v1",
   "aggregate_type": "parcel",
   "aggregate_id": "prcl_01HXYZ1234567890",
   "version": 1,
@@ -65,19 +65,24 @@ State changes and event creation must commit atomically in the Core API PostgreS
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_type VARCHAR(64) NOT NULL,
-    aggregate_id VARCHAR(64) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    aggregate_version INTEGER DEFAULT 1 NOT NULL,
     event_type VARCHAR(128) NOT NULL,
+    schema_version VARCHAR(16) DEFAULT '1.0.0' NOT NULL,
     payload JSONB NOT NULL,
     correlation_id VARCHAR(128) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    published_at TIMESTAMP WITH TIME ZONE NULL,
-    retry_count INT DEFAULT 0 NOT NULL,
-    last_error TEXT NULL
+    status VARCHAR(32) DEFAULT 'PENDING' NOT NULL 
+        CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
+    attempt_count INTEGER DEFAULT 0 NOT NULL,
+    next_attempt_at TIMESTAMPTZ NULL,
+    last_error TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    published_at TIMESTAMPTZ NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_outbox_unpublished 
+CREATE INDEX IF NOT EXISTS idx_outbox_pending 
 ON outbox_events (created_at ASC) 
-WHERE published_at IS NULL;
+WHERE status = 'PENDING';
 ```
 
 ---
@@ -100,7 +105,7 @@ WHERE published_at IS NULL;
 
 Because RabbitMQ delivers with **at-least-once** semantics, network blips or crashes may cause duplicate event delivery.
 
-- **Mandatory Deduplication:** Every consumer must store processed `event_id` records in an `idempotent_consumers` table or transactional cache:
+- **Mandatory Deduplication:** Every consumer must store processed `event_id` records in the `processed_events` table:
 ```sql
 CREATE TABLE IF NOT EXISTS processed_events (
     event_id VARCHAR(64) NOT NULL,

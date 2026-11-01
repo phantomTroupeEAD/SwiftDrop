@@ -47,19 +47,19 @@ Returns unassigned parcels and current courier loads for a specific zone.
 - **Method / Path:** `GET /api/v1/dispatch/board`
 - **Auth Required:** Bearer JWT (`DISPATCHER`, `ADMIN`)
 - **Headers:** `Authorization: Bearer <jwt>`
-- **Query Params:** `?zone_code=ZONE_1&status=PENDING`
+- **Query Params:** `?zone_id=ZONE_COLOMBO_01&status=ELIGIBLE` (also supports `zone_code`)
 
 ### Success Response (`200 OK`)
 ```json
 {
   "data": {
-    "zone_code": "ZONE_1",
+    "zone_id": "ZONE_COLOMBO_01",
     "unassigned_parcels": [
       {
         "id": "prcl_01HXYZ1234567890",
         "tracking_number": "SD-20261021-04921",
         "weight_kg": 2.5,
-        "recipient_city": "Springfield",
+        "recipient_city": "Colombo",
         "created_at": "2026-10-21T09:00:00Z"
       }
     ],
@@ -67,6 +67,7 @@ Returns unassigned parcels and current courier loads for a specific zone.
       {
         "courier_id": "usr_courier_99",
         "name": "Bob Miller",
+        "current_zone_id": "ZONE_COLOMBO_01",
         "active_assignments": 8,
         "max_capacity": 25,
         "status": "ON_SHIFT"

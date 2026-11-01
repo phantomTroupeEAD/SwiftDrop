@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: core-api-pdb
+  namespace: swiftdrop
+spec:
+  minAvailable: 1            # node drain or upgrade keeps at least one pod serving
+  selector:
+    matchLabels: {app.kubernetes.io/name: core-api}

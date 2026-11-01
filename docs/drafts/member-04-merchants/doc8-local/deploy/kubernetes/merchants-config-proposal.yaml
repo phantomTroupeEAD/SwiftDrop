@@ -1,0 +1,74 @@
+# PROPOSAL for Member 9 — what the merchants module needs in the shared core-api Deployment.
+# Not a complete Deployment: Member 9 owns deploy/kubernetes/. Merge these pieces into theirs.
+# Namespace and names follow docs/operations/deployment-guide.md (namespace swiftdrop, deployment core-api).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-api-merchants-config
+  namespace: swiftdrop
+  labels: { app: core-api, module: merchants }
+data:
+  MERCHANT_API_KEY_PREFIX: "sd_live_"              # sd_test_ in non-production clusters
+  MERCHANT_API_KEY_PEPPER_VERSION: "1"
+  WEBHOOK_SECRET_KEY_VERSION: "1"
+  WEBHOOK_ALLOW_HTTP: "false"                      # config refuses true outside APP_ENV=local
+  MERCHANT_MAX_ACTIVE_KEYS: "5"
+  WEBHOOK_MAX_ENDPOINTS_PER_MERCHANT: "10"
+  SHUTDOWN_DRAIN_SECONDS: "5"                      # > readiness period so endpoints are removed first
+  SHUTDOWN_TIMEOUT_SECONDS: "20"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: core-api-merchants-secrets
+  namespace: swiftdrop
+  labels: { app: core-api, module: merchants }
+type: Opaque
+stringData:
+  # Placeholders only. Create real values with:
+  #   kubectl create secret generic core-api-merchants-secrets -n swiftdrop \
+  #     --from-literal=MERCHANT_API_KEY_PEPPER="$(head -c 48 /dev/urandom | base64)" \
+  #     --from-literal=WEBHOOK_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
+  MERCHANT_API_KEY_PEPPER: "REPLACE_ME_AT_LEAST_32_CHARS"
+  WEBHOOK_SECRET_ENCRYPTION_KEY: "REPLACE_ME_BASE64_32_BYTES"
+  # Member 8's Event Worker needs the SAME WEBHOOK_SECRET_ENCRYPTION_KEY (read-only) to sign webhooks (U-22).
+---
+# Fragment to merge into Member 9's core-api Deployment spec.template.spec.containers[core-api]:
+#
+#   envFrom:
+#     - configMapRef: { name: core-api-config }              # existing (APP_ENV, HTTP_ADDR, ...)
+#     - configMapRef: { name: core-api-merchants-config }    # new
+#     - secretRef:    { name: core-api-merchants-secrets }   # new
+#   ports: [{ name: http, containerPort: 8080 }]
+#   livenessProbe:  { httpGet: { path: /livez,  port: http }, periodSeconds: 10, failureThreshold: 3 }
+#   readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 3,  failureThreshold: 1 }
+#   startupProbe:   { httpGet: { path: /livez,  port: http }, periodSeconds: 2,  failureThreshold: 15 }
+#   securityContext:
+#     runAsNonRoot: true
+#     runAsUser: 10001
+#     readOnlyRootFilesystem: true
+#     allowPrivilegeEscalation: false
+#     capabilities: { drop: [ALL] }
+#   resources:                       # merchants adds little to core-api; measured image 31 MB
+#     requests: { cpu: 100m, memory: 64Mi }
+#     limits:   { memory: 256Mi }
+# terminationGracePeriodSeconds: 30  # >= SHUTDOWN_DRAIN_SECONDS + SHUTDOWN_TIMEOUT_SECONDS
+---
+# Egress from core-api: merchants resolves webhook hostnames (DNS) at registration time but
+# never connects to merchant URLs (Member 8 does). Allow DNS; no extra egress needed for this module.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-api-merchants-dns-egress
+  namespace: swiftdrop
+spec:
+  podSelector: { matchLabels: { app: core-api } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
