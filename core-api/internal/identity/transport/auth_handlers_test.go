@@ -29,7 +29,7 @@ func setupTestRouter() (*http.ServeMux, application.TokenProvider, *application.
 	// Add an admin-only test route
 	mux.Handle("GET /api/v1/admin/test", security.Authenticate(
 		transport.RequireRole(domain.RoleAdmin)(
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(`{"admin": true}`))
 			}),

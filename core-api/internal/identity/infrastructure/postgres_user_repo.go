@@ -190,7 +190,6 @@ func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) er
 func (r *PostgresUserRepository) ListUsers(ctx context.Context, role *domain.Role, limit int, offset int) ([]*domain.User, int, error) {
 	var countQuery string
 	var listQuery string
-	var args []interface{}
 
 	if role != nil {
 		countQuery = `SELECT COUNT(*) FROM users WHERE role = $1;`
@@ -201,7 +200,6 @@ func (r *PostgresUserRepository) ListUsers(ctx context.Context, role *domain.Rol
 			ORDER BY created_at DESC
 			LIMIT $2 OFFSET $3;
 		`
-		args = append(args, string(*role))
 	} else {
 		countQuery = `SELECT COUNT(*) FROM users;`
 		listQuery = `

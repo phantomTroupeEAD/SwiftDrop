@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -35,8 +37,16 @@ func main() {
 	fmt.Println("==================================================================")
 
 	serverAddr := ":" + port
+	srv := &http.Server{
+		Addr:              serverAddr,
+		Handler:           container.Mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	log.Printf("Server listening on http://localhost:%s\n", port)
-	if err := http.ListenAndServe(serverAddr, container.Mux); err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

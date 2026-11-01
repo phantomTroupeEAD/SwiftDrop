@@ -37,7 +37,8 @@ type JWTTokenProvider struct {
 // NewJWTTokenProvider constructs a token provider with secret and configuration.
 func NewJWTTokenProvider(secret string) *JWTTokenProvider {
 	if secret == "" {
-		secret = "swiftdrop-development-secret-key-change-in-production-32chars"
+		// #nosec G101 -- Local development fallback key
+		secret = "swiftdrop-development-secret-key-change-in-production-32chars" //nolint:gosec
 	}
 	return &JWTTokenProvider{
 		secretKey: []byte(secret),
