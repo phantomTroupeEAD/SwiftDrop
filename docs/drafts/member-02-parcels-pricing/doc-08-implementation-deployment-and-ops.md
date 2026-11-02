@@ -2,9 +2,9 @@
 
 ## Document 8 — Implementation, Deployment & Operations Guide
 
-> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)  
-> **Status:** Aligned Operations Guide (Post-Audit v2.0.0 Alignment)  
-> **Date:** 25 October 2026  
+> **Module:** Member 2 — Parcel Management & Pricing (`core-api/internal/parcels/`, `core-api/internal/pricing/`)
+> **Status:** Aligned Operations Guide (Post-Audit v2.0.0 Alignment)
+> **Date:** 25 October 2026
 > **Order of Precedence:** SwiftDrop SRS v1.0 > Approved Architecture & Contracts > Engineering Standards v1.0 > AI Rulebook (`AGENTS.md`) > Member 2 Specifications
 
 ---
@@ -61,7 +61,7 @@ core-api/internal/
 │   └── README.md             # Co-located living module documentation
 ├── pricing/
 │   ├── domain/               # Deterministic calculation engine & monetary values
-│   │   ├── formula.go        # Volumetric divisor 5000, chargeable weight, billable extra
+│   │   ├── formula.go        # Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands (<= 30 kg)
 │   │   └── money.go          # Exact integer minor units (LKR cents)
 │   ├── application/          # Quote calculation & persistence use cases
 │   │   ├── quote_usecase.go  # Evaluates active rule, sets 15m TTL
@@ -85,14 +85,16 @@ Configuration is parsed at startup using standard environment variables. Missing
 | Variable Name | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `APP_ENV` | String | `development` | Environment mode (`development`, `staging`, `production`). |
-| `HTTP_PORT` | Integer | `8080` | Port for the HTTP REST API server. |
-| `DATABASE_URL` | String | (Required) | PostgreSQL connection URI: `postgres://user:pass@host:5432/dbname?sslmode=disable`. |
-| `DATABASE_MAX_OPEN_CONNS` | Integer | `25` | Maximum active PostgreSQL pool connections. |
-| `DATABASE_MAX_IDLE_CONNS` | Integer | `10` | Maximum idle PostgreSQL pool connections. |
+| `HTTP_PORT` | Integer | `8080` | Port for the HTTP REST API server (`HTTP_ADDR=:8080`). |
+| `DATABASE_URL` | String | (Required) | PostgreSQL DSN: `postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable`. |
+| `DB_MAX_OPEN_CONNS` | Integer | `25` | Maximum active PostgreSQL pool connections (Core API allocation: up to 12-25). |
+| `DB_MAX_IDLE_CONNS` | Integer | `10` | Maximum idle PostgreSQL pool connections. |
 | `DATABASE_CONN_MAX_LIFETIME` | Duration | `15m` | Maximum connection reuse duration. |
+| `PARCEL_MAX_WEIGHT_KG` | Float | `30.0` | Maximum allowable actual and chargeable parcel weight. |
+| `PARCEL_MAX_DIMENSION_CM` | Float | `150.0` | Maximum allowable single dimension per parcel. |
 | `PRICING_DEFAULT_CURRENCY` | String | `LKR` | Authoritative ISO 4217 currency code. |
 | `PRICING_QUOTE_TTL_MINUTES` | Integer | `15` | Guaranteed quote freeze duration in minutes. |
-| `IDEMPOTENCY_RETENTION_HOURS`| Integer | `24` | Key deduplication cache window in hours. |
+| `IDEMPOTENCY_EXPIRY_HOURS` | Integer | `24` | Key deduplication cache window in hours (alias `IDEMPOTENCY_RETENTION_HOURS`). |
 | `LOG_LEVEL` | String | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`). |
 | `LOG_FORMAT` | String | `json` | Log output format (`json` or `text`). |
 
@@ -100,13 +102,15 @@ Configuration is parsed at startup using standard environment variables. Missing
 ```dotenv
 APP_ENV=development
 HTTP_PORT=8080
-DATABASE_URL=postgres://swiftdrop:swiftdrop_dev_password@localhost:5432/swiftdrop?sslmode=disable
-DATABASE_MAX_OPEN_CONNS=25
-DATABASE_MAX_IDLE_CONNS=10
+DATABASE_URL=postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable
+DB_MAX_OPEN_CONNS=25
+DB_MAX_IDLE_CONNS=10
 DATABASE_CONN_MAX_LIFETIME=15m
+PARCEL_MAX_WEIGHT_KG=30.0
+PARCEL_MAX_DIMENSION_CM=150.0
 PRICING_DEFAULT_CURRENCY=LKR
 PRICING_QUOTE_TTL_MINUTES=15
-IDEMPOTENCY_RETENTION_HOURS=24
+IDEMPOTENCY_EXPIRY_HOURS=24
 LOG_LEVEL=debug
 LOG_FORMAT=json
 ```
@@ -132,10 +136,12 @@ migrate -path core-api/migrations -database "postgres://swiftdrop:swiftdrop_dev_
 migrate -path core-api/migrations -database "postgres://swiftdrop:swiftdrop_dev_password@localhost:5432/swiftdrop?sslmode=disable" down 1
 ```
 
-### 5.3 Deterministic Tariff Seeding
-To allow local testing of quote generation and booking, seed migration `000004` includes base test tariffs:
-- **Rule 1:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Base fee 35,000 cents (LKR 350.00), per-kg fee 10,000 cents (LKR 100.00).
-- **Rule 2:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01` (Intra-zone): Base fee 20,000 cents (LKR 200.00), per-kg fee 5,000 cents (LKR 50.00).
+### 5.3 Deterministic Tariff Seeding & Test Fixtures
+> [!NOTE]
+> **Illustrative Test Fixture Notice (Not Commercial Price Promises):**
+> Commercial tariffs are determined by business operations and configured exclusively through Member 7's administration workflow. Member 2 never hard-codes commercial rates. For local testing and development only, database fixtures provide illustrative complete tariffs per zone pair and weight band:
+- **Inter-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Illustrative complete tariffs for Bands 1–7 (e.g., Band 1: 35,000 cents, Band 2: 45,000 cents, Band 3: 55,000 cents, Band 4: 75,000 cents, Band 5: 110,000 cents, Band 6: 160,000 cents, Band 7: 220,000 cents).
+- **Intra-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01`: Illustrative complete tariffs for Bands 1–7.
 
 ---
 
@@ -198,8 +204,8 @@ ENTRYPOINT ["/app/swiftdrop-api"]
 ## 8. Health Checks, Telemetry & Observability
 
 ### 8.1 Probe Specifications
-- **Liveness Probe (`GET /healthz`):** Verifies the HTTP listener is accepting connections. Returns `200 OK` (`{"status":"UP"}`).
-- **Readiness Probe (`GET /readyz`):** Executes `SELECT 1` via `pgxpool`. If database connection is active, returns `200 OK` (`{"status":"READY","database":"UP"}`). If database is unreachable, returns `503 Service Unavailable`.
+- **Liveness Probe (`GET /health/live`):** Verifies the HTTP listener is accepting connections. Returns `200 OK` (`{"status":"UP"}`). Aliased as `GET /livez` and `GET /healthz`.
+- **Readiness Probe (`GET /health/ready`):** Executes `SELECT 1` via `pgxpool`. If database connection is active, returns `200 OK` (`{"status":"READY","database":"UP"}`). If database is unreachable, returns `503 Service Unavailable`. Aliased as `GET /readyz`.
 
 ### 8.2 Structured Operational Metrics
 Exposed via Prometheus standard endpoint `/metrics`:
@@ -215,23 +221,26 @@ Exposed via Prometheus standard endpoint `/metrics`:
 | Operational Topic | Pre-Audit Draft State | Post-Audit Aligned Decision | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Pricing Route** | Ambiguous `/pricing/estimate` | `POST /api/v1/pricing/quotes` with quote persistence | Aligned with Member 10 & API Conventions |
-| **Quote Expiration TTL** | Unpersisted / arbitrary TTL | 15 minutes (`PRICING_QUOTE_TTL_MINUTES=15`) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
-| **Pricing Formula & Multipliers** | Undefined formula | Volumetric divisor 5000, multipliers (1.0x, 1.5x, 2.0x) | **PROVISIONAL PROPOSAL (PENDING TEAM CONFIRMATION)** |
+| **Pricing Model & Complete Tariff** | Undefined formula / base+per-kg | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual/chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (6000)** | Volumetric divisor 5000 | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Quote Expiration TTL** | Unpersisted / arbitrary TTL | 15 minutes (`PRICING_QUOTE_TTL_MINUTES=15`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
 | **Monetary Type** | Floating-point fees | Exact integer cents (`BIGINT`, `LKR`) | Engineering Standards v1.0 Section 6 |
-| **Database Migrations** | Unnumbered / unspecified | Migrations `000004`, `000005`, `000010` | Database Migration Baseline |
+| **Address Persistence** | Child table `parcel_addresses` | Dual Specification: JSONB snapshots on `parcels` vs child table `parcel_addresses` | Architecture Alignment Item |
+| **Database Migrations** | Unnumbered / unspecified | Migrations `000004`, `000005`, `000010` (co-designed specifications) | Database Migration Baseline |
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
-| **Idempotency Window** | Undefined retention | 24 hours (`IDEMPOTENCY_RETENTION_HOURS=24`) | Engineering Standards v1.0 Section 7 |
+| **Idempotency Window** | Undefined retention | 24 hours (`IDEMPOTENCY_EXPIRY_HOURS=24`) with `caller_scope` | Engineering Standards v1.0 & API Conventions |
 | **Delivery Failure Logic** | Ambiguous terminal failure | ADR-004: max 3 attempts (`ATTEMPT_FAILED` $\to$ `RETURNED`) | ADR-004 Failed Delivery Semantics |
-| **Tariff Administration** | Mixed Member 2 admin claims | Admin write endpoints owned by M7/M1 | `PENDING TEAM CONFIRMATION` |
+| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; candidate REST endpoints served by M2 | Coordinated Boundary |
 | **Receipt File Format** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 9.1 Pricing Policy Dependency & Operational Impact Analysis
 
 | Operational Configuration | Invariant Aspect | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **`PRICING_QUOTE_TTL_MINUTES`** | Environment-driven configuration parameter. | Can be dynamically adjusted (e.g. from 15m to 30m) via environment variable without modifying application code. |
+| **`PRICING_QUOTE_TTL_MINUTES`** | Environment-driven configuration parameter. | Can be dynamically adjusted via environment variable without modifying application code; enforced strictly by backend `current_time >= expires_at`. |
 | **`PRICING_DEFAULT_CURRENCY`** | Controlled via config; default `LKR`. Stored in integer minor units. | Must remain aligned with system-wide currency standards; no code changes required. |
-| **Database Migration 000004** | Table `pricing_rules` structure. | If formula factors or multiplier tiers are revised, an additive migration script will be applied cleanly via `golang-migrate`. |
+| **Database Migration 000004** | Table `pricing_rules` structure storing complete tariffs. | If band definitions or zone pairing changes, additive migration scripts coordinate with Member 9 DevOps without affecting existing confirmed parcel bookings. |
 
 ---
 

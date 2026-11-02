@@ -1,15 +1,12 @@
 bash scripts/local-down.sh --wipe
+stopped
 wiped /tmp/m7-local
 bash scripts/local-up.sh
 [1/7] PostgreSQL 16 on :5432
 [2/7] Roles and grants (scripts/db-bootstrap.sql)
-[3/7] Migrations (golang-migrate, owner role)
-      20261025090000/u identity_create_users_stub (9.723943ms)
-      20261025100000/u admin_create_delivery_zones (21.141922ms)
-      20261025100100/u admin_create_zone_postal_codes (30.18107ms)
-      20261025100200/u admin_create_system_settings (38.68396ms)
-      20261025100300/u admin_create_audit_logs (49.360921ms)
-      20261025100400/u admin_audit_logs_append_only_trigger (56.570999ms)
+[3/7] Migrations (golang-migrate, swiftdrop_migrator role)
+      2/u create_delivery_zones (23.362415ms)
+      11/u create_audit_logs (37.74423ms)
 [4/7] Seed (7 zones, 3 settings, demo users)
       seed: done (7 zones, 3 settings, 3 demo users)
 [5/7] Dev JWT key pair

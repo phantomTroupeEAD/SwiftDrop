@@ -6,23 +6,44 @@ import (
 )
 
 // UT-AD-01..04: value objects check themselves on creation.
+func TestNewZoneID(t *testing.T) {
+	cases := []struct {
+		in string
+		ok bool
+	}{
+		{"ZONE_COLOMBO_01", true},
+		{"ZONE_KANDY", true},
+		{"ZONE_A", false},                                 // too short after prefix
+		{"zone_colombo", false},                           // lower case (TD-05)
+		{"COLOMBO", false},                                // missing ZONE_ prefix
+		{"ZONE_COLOMBO-1", false},                         // dash not allowed in the id
+		{"ZONE_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ12", false}, // 33 characters, column is VARCHAR(32)
+		{"", false},
+	}
+	for _, c := range cases {
+		_, err := NewZoneID(c.in)
+		if c.ok && err != nil {
+			t.Errorf("%q: unexpected error %v", c.in, err)
+		}
+		if !c.ok && !errors.Is(err, ErrInvalidZoneID) {
+			t.Errorf("%q: want ErrInvalidZoneID, got %v", c.in, err)
+		}
+	}
+}
+
 func TestNewZoneCode(t *testing.T) {
 	cases := []struct {
 		in string
 		ok bool
 	}{
-		{"ZONE_COLOMBO_CENTRAL", true},
-		{"ZONE_KANDY", true},
-		{"ZONE_A", false},         // too short after prefix
-		{"zone_colombo", false},   // lower case (TD-05)
-		{"COLOMBO", false},        // missing ZONE_ prefix
-		{"ZONE_COLOMBO-1", false}, // dash not allowed
-		{"", false},
+		{"CMB-01", true}, {"KDY_01", true}, {"AB", true},
+		{"A", false}, {"cmb-01", false}, {"CMB 01", false}, {"", false}, // TD-06
+		{"ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567", false}, // 33 characters
 	}
 	for _, c := range cases {
 		_, err := NewZoneCode(c.in)
-		if c.ok && err != nil {
-			t.Errorf("%q: unexpected error %v", c.in, err)
+		if c.ok != (err == nil) {
+			t.Errorf("%q: ok=%v err=%v", c.in, c.ok, err)
 		}
 		if !c.ok && !errors.Is(err, ErrInvalidZoneCode) {
 			t.Errorf("%q: want ErrInvalidZoneCode, got %v", c.in, err)
@@ -62,15 +83,9 @@ func TestPrefixOverlaps(t *testing.T) {
 	}
 }
 
-func TestNewLKR(t *testing.T) {
-	m, err := NewLKR(45000)
-	if err != nil || m.Cents() != 45000 || m.Currency() != "LKR" {
-		t.Fatalf("got %v %v", m, err)
-	}
-	if _, err := NewLKR(0); err != nil {
-		t.Errorf("zero allowed: %v", err)
-	}
-	if _, err := NewLKR(-100); !errors.Is(err, ErrNegativeMoney) { // TD-06
-		t.Errorf("want ErrNegativeMoney, got %v", err)
+func TestPrefixCovers(t *testing.T) {
+	p, _ := NewPostalPrefix("003")
+	if !p.Covers("00300") || !p.Covers("003") || p.Covers("00400") {
+		t.Error("Covers must match postal codes that start with the prefix")
 	}
 }

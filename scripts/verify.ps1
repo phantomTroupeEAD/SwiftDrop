@@ -26,15 +26,16 @@ if ($foundSecrets) {
 if ((Test-Path "core-api") -or (Test-Path "services/messaging") -or (Test-Path "go.mod")) {
     Write-Host "[2/4] Verifying Go formatting (gofmt)..." -ForegroundColor Yellow
     if (Get-Command gofmt -ErrorAction SilentlyContinue) {
-        $targets = @()
-        if (Test-Path "core-api") { $targets += "core-api" }
-        if (Test-Path "services/messaging") { $targets += "services/messaging" }
-        if ($targets.Count -eq 0) { $targets += "." }
-        $unformatted = gofmt -l $targets
-        if ($unformatted) {
-            Write-Host "  [ERROR] Unformatted Go files:" -ForegroundColor Red
-            $unformatted | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
-            $Failed = $true
+        $goFiles = Get-ChildItem -Recurse -Filter *.go | Where-Object { $_.FullName -notmatch "vendor|docs" } | Select-Object -ExpandProperty FullName
+        if ($goFiles) {
+            $unformatted = gofmt -l $goFiles
+            if ($unformatted) {
+                Write-Host "  [ERROR] Unformatted Go files:" -ForegroundColor Red
+                $unformatted | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+                $Failed = $true
+            } else {
+                Write-Host "  [PASS] All Go files formatted." -ForegroundColor Green
+            }
         } else {
             Write-Host "  [PASS] All Go files formatted." -ForegroundColor Green
         }

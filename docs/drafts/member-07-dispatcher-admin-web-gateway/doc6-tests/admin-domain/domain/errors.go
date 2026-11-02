@@ -5,11 +5,11 @@ package domain
 import "errors"
 
 var (
+	ErrInvalidZoneID         = errors.New("invalid zone id")
 	ErrInvalidZoneCode       = errors.New("invalid zone code")
 	ErrInvalidZoneName       = errors.New("invalid zone name")
+	ErrInvalidDescription    = errors.New("invalid zone description")
 	ErrInvalidPrefix         = errors.New("invalid postal code prefix")
-	ErrNegativeMoney         = errors.New("money cannot be negative")
-	ErrUnsupportedCurrency   = errors.New("only LKR is supported")
 	ErrNoPrefixes            = errors.New("zone needs at least one postal code prefix")
 	ErrDuplicatePrefixInZone = errors.New("postal code prefix listed twice in the same zone")
 	ErrAlreadyEnabled        = errors.New("zone is already enabled")

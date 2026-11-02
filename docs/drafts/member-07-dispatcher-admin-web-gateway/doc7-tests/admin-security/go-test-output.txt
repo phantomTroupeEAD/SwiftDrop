@@ -21,7 +21,7 @@
 === RUN   TestRequireRole_DispatchBoard
 --- PASS: TestRequireRole_DispatchBoard (0.00s)
 === RUN   TestWriteError_HidesInternalDetails
-2026/10/24 05:29:21 ERROR admin request failed correlation_id=corr_da43cd584171c126d5f09572 err="pq: duplicate key value violates unique constraint \"delivery_zones_code_key\" password=hunter2"
+2026/10/26 12:17:27 ERROR admin request failed correlation_id=corr_d0d62b8b48879c1879611be1 err="pq: duplicate key value violates unique constraint \"delivery_zones_code_key\" password=hunter2"
 --- PASS: TestWriteError_HidesInternalDetails (0.00s)
 === RUN   TestWriteError_KnownWrapped
 --- PASS: TestWriteError_KnownWrapped (0.00s)

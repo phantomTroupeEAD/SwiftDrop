@@ -4,7 +4,7 @@
 > **Author:** Member 9 — DevOps, Kubernetes & Observability + Database Coordinator (Minidu Dhananjana)  
 > **Target Module / Location:** `deploy/` (Docker Compose, Kubernetes, Helm, monitoring), `.github/` (CI/CD), root `Makefile`; database coordination of `core-api/migrations/`  
 > **Key Upstream Dependencies:** every service owner (Dockerfile, health endpoints, env vars), Member 7 (gateway routes), Member 8 (queues, reconciler), Member 2 (seed, migrations)  
-> **Open Questions / Needs Clarification:** Hosting provider and size for the K3s server (Hetzner vs Azure for Students); who has GitHub admin rights for branch protection and code-owner review; domain for Cloudflare; whether Redis and object storage run inside Kubernetes (Members 5 and 3).  
+> **Open Questions / Needs Clarification:** Hosting provider (trying Azure for Students first; Hetzner CX33 as the paid backup; ADR-002 §2); who has GitHub admin rights for branch protection and code-owner review; domain for Cloudflare; whether Redis and object storage run inside Kubernetes (Members 5 and 3).  
 > **Answers:** What does this module own, and what must it never own?  
 
 ---
@@ -33,7 +33,7 @@ Without a platform module:
 | # | Responsibility | Source |
 | :-: | :--- | :--- |
 | R1 | Dockerfiles for all 6 services, written **together with** each owner (templates from me, each owner understands their own). The core-api Dockerfile is led by Watti (M8); the **`messaging`** image (relay, worker and reconcile in one Dockerfile) is Watti's; **`web/Dockerfile` + the Nginx config are mine** (Sajini, M6, 2026-10-25) | Work Division §3 and §9; group decision |
-| R2 | Local **Docker Compose** stack (`deploy/docker-compose.yml`) with Postgres, RabbitMQ, Redis, MinIO, Traefik and the app services | SRS §11.1; C3 decision |
+| R2 | Local **Docker Compose** stack (`deploy/docker-compose.yml`) with Postgres, RabbitMQ, Redis, MinIO, Mailpit (local email inbox), Traefik and the app services | SRS §11.1; C3 decision |
 | R3 | Root **Makefile**: `make up`, `make migrate-up`, `make seed`, `make test-e2e` | C22 decision |
 | R4 | **Kubernetes** manifests (and the Helm chart for the bonus): Deployments, Services, StatefulSets, Job, CronJob, ConfigMap and Secret templates, NetworkPolicies | SRS §11.2; ADR-002 |
 | R5 | Probes, resource requests and limits, graceful shutdown settings, and **HPA/KEDA** autoscaling | SRS §11.2; ADR-002 §7 |
@@ -70,7 +70,7 @@ Without a platform module:
 | M7 Bagya | route map, the `IngressRoute`/`Middleware` CRDs, CORS and rate limits | path-based routing decided (C17) |
 | M8 Watti | queue names for KEDA, reconciler command and image, relay/worker metrics | ✅ answered 2026-10-25 (queues, reconciler, ports 8082/8083, metrics, pools); ⏳ health paths, `correlation_id`, `processed_events` |
 | M5 Senuji | SSE paths, Redis need, HPA numbers | TBD (C8, C18, C26) |
-| M2 Hansi | seed command, core-api pool size confirmation, idempotency table owner | TBD (C11, DB7) |
+| M2 Hansi | seed command, core-api pool size confirmation, idempotency table owner | ✅ seed `/app/seed` via `make seed`, owns `idempotency_keys`, JSONB addresses (2026-11-01); ⏳ core-api pool size (C11) |
 | Every table owner | migrations that follow the rules in Doc 5 | rules announced to the team |
 | Coordinator | milestone dates, VPS + Cloudflare + domain, GitHub admin rights, GHCR access | TBD |
 
@@ -102,13 +102,13 @@ Without a platform module:
 
 | # | Invariant | Source |
 | :-: | :--- | :--- |
-| I1 | Outbox Relay always has **`replicas: 1`**; no HPA or KEDA | AGENTS.md §4.4; ADR-002 §7.2 |
-| I2 | PostgreSQL and RabbitMQ run as **StatefulSets** with persistent volumes, and are never scaled | AGENTS.md §4.4; SRS §11.2 |
+| I1 | Outbox Relay always has **`replicas: 1`**; no HPA or KEDA | ADR-002 §4 (workload table) and §7 |
+| I2 | PostgreSQL and RabbitMQ run as **StatefulSets** with persistent volumes, and are never scaled | ADR-002 §4; SRS §11.2 |
 | I3 | **No real secrets** in git, images, CI logs or committed Helm values | SRS §11.1; AGENTS.md §8 |
 | I4 | **Pinned image tags**; no `latest` in the final submission | Engineering Standards §10 |
 | I5 | **Only Traefik is public.** Postgres, RabbitMQ (including its management UI), health and metrics stay internal | Engineering Standards §10; SRS §11.4 |
 | I6 | Containers **run as non-root** (UID 10001) | security-notes §6 |
-| I7 | Total DB connections stay **≤ Postgres `max_connections`** | ADR-002 §7.1; C11 |
+| I7 | Total DB connections stay **≤ Postgres `max_connections`** (150, D8) | C11; D8 |
 | I8 | **Migrations run before the app starts.** Every migration is **reviewed by the DB coordinator** and has a **unique number** | C22; Engineering Standards §6 |
 | I9 | Every workload that needs them has **probes and requests/limits** | SRS §11.2; Work Division §3 acceptance |
 | I10 | `main` stays **runnable from a clean clone** | Work Division §4; Engineering Standards §12.3 |
@@ -158,16 +158,18 @@ Without a platform module:
 ## 9. Assumptions, unresolved decisions, out-of-scope work
 
 **Assumptions:**
-- the target is one Ubuntu VPS running **K3s** (ADR-002), with **k3d** used locally;
+- the target is one Ubuntu VPS with at least 8 GB RAM running **K3s** (provider open: Azure for Students first, Hetzner CX33 as the paid backup; ADR-002 §2). **k3d** is used locally;
 - Cloudflare sits in front;
 - images are stored in **GHCR**;
 - PostgreSQL and RabbitMQ run **inside** the cluster, because the bonus rubric may require it (SRS §15.3, Work Division §9).
 
 **Decided (2026-10-24):** C1 health paths · C3 Compose location · C4 secret names · C11 M9 owns the pool budget · C17 path routing · C22 golang-migrate + Makefile · Minidu is DB coordinator · Watti leads the core-api Dockerfile.
 
+**Decided later:** C6, C7, C10, C15, C16 (2026-10-25) · C2, C12, C14, C21 · D2 6-digit names · D3 hub migration order (2026-10-28) · D6 DB roles · D8 `max_connections=150` · A8 per-service manifest folders. See the README.
+
 **Still open:**
-- infra conflicts C2, C5, C8, C9, C12, C13 (`correlation_id`), C14, C18–C21 and C23–C26 (C6, C7, C10, C15 and C16 were settled on 2026-10-25);
-- schema problems DB1–DB11;
-- the VPS provider and size, the domain, and GitHub admin rights.
+- infra conflicts C5, C8, C9, C13 (`correlation_id`), C18–C20, C23, C24 (domain), C25 (pinning, web/Python jobs), C26 (Redis);
+- schema problems DB1–DB3, DB5, DB6, DB8, DB9, DB11, DB12 (DB4, DB7, DB10 and DB13 are resolved);
+- the hosting provider (ADR-002 §2), the domain, and GitHub admin rights.
 
 **Out of scope:** multi-region or HA clusters, disaster recovery with a formal RPO/RTO (SRS §1.5), managed cloud Kubernetes, a service mesh, GitOps tools (Argo CD/Flux), and 24/7 on-call.

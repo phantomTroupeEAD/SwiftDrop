@@ -33,9 +33,10 @@ spec:
   headers:
     accessControlAllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     accessControlAllowHeaders: ["Authorization", "Content-Type", "X-API-Key", "Idempotency-Key", "X-Request-ID"]
-    accessControlExposeHeaders: ["X-Request-ID", "Content-Length", "Retry-After", "Idempotent-Replay"]
+    accessControlExposeHeaders: ["X-Request-ID", "Content-Length"]
     accessControlAllowCredentials: true
-    accessControlAllowOriginList: ["https://swiftdrop.example.com"]   # real domain: U-09
+    # Production origins from security-notes section 4 (R-14)
+    accessControlAllowOriginList: ["https://swiftdrop.io", "https://app.swiftdrop.io", "https://portal.swiftdrop.io"]
     accessControlMaxAge: 86400
     addVaryHeader: true
 ---
@@ -50,6 +51,18 @@ kind: Middleware
 metadata: {name: login-ratelimit, namespace: swiftdrop}
 spec:
   rateLimit: {average: 5, burst: 3, period: 1m, sourceCriterion: {ipStrategy: {depth: 1}}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: ai-ratelimit, namespace: swiftdrop}
+spec:
+  rateLimit: {average: 10, burst: 2, period: 1m, sourceCriterion: {ipStrategy: {depth: 1}}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: merchant-ratelimit, namespace: swiftdrop}
+spec:
+  rateLimit: {average: 120, burst: 20, period: 1m, sourceCriterion: {ipStrategy: {depth: 1}}}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

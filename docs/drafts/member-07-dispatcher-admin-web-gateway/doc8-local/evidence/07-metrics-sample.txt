@@ -1,30 +1,28 @@
 # HELP http_requests_total HTTP requests by route and status.
 # TYPE http_requests_total counter
-http_requests_total{route="GET /readyz",status="200"} 2
-http_requests_total{route="unmatched",status="404"} 1
+http_requests_total{route="GET /health/ready",status="200"} 2
 # HELP http_request_duration_seconds HTTP request time.
 # TYPE http_request_duration_seconds histogram
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.005"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.01"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.025"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.05"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.1"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.25"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="0.5"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="1"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="2.5"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="5"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="10"} 2
-http_request_duration_seconds_bucket{route="GET /readyz",le="+Inf"} 2
-http_request_duration_seconds_sum{route="GET /readyz"} 0.000683578
-http_request_duration_seconds_count{route="GET /readyz"} 2
-http_request_duration_seconds_bucket{route="unmatched",le="0.005"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.01"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.025"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.05"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.1"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.25"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="0.5"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="1"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="2.5"} 1
-http_request_duration_seconds_bucket{route="unmatched",le="5"} 1
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.005"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.01"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.025"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.05"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.1"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.25"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="0.5"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="1"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="2.5"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="5"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="10"} 2
+http_request_duration_seconds_bucket{route="GET /health/ready",le="+Inf"} 2
+http_request_duration_seconds_sum{route="GET /health/ready"} 0.000853791
+http_request_duration_seconds_count{route="GET /health/ready"} 2
+# HELP db_pool_in_use_connections Connections busy right now.
+# TYPE db_pool_in_use_connections gauge
+db_pool_in_use_connections 0
+# HELP db_pool_max_connections Pool size (DB_MAX_OPEN_CONNS).
+# TYPE db_pool_max_connections gauge
+db_pool_max_connections 25
+# HELP db_pool_wait_total Times a request had to wait for a free connection.
+# TYPE db_pool_wait_total gauge
+db_pool_wait_total 0

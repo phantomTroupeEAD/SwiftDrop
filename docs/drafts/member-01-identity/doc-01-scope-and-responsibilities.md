@@ -36,15 +36,15 @@ Without a centralized, robust identity and security domain:
 
 | ID | Capability | Description | SRS / ADR Trace |
 |:---|:---|:---|:---|
-| **M1-01** | User Registration | Accept customer registration with email, password, full name, and phone. Validate password complexity and ensure email uniqueness. | FR-IAM-001, AT-001 |
-| **M1-02** | Credential Hashing | Enforce memory-hard, salted password hashing using Argon2id (fallback bcrypt) with zero plaintext persistence. | FR-IAM-002, SEC-001 |
+| **M1-01** | User Registration | Accept customer registration with email, password, full name, and phone. Validate password complexity and ensure email uniqueness. Verified email required per FR-IAM-001. | FR-IAM-001, AT-001 |
+| **M1-02** | Credential Hashing | Enforce memory-hard, salted password hashing using Argon2id (fallback bcrypt) with zero plaintext persistence. | FR-IAM-002, SEC-002 |
 | **M1-03** | Local Authentication | Authenticate email/password credentials, handle failed attempt penalties, and issue initial token pairs. | FR-IAM-003, AT-001 |
 | **M1-04** | Google OIDC Federation | Orchestrate authorization code flow with Google, validate ID tokens (signature, issuer, audience, nonce), and link identities. | FR-IAM-002, ADR-003, AT-014 |
-| **M1-05** | Token Lifecycle & RTR | Issue RS256/HS256 access JWTs and handle refresh token rotation, invalidating entire token families upon detected token reuse. | ADR-003, SEC-004 |
+| **M1-05** | Token Lifecycle & RTR | Issue RS256 access JWTs and handle refresh token rotation (7-day web / 14-day courier per ADR-003), invalidating entire token families immediately upon detected token reuse. | ADR-003, SEC-004 |
 | **M1-06** | Session Invalidation | Implement logout endpoint revoking active refresh tokens and purging session cookies. | FR-IAM-003 |
 | **M1-07** | Reusable Middleware | Provide HTTP middleware to authenticate tokens, verify roles, enforce tenant boundaries, and populate Go `context.Context`. | FR-IAM-004, SEC-002 |
-| **M1-08** | Account Administration | Provide administrator endpoints to list users, filter by role/status, inspect audit profiles, and promote/demote roles. | FR-IAM-005, FR-ADM-004 |
-| **M1-09** | Identity Audit Logging | Log security events (login success/failure, role modification, token revocation) to `audit_logs`. | FR-IAM-009, SEC-009 |
+| **M1-08** | Account Administration | Provide administrator endpoints to list users, filter by role/status, inspect audit profiles, and promote/demote roles. | FR-IAM-005, FR-ADM-006 |
+| **M1-09** | Identity Audit Logging | Log security events (login success/failure, role modification, token revocation) to `audit_logs`. | FR-IAM-009, SEC-015 |
 
 ### 2.2 Explicit Exclusions (What This Module Does NOT Own)
 
@@ -133,9 +133,9 @@ Without a centralized, robust identity and security domain:
 | **All Modules** | `AuthMiddleware()` | Go in-process HTTP middleware |
 | **All Modules** | `RequireRole(roles ...Role)` | Go in-process HTTP middleware |
 | **All Modules** | `GetSecurityContext(ctx) -> Principal` | Go in-process context helper |
-| **Member 4 (Merchants)** | Validate user exists and has role `MERCHANT` | Go in-process query interface `UserFinder` |
-| **Member 7 (Admin Gateway)** | Update user status / role via `/api/v1/admin/users/*` | REST API over HTTP/2 |
-| **Member 5 (Tracking API)** | Verify access token validity against public key / secret | In-process JWT validation engine |
+| **Member 4 (Merchants)** | Validate user exists (`UserFinder`), grant merchant role within transaction (`RoleAssigner.GrantMerchantRole(tx)`), and emit audit entries (`AuditWriter.Write(tx)`) | Go in-process interfaces |
+| **Member 7 (Admin Gateway)** | Update user status / role, suspend accounts, revoke sessions via `/api/v1/admin/users/*` | REST API over HTTP/2 |
+| **Member 5 (Tracking API)** | Verify access token validity against public key / JWKS | In-process JWT validation engine (RS256) |
 
 ---
 
@@ -143,8 +143,8 @@ Without a centralized, robust identity and security domain:
 
 - **Source Code Directory:** `core-api/internal/identity/`
 - **Database Tables:** `users`, `refresh_tokens`, `oauth_identities` (DDL in `migrations/000001_create_identity_tables.up.sql`)
-- **API Routes:** `/api/v1/auth/*`, `/api/v1/admin/users/*`
-- **Kubernetes Secrets Owned:** `jwt-secrets` (private/public keys or HMAC shared secrets), `integrations-secrets` (Google Client ID & Secret)
+- **API Routes:** `/api/v1/auth/*`, `/api/v1/admin/users/*`, `/.well-known/jwks.json`
+- **Kubernetes Secrets Owned:** `jwt-secrets` (`JWT_PRIVATE_KEY_PEM`, `JWT_PUBLIC_KEY_PEM`), `integrations-secrets` (Google Client ID & Secret)
 
 ---
 
@@ -165,7 +165,6 @@ Without a centralized, robust identity and security domain:
 
 ## 9. Assumptions, Unresolved Decisions & Review Items
 
-1. **JWT Algorithm Selection:** ADR-003 and Engineering Standards evaluate RS256 (asymmetric) vs HS256 (symmetric).
-   - *Working Agreement:* For initial monolith simplicity, HS256 is fully supported with a shared `JWT_SECRET`; however, asymmetric RS256 is designed into `infrastructure/jwt_provider.go` to allow independent microservice verification (Tracking API) without sharing signing keys.
+1. **JWT Algorithm Selection:** In strict accordance with ADR-003 and `environment-variables.md`, SwiftDrop mandates asymmetric **RS256** exclusively. Identity signs tokens using `JWT_PRIVATE_KEY_PEM`, while edge services and microservices (Tracking API) verify tokens via `JWT_PUBLIC_KEY_PEM` or `/.well-known/jwks.json` without key sharing.
 2. **Account Deletion / GDPR:** Hard deletion cascades would violate parcel audit history invariants. Soft deletion (`status = 'SUSPENDED'` or `'DEACTIVATED'`) with PII anonymization is the agreed policy.
-3. **Seed Data Admin Credentials:** Predefined deterministic accounts (`admin@swiftdrop.local`, `customer@swiftdrop.local`, etc.) must be created exclusively via `core-api/cmd/seed/` and prohibited from executing in `APP_ENV=production`.
+3. **Seed Data Admin Credentials:** Predefined deterministic accounts (`admin@swiftdrop.com`, `customer.alice@swiftdrop.com`, etc.) must be created exclusively via `core-api/cmd/seed/` and prohibited from executing in `APP_ENV=production`.
