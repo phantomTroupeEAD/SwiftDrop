@@ -30,6 +30,8 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 - **Generative UI Action Cards:** Generates pre-filled `NAVIGATE_BOOKING` cards directly in the React web portal for seamless 1-click booking confirmation.
 - **FastMCP Protocol Server:** Exposes tools via STDIO and Server-Sent Events (SSE) for external AI agent integration (**+5 Assignment Bonus Marks**).
 - **Dual LLM Engine:** Universal `AsyncOpenAI` client (OpenRouter, Groq, NVIDIA NIM, OpenAI, Ollama) paired with an offline deterministic mock adapter for zero-cost automated CI testing.
+- **Role-Aware Tiered Rate Limiting:** Configurable SlowAPI engine enforcing 20 RPM for anonymous visitors, 60 RPM for authenticated customers, and 100 RPM for merchants/staff with RFC-7807 429 envelopes.
+- **Cryptographic JWT Tenant Verification:** Zero-dependency HMAC-SHA256 token verification matching Core API standards (ADR-003, SEC-004/005) with IDOR defense.
 - **Strict Invariants:** 100% read-only operations with **zero direct database access**; all persistence is mediated through authoritative Core APIs.
 
 ---

@@ -7,7 +7,15 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from src.api.middleware import (
+    JWTAuthenticationMiddleware,
+    SecurityHeadersMiddleware,
+    limiter,
+    rate_limit_exceeded_handler,
+)
 from src.api.routers import chat_router, health_router
 from src.core.config import get_settings
 from src.domain.errors import AppException, ErrorDetail
@@ -45,14 +53,21 @@ app = FastAPI(
         "Production AI Delivery Assistant providing grounded parcel tracking, "
         "instant shipping quotations, active parcel summaries, and standardized FastMCP tools."
     ),
-    version="2.5.1",
+    version="2.8.2",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
 
-# Configure CORS Middleware
+# Attach SlowAPI Limiter to application state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Configure Security, Rate Limiting & CORS Middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(JWTAuthenticationMiddleware)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

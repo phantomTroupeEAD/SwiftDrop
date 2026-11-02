@@ -85,4 +85,12 @@ def sanitize_assistant_identity(text: str) -> str:
     sanitized = re.sub(r"(?i)\bmobile\s+apps?\b", "web portal", sanitized)
     sanitized = re.sub(r"(?i)\b(portal\s+web\s+portal|web\s+portal\s+or\s+web\s+portal)\b", "web portal", sanitized)
 
+    # Pattern 7: SEC-009 Privacy Masking — Redact customer personal phone numbers and street lines
+    # Matches +94 7X XXX XXXX, +947XXXXXXXX, 07XXXXXXXX, 011XXXXXXX
+    sanitized = re.sub(
+        r"(\+94\s*\d{1,2}\s*\d{3}\s*\d{4}|07[0-9]\s*\d{3}\s*\d{4}|\b07[0-9]{8}\b|\b011[0-9]{7}\b)",
+        "[PHONE REDACTED]",
+        sanitized,
+    )
+
     return sanitized

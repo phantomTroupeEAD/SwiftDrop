@@ -152,6 +152,33 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 }
 ```
 
+##### 401 Unauthorized (Authentication Failure)
+```json
+{
+  "error": {
+    "code": "AUTH_UNAUTHORIZED",
+    "message": "Authentication token has expired",
+    "details": []
+  }
+}
+```
+
+##### 429 Too Many Requests (Rate Limit Exceeded)
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Please wait 45 seconds before retrying.",
+    "details": [
+      {
+        "field": "rate_limit",
+        "issue": "Request frequency exceeded your tier's quota. Retry after 45s."
+      }
+    ]
+  }
+}
+```
+
 ##### 502 Bad Gateway (Upstream Service Failure)
 ```json
 {

@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     )
 
     # Security, Service Tokens & Rate Limiting
+    JWT_SECRET: SecretStr = Field(
+        default=SecretStr("swiftdrop-development-secret-key-change-in-production-32chars"),
+        description="Shared HMAC-SHA256 secret key for verifying Core API access tokens",
+    )
     AI_SERVICE_ROLE_TOKEN: SecretStr = Field(
         default=SecretStr("dev-internal-secret-key-123"),
         description="Shared secret token for internal Core API service-role requests",
@@ -99,7 +103,25 @@ class Settings(BaseSettings):
         default=20,
         ge=1,
         le=1000,
-        description="Max requests per minute per IP matching Traefik edge rate limit",
+        description="Legacy fallback rate limit ceiling (RPM)",
+    )
+    RATE_LIMIT_ANONYMOUS_RPM: int = Field(
+        default=20,
+        ge=1,
+        le=1000,
+        description="Rate limit for unauthenticated anonymous traffic (requests/min)",
+    )
+    RATE_LIMIT_CUSTOMER_RPM: int = Field(
+        default=60,
+        ge=1,
+        le=2000,
+        description="Rate limit for authenticated customers (requests/min)",
+    )
+    RATE_LIMIT_MERCHANT_RPM: int = Field(
+        default=100,
+        ge=1,
+        le=5000,
+        description="Rate limit for authenticated merchants and staff (requests/min)",
     )
 
     # In-Memory Conversational Session Cache (Stateless Isolation)
@@ -150,6 +172,11 @@ class Settings(BaseSettings):
         if self.USE_MOCK_UPSTREAM:
             return self.MOCK_TRACKING_API_URL
         return self.TRACKING_API_URL
+
+    @property
+    def jwt_secret_key(self) -> str:
+        """Return the active JWT secret key string for token validation."""
+        return self.JWT_SECRET.get_secret_value()
 
     @property
     def ai_service_role_token(self) -> SecretStr:
