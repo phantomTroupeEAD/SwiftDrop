@@ -18,28 +18,19 @@ data:
   SHUTDOWN_DRAIN_SECONDS: "5"                      # > readiness period so endpoints are removed first
   SHUTDOWN_TIMEOUT_SECONDS: "20"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: core-api-merchants-secrets
-  namespace: swiftdrop
-  labels: { app: core-api, module: merchants }
-type: Opaque
-stringData:
-  # Placeholders only. Create real values with:
-  #   kubectl create secret generic core-api-merchants-secrets -n swiftdrop \
-  #     --from-literal=MERCHANT_API_KEY_PEPPER="$(head -c 48 /dev/urandom | base64)" \
-  #     --from-literal=WEBHOOK_SECRET_ENCRYPTION_KEY="$(head -c 32 /dev/urandom | base64)"
-  MERCHANT_API_KEY_PEPPER: "REPLACE_ME_AT_LEAST_32_CHARS"
-  WEBHOOK_SECRET_ENCRYPTION_KEY: "REPLACE_ME_BASE64_32_BYTES"
-  # Member 8's Event Worker needs the SAME WEBHOOK_SECRET_ENCRYPTION_KEY (read-only) to sign webhooks (U-22).
+# Secrets: no merchants-specific Secret. Member 9 owns the shared integrations-secrets
+# (docs/operations/environment-variables.md), which must contain these two keys for core-api:
+#   MERCHANT_API_KEY_PEPPER        head -c 48 /dev/urandom | base64
+#   WEBHOOK_SECRET_ENCRYPTION_KEY  head -c 32 /dev/urandom | base64
+# Member 8's Event Worker mounts the same Secret: it needs the SAME WEBHOOK_SECRET_ENCRYPTION_KEY
+# to decrypt signing secrets (U-22).
 ---
 # Fragment to merge into Member 9's core-api Deployment spec.template.spec.containers[core-api]:
 #
 #   envFrom:
 #     - configMapRef: { name: core-api-config }              # existing (APP_ENV, HTTP_ADDR, ...)
 #     - configMapRef: { name: core-api-merchants-config }    # new
-#     - secretRef:    { name: core-api-merchants-secrets }   # new
+#     - secretRef:    { name: integrations-secrets }         # Member 9's shared Secret
 #   ports: [{ name: http, containerPort: 8080 }]
 #   livenessProbe:  { httpGet: { path: /livez,  port: http }, periodSeconds: 10, failureThreshold: 3 }
 #   readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 3,  failureThreshold: 1 }

@@ -1,0 +1,114 @@
+@startuml
+title Delivery Fee Estimation – Activity Diagram
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 14
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam roundCorner 8
+
+skinparam title {
+    FontSize 24
+    FontColor #172554
+    FontStyle bold
+}
+
+skinparam swimlane {
+    BorderColor #2563EB
+    BorderThickness 1.5
+    TitleBackgroundColor #F8FBFF
+    TitleFontColor #172554
+    TitleFontSize 16
+    TitleFontStyle bold
+}
+
+skinparam activity {
+    StartColor #172554
+    EndColor #172554
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 14
+    DiamondBackgroundColor #DBEAFE
+    DiamondBorderColor #2563EB
+    DiamondFontColor #172554
+    DiamondFontSize 13
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 13
+}
+
+|#F8FBFF|Client| Customer / Merchant Client
+|#F8FBFF|Handler| Pricing HTTP Handler (Transport)
+|#F8FBFF|App| Pricing Application & Domain
+|#F8FBFF|Repo| Pricing Repository / PostgreSQL (Infrastructure)
+
+|Client|
+start
+:Request delivery fee estimate\n(pickup/dropoff zones, weight, dimensions);
+
+|Handler|
+:Receive HTTP estimate request;
+:Validate mandatory fields and syntax;
+
+if (Is request\nvalid?) then ([invalid])
+  :Construct 400 Bad Request\nvalidation error response;
+  |Client|
+  :Receive validation error response;
+else ([valid])
+  |App|
+  :Validate route serviceability\nagainst delivery_zones;
+  if (Is route\nserviceable?) then ([unsupported])
+    |Handler|
+    :Construct 422 Unsupported Route\nerror response;
+    |Client|
+    :Receive unsupported route error;
+  else ([serviceable])
+    |App|
+    :Validate parcel weight and dimensions\nagainst approved limits;
+    if (Within\nlimits?) then ([exceeded])
+      |Handler|
+      :Construct 422 Parcel Limits Exceeded\nerror response;
+      |Client|
+      :Receive limit exceeded error;
+    else ([within limits])
+      |App|
+      :Apply approved chargeable-weight\ncalculation policy;
+      :Determine applicable weight band;
+      |Repo|
+      :Query active matching tariff\nfor zone pair & weight band;
+      |App|
+      switch (Tariff match\nresult?)
+      case ( [no matching tariff] )
+        |Handler|
+        :Construct 422 Pricing Unavailable\nerror response;
+        |Client|
+        :Receive pricing unavailable error;
+      case ( [multiple matching tariffs] )
+        |Handler|
+        :Construct 500 Configuration Error\nambiguous tariff response;
+        |Client|
+        :Receive configuration error response;
+      case ( [exactly one tariff] )
+        |App|
+        :Calculate delivery fee\nusing approved pricing rule;
+        |Repo|
+        :Persist quote in pricing_quotes;
+        |Handler|
+        :Construct quote response\n(HTTP 200 OK / 201 Created);
+        |Client|
+        :Receive delivery fee quote;
+      endswitch
+    endif
+  endif
+endif
+
+|Client|
+stop
+
+@enduml

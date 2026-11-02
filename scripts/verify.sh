@@ -22,7 +22,7 @@ fi
 # 2. Go Code Formatting Check
 if [ -d "core-api" ] || [ -d "services/messaging" ] || [ -f "go.mod" ]; then
     echo "[2/4] Verifying Go formatting (gofmt)..."
-    GO_UNFORMATTED=$(gofmt -l $(find core-api services/messaging -name "*.go" -not -path "*/vendor/*" 2>/dev/null || true) 2>/dev/null || true)
+    GO_UNFORMATTED=$(gofmt -l $(find . -name "*.go" -not -path "*/vendor/*" -not -path "*/docs/*" 2>/dev/null) 2>/dev/null || true)
     if [ -n "$GO_UNFORMATTED" ]; then
         echo "  [ERROR] The following Go files require formatting:"
         echo "$GO_UNFORMATTED"

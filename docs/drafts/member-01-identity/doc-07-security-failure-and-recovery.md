@@ -26,8 +26,8 @@
 |:---|:---|:---|:---|
 | **User Password** | Critical | Argon2id / bcrypt salted hash | **STRICTLY PROHIBITED** from all logs, queries, and API responses. Sanitized before transport serialization. |
 | **Refresh Token Secret** | High | SHA-256 hash | Client holds raw token in cookie; DB holds hash only. Never logged. |
-| **JWT Signing Key** | Critical | Kubernetes Secret / Environment Variable | Kept in application memory; never exposed via API or committed to Git. |
-| **User Email & Phone** | PII | Cleartext in PostgreSQL | Masked in public tracking queries; logged only as anonymous user IDs (`usr_...`). |
+| **JWT Signing Key** | Critical | Kubernetes Secret (`JWT_PRIVATE_KEY_PEM`) | Kept in application memory; never exposed via API or committed to Git. |
+| **User Email & Phone** | PII | Cleartext in PostgreSQL | Masked in public tracking queries; logged only as anonymous UUIDs. |
 
 ---
 
@@ -35,16 +35,16 @@
 
 | Component / Dependency | Failure Scenario | Impact | System Behavior & Recovery Action |
 |:---|:---|:---|:---|
-| **PostgreSQL Database** | Database down or connection pool exhausted | New logins, registrations, and token refreshes fail. | - Returns `503 Service Unavailable`.<br>- Existing access tokens continue to authenticate in-memory at downstream services until 15-minute expiration. |
+| **PostgreSQL Database** | Database down or connection pool exhausted | New logins, registrations, and token refreshes fail. | - Returns `503 Service Unavailable`.<br>- Existing RS256 access tokens continue to authenticate in-memory at downstream services until 15-minute expiration. |
 | **Google OIDC Provider** | Google Identity API unreachable or network timeout | Google login button fails. | - Returns structured error `AUTH_OIDC_PROVIDER_UNAVAILABLE`.<br>- Local email/password login operates completely unaffected. |
-| **Concurrent Token Refresh** | Multi-tab browser triggers concurrent refresh requests. | Race condition on single-use refresh token. | - Built-in 10-second grace window permits near-simultaneous multi-tab refreshes without triggering breach revocation. |
+| **Concurrent Token Refresh** | Multi-tab browser triggers concurrent refresh requests. | Token reuse detection triggered. | - Client-side state managers must serialize token refresh calls.<br>- In accordance with ADR-003 (RTR), any reuse of an already rotated refresh token triggers instant invalidation of the entire `family_id` to prevent session hijacking. |
 | **Leaked Database Dump** | Database compromised by external threat actor. | Password hashes and refresh hashes dumped. | - Argon2id parameters ($m=65536, t=3, p=2$) resist GPU dictionary cracking.<br>- All refresh tokens are hashed with SHA-256, rendering dumped values useless for session hijacking. |
 
 ---
 
-## 4. Audit Logging & Security Event Tracing
+## 4. Audit Logging & Security Event Tracing (SEC-015)
 
-The Identity module emits structured JSON security audit events directly to `stdout` and appends critical records to the shared `audit_logs` table:
+The Identity module emits structured JSON security audit events directly to `stdout` and commits authoritative records to the shared `audit_logs` table via `AuditWriter`:
 
 ```json
 {
@@ -52,8 +52,9 @@ The Identity module emits structured JSON security audit events directly to `std
   "level": "WARN",
   "service": "core-api",
   "module": "identity",
-  "event": "AUTH_TOKEN_REUSE_DETECTED",
-  "user_id": "0192e4a8-6b2a-7c91-9e12-3456789abcde",
+  "event": "TOKEN_REUSE_DETECTED",
+  "actor_id": "0192e4a8-6b2a-7c91-9e12-3456789abcde",
+  "actor_role": "CUSTOMER",
   "family_id": "0192e4a8-f123-7c91-9e12-aabbccddeeff",
   "client_ip": "192.0.2.45",
   "user_agent": "Mozilla/5.0 ...",
@@ -62,9 +63,10 @@ The Identity module emits structured JSON security audit events directly to `std
 }
 ```
 
-### Audited Events:
-1. `AUTH_LOGIN_SUCCESS` / `AUTH_LOGIN_FAILURE`
-2. `AUTH_TOKEN_ROTATED` / `AUTH_TOKEN_REUSE_DETECTED`
-3. `AUTH_USER_REGISTERED`
-4. `AUTH_ROLE_MODIFIED`
-5. `AUTH_ACCOUNT_SUSPENDED`
+### Standard Audited Events:
+1. `USER_LOGIN_SUCCESS` / `USER_LOGIN_FAILED`
+2. `TOKEN_ROTATED` / `TOKEN_REUSE_DETECTED`
+3. `USER_REGISTERED`
+4. `USER_ROLE_ASSIGNED` (e.g. `MERCHANT_ROLE_GRANTED` via Member 4 `RoleAssigner`)
+5. `USER_SUSPENDED` (Administrative lock via Member 7)
+6. `USER_SESSIONS_REVOKED` (Session purge via Member 7)

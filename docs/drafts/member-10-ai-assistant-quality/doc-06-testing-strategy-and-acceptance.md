@@ -125,18 +125,25 @@ flowchart LR
 
 ---
 
-#### Suite 2: Scenario 2 — Merchant B2B Ordering & Asynchronous Webhook Integration
+#### Suite 2: Scenario 2 — Multi-Tenant Merchant B2B Ordering, Webhooks & DLQ Verification
 - **File:** `tests/e2e/api/test_merchant_webhooks.py`
-- **Methodology:** Pytest + HTTPX + RabbitMQ + Local Mock Webhook Receiver.
+- **Methodology:** Pytest + HTTPX + RabbitMQ + Multi-Tenant `mock-webhook:9999` Container with Visual Dashboard.
 - **Test Steps:**
-  1. Spin up ephemeral local HTTP receiver on port `9999` (`http://localhost:9999/webhook`).
-  2. Call `POST /api/v1/merchants/orders` using Merchant API key in `X-API-Key` header.
+  1. Call `POST http://localhost:9999/api/reset` to flush the mock webhook receiver cache.
+  2. Merchant Alpha calls `POST /api/v1/merchant/orders` using Alpha API key (`X-API-Key: test_key_alpha`).
   3. Assert `201 Created` with tracking number `SD-MERCH-001`.
-  4. Query RabbitMQ exchange `swiftdrop.events.topic` to assert CloudEvent `com.swiftdrop.parcel.created` was published by the Outbox Relay within 3 seconds.
-  5. Trigger courier status transition to `IN_TRANSIT`.
-  6. Assert local webhook receiver receives HTTP POST with `X-SwiftDrop-Signature` header within 5 seconds.
-  7. Verify HMAC-SHA256 signature using merchant secret key.
-  8. **Failure & DLQ Test:** Configure webhook URL to return HTTP 500 $\to$ assert Event Worker retries 3 times with exponential backoff and finally routes message to `swiftdrop.webhooks.dlq`.
+  4. Query RabbitMQ exchange `swiftdrop.events.topic` to assert CloudEvent `parcel.booked.v1` was published by the Outbox Relay within 3 seconds.
+  5. Event Worker dispatches to `http://mock-webhook:9999/webhooks/merchant-alpha` with header `X-SwiftDrop-Signature`.
+  6. Assert mock receiver records event under Merchant Alpha with valid HMAC-SHA256 signature verification.
+  7. **Strict Multi-Tenant Isolation Assertion (SEC-004 / SEC-005):**
+     - Query `GET http://localhost:9999/api/merchants/mer_beta/events`.
+     - Assert Merchant Beta received **ZERO events** (100% isolation; 0 cross-talk / data leakage).
+  8. **Failure & Dead-Letter Queue (DLQ) Test:**
+     - Merchant Chaos triggers dispatch to `http://mock-webhook:9999/webhooks/merchant-chaos` (responding HTTP 500).
+     - Event Worker applies test-mode compressed retries (`WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`).
+     - Assert that after 3 attempts, the message is routed to `swiftdrop.dlq`.
+  9. **Visual Proof Artifact:**
+     - Playwright navigates to `http://localhost:9999/dashboard` and captures a full-page screenshot (`test-results/artifacts/webhook-multi-tenant-proof.png`) as verifiable evidence for the 15-mark live presentation rubric.
 
 ---
 
@@ -230,10 +237,10 @@ pytest tests/e2e/ui/ -v --video=on --tracing=on
 pytest tests/e2e/api/ -v
 ```
 
-### 2.2 Continuous Integration (GitHub Actions)
-E2E tests run automatically on every Pull Request via `.github/workflows/ci.yml`:
-1. Services started via `docker compose up -d postgres rabbitmq core-api tracking-api ai-assistant web`.
-2. Database seeded via `seeds/dev_seed.sql`.
+### 2.2 Continuous Integration & Orchestration
+E2E tests run automatically on every Pull Request via standard Makefile targets (Agreements A7, K13):
+1. Services started via `make up` (bringing up PostgreSQL, RabbitMQ, Core API, Outbox Relay, Event Worker, Tracking API, AI Assistant, Mailpit, Traefik, and `mock-webhook`).
+2. Database seeded via `make seed`.
 3. Pytest executes test suites in parallel.
 4. If any test fails, Playwright traces and failure screenshots are automatically uploaded as CI run artifacts.
 
@@ -244,14 +251,14 @@ E2E tests run automatically on every Pull Request via `.github/workflows/ci.yml`
 To secure full marks across the **15 Testing Marks** and **15 Presentation Marks**:
 1. **Measurable Code Coverage:** $\ge 85\%$ test coverage for the AI Assistant service, with coverage reports generated via `pytest-cov`.
 2. **Passing Automated E2E Suite:** All 5 test suites pass deterministically on a clean clone.
-3. **Live Demo Video / Traces:** Playwright video recordings and trace files captured in `tests/e2e/artifacts/` available as proof of functioning customer, courier, and merchant journeys.
+3. **Live Demo Video / Traces:** Playwright video recordings, traces, and the live webhook HTML dashboard screenshots captured in `tests/e2e/artifacts/` available as proof of functioning customer, courier, and merchant journeys.
 4. **Zero Unhandled Errors:** All failure edge cases (404, 500, prompt injection, IDOR) produce structured error envelopes without exposing stack traces.
 
 ---
 
 ## 4. Review Checklist for Team Meeting 2
 
-- [ ] **Members 6 & 7 (Frontend):** Verify that all `data-testid` attributes targeted in Suite 1, Suite 3, and Suite 4 are implemented in the React codebase.
-- [ ] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` creates the exact accounts (`usr_cust_001`, `usr_cust_002`, `usr_cour_001`, `usr_cour_002`, `usr_disp_001`).
-- [ ] **Member 8 (Messaging):** Confirm that the RabbitMQ routing key is `parcel.created` and webhook retry limit is 3 attempts before DLQ.
-- [ ] **Member 9 (DevOps):** Confirm that Playwright browser dependencies (`playwright install chromium`) are added to the CI runner script.
+- [x] **Members 6 & 7 (Frontend):** Verify that all `data-testid` attributes targeted in Suite 1, Suite 3, and Suite 4 are implemented in the React codebase.
+- [x] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` creates the exact accounts (`usr_cust_001`, `usr_cust_002`, `usr_cour_001`, `usr_cour_002`, `usr_disp_001`).
+- [x] **Member 8 (Messaging):** Event names standardized to `parcel.booked.v1`; queue `q.webhooks.dispatcher`; DLQ `swiftdrop.dlq`; compressed retries via `WEBHOOK_RETRY_INTERVALS_MS=500,1000,2000`.
+- [x] **Member 9 (DevOps):** Standalone `mock-webhook:9999` container added to Compose; `make up` and `make seed` standardized; Playwright browser dependencies installed on CI runners.

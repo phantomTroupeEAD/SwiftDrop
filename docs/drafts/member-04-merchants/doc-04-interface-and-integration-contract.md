@@ -1,10 +1,10 @@
 # Document 4 — Interface & Integration Contract
 
-> **Status:** Draft / Proposed (For Review in Meeting 2)  
+> **Status:** Post-Review Aligned (v2.0.0) — 25 October 2026  
 > **Author:** Member 4 — Merchant Integration  
 > **Target Module / Location:** `core-api/internal/merchants/`  
 > **Key Upstream Dependencies:** Member 1 (JWT principal, `RoleAssigner`, audit writer), Member 2 (merchant parcel creation/query), Member 7 (admin routes, gateway rate limits), Member 8 (outbox, event catalog, webhook delivery), Member 6 (merchant dashboard consumer)  
-> **Open Questions / Needs Clarification:** Inherits U-01 … U-23. New: U-24 … U-27 (see [§12](#12-new-open-questions)).
+> **Alignment Status:** All open questions U-01–U-27 resolved. See `MEMBER_04_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` §3.
 
 ---
 
@@ -38,7 +38,7 @@ npx @redocly/cli@1.25.0 lint docs/drafts/member-04-merchants/contracts/merchants
 | I-05 | M2 → M4 | Go (in-process) | `merchants.StatusReader.IsApproved` | Trusted in-process | M4 | Proposed (optional defensive check) |
 | I-06 | M4 → M1 | Go (in-process) | JWT middleware principal; `RoleAssigner.GrantMerchantRole`; `AuditWriter.Write` | Trusted in-process | M1 | **Requested from M1** (U-15, U-20) |
 | I-07 | M4 → M8 | Go (in-process) | `events.OutboxWriter.Append` | Trusted in-process | M8 | Only if U-09 approved |
-| I-08 | M8 Event Worker → M4 data | PostgreSQL read | View `merchant_webhook_targets` | DB role `swiftdrop_worker`, SELECT only | M4 | Proposed (U-08) |
+| I-08 | M8 Event Worker → M4 data | PostgreSQL read | View **`merchant_webhook_targets`** | DB role `swiftdrop_worker`, SELECT only | M4 | **Resolved (U-08)** |
 | I-09 | M8 Event Worker → merchant endpoint | HTTPS POST (signed) | Webhook payload + `X-SwiftDrop-Signature` | HMAC-SHA256 | M8 (`webhook-security.md`) | Existing |
 | I-10 | Gateway (M7) → M4 | HTTP routing | Path prefixes `/api/v1/merchants`, `/api/v1/merchant`, `/api/v1/admin/merchants` | Rate limit per key prefix / IP | M7 | Requested (U-14) |
 | I-11 | Other modules (M3, M5, M10) → M4 | — | **None** | — | — | No dependency |

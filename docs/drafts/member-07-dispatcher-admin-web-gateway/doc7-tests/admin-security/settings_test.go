@@ -42,7 +42,7 @@ func TestValidateReason(t *testing.T) {
 	for reason, ok := range map[string]bool{
 		"":                                 false,
 		"   fix     ":                      false,
-		"Colombo 3 surcharge raised by M2": true,
+		"Colombo 3 prefixes moved by ops": true,
 		strings.Repeat("x", 501):           false,
 		"මුදල් වෙනස් කිරීම සඳහා හේතුව": true,
 	} {
@@ -55,7 +55,7 @@ func TestValidateReason(t *testing.T) {
 // SC-D01: secrets never enter audit_logs before/after snapshots.
 func TestRedactForAudit(t *testing.T) {
 	in := map[string]any{
-		"code":          "ZONE_COLOMBO_CENTRAL",
+		"code":          "ZONE_COLOMBO_01",
 		"api_key":       "sd_live_abc",
 		"Authorization": "Bearer x",
 		"webhook":       map[string]any{"url": "https://m.example", "signingSecret": "whsec_1"},
@@ -69,7 +69,7 @@ func TestRedactForAudit(t *testing.T) {
 			t.Fatalf("leaked %q in %s", leak, s)
 		}
 	}
-	if out["code"] != "ZONE_COLOMBO_CENTRAL" || !strings.Contains(s, "https://m.example") || !strings.Contains(s, "plain") {
+	if out["code"] != "ZONE_COLOMBO_01" || !strings.Contains(s, "https://m.example") || !strings.Contains(s, "plain") {
 		t.Fatalf("normal fields must stay: %s", s)
 	}
 	if in["api_key"] != "sd_live_abc" {

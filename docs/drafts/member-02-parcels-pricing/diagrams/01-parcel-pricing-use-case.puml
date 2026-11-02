@@ -1,0 +1,90 @@
+@startuml
+left to right direction
+skinparam linetype ortho
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam defaultFontColor #172554
+skinparam shadowing false
+skinparam actorStyle standard
+
+skinparam actor {
+    BackgroundColor #EFF6FF
+    BorderColor #1E3A8A
+    FontColor #1E3A8A
+    FontSize 13
+    FontStyle bold
+}
+
+skinparam usecase {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #172554
+    FontSize 12
+}
+
+skinparam rectangle {
+    BorderColor #2563EB
+    BorderThickness 1.5
+    FontColor #1E3A8A
+    FontSize 14
+    FontStyle bold
+    BackgroundColor #FFFFFF
+}
+
+skinparam arrow {
+    Color #2563EB
+    FontColor #172554
+    FontSize 11
+}
+
+actor "Customer" as Customer
+actor "Merchant Client" as Merchant
+
+Customer -[hidden]right- Merchant
+
+rectangle "Parcel Management & Pricing Subsystem" {
+    usecase "Estimate Delivery Fee" as UC_Estimate
+    usecase "Book Customer Parcel" as UC_BookCustomer
+    usecase "Create Merchant Parcel Order" as UC_CreateMerchant
+    usecase "Cancel Parcel Booking" as UC_Cancel
+    usecase "Retrieve Parcel Details" as UC_GetDetails
+    usecase "Retrieve Parcel Status History" as UC_GetHistory
+    usecase "Retrieve Delivery Receipt" as UC_GetReceipt
+
+    usecase "Validate Pricing Quote" as UC_ValidateQuote
+    usecase "Configure Pricing Tariffs" as UC_ConfigPricing
+
+    UC_Estimate -[hidden]right- UC_BookCustomer
+    UC_BookCustomer -[hidden]right- UC_CreateMerchant
+    UC_CreateMerchant -[hidden]right- UC_Cancel
+    UC_Cancel -[hidden]right- UC_GetDetails
+    UC_GetDetails -[hidden]right- UC_GetHistory
+    UC_GetHistory -[hidden]right- UC_GetReceipt
+
+    UC_BookCustomer -[hidden]down- UC_ValidateQuote
+    UC_GetDetails -[hidden]down- UC_ConfigPricing
+}
+
+actor "Administrator" as Admin
+
+Customer -- UC_Estimate
+Customer -- UC_BookCustomer
+Customer -- UC_Cancel
+Customer -- UC_GetDetails
+Customer -- UC_GetHistory
+Customer -- UC_GetReceipt
+
+Merchant -- UC_Estimate
+Merchant -- UC_CreateMerchant
+Merchant -- UC_Cancel
+Merchant -- UC_GetDetails
+Merchant -- UC_GetHistory
+Merchant -- UC_GetReceipt
+
+UC_BookCustomer ..> UC_ValidateQuote : <<include>>
+UC_CreateMerchant ..> UC_ValidateQuote : <<include>>
+
+UC_ConfigPricing -- Admin
+@enduml

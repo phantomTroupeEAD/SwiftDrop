@@ -9,6 +9,7 @@
 ## 🌟 Team Meeting 2 Action Sheets & Handoff Guide
 
 Before reading the internal specifications, all team members should review:
+- 📄 **[`AUDIT_PROBLEMS_AND_PLANNED_FIXES.md`](./AUDIT_PROBLEMS_AND_PLANNED_FIXES.md)**: Authoritative audit remediation specification resolving all 10 repository audit findings, multi-tenant webhook test artifact (`mock-webhook:9999`) with visual HTML dashboard, dynamic policy precedence rule, and MCP dual-auth.
 - 📄 **[`team-integration-and-handoff-guide.md`](./team-integration-and-handoff-guide.md)**: **Mandatory Action Sheet for Members 1 through 9**, containing:
   - Frontend contract for Members 6 & 7 (Mandatory Playwright `data-testid` standard & Chatbot action card integration).
   - Backend API schemas required from Members 1, 2, 3, 4, 5, 8, and 9.
