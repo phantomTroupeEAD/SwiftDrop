@@ -4,9 +4,10 @@ from pathlib import Path
 import re
 import pytest
 
+
 def test_package_structure():
     """Verify that all core modules exist and have valid package initializers."""
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = Path(__file__).resolve().parent.parent.parent
     packages = [
         "src",
         "src/api",
@@ -16,18 +17,25 @@ def test_package_structure():
         "src/domain",
         "src/llm",
         "src/mcp",
+        "src/services",
         "src/tools",
         "tests",
+        "tests/unit",
+        "tests/api",
+        "tests/security",
+        "tests/e2e",
     ]
     for pkg in packages:
         init_file = base_dir / pkg / "__init__.py"
         assert init_file.exists(), f"Missing __init__.py in package: {pkg}"
 
+
 def test_zero_database_dependency_invariant():
     """Enforce strict invariant: zero direct database packages in requirements.txt."""
-    req_file = Path(__file__).resolve().parent.parent / "requirements.txt"
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    req_file = base_dir / "requirements.txt"
     assert req_file.exists(), "requirements.txt does not exist"
-    
+
     content = req_file.read_text(encoding="utf-8").lower()
     forbidden_db_drivers = [
         "psycopg2",
@@ -45,9 +53,11 @@ def test_zero_database_dependency_invariant():
             "AI Assistant must access data exclusively via upstream REST APIs."
         )
 
+
 def test_env_example_has_mandatory_keys():
     """Verify that .env.example defines all mandatory configuration variables."""
-    env_file = Path(__file__).resolve().parent.parent / ".env.example"
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    env_file = base_dir / ".env.example"
     assert env_file.exists(), ".env.example does not exist"
 
     content = env_file.read_text(encoding="utf-8")
@@ -70,9 +80,11 @@ def test_env_example_has_mandatory_keys():
             f"Mandatory configuration key '{key}' missing from .env.example"
         )
 
+
 def test_dockerfile_security_invariants():
     """Verify that Dockerfile specifies non-root execution and healthcheck."""
-    dockerfile = Path(__file__).resolve().parent.parent / "Dockerfile"
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    dockerfile = base_dir / "Dockerfile"
     assert dockerfile.exists(), "Dockerfile does not exist"
 
     content = dockerfile.read_text(encoding="utf-8")

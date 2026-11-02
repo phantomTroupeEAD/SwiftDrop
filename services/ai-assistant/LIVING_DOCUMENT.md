@@ -298,62 +298,69 @@ To satisfy the **Zero Database Invariant** while supporting multi-turn conversat
 
 ```
 services/ai-assistant/
-├── .env.example                     # Canonical configuration template
+├── .env.example                     # Canonical configuration template (tiered RPMs, JWT secret)
 ├── .gitignore                       # Python ignore rules (.venv, __pycache__, .env)
 ├── Dockerfile                       # Python 3.11-slim container with non-root appuser
 ├── pyproject.toml                   # Project metadata, pytest, and ruff configs
-├── requirements.txt                 # Locked runtime dependencies
+├── requirements.txt                 # Locked runtime dependencies (Zero DB packages)
 ├── ROADMAP.md                       # Comprehensive 8-phase implementation roadmap
 ├── API.md                           # Co-located REST API contracts and OpenAPI schemas
 ├── README.md                        # Professional industry-standard microservice README
 ├── LIVING_DOCUMENT.md               # Master living engineering specification (this document)
 │
 ├── src/                             # Application source code
-│   ├── __init__.py                  # Source root package initializer (version 2.0.0)
-│   ├── main.py                      # FastAPI application entrypoint, lifespan & CORS
+│   ├── __init__.py                  # Source root package initializer (version 2.10.0)
+│   ├── main.py                      # FastAPI application entrypoint, lifespan, CORS, and middleware wiring
 │   │
-│   ├── api/                         # Transport Layer (HTTP REST)
+│   ├── api/                         # Transport Layer (HTTP REST Controllers & Middleware)
 │   │   ├── __init__.py
-│   │   ├── middleware/              # Cross-cutting HTTP middleware
+│   │   ├── middleware/              # Cross-cutting HTTP middlewares
 │   │   │   ├── __init__.py
-│   │   │   ├── auth.py              # Inbound Bearer JWT extraction & service-role token validator
-│   │   │   ├── rate_limit.py        # Slowapi rate limiter (20 RPM matching Traefik)
-│   │   │   └── security.py          # Prompt injection heuristic filter & input hygiene
-│   │   └── routers/                 # Route handlers
+│   │   │   ├── auth.py              # JWTAuthenticationMiddleware (ASGI Bearer token extractor)
+│   │   │   ├── rate_limit.py        # SlowAPI tiered rate limiter (20/60/100 RPM)
+│   │   │   └── security.py          # SecurityHeadersMiddleware (HSTS, CSP, X-Frame-Options)
+│   │   └── routers/                 # Route handlers (Thin HTTP controllers)
 │   │       ├── __init__.py
-│   │       ├── chat.py              # POST /api/v1/ai/chat (Conversational assistant)
+│   │       ├── chat.py              # POST /api/v1/ai/chat (Delegates to ChatService)
 │   │       └── health.py            # GET /health/live, GET /health/ready, GET /metrics
+│   │
+│   ├── services/                    # Application Service Layer (Domain Orchestration)
+│   │   ├── __init__.py
+│   │   └── chat_service.py          # ChatService orchestrating session cache, context, LLM, and guardrails
 │   │
 │   ├── core/                        # Technical Drivers & Cross-Cutting Concerns
 │   │   ├── __init__.py
 │   │   ├── config.py                # Pydantic BaseSettings loading .env, property aliases, SSRF block
 │   │   ├── cache.py                 # In-memory LRU session store (TTL 15m, max 50 sessions)
-│   │   └── logging.py               # Structured JSON logger with PII masking
+│   │   ├── security.py              # Cryptographic JWT verification, HMAC-SHA256, constant-time checks
+│   │   ├── logging.py               # Enterprise structured logger & CorrelationIdMiddleware (X-Correlation-ID)
+│   │   └── postal_codes.py          # Sri Lanka 25-district postal directory & town resolution
 │   │
 │   ├── domain/                      # Pure Domain Logic & Data Transfer Objects
 │   │   ├── __init__.py
-│   │   ├── chat.py                  # ChatMessage, ChatMessageRequest, ChatMessageResponse, GenerativeAction, ToolCallRecord
+│   │   ├── chat.py                  # ChatMessage, ChatMessageRequest, ChatMessageResponse, GenerativeAction
 │   │   ├── tools.py                 # Tool input arguments schemas & validation models
-│   │   └── errors.py                # Standardized domain exceptions & error envelopes
+│   │   └── errors.py                # Standardized domain exceptions & RFC-7807 error envelopes
 │   │
-│   ├── llm/                         # Language Model Abstraction Layer (Phase 4 Complete)
+│   ├── llm/                         # Language Model Abstraction Layer
 │   │   ├── __init__.py              # Factory get_llm_client() selecting adapter
 │   │   ├── base.py                  # Abstract BaseLLMClient interface
 │   │   ├── prompts.py               # Authoritative system prompt with security guardrails & persona rules
-│   │   ├── guardrails.py            # Model identity masking (DeepSeek, Kimi, Qwen, Moonshot, Gemini)
+│   │   ├── guardrails.py            # Model identity masking & SEC-009 phone redaction
 │   │   ├── openai_adapter.py        # Universal AsyncOpenAI client with multi-turn loop (max 3)
 │   │   └── mock_adapter.py          # Deterministic regex mock engine with offline local preview
 │   │
-│   ├── tools/                       # Upstream Tool Execution Layer (Phase 3 Complete)
+│   ├── tools/                       # Upstream Tool Execution Layer
 │   │   ├── __init__.py              # Central imports registering all tools
 │   │   ├── registry.py              # Central @register_tool decorator, timing & error boundary
 │   │   ├── tracking_tool.py         # track_parcel_status -> Tracking API with SEC-009 masking
 │   │   ├── pricing_tool.py          # estimate_delivery_fee -> Core API pricing + NAVIGATE_BOOKING card
 │   │   ├── parcels_tool.py          # list_active_parcels -> Core API parcels with IDOR Bearer forward
 │   │   ├── policy_tool.py           # explain_company_policies -> Grounded Q&A with dynamic override
+│   │   ├── postal_tool.py           # lookup_postal_code -> Sri Lanka directory query
 │   │   └── company_policies.md      # Authoritative static company shipping guidelines
 │   │
-│   └── mcp/                         # Model Context Protocol (FastMCP) Server (Phase 5 Complete)
+│   └── mcp/                         # Model Context Protocol (FastMCP) Server
 │       ├── __init__.py              # Package exports (mcp, tools, resources)
 │       └── server.py                # FastMCP server instance, tools, swiftdrop:// resources, STDIO
 │
@@ -361,23 +368,40 @@ services/ai-assistant/
 │   ├── __init__.py
 │   └── mock_upstream_server.py      # Unified mock Core API & Tracking API server (port 8085)
 │
-└── tests/                           # Verification & Automated Test Suite (123 Tests Total)
+└── tests/                           # Categorized Verification Suite (172 Tests, 91% Coverage)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true and session reset
-    ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
-    ├── test_config.py               # Settings, SecretStr masking, SSRF validation (7 tests)
-    ├── test_domain_chat.py          # Chat DTOs, prompt limits, URL sanitization (7 tests)
-    ├── test_domain_tools.py         # Tool argument bounds, regex, and enums (7 tests)
-    ├── test_domain_errors.py        # Error envelopes and exception handlers (6 tests)
-    ├── test_cache.py                # LRU eviction, TTL expiry, concurrency safety (6 tests)
-    ├── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
-    ├── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
-    ├── test_llm.py                  # Phase 4 Dual LLM engines, loop capping, rate limits (12 tests)
-    ├── test_mcp.py                  # Phase 5 FastMCP tools, swiftdrop:// resources, read-only (12 tests)
-    ├── test_api_health.py           # Phase 6 Health probes, metrics, OpenAPI docs (6 tests)
-    ├── test_api_chat.py             # Phase 6 POST /api/v1/ai/chat happy path & session memory (12 tests)
-    ├── test_api_resilience.py       # Phase 6 Fault injection, 500 masking, decoupled probes (4 tests)
-    ├── test_api_security.py         # Phase 6 Null-byte, PII masking, cross-conv isolation (8 tests)
+    ├── unit/                        # Pure unit tests (Domain, Config, Cache, Tools, Scaffolding, Services)
+    │   ├── __init__.py
+    │   ├── test_config.py           # Settings, SecretStr masking, SSRF validation
+    │   ├── test_cache.py            # LRU eviction, TTL expiry, concurrency safety
+    │   ├── test_domain_chat.py      # Chat DTOs, prompt limits, URL sanitization
+    │   ├── test_domain_errors.py    # Error envelopes and exception handlers
+    │   ├── test_domain_tools.py     # Tool argument bounds, regex, and enums
+    │   ├── test_tools.py            # Tool registry, upstream mocks, SEC-009 privacy
+    │   ├── test_scaffolding.py      # Package structure and Zero-DB invariants
+    │   ├── test_service_chat.py     # ChatService orchestration and persistence
+    │   └── test_core_logging.py     # Structured logging and correlation ID propagation
+    ├── api/                         # HTTP transport and API controller integration tests
+    │   ├── __init__.py
+    │   ├── test_api_chat.py         # POST /api/v1/ai/chat happy path & session memory
+    │   ├── test_api_auth.py         # JWT verification, expired token rejection, tampered signature
+    │   ├── test_api_ratelimit.py    # Tiered rate limits (20/60/100 RPM) & RFC-7807 429
+    │   ├── test_api_health.py       # Health probes, metrics, OpenAPI docs
+    │   ├── test_api_resilience.py   # Fault injection, 500 masking, decoupled probes
+    │   └── test_api_concurrency.py  # Concurrency safety under load
+    ├── security/                    # Specialized penetration, security headers, and edge cases
+    │   ├── __init__.py
+    │   ├── test_api_security.py     # Security response headers, CSP, X-Frame-Options
+    │   ├── test_security_penetration.py # ReDoS, SQL/NoSQL injection, prompt injection
+    │   └── test_security_edge_cases.py  # PII leakage, unicode exploits, memory bounds
+    └── e2e/                         # End-to-end user workflows and protocol testing
+        ├── __init__.py
+        ├── test_e2e_workflows.py    # Full multi-turn customer/merchant conversational journeys
+        ├── test_concurrency_benchmarks.py # Concurrent session scaling benchmarks
+        ├── test_llm.py              # Dual LLM engines, loop capping, rate limits
+        ├── test_mcp.py              # FastMCP tools, swiftdrop:// resources
+        └── test_mock_upstream_server.py # Live mock server integration testing
     ├── test_api_concurrency.py      # Phase 6 Async non-blocking load & thread-safe cache (3 tests)
     └── test_mock_upstream_server.py # Unified mock upstream server on port 8085 (9 tests)
 ```
@@ -555,3 +579,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.8.1` | 2026-11-03 | **Clean Integer Sri Lankan Rupee Pricing & Action Card Dual Prefill Complete:** Updated fee quotation logic to format conversational quotes in whole integer Rupees (e.g. `LKR 1,595` instead of `LKR 1,595.00`) per Sri Lankan commerce conventions. Extended generative action prefill payload with `"estimated_fee": 1595` alongside `"estimated_fee_cents": 159500` for seamless 1-click booking UI pre-population without breaking backend payment processors. | `133 passed in 25.60s` |
 | `2.8.2` | 2026-11-03 | **Web-Only Platform Boundary & Mobile App Hallucination Guardrail Complete:** Added explicit platform boundary rules in `src/llm/prompts.py` declaring SwiftDrop strictly a web platform (`/portal`) without native iOS/Android apps. Extended `src/llm/guardrails.py` to scrub any model hallucinations referring to a "mobile app", converting them to "SwiftDrop web portal". Added automated test `test_mobile_app_hallucination_scrubbing_guardrail`. | `134 passed in 22.82s` |
 | `2.9.0` | 2026-11-03 | **Phase 7 Edge Security Hardening, Auth, Rate Limiting & E2E Complete:** Implemented `src/api/middleware/auth.py` (authoritative zero-dependency HMAC-SHA256 JWT verifier matching Member 1 Go Core API), `src/api/middleware/rate_limit.py` (SlowAPI role-aware tiered rate limiting configurable via `RATE_LIMIT_*_RPM` env vars with RFC-7807 429 handler), `src/api/middleware/security.py` (edge response headers), and SEC-009 customer phone PII scrubbing in `src/llm/guardrails.py`. Delivered 28 new automated tests across 5 specialized suites (`test_api_ratelimit.py`, `test_api_auth.py`, `test_security_penetration.py`, `test_e2e_workflows.py`, `test_concurrency_benchmarks.py`). Achieved 90% overall code coverage. | `162 passed in 57.67s (90% coverage)` |
+| `2.10.0` | 2026-11-03 | **Enterprise Layered Clean Architecture & Test Suite Reorganization Complete:** Extracted domain cryptography to `src/core/security.py`, introduced application service layer `src/services/chat_service.py` decoupling HTTP controllers from domain orchestration, added structured logging and distributed `X-Correlation-ID` propagation in `src/core/logging.py`, reorganized all tests into modular directories (`tests/unit/`, `tests/api/`, `tests/security/`, `tests/e2e/`), and added 10 new unit tests covering ChatService and logging. | `172 passed in 59.64s (91% coverage)` |

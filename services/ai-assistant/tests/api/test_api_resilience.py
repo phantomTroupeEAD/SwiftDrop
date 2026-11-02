@@ -11,7 +11,7 @@ def test_global_exception_handler_masks_internal_error():
     """Verify unhandled exceptions return 500 RFC-7807 envelope with zero stack trace leakage."""
     from src.main import app
     safe_client = TestClient(app, raise_server_exceptions=False)
-    with patch("src.api.routers.chat.get_llm_client") as mock_get_client:
+    with patch("src.services.chat_service.get_llm_client") as mock_get_client:
         mock_get_client.side_effect = RuntimeError("Simulated catastrophic memory corruption!")
         response = safe_client.post("/api/v1/ai/chat", json={"prompt": "Hello"})
         assert response.status_code == 500
@@ -54,7 +54,7 @@ def test_decoupled_health_probes_during_upstream_outage(client: TestClient):
 
 def test_upstream_domain_exception_handling(client: TestClient):
     """Verify UpstreamServiceException is converted to RFC-7807 502 Bad Gateway response."""
-    with patch("src.api.routers.chat.get_llm_client") as mock_get_client:
+    with patch("src.services.chat_service.get_llm_client") as mock_get_client:
         mock_client = mock_get_client.return_value
         mock_client.generate_reply.side_effect = UpstreamServiceException(
             service_name="core-pricing",

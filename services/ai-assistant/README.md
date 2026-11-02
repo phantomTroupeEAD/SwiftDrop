@@ -33,19 +33,52 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 - **Role-Aware Tiered Rate Limiting:** Configurable SlowAPI engine enforcing 20 RPM for anonymous visitors, 60 RPM for authenticated customers, and 100 RPM for merchants/staff with RFC-7807 429 envelopes.
 - **Cryptographic JWT Tenant Verification:** Zero-dependency HMAC-SHA256 token verification matching Core API standards (ADR-003, SEC-004/005) with IDOR defense.
 - **Strict Invariants:** 100% read-only operations with **zero direct database access**; all persistence is mediated through authoritative Core APIs.
+- **Enterprise Layered Clean Architecture:** Clean separation of concerns with Transport Layer (`src/api`), Application Service Layer (`src/services/chat_service.py`), Pure Domain Models (`src/domain`), Cross-Cutting Drivers (`src/core/security.py`, `src/core/logging.py`), and Modular Test Suites (`tests/{unit,api,security,e2e}/`).
 
 ---
 
 ## 🏛️ System Architecture
 
 ```mermaid
-flowchart LR
-    Portal["React Web Portal"] -->|"POST /api/v1/ai/chat"| AIService["AI Assistant (:8000)"]
-    Cursor["Claude / Cursor (MCP)"] -->|"STDIO / SSE"| AIService
-    
-    AIService -->|"GET /tracking/public/{id}"| TrackingAPI["Tracking API (:8081)"]
-    AIService -->|"POST /pricing/quotes"| CorePricing["Core API Pricing (:8080)"]
-    AIService -->|"GET /parcels (Bearer JWT)"| CoreParcels["Core API Parcels (:8080)"]
+flowchart TD
+    subgraph Clients["Clients & Gateways"]
+        Portal["React Web Portal"]
+        Cursor["Claude / Cursor (MCP)"]
+    end
+
+    subgraph TransportLayer["Transport Layer (src/api)"]
+        ChatRouter["ChatRouter (POST /chat)"]
+        HealthRouter["HealthRouter (/health)"]
+        Middlewares["Auth, RateLimit, SecurityHeaders, CorrelationId"]
+    end
+
+    subgraph ServiceLayer["Application Service Layer (src/services)"]
+        ChatService["ChatService (Session, Context, LLM, Guardrails)"]
+    end
+
+    subgraph DomainCore["Domain & Core Drivers (src/domain, src/core)"]
+        DomainModels["Domain Chat & Tool DTOs"]
+        SessionCache["In-Memory LRU Session Cache"]
+        Security["HMAC-SHA256 JWT Security"]
+        Logging["Structured Logger & Correlation IDs"]
+    end
+
+    subgraph UpstreamIntegrations["Upstream APIs & Services"]
+        TrackingAPI["Tracking API (:8081)"]
+        CorePricing["Core API Pricing (:8080)"]
+        CoreParcels["Core API Parcels (:8080)"]
+    end
+
+    Portal --> Middlewares
+    Cursor --> Middlewares
+    Middlewares --> ChatRouter
+    Middlewares --> HealthRouter
+    ChatRouter --> ChatService
+    ChatService --> DomainModels
+    ChatService --> SessionCache
+    ChatService --> TrackingAPI
+    ChatService --> CorePricing
+    ChatService --> CoreParcels
 ```
 
 ---

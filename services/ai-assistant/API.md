@@ -86,6 +86,14 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 #### Request Headers
 - `Content-Type: application/json` (Required)
 - `Authorization: Bearer <jwt>` (Optional: Required for queries accessing private account parcels)
+- `X-Correlation-ID: <uuid>` or `X-Request-ID: <uuid>` (Optional: Distributed tracing correlation ID; generated automatically if omitted)
+
+#### Response Headers
+- `X-Correlation-ID: <uuid>` (Distributed request tracking correlation identifier)
+- `X-Frame-Options: DENY` (Clickjacking defense)
+- `X-Content-Type-Options: nosniff` (MIME sniffing prevention)
+- `Content-Security-Policy: default-src 'self'` (Content security restrictions)
+- `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` (SlowAPI rate limit tracking)
 
 #### Request Body Schema (`ChatMessageRequest`)
 ```json
