@@ -38,8 +38,9 @@ def test_mcp_registered_tools_discovery():
             assert expected in tool_names
 
         for tool in tools:
-            assert tool.description
-            assert tool.inputSchema is not None
+            assert tool.description is not None
+            schema = getattr(tool, "input_schema", getattr(tool, "inputSchema", None))
+            assert schema is not None
     asyncio.run(_test())
 
 

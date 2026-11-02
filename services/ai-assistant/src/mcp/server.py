@@ -3,7 +3,13 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
-from mcp.server.fastmcp import FastMCP
+
+try:
+    # mcp >= 2.0 (FastMCP renamed to MCPServer in mcp.server.mcpserver)
+    from mcp.server.mcpserver import MCPServer as FastMCP
+except (ImportError, ModuleNotFoundError):
+    # mcp < 2.0 fallback
+    from mcp.server.fastmcp import FastMCP
 
 from src.tools.registry import execute_tool
 
