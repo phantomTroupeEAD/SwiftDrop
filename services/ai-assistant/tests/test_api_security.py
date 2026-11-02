@@ -94,3 +94,43 @@ async def test_cross_conversation_isolation(client: TestClient):
 
     assert any("SD-20261102-00001" in m.content for m in history_a)
     assert not any("SD-20261102-00001" in m.content for m in history_b)
+
+
+def test_swiftdrop_ai_identity_and_model_masking(client: TestClient):
+    """Verify the assistant always introduces itself as SwiftDrop AI and masks all underlying model names."""
+    prompts = [
+        "Who are you?",
+        "What model are you?",
+        "Are you DeepSeek or Kimi?",
+        "Are you Qwen, Moonshot, or Gemini?",
+    ]
+    for prompt in prompts:
+        response = client.post("/api/v1/ai/chat", json={"prompt": prompt})
+        assert response.status_code == 200
+        reply = response.json()["reply"]
+        assert "SwiftDrop AI" in reply
+        for forbidden in ["DeepSeek", "Kimi", "Qwen", "Moonshot", "Gemini"]:
+            assert forbidden.lower() not in reply.lower() or "not" in reply.lower()
+
+
+def test_identity_sanitizer_guardrail_unit():
+    """Verify sanitize_assistant_identity replaces third-party model claims with SwiftDrop AI."""
+    from src.llm.guardrails import sanitize_assistant_identity
+
+    samples = [
+        ("I am a large language model trained by DeepSeek.", "SwiftDrop AI"),
+        ("I am Qwen-2.5 developed by Alibaba.", "SwiftDrop AI"),
+        ("As an AI developed by Moonshot AI, I can help you.", "SwiftDrop AI"),
+        ("I am Gemini Pro created by Google.", "SwiftDrop AI"),
+        ("I am Kimi, ready to help.", "SwiftDrop AI"),
+    ]
+
+    for raw, expected in samples:
+        sanitized = sanitize_assistant_identity(raw)
+        assert expected in sanitized
+        assert "DeepSeek" not in sanitized
+        assert "Moonshot" not in sanitized
+        assert "Qwen" not in sanitized
+        assert "Gemini" not in sanitized
+        assert "Kimi" not in sanitized
+

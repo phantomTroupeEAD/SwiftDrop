@@ -12,6 +12,7 @@ from src.domain.chat import (
     GenerativeAction,
 )
 from src.llm.base import BaseLLMClient
+from src.llm.guardrails import sanitize_assistant_identity
 from src.tools.registry import execute_tool
 
 
@@ -234,11 +235,42 @@ class MockLLMAdapter(BaseLLMClient):
                 reply = f"Could not retrieve policy guidelines: {record.error_message}"
 
         # -------------------------------------------------------------
-        # Intent 6: General Greeting / Default Help
+        # Intent 6: Assistant Identity / Third-Party Model Inquiry
+        # -------------------------------------------------------------
+        elif any(
+            kw in prompt_lower
+            for kw in [
+                "who are you",
+                "what are you",
+                "your name",
+                "what model",
+                "which model",
+                "who created you",
+                "who made you",
+                "deepseek",
+                "kimi",
+                "qwen",
+                "moonshot",
+                "gemini",
+                "chatgpt",
+                "openai",
+                "claude",
+                "llama",
+                "mistral",
+                "particle",
+            ]
+        ):
+            reply = (
+                "I am **SwiftDrop AI**, the official AI delivery and logistics assistant "
+                "developed specifically for the SwiftDrop courier network in Sri Lanka."
+            )
+
+        # -------------------------------------------------------------
+        # Intent 7: General Greeting / Default Help
         # -------------------------------------------------------------
         else:
             reply = (
-                "Hello! I am the **SwiftDrop AI Delivery Assistant**.\n\n"
+                "Hello! I am **SwiftDrop AI**, the official SwiftDrop AI Delivery Assistant for the SwiftDrop courier network.\n\n"
                 "I can assist you with:\n"
                 "- 📦 **Tracking a shipment:** Inquire with your tracking code (e.g. `SD-20261021-04921`)\n"
                 "- 💰 **Fee quotes:** Ask for a tariff estimate (e.g. *'How much to send 2.5kg from 00100 to 20000?'*)\n"
@@ -247,6 +279,7 @@ class MockLLMAdapter(BaseLLMClient):
             )
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
+        reply = sanitize_assistant_identity(reply)
 
         return ChatMessageResponse(
             conversation_id=conversation_id,

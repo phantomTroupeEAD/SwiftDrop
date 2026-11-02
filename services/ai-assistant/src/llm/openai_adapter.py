@@ -21,6 +21,7 @@ from src.domain.chat import (
 )
 from src.domain.errors import RateLimitException, UpstreamServiceException
 from src.llm.base import BaseLLMClient
+from src.llm.guardrails import sanitize_assistant_identity
 from src.llm.prompts import SYSTEM_PROMPT
 from src.tools.registry import execute_tool, export_openai_tools
 
@@ -176,6 +177,8 @@ class OpenAIAdapter(BaseLLMClient):
             ) from ase
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+        final_reply = sanitize_assistant_identity(final_reply)
 
         return ChatMessageResponse(
             conversation_id=conversation_id,

@@ -13,6 +13,7 @@ from src.domain.chat import (
     MessageRole,
 )
 from src.llm import get_llm_client
+from src.llm.guardrails import sanitize_assistant_identity
 
 router = APIRouter()
 
@@ -58,6 +59,9 @@ async def chat_endpoint(
         conversation_id=request.conversation_id,
         context=context,
     )
+
+    # 3b. Guarantee SwiftDrop AI identity and scrub any third-party model leaks
+    response.reply = sanitize_assistant_identity(response.reply)
 
     # 4. Atomically persist user turn and assistant reply to in-memory session cache
     user_turn = ChatMessage(role=MessageRole.USER, content=request.prompt)

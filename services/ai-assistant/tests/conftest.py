@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.core.cache import get_session_cache
+from src.core.config import get_settings
 from src.main import app
 
 
@@ -17,6 +18,9 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setenv("TRACKING_API_URL", "http://test-tracking-api:8081")
     monkeypatch.setenv("AI_SERVICE_ROLE_TOKEN", "test-internal-token-123")
     monkeypatch.setenv("AI_RATE_LIMIT_RPM", "100")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)

@@ -339,7 +339,8 @@ services/ai-assistant/
 │   ├── llm/                         # Language Model Abstraction Layer (Phase 4 Complete)
 │   │   ├── __init__.py              # Factory get_llm_client() selecting adapter
 │   │   ├── base.py                  # Abstract BaseLLMClient interface
-│   │   ├── prompts.py               # Authoritative system prompt with security guardrails
+│   │   ├── prompts.py               # Authoritative system prompt with security guardrails & persona rules
+│   │   ├── guardrails.py            # Model identity masking (DeepSeek, Kimi, Qwen, Moonshot, Gemini)
 │   │   ├── openai_adapter.py        # Universal AsyncOpenAI client with multi-turn loop (max 3)
 │   │   └── mock_adapter.py          # Deterministic regex mock engine with offline local preview
 │   │
@@ -356,7 +357,7 @@ services/ai-assistant/
 │       ├── __init__.py              # Package exports (mcp, tools, resources)
 │       └── server.py                # FastMCP server instance, tools, swiftdrop:// resources, STDIO
 │
-└── tests/                           # Verification & Automated Test Suite (112 Tests Total)
+└── tests/                           # Verification & Automated Test Suite (114 Tests Total)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true and session reset
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
@@ -409,7 +410,7 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (112 Passing Tests)
+### Complete Test Suite Breakdown (114 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
    - Package structure, zero-database invariant, environment keys, Dockerfile non-root user.
 2. **`test_config.py` (7 Tests):**
@@ -467,13 +468,15 @@ python -m pytest services/ai-assistant/tests/ -v
     - `test_malformed_json_returns_422`: Intercepts malformed JSON payloads and returns structured 422 error.
     - `test_decoupled_health_probes_during_upstream_outage`: Health probes return 200 OK in < 10ms with zero network calls during upstream outage.
     - `test_upstream_domain_exception_handling`: Maps upstream timeouts to 502 Bad Gateway envelope.
-14. **`test_api_security.py` (6 Tests — Phase 6 Security & Sanitization):**
+14. **`test_api_security.py` (8 Tests — Phase 6 Security & Sanitization):**
     - `test_null_byte_sanitized_in_prompt`: Null bytes stripped without crashing request parser.
     - `test_prompt_injection_resilience`: Adversarial injection and jailbreak prompts handled safely.
     - `test_pii_masking_in_chat_response`: SEC-009 verification ensuring zero phone or street address leaks.
     - `test_bearer_token_not_echoed_in_response`: Sensitive JWT tokens never reflected in response text.
     - `test_unicode_and_emoji_prompt_handling`: Multilingual (Sinhala/Tamil) and emoji text parsed cleanly.
     - `test_cross_conversation_isolation`: Strict tenant/session boundaries; zero history bleed across conversation IDs.
+    - `test_swiftdrop_ai_identity_and_model_masking`: Verifies assistant identifies as SwiftDrop AI and masks model names.
+    - `test_identity_sanitizer_guardrail_unit`: Verifies programmatic scrubber replaces DeepSeek, Kimi, Qwen, Moonshot, Gemini, etc. with SwiftDrop AI.
 15. **`test_api_concurrency.py` (3 Tests — Phase 6 Concurrency & Non-Blocking Async):**
     - `test_concurrent_async_chat_requests`: 10 simultaneous async requests complete with 200 OK.
     - `test_concurrent_session_cache_thread_safety`: Concurrent cache reads and writes operate with zero race conditions.
