@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.3.0` (Authoritative Baseline — Phase 3 Complete)  
+> **Specification Version:** `2.4.0` (Authoritative Baseline — Phase 4 Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -78,7 +78,7 @@ sequenceDiagram
     alt MOCK_LLM_MODE == true (Offline / CI)
         Engine->>Engine: Deterministic Regex Intent Matcher
     else Production Mode (Live LLM)
-        Engine->>Engine: AsyncOpenAI Function Calling Loop
+        Engine->>Engine: AsyncOpenAI Function Calling Loop (max 3 rounds)
     end
 
     Engine->>Tool: Execute required tool (e.g. estimate_delivery_fee)
@@ -102,14 +102,14 @@ flowchart TD
     subgraph LiveMode["Production Engine (Live LLM)"]
         OpenAIClient["Universal AsyncOpenAI Client"]
         Provider["OpenRouter / Groq / NVIDIA / Ollama"]
-        ToolCallingLoop["Multi-Turn Function Calling Loop"]
+        ToolCallingLoop["Multi-Turn Function Calling Loop<br/>(Capped at MAX_TOOL_ITERATIONS = 3)"]
         OpenAIClient --> Provider
         Provider --> ToolCallingLoop
     end
 
     subgraph MockMode["CI & Testing Engine (Offline Deterministic Mock)"]
         RegexMatcher["Deterministic Regex Pattern Matcher"]
-        IntentRouting["Intent Routing:<br/>- Tracking: ^SD-\d{8}-\d{5}$ or 'track'<br/>- Fee: 'cost', 'fee', 'estimate', 'kg'<br/>- Active: 'my parcels', 'active'<br/>- Policy: 'prohibited', 'rules', 'sla'"]
+        IntentRouting["Intent Routing:<br/>1. Tracking code: ^SD-\d{8}-\d{5}$<br/>2. Tracking without code: 'track', 'where is'<br/>3. Active parcels: 'my parcel', 'active shipments'<br/>4. Fee estimate: 'cost', 'fee', 'how much'<br/>5. Policies: 'prohibited', 'rules', 'sla'<br/>6. Default help overview"]
         RegexMatcher --> IntentRouting
     end
 
@@ -119,17 +119,27 @@ flowchart TD
     IntentRouting --> ToolRegistry
 ```
 
-### 1. Production Mode (`openai_adapter.py`)
-- Uses the official `openai.AsyncOpenAI` client initialized with configurable `LLM_BASE_URL` and `LLM_API_KEY`.
-- Because modern providers (OpenRouter, Groq, NVIDIA NIM, local Ollama) adhere to the OpenAI API specification, team members can swap models simply by changing `.env` variables without code modifications.
-- Sends tools in standard OpenAI format: `tools=[{"type": "function", "function": ...}]`.
-- Runs a multi-step execution loop: sends query $\rightarrow$ receives model's `tool_calls` request $\rightarrow$ executes tools $\rightarrow$ feeds outputs back to model $\rightarrow$ returns finalized grounded text.
+### 1. Production Mode (`src/llm/openai_adapter.py`)
+- **Universal Provider Compatibility:** Uses the official `openai.AsyncOpenAI` client initialized with configurable `LLM_BASE_URL` and `LLM_API_KEY`. Operates transparently with OpenRouter, Groq, NVIDIA NIM, OpenAI, or local Ollama/vLLM.
+- **Recursive Tool Execution Loop:**
+  1. Sends user prompt + history + tools exported via `export_openai_tools()`.
+  2. If the model emits `tool_calls`, resolves them via `execute_tool(name, args, context)`.
+  3. Appends tool results and sends back to model for natural language synthesis.
+  4. Automatically extracts attached `GenerativeAction` cards from tool outputs.
+- **Infinite Loop Capping (`MAX_TOOL_ITERATIONS = 3`):** To eliminate denial-of-wallet and infinite recursive tool execution attacks, the function calling loop is hard-capped at 3 iterations. If round 3 is reached without terminal text, the engine executes a non-tool completion to force a final answer.
+- **Resilience & Error Mapping:** Catches `openai.RateLimitError` $\rightarrow$ `RateLimitException` (429), `openai.APITimeoutError` / `APIConnectionError` $\rightarrow$ `UpstreamServiceException` (502).
 
-### 2. Offline Deterministic Mock Mode (`mock_adapter.py`)
-- Enabled when `MOCK_LLM_MODE=true` or when `LLM_API_KEY` is not provided.
-- Employs deterministic regexes and keyword classifiers to identify user intent.
-- Executes the exact same underlying tools from `src/tools/` against upstream services or local fixtures.
-- Guarantees that automated CI test runs (`verify.sh`, `pytest`) run in `< 2 seconds` with zero cloud network dependencies, zero rate limit failures, and zero cloud API expenses.
+### 2. Offline Deterministic Mock Mode (`src/llm/mock_adapter.py`)
+- **Zero-Dependency CI Engine:** Enabled when `MOCK_LLM_MODE=true` or when `LLM_API_KEY` is not provided.
+- **Structured Intent Routing Hierarchy:**
+  1. Tracking with canonical code: Executes `track_parcel_status`.
+  2. Tracking inquiry without code: Prompts user for canonical `SD-YYYYMMDD-XXXXX` format.
+  3. Active parcels inquiry: Executes `list_active_parcels` forwarding caller's Bearer JWT.
+  4. Fee and quote inquiry: Parses weight and 5-digit postal codes, executes `estimate_delivery_fee`, and attaches `NAVIGATE_BOOKING` action card.
+  5. Policy and shipping rules: Queries `explain_company_policies`.
+  6. Default greeting: Outlines platform capabilities.
+- **Local Dev Simulation Fallback:** If upstream Core API or Tracking API is offline during local UI development, produces realistic preview outputs and prefilled action cards without breaking the frontend.
+- **Performance Guarantee:** Executes in `< 20ms` with zero cloud network dependencies, zero rate limit failures, and zero cloud API costs.
 
 ---
 
@@ -174,25 +184,28 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
 - `export_openai_tools()` exporting Pydantic v2 `model_json_schema()` definitions for LLM function calling.
 
 ```
-                           PHASE 3 INTEGRATION TOPOLOGY
+                           PHASE 3/4 INTEGRATION TOPOLOGY
                            
-   [FastAPI Router / FastMCP Server]
-                   │
-                   ▼
-         [src/tools/registry.py] ── Central Dispatcher, Timing & Error Handling
-                   │
-         ┌─────────┼───────────────────────────┬───────────────────────────┐
-         ▼         ▼                           ▼                           ▼
-   [tracking_tool] [pricing_tool]              [parcels_tool]              [policy_tool]
-         │         │                           │                           │
-         │         │                           │                           ├─► company_policies.md
-         │         │                           │                           │   (Static Knowledge Base)
-         │         │                           │                           │
-         ▼ (HTTP)  ▼ (HTTP)                    ▼ (HTTP + Bearer)           ▼ (HTTP + Service Token)
-   [Tracking API]  [Core Pricing Engine]       [Core Parcels Service]      [Core Admin Settings]
-   (:8081)         (:8080)                     (:8080)                     (:8080)
-   GET /public/{id} POST /quotes               GET /parcels                GET /admin/settings
-   (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)
+    [FastAPI Router / FastMCP Server]
+                    │
+                    ▼
+          [src/llm/ (OpenAI or Mock)]
+                    │
+                    ▼
+          [src/tools/registry.py] ── Central Dispatcher, Timing & Error Handling
+                    │
+          ┌─────────┼───────────────────────────┬───────────────────────────┐
+          ▼         ▼                           ▼                           ▼
+    [tracking_tool] [pricing_tool]              [parcels_tool]              [policy_tool]
+          │         │                           │                           │
+          │         │                           │                           ├─► company_policies.md
+          │         │                           │                           │   (Static Knowledge Base)
+          │         │                           │                           │
+          ▼ (HTTP)  ▼ (HTTP)                    ▼ (HTTP + Bearer)           ▼ (HTTP + Service Token)
+    [Tracking API]  [Core Pricing Engine]       [Core Parcels Service]      [Core Admin Settings]
+    (:8081)         (:8080)                     (:8080)                     (:8080)
+    GET /public/{id} POST /quotes               GET /parcels                GET /admin/settings
+    (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)
 ```
 
 ### Tool 1: `track_parcel_status` (`src/tools/tracking_tool.py`)
@@ -240,14 +253,16 @@ To satisfy the **Zero Database Invariant** while supporting multi-turn conversat
 
 ## 8. Security, Privacy, Rate Limiting & Prompt Defense
 
-1. **Prompt Length Hygiene:** Prompts are restricted to `1 <= len(prompt) <= 1000` characters. Null bytes (`\x00`) and ANSI control characters are automatically stripped.
-2. **Open Redirect & XSS Defense on Action Cards:** `GenerativeAction.target_url` enforces strict regex whitelisting:
+1. **Defensive System Prompting (`src/llm/prompts.py`):** Authoritative rules explicitly mandate: read-only authority, LKR currency, SEC-009 privacy masking, zero-hallucination on 404s, and strict refusal to disclose system instructions or internal tokens.
+2. **Infinite Loop Hard Cap:** Recursive function calling in `OpenAIAdapter` is hard-capped at `MAX_TOOL_ITERATIONS = 3`.
+3. **Prompt Length Hygiene:** Prompts are restricted to `1 <= len(prompt) <= 1000` characters. Null bytes (`\x00`) and ANSI control characters are automatically stripped.
+4. **Open Redirect & XSS Defense on Action Cards:** `GenerativeAction.target_url` enforces strict regex whitelisting:
    `^/(portal/book|customer/book|tracking|support)(\?.*)?$`
    Any URL containing external domains (`https://evil.com`), protocol-relative slashes (`//evil.com`), or script schemes (`javascript:`) is rejected at schema validation.
-3. **Secret Hygiene:** `LLM_API_KEY` and service tokens are typed as `pydantic.SecretStr`. String serialization (e.g. in error logs or debug dumps) automatically masks them as `**********`.
-4. **SSRF Cloud Metadata Defense:** `CORE_API_URL` and `TRACKING_API_URL` in `Settings` are validated to block link-local addresses (`http://169.254.169.254`), preventing AWS/GCP instance credential exfiltration.
-5. **Rate Limiting (`slowapi`):** Enforces a rate limit of 20 requests per minute per IP / tenant ID matching Traefik edge API Gateway policies.
-6. **Container Least Privilege:** Dockerfile runs as unprivileged user `appuser` (UID 10001, GID 10001).
+5. **Secret Hygiene:** `LLM_API_KEY` and service tokens are typed as `pydantic.SecretStr`. String serialization (e.g. in error logs or debug dumps) automatically masks them as `**********`.
+6. **SSRF Cloud Metadata Defense:** `CORE_API_URL` and `TRACKING_API_URL` in `Settings` are validated to block link-local addresses (`http://169.254.169.254`), preventing AWS/GCP instance credential exfiltration.
+7. **Rate Limiting (`slowapi`):** Enforces a rate limit of 20 requests per minute per IP / tenant ID matching Traefik edge API Gateway policies.
+8. **Container Least Privilege:** Dockerfile runs as unprivileged user `appuser` (UID 10001, GID 10001).
 
 ---
 
@@ -293,11 +308,12 @@ services/ai-assistant/
 │   │   ├── tools.py                 # Tool input arguments schemas & validation models
 │   │   └── errors.py                # Standardized domain exceptions & error envelopes
 │   │
-│   ├── llm/                         # Language Model Abstraction Layer
-│   │   ├── __init__.py
+│   ├── llm/                         # Language Model Abstraction Layer (Phase 4 Complete)
+│   │   ├── __init__.py              # Factory get_llm_client() selecting adapter
 │   │   ├── base.py                  # Abstract BaseLLMClient interface
-│   │   ├── openai_adapter.py        # Universal AsyncOpenAI function-calling client
-│   │   └── mock_adapter.py          # Deterministic regex/fixture mock adapter for offline CI
+│   │   ├── prompts.py               # Authoritative system prompt with security guardrails
+│   │   ├── openai_adapter.py        # Universal AsyncOpenAI client with multi-turn loop (max 3)
+│   │   └── mock_adapter.py          # Deterministic regex mock engine with offline preview
 │   │
 │   ├── tools/                       # Upstream Tool Execution Layer (Phase 3 Complete)
 │   │   ├── __init__.py              # Central imports registering all tools
@@ -312,7 +328,7 @@ services/ai-assistant/
 │       ├── __init__.py
 │       └── server.py                # FastMCP server instance, SSE & STDIO transports
 │
-└── tests/                           # Verification & Automated Test Suite (57 Tests Total)
+└── tests/                           # Verification & Automated Test Suite (69 Tests Total)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
@@ -322,7 +338,8 @@ services/ai-assistant/
     ├── test_domain_errors.py        # Error envelopes and exception handlers (6 tests)
     ├── test_cache.py                # LRU eviction, TTL expiry, concurrency safety (6 tests)
     ├── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
-    └── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
+    ├── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
+    └── test_llm.py                  # Phase 4 Dual LLM engines, loop capping, rate limits (12 tests)
 ```
 
 ---
@@ -358,62 +375,36 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (57 Passing Tests)
+### Complete Test Suite Breakdown (69 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
-   - `test_package_structure`: Asserts all packages contain valid initializers.
-   - `test_zero_database_dependency_invariant`: Asserts zero database drivers exist in `requirements.txt`.
-   - `test_env_example_has_mandatory_keys`: Asserts all 11 required environment variables are documented.
-   - `test_dockerfile_security_invariants`: Asserts `USER appuser`, healthcheck, and port 8000 in `Dockerfile`.
+   - Package structure, zero-database invariant, environment keys, Dockerfile non-root user.
 2. **`test_config.py` (7 Tests):**
-   - `test_default_settings`: Verifies defaults.
-   - `test_secret_str_masking`: Verifies that `str(settings.LLM_API_KEY)` masks with `**********`.
-   - `test_is_mock_mode_logic`: Proves mock mode logic when API key is empty or flag is set.
-   - `test_url_validation_and_ssrf_blocking`: Proves rejection of `ftp://`, `file://`, and `169.254.169.254`.
-   - `test_port_bounds_validation`: Proves rejection of privileged ports (<1024) and out-of-range ports (>65535).
-   - `test_service_role_token_fallback`: Verifies fallback to `INTERNAL_SERVICE_KEY`.
-   - `test_get_settings_singleton`: Verifies lru_cache singleton behavior.
+   - Defaults, `SecretStr` masking, mock mode logic, SSRF URL blocking, port bounds, token fallback, singleton cache.
 3. **`test_domain_chat.py` (7 Tests):**
-   - `test_chat_message_valid`: Verifies content sanitization and null-byte stripping.
-   - `test_chat_message_empty_content_rejected`: Rejects empty or whitespace-only messages.
-   - `test_generative_action_valid_urls`: Verifies approved relative paths (`/portal/book`, `/tracking`, `/support`).
-   - `test_generative_action_prohibited_urls`: Proves rejection of `javascript:`, `http://`, `//evil.com`, and open redirects.
-   - `test_chat_request_prompt_length_constraints`: Proves 1,000-character prompt boundary.
-   - `test_chat_request_history_capping`: Proves truncation to last 10 messages.
-   - `test_chat_response_structure`: Proves JSON envelope structure.
+   - Chat message validation, empty rejection, approved relative URLs, prohibited XSS/open-redirect schemes, prompt length capping (1,000 chars), history capping (10 turns), response schema.
 4. **`test_domain_tools.py` (7 Tests):**
-   - `test_track_parcel_input_valid`: Verifies uppercasing and canonical formatting (`SD-20261021-04921`).
-   - `test_track_parcel_input_invalid`: Proves rejection of malformed tracking numbers.
-   - `test_estimate_fee_input_valid`: Validates fee calculation parameters.
-   - `test_estimate_fee_input_weight_boundaries`: Enforces `0.0 < weight_kg <= 50.0`.
-   - `test_estimate_fee_input_postal_code_regex`: Enforces 5-digit postal code format.
-   - `test_active_parcels_input_limits`: Enforces `1 <= limit <= 50`.
-   - `test_company_policy_input`: Verifies policy query sanitization.
+   - Tracking regex validation (`^SD-\d{8}-\d{5}$`), invalid tracking rejection, fee estimation bounds (`0.0 < weight <= 50.0`), 5-digit postal code regex, active parcel limits (`1 <= limit <= 50`), policy query sanitization.
 5. **`test_domain_errors.py` (6 Tests):**
-   - Verifies status code mappings for `ValidationException` (422), `PromptInjectionException` (400), `ResourceNotFoundException` (404), `UpstreamServiceException` (502), `RateLimitException` (429), and `AuthException` (401).
+   - Status code mappings: 422 (Validation), 400 (Injection), 404 (Not Found), 502 (Upstream), 429 (Rate Limit), 401 (Auth).
 6. **`test_cache.py` (6 Tests):**
-   - Verifies turn appending, history capping at 10, tenant isolation, TTL expiration, LRU capacity eviction, and async concurrency safety.
+   - Turn appending, 10-message capping, tenant isolation, TTL expiration, LRU eviction, concurrency safety.
 7. **`test_security_edge_cases.py` (6 Tests):**
-   - `test_prompt_injection_null_byte_and_whitespace_defense`: Proves embedded null bytes are stripped.
-   - `test_generative_action_xss_and_open_redirect_fuzzing`: Fuzzes 13 attack vectors against action cards.
-   - `test_redos_resistance_on_tracking_number_regex`: Proves linear regex evaluation (< 50ms for 10,000 chars).
-   - `test_ssrf_cloud_metadata_probing`: Proves rejection of all cloud metadata variants.
-   - `test_cache_flooding_dos_defense`: Floods 1,000 sessions into a 50-capacity cache and verifies memory stays bounded.
-   - `test_floating_point_special_values_in_pricing`: Proves `NaN` and `Infinity` floats are rejected.
-8. **`test_tools.py` (14 Tests — Phase 3 Tool Suite):**
-   - `test_tool_registry_registration_and_export`: Verifies all 4 tools registered, `is_read_only=True`, and valid OpenAPI schemas exported.
-   - `test_execute_tool_unknown_tool`: Verifies unknown tool returns `status="ERROR"` and duration.
-   - `test_execute_tool_invalid_arguments`: Verifies invalid tracking code fails schema validation without crashing.
-   - `test_track_parcel_tool_success`: Verifies upstream 200 OK parsing with milestone extraction.
-   - `test_track_parcel_tool_sec009_privacy_masking`: Verifies recipient phone numbers, street address, and driver notes are completely stripped.
-   - `test_track_parcel_tool_404_not_found`: Proves deterministic grounded not-found response.
-   - `test_track_parcel_tool_upstream_500_and_timeout`: Proves `UpstreamServiceException` handling for 500 status and `httpx.ReadTimeout`.
-   - `test_pricing_tool_success`: Verifies minor unit cents (`total_fee_cents`), display string, and `NAVIGATE_BOOKING` action.
-   - `test_pricing_tool_malformed_json_and_upstream_error`: Verifies non-JSON HTML error page handling.
-   - `test_parcels_tool_success_with_bearer`: Verifies caller's Bearer token is forwarded to Core API and recipient PII is stripped.
-   - `test_parcels_tool_missing_or_unauthorized`: Proves `AuthException` when Bearer token is missing or upstream returns 401.
-   - `test_policy_tool_static_fallback`: Verifies prohibited goods and SLAs retrieved from static markdown.
-   - `test_policy_tool_transit_sla_query`: Verifies Colombo express delivery SLA retrieval.
-   - `test_execute_tool_full_lifecycle_via_registry`: Verifies end-to-end execution through registry with timing and error isolation.
+   - Null-byte stripping, 13 XSS/open-redirect fuzzing vectors, ReDoS resistance (< 50ms for 10k chars), SSRF cloud metadata defense, cache flooding DoS bounds, `NaN`/`Infinity` rejection.
+8. **`test_tools.py` (14 Tests):**
+   - Registration and schema export, unknown tool handling, invalid arguments handling, tracking tool 200 OK, SEC-009 privacy masking, 404 not-found handling, 500 & timeout errors, pricing tool LKR minor units and action cards, non-JSON HTML error handling, active parcels Bearer forwarding, missing auth rejection, static policy retrieval, SLA queries, full registry lifecycle.
+9. **`test_llm.py` (12 Tests — Phase 4 LLM Suite):**
+   - `test_system_prompt_hygiene_and_guardrails`: Enforces read-only, LKR currency, SEC-009, zero-hallucination.
+   - `test_mock_adapter_general_greeting`: Returns platform overview for general inquiries.
+   - `test_mock_adapter_tracking_query_success`: Resolves shipment tracking requests.
+   - `test_mock_adapter_tracking_query_missing_code`: Asks for canonical 15-char code when code is missing.
+   - `test_mock_adapter_pricing_quote_with_action_card`: Resolves fee estimates with `NAVIGATE_BOOKING` action.
+   - `test_mock_adapter_active_parcels_without_auth`: Enforces authentication prompt for parcel inquiries.
+   - `test_mock_adapter_policy_inquiry`: Explains restricted commodities and SLAs.
+   - `test_openai_adapter_multi_turn_tool_calling_mocked`: Validates multi-turn function calling execution loop.
+   - `test_openai_adapter_loop_capping_defense`: Verifies hard termination at 3 tool rounds.
+   - `test_openai_adapter_rate_limit_429`: Translates `openai.RateLimitError` $\rightarrow$ `RateLimitException`.
+   - `test_openai_adapter_timeout_and_connection_error`: Translates `APITimeoutError` $\rightarrow$ `UpstreamServiceException`.
+   - `test_llm_factory_selection`: Validates mock vs. production engine selection.
 
 ---
 
@@ -437,13 +428,17 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 
 ## 13. Historical Decision Log, Debugging Records & Changelog
 
+### Historical Decision Record: Intent Priority in Mock Engine
+- **Problem:** When prompts like *"Can you track my package please?"* were evaluated, the phrase `"my package"` prematurely triggered the Active Parcels intent rather than the Tracking inquiry intent.
+- **Resolution:** Re-ordered intent evaluation in `MockLLMAdapter`: Tracking code check $\rightarrow$ Tracking inquiry without code $\rightarrow$ Active parcels $\rightarrow$ Pricing quotes $\rightarrow$ Policies $\rightarrow$ General greetings.
+
 ### Historical Decision Record: Python `cmd` Namespace Collision
-- **Problem:** The directory was initially scaffolded with a `cmd/` package matching Go project conventions. In Python, having a root `cmd/` directory shadows the standard library module `cmd.py` (which powers Python's interactive debugger `pdb`). When `pytest` initialized its debugging hooks, it crashed with `AttributeError: module 'cmd' has no attribute 'Cmd'`.
-- **Resolution:** Removed `cmd/`. Entrypoints are placed at `src/main.py` and `src/mcp/server.py`.
+- **Problem:** Scaffolded root `cmd/` shadowed standard library module `cmd.py`.
+- **Resolution:** Removed `cmd/`. Entrypoints placed at `src/main.py` and `src/mcp/server.py`.
 
 ### Historical Decision Record: Backward-Compatible Property Aliases in Settings
-- **Problem:** Config attributes were initially defined with uppercase names (`CORE_API_URL`, `TRACKING_API_URL`). Tools referencing lowercase properties (`core_api_base_url`, `tracking_api_base_url`) threw `AttributeError`.
-- **Resolution:** Added explicit property aliases (`core_api_base_url`, `tracking_api_base_url`, `ai_service_role_token`) to `Settings` in `src/core/config.py`, providing seamless dual access without breaking existing code.
+- **Problem:** Config attributes were uppercase (`CORE_API_URL`, `TRACKING_API_URL`), while tools accessed lowercase properties.
+- **Resolution:** Added explicit property aliases (`core_api_base_url`, `tracking_api_base_url`, `ai_service_role_token`) to `Settings`.
 
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
@@ -453,3 +448,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.1.0` | 2026-11-02 | **Phase 1 Scaffolding Complete:** Created `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, secure `Dockerfile`, complete layered package tree, removed shadowed `cmd/` directory, automated smoke tests. | `4 passed in 0.05s` |
 | `2.2.0` | 2026-11-02 | **Phase 2 Domain & Config Complete:** Implemented `src/core/config.py` (SecretStr masking, SSRF URL validator), `src/domain/chat.py` (DTOs, 1000-char cap, strict URL whitelist), `src/domain/tools.py` (bounds, non-backtracking regex, enums), `src/domain/errors.py` (error envelopes), `src/core/cache.py` (thread-safe LRU cache with TTL & DoS bounds). Implemented 43 tests across unit & security suites. | `43 passed in 1.63s` |
 | `2.3.0` | 2026-11-02 | **Phase 3 Upstream Clients & Read-Only Tools Complete:** Implemented central `src/tools/registry.py` (dispatch, timing, schema export), `src/tools/tracking_tool.py` (SEC-009 privacy masking, 404 safety), `src/tools/pricing_tool.py` (LKR integer cents, NAVIGATE_BOOKING action card), `src/tools/parcels_tool.py` (IDOR Bearer token forwarding), `src/tools/policy_tool.py` (static fallback + dynamic admin override), and `src/tools/company_policies.md`. Implemented 14 tests in `test_tools.py`. | `57 passed in 12.23s` |
+| `2.4.0` | 2026-11-02 | **Phase 4 Dual LLM Orchestration Engine Complete:** Implemented `src/llm/prompts.py` (system prompt with guardrails), `src/llm/base.py` (BaseLLMClient interface), `src/llm/openai_adapter.py` (universal AsyncOpenAI client with multi-turn loop, MAX_TOOL_ITERATIONS = 3 cap, rate limit & timeout mappings), `src/llm/mock_adapter.py` (deterministic regex intent engine with offline local preview), and `src/llm/__init__.py` (engine factory). Implemented 12 tests in `test_llm.py`. | `69 passed in 34.18s` |
