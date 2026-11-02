@@ -71,7 +71,6 @@ flowchart TD
 
 ```
 services/ai-assistant/
-├── cmd/                         # Entrypoint scripts (stdio server, web server)
 ├── src/
 │   ├── api/                     # Transport layer (FastAPI routers, lifespan handlers)
 │   │   ├── routers/
@@ -96,12 +95,15 @@ services/ai-assistant/
 │   └── mcp/                     # FastMCP Protocol Server
 │       └── server.py            # FastMCP STDIO and SSE server implementation
 ├── tests/                       # Unit and integration test suite
+│   ├── test_scaffolding.py      # Phase 1 scaffolding & invariant smoke tests
 │   ├── test_chat_router.py      # FastAPI chat endpoint validation
 │   ├── test_mock_llm.py         # Deterministic mock adapter test
 │   ├── test_tools.py            # Tool execution and error handling tests
 │   └── test_health.py           # Decoupled health probe verification
 ├── Dockerfile                   # Multi-stage secure Dockerfile (USER 10001:10001)
 ├── pyproject.toml               # Poetry / Pip dependencies and tool configuration
+├── requirements.txt             # Locked Python runtime dependencies
+├── .env.example                 # Documented configuration template
 ├── API.md                       # Co-located API specification
 └── README.md                    # Co-located module living documentation
 ```
@@ -133,3 +135,4 @@ services/ai-assistant/
 | :--- | :--- | :--- | :--- |
 | `0.1.0` | 2026-10-21 | Initial placeholder README and basic route baseline | Architecture Setup |
 | `2.0.0` | 2026-10-25 | Complete v2.0.0 rewrite: FastMCP integration, offline mock LLM, zero-DB enforcement, port 8000 lock, decoupled probes, generative UI action directives, and multi-actor Playwright test alignment | Member 10 & Review Agent |
+| `2.1.0` | 2026-11-02 | **Phase 1 Complete:** Bootstrapped Python service scaffolding, dependencies (`requirements.txt`, `pyproject.toml`), `.env.example`, `.gitignore`, secure `Dockerfile`, complete layered package tree (`src/api`, `src/core`, `src/domain`, `src/llm`, `src/tools`, `src/mcp`), and automated smoke tests | Member 10 |
