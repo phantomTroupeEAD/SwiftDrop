@@ -48,6 +48,7 @@ class Settings(BaseSettings):
         le=1.0,
         description="LLM sampling temperature",
     )
+    LLM_MAX_TOKENS: int = Field(default=1024, ge=128, le=8192, description='Max tokens')
 
     # Offline CI / Automated Testing Toggle
     MOCK_LLM_MODE: bool = Field(

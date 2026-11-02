@@ -76,6 +76,7 @@ class OpenAIAdapter(BaseLLMClient):
                     tools=openai_tools if openai_tools else None,
                     tool_choice="auto" if openai_tools else None,
                     temperature=self._settings.LLM_TEMPERATURE,
+                    max_tokens=self._settings.LLM_MAX_TOKENS,
                 )
 
                 choice = response.choices[0]
@@ -156,6 +157,7 @@ class OpenAIAdapter(BaseLLMClient):
                         model=self._settings.LLM_MODEL,
                         messages=messages,
                         temperature=self._settings.LLM_TEMPERATURE,
+                        max_tokens=self._settings.LLM_MAX_TOKENS,
                     )
                     final_reply = forced_completion.choices[0].message.content or ""
                     break

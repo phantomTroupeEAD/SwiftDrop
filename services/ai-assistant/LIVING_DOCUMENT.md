@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.5.0` (Authoritative Baseline — Phase 5 Complete)  
+> **Specification Version:** `2.6.0` (Authoritative Baseline — Phase 6 Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -356,9 +356,9 @@ services/ai-assistant/
 │       ├── __init__.py              # Package exports (mcp, tools, resources)
 │       └── server.py                # FastMCP server instance, tools, swiftdrop:// resources, STDIO
 │
-└── tests/                           # Verification & Automated Test Suite (81 Tests Total)
+└── tests/                           # Verification & Automated Test Suite (112 Tests Total)
     ├── __init__.py
-    ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true
+    ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true and session reset
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
     ├── test_config.py               # Settings, SecretStr masking, SSRF validation (7 tests)
     ├── test_domain_chat.py          # Chat DTOs, prompt limits, URL sanitization (7 tests)
@@ -368,7 +368,12 @@ services/ai-assistant/
     ├── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
     ├── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
     ├── test_llm.py                  # Phase 4 Dual LLM engines, loop capping, rate limits (12 tests)
-    └── test_mcp.py                  # Phase 5 FastMCP tools, swiftdrop:// resources, read-only (12 tests)
+    ├── test_mcp.py                  # Phase 5 FastMCP tools, swiftdrop:// resources, read-only (12 tests)
+    ├── test_api_health.py           # Phase 6 Health probes, metrics, OpenAPI docs (6 tests)
+    ├── test_api_chat.py             # Phase 6 POST /api/v1/ai/chat happy path & session memory (12 tests)
+    ├── test_api_resilience.py       # Phase 6 Fault injection, 500 masking, decoupled probes (4 tests)
+    ├── test_api_security.py         # Phase 6 Null-byte, PII masking, cross-conv isolation (6 tests)
+    └── test_api_concurrency.py      # Phase 6 Async non-blocking load & thread-safe cache (3 tests)
 ```
 
 ---
@@ -404,7 +409,7 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (81 Passing Tests)
+### Complete Test Suite Breakdown (112 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
    - Package structure, zero-database invariant, environment keys, Dockerfile non-root user.
 2. **`test_config.py` (7 Tests):**
@@ -436,6 +441,43 @@ python -m pytest services/ai-assistant/tests/ -v
     - `test_mcp_active_parcels_auth_enforcement`: Rejects calls without authorization token.
     - `test_mcp_explain_company_policies`: Explains prohibited goods and guidelines.
     - `test_mcp_read_only_invariant`: Proves zero write/delete tools registered on FastMCP.
+
+11. **`test_api_health.py` (6 Tests — Phase 6 Health & Documentation):**
+    - `test_liveness_probe_returns_200`: Verifies `/health/live` returns UP status.
+    - `test_readiness_probe_returns_200`: Verifies `/health/ready` evaluates local cache and returns READY.
+    - `test_metrics_endpoint_returns_200`: Verifies `/health/metrics` returns active session count and uptime.
+    - `test_root_greeting_returns_200`: Verifies `GET /` returns quick navigation links.
+    - `test_openapi_schema_endpoint`: Verifies `/openapi.json` generates valid OpenAPI 3.1.0 specifications.
+    - `test_docs_ui_endpoints`: Verifies `/docs` (Swagger UI) and `/redoc` return 200 OK HTML.
+12. **`test_api_chat.py` (12 Tests — Phase 6 Conversational Transport):**
+    - `test_chat_endpoint_empty_prompt_rejected`: Rejects empty prompt with 422 RFC-7807 envelope.
+    - `test_chat_endpoint_whitespace_only_rejected`: Rejects whitespace prompt with 422.
+    - `test_chat_endpoint_oversized_prompt_rejected`: Rejects prompt exceeding 1,000 characters.
+    - `test_chat_endpoint_boundary_1000_char_prompt`: Validates prompt at exact 1,000 character limit.
+    - `test_chat_endpoint_tracking_inquiry_grounded`: Verifies tracking inquiry executes `track_parcel_status`.
+    - `test_chat_endpoint_pricing_quote_with_action_card`: Computes fee quote and returns `NAVIGATE_BOOKING` card.
+    - `test_chat_endpoint_policy_inquiry`: Explains company prohibited items via `explain_company_policies`.
+    - `test_chat_endpoint_auto_generates_conversation_id`: Automatically generates UUIDv4 session ID if omitted.
+    - `test_chat_endpoint_session_memory_continuity`: Multi-turn context remembered across turns with same ID.
+    - `test_chat_endpoint_with_explicit_client_history`: Prioritizes client-supplied history turns.
+    - `test_chat_endpoint_with_bearer_token`: Forwards Authorization Bearer JWT to tool execution.
+    - `test_cors_preflight_headers`: Verifies CORS OPTIONS preflight response and credential headers.
+13. **`test_api_resilience.py` (4 Tests — Phase 6 Fault Injection & Resilience):**
+    - `test_global_exception_handler_masks_internal_error`: Uncaught exceptions return safe 500 RFC-7807 envelope without stack trace leakage.
+    - `test_malformed_json_returns_422`: Intercepts malformed JSON payloads and returns structured 422 error.
+    - `test_decoupled_health_probes_during_upstream_outage`: Health probes return 200 OK in < 10ms with zero network calls during upstream outage.
+    - `test_upstream_domain_exception_handling`: Maps upstream timeouts to 502 Bad Gateway envelope.
+14. **`test_api_security.py` (6 Tests — Phase 6 Security & Sanitization):**
+    - `test_null_byte_sanitized_in_prompt`: Null bytes stripped without crashing request parser.
+    - `test_prompt_injection_resilience`: Adversarial injection and jailbreak prompts handled safely.
+    - `test_pii_masking_in_chat_response`: SEC-009 verification ensuring zero phone or street address leaks.
+    - `test_bearer_token_not_echoed_in_response`: Sensitive JWT tokens never reflected in response text.
+    - `test_unicode_and_emoji_prompt_handling`: Multilingual (Sinhala/Tamil) and emoji text parsed cleanly.
+    - `test_cross_conversation_isolation`: Strict tenant/session boundaries; zero history bleed across conversation IDs.
+15. **`test_api_concurrency.py` (3 Tests — Phase 6 Concurrency & Non-Blocking Async):**
+    - `test_concurrent_async_chat_requests`: 10 simultaneous async requests complete with 200 OK.
+    - `test_concurrent_session_cache_thread_safety`: Concurrent cache reads and writes operate with zero race conditions.
+    - `test_health_probe_latency_under_load`: Health liveness probe remains immediate (< 10ms) under active chat traffic.
 
 ---
 
@@ -481,3 +523,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.3.0` | 2026-11-02 | **Phase 3 Upstream Clients & Read-Only Tools Complete:** Implemented central `src/tools/registry.py` (dispatch, timing, schema export), `src/tools/tracking_tool.py` (SEC-009 privacy masking, 404 safety), `src/tools/pricing_tool.py` (LKR integer cents, NAVIGATE_BOOKING action card), `src/tools/parcels_tool.py` (IDOR Bearer token forwarding), `src/tools/policy_tool.py` (static fallback + dynamic admin override), and `src/tools/company_policies.md`. Implemented 14 tests in `test_tools.py`. | `57 passed in 12.23s` |
 | `2.4.0` | 2026-11-02 | **Phase 4 Dual LLM Orchestration Engine Complete:** Implemented `src/llm/prompts.py` (system prompt with guardrails), `src/llm/base.py` (BaseLLMClient interface), `src/llm/openai_adapter.py` (universal AsyncOpenAI client with multi-turn loop, MAX_TOOL_ITERATIONS = 3 cap, rate limit & timeout mappings), `src/llm/mock_adapter.py` (deterministic regex intent engine with offline local preview), and `src/llm/__init__.py` (engine factory). Implemented 12 tests in `test_llm.py`. | `69 passed in 34.18s` |
 | `2.5.0` | 2026-11-02 | **Phase 5 Model Context Protocol (FastMCP) Server Complete:** Implemented `src/mcp/server.py` with 4 FastMCP tools (`track_parcel`, `estimate_shipping_fee`, `get_my_active_parcels`, `explain_company_policies`), 2 authoritative context resources (`swiftdrop://policies`, `swiftdrop://sla-matrix`), STDIO desktop entrypoint, and `src/mcp/__init__.py`. Implemented 12 tests in `test_mcp.py`. | `81 passed in 49.61s` |
+| `2.6.0` | 2026-11-02 | **Phase 6 Transport Layer & Core API Endpoints Complete:** Implemented `src/main.py` (FastAPI app, lifespan, CORS, RFC-7807 global exception handlers), `src/api/routers/health.py` (decoupled `/health/live`, `/health/ready`, `/health/metrics`), and `src/api/routers/chat.py` (`POST /api/v1/ai/chat` with session memory continuity and non-blocking Bearer auth forwarding). Built 31 new automated tests across health, chat, resilience, security, and concurrency. | `112 passed in 97.45s` |

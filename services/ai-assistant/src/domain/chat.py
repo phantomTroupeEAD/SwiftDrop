@@ -28,7 +28,7 @@ class ChatMessage(BaseModel):
     """A single turn within a multi-turn conversation."""
 
     role: MessageRole
-    content: str = Field(min_length=1, max_length=2000)
+    content: str = Field(min_length=1, max_length=10000)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("content")

@@ -4,18 +4,21 @@
 > **Assigned Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Base Path:** `/api/v1/ai`  
 > **Container Port:** `8000`  
-> **Specification Version:** `2.0.0` (Authoritative System-Wide Baseline)
+> **Specification Version:** `2.5.1` (Authoritative System Baseline)
 
 ---
 
-## 1. Endpoint Overview
+## 1. Endpoint Overview & Interactive Documentation
 
 | Method | URI Path | Description | Required Auth / Role |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/ai/chat` | Natural language chat endpoint with automatic tool invocation and grounded responses | Optional (Public for tracking queries; Bearer JWT for customer parcel lookup) |
+| `GET` | `/docs` | Interactive Swagger UI (OpenAPI 3.1.0) | None (Developer UI) |
+| `GET` | `/redoc` | Interactive ReDoc Documentation | None (Developer UI) |
+| `GET` | `/openapi.json` | Canonical OpenAPI Schema Specification | None (Public) |
+| `POST` | `/api/v1/ai/chat` | Natural language chat endpoint with automatic tool invocation and grounded responses | Optional (Public for tracking & quotes; Bearer JWT for customer parcel lookup) |
 | `GET` | `/health/live` | Kubernetes Liveness Probe: confirms FastAPI event loop responsiveness | None (Public) |
-| `GET` | `/health/ready` | Kubernetes Readiness Probe: verifies local LLM config & memory cache | None (Public) |
-| `GET` | `/metrics` | Prometheus metrics endpoint for request counts and LLM latency | Internal / Prometheus Scraper |
+| `GET` | `/health/ready` | Kubernetes Readiness Probe: verifies local LLM config & memory cache sanity | None (Public) |
+| `GET` | `/health/metrics` | Prometheus & runtime metrics endpoint for active sessions, uptime, and capacity | None (Public) |
 
 ---
 
@@ -26,7 +29,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 ### 2.1 `track_parcel_status`
 - **Description:** Retrieve real-time tracking milestones, status description, and destination city for a parcel.
 - **Parameters:**
-  - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`).
+  - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261102-00001`).
 - **Target Upstream Endpoint:** `GET http://tracking-api:8081/api/v1/tracking/public/{tracking_number}`
 - **Security & Privacy:** Strictly enforces SEC-009 privacy masking (omits phone numbers, street addresses, driver notes).
 - **Permissions:** Public / Anonymous.
@@ -45,7 +48,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
 - **Permissions:** Public / Anonymous.
 
-### 2.3 `list_active_parcels`
+### 2.3 `get_my_active_parcels`
 - **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.
 - **Parameters:**
   - `status` (string, optional): Filter by parcel lifecycle status (e.g. `"IN_TRANSIT"`).
@@ -58,7 +61,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Description:** Explain courier company policies, prohibited goods, packaging standards, transit SLAs, and dispute rules.
 - **Parameters:**
   - `query` (string, required): Inquired policy topic (e.g. `"prohibited items"`, `"packaging limits"`, `"SLA"`).
-- **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with 30-min cache and local `company_policies.md` fallback).
+- **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with local `company_policies.md` grounding).
 - **Permissions:** Public / Anonymous.
 
 ### 2.5 Authoritative FastMCP Context Resources
@@ -71,144 +74,97 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 
 ### 3.1 Chat with Assistant (`POST /api/v1/ai/chat`)
 
-Processes a user prompt, executes necessary FastMCP tools, and returns a grounded response with structured generative UI actions.
+Processes a user prompt, executes necessary read-only tools, and returns a grounded response with structured generative UI actions and session continuity.
 
 #### Request Headers
 - `Content-Type: application/json` (Required)
-- `Authorization: Bearer <jwt>` (Optional: Required for queries accessing private parcel data)
-- `X-Correlation-ID: <uuid>` (Optional: Tracing identifier)
+- `Authorization: Bearer <jwt>` (Optional: Required for queries accessing private account parcels)
 
-#### Request Body Schema
+#### Request Body Schema (`ChatMessageRequest`)
 ```json
 {
-  "type": "object",
-  "required": ["message"],
-  "properties": {
-    "message": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2000,
-      "description": "User natural language input query."
-    },
-    "conversation_id": {
-      "type": "string",
-      "format": "uuid",
-      "description": "Optional UUID identifying existing multi-turn conversation session."
-    },
-    "locale": {
-      "type": "string",
-      "default": "en-US",
-      "description": "Preferred language for response generation."
-    }
-  }
+  "prompt": "How much does it cost to ship a 2.5kg package from Colombo to Kandy?",
+  "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "locale": "en-US",
+  "history": []
 }
 ```
 
-#### Request Payload Example
-```json
-{
-  "message": "How much would it cost to send a 2.5kg box (30x20x15 cm) from Colombo 01 (00100) to Kandy (20000) using Express delivery?",
-  "conversation_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-}
-```
+#### Request Fields
+- `prompt` (string, required): Natural language input (1 to 1,000 characters).
+- `conversation_id` (string, optional, UUID format): Correlates multi-turn sessions in the cache. Automatically generated as a UUIDv4 if omitted.
+- `locale` (string, optional): Client locale (defaults to `"en-US"`).
+- `history` (array of `ChatMessage`, optional): Explicit prior turns if client manages context locally.
 
 #### Success Response (`200 OK`)
 ```json
 {
-  "success": true,
-  "data": {
-    "conversation_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-    "response": "Sending a 2.5 kg package (30×20×15 cm) from Colombo 01 to Kandy via **Express Delivery** is estimated at **LKR 750.00**.\n\n### Tariff Breakdown:\n- **Base Shipping Fee:** LKR 500.00\n- **Weight Surcharge (2.5 kg):** LKR 150.00\n- **Express Service Surcharge:** LKR 100.00\n- **Estimated Delivery Window:** Next business day by 5:00 PM.\n\nWould you like to book this shipment now?",
-    "tools_used": [
-      {
-        "name": "estimate_shipping_fee",
-        "parameters": {
-          "weight_kg": 2.5,
-          "length_cm": 30.0,
-          "width_cm": 20.0,
-          "height_cm": 15.0,
-          "service_type": "EXPRESS",
-          "pickup_postal": "00100",
-          "delivery_postal": "20000"
-        },
-        "status": "SUCCESS"
+  "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "reply": "The estimated shipping fee for a 2.5kg package from Colombo to Kandy is **LKR 750.00** via **STANDARD** delivery (estimated transit: 48 hours).",
+  "actions": [
+    {
+      "action_type": "NAVIGATE_BOOKING",
+      "label": "Book Shipment Now",
+      "target_url": "/portal/book",
+      "prefill_data": {
+        "weight_kg": 2.5,
+        "pickup_postal_code": "00100",
+        "delivery_postal_code": "20000",
+        "service_type": "STANDARD",
+        "estimated_fee_cents": 75000,
+        "currency": "LKR"
       }
-    ],
-    "suggested_actions": [
-      {
-        "action_type": "NAVIGATE_BOOKING",
-        "label": "Book This Shipment",
-        "payload": {
-          "weight_kg": 2.5,
-          "length_cm": 30.0,
-          "width_cm": 20.0,
-          "height_cm": 15.0,
-          "service_type": "EXPRESS",
-          "pickup_postal": "00100",
-          "delivery_postal": "20000",
-          "estimated_fee_cents": 75000,
-          "currency": "LKR"
-        }
-      }
-    ],
-    "execution_time_ms": 342
-  }
+    }
+  ],
+  "tools_called": [
+    "estimate_delivery_fee"
+  ],
+  "latency_ms": 142,
+  "grounded": true
 }
 ```
 
-#### Error Responses
+#### Error Responses (Standard RFC-7807 Format)
 
-##### 400 Bad Request
-Empty message or invalid JSON payload.
+##### 422 Unprocessable Entity (Semantic Validation Failure)
 ```json
 {
-  "success": false,
   "error": {
-    "code": "VALIDATION_FAILED",
-    "message": "Message field cannot be empty or whitespace only.",
+    "code": "VALIDATION_ERROR",
+    "message": "Request payload failed semantic domain validation",
     "details": [
       {
-        "field": "message",
-        "issue": "String should have at least 1 characters"
+        "field": "prompt",
+        "issue": "Prompt cannot be empty or whitespace only"
       }
     ]
   }
 }
 ```
 
-##### 401 Unauthorized
-Attempted to invoke private tool (`get_my_active_parcels`) without a valid Bearer token.
+##### 502 Bad Gateway (Upstream Service Failure)
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Authentication required to query active account parcels."
-  }
-}
-```
-
-##### 429 Too Many Requests
-Rate limit exceeded (e.g. > 30 requests/minute per IP/tenant).
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "AI assistant rate limit exceeded. Please wait 60 seconds before retrying.",
-    "retry_after_seconds": 60
-  }
-}
-```
-
-##### 502 Bad Gateway
-Upstream Core API or Tracking API returned an unrecoverable network or 5xx error.
-```json
-{
-  "success": false,
   "error": {
     "code": "UPSTREAM_SERVICE_UNAVAILABLE",
-    "message": "Failed to retrieve quote from pricing service. Please try again shortly."
+    "message": "Upstream service 'core-pricing' failure: Connection timeout",
+    "details": [
+      {
+        "field": "upstream",
+        "issue": "core-pricing"
+      }
+    ]
+  }
+}
+```
+
+##### 500 Internal Server Error (Masked Server Error)
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "An unexpected server error occurred. Please contact support if the issue persists.",
+    "details": []
   }
 }
 ```
@@ -216,33 +172,45 @@ Upstream Core API or Tracking API returned an unrecoverable network or 5xx error
 ---
 
 ### 3.2 Liveness Probe (`GET /health/live`)
-Confirms that the FastAPI process and event loop are responsive.
+Confirms that the FastAPI process and asyncio event loop are responsive.
 
-- **Success Response (`200 OK`):**
 ```json
 {
-  "status": "alive"
+  "status": "UP",
+  "timestamp": "2026-11-02T13:30:00.000000+00:00",
+  "service": "ai-assistant"
 }
 ```
 
 ---
 
 ### 3.3 Readiness Probe (`GET /health/ready`)
-Verifies local configuration and memory cache readiness. **Strictly decoupled from upstream external services.**
+Verifies local cache sanity, engine mode, and tool registrations. **Strictly decoupled from external upstream services.**
 
-- **Success Response (`200 OK`):**
 ```json
 {
-  "status": "ready",
-  "llm_backend": "mock",
-  "cache_status": "ok"
+  "status": "READY",
+  "engine": "live",
+  "active_sessions": 4,
+  "registered_tools": 4,
+  "timestamp": "2026-11-02T13:30:00.000000+00:00"
 }
 ```
 
-- **Failure Response (`503 Service Unavailable`):**
+---
+
+### 3.4 Telemetry Metrics (`GET /health/metrics`)
+Operational metrics for health monitoring and capacity audits.
+
 ```json
 {
-  "status": "unavailable",
-  "reason": "Memory cache initialization failed"
+  "service": "ai-assistant",
+  "version": "2.5.1",
+  "uptime_seconds": 1284,
+  "active_sessions": 4,
+  "max_capacity": 10000,
+  "registered_tools": 4,
+  "mock_mode": false,
+  "timestamp": "2026-11-02T13:30:00.000000+00:00"
 }
 ```
