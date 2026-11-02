@@ -76,4 +76,13 @@ def sanitize_assistant_identity(text: str) -> str:
     for pattern, replacement in tool_replacements:
         sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
 
+    # Pattern 6: Scrub mobile app hallucinations (SwiftDrop is strictly a web portal)
+    sanitized = re.sub(
+        r"(?i)\b(?:portal\s+)?or\s+(?:the\s+|our\s+)?mobile\s+apps?\b",
+        "web portal",
+        sanitized,
+    )
+    sanitized = re.sub(r"(?i)\bmobile\s+apps?\b", "web portal", sanitized)
+    sanitized = re.sub(r"(?i)\b(portal\s+web\s+portal|web\s+portal\s+or\s+web\s+portal)\b", "web portal", sanitized)
+
     return sanitized

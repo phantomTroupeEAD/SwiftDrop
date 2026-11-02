@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.8.0` (Authoritative Baseline — Postal Directory & Name Guardrails Active)  
+> **Specification Version:** `2.8.2` (Authoritative Baseline — Web-Only Portal Guardrails Active)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -247,8 +247,8 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
 - **Purpose:** Authoritative parcel delivery tariff calculation.
 - **Target Endpoint:** `POST /api/v1/pricing/quotes` on Member 2's Core Pricing Engine (`CORE_API_URL`).
 - **Input Model:** `EstimateFeeInput` (`weight_kg: 0.1-50.0`, 5-digit postal codes, service tier, optional dimensions).
-- **Output Invariant:** Echoes exact integer minor units (`total_fee_cents`), currency `LKR`, and human display string `f"LKR {total / 100:.2f}"`.
-- **Generative UI Action Card:** Automatically generates a validated `NAVIGATE_BOOKING` action card (`target_url: "/portal/book"`) prefilled with postal codes, weight, service tier, and fee.
+- **Output Invariant:** Echoes exact integer Sri Lankan Rupees (`estimated_fee`), minor units (`total_fee_cents`), currency `LKR`, and human display string `f"LKR {total_fee_lkr:,}"` without fractional cents (e.g. `LKR 1,595` instead of `LKR 1,595.00`), matching Sri Lankan commerce conventions.
+- **Generative UI Action Card:** Automatically generates a validated `NAVIGATE_BOOKING` action card (`target_url: "/portal/book"`) prefilled with postal codes, weight, service tier, clean integer fee (`"estimated_fee": 1595`), and minor units (`"estimated_fee_cents": 159500`).
 
 ### Tool 3: `list_active_parcels` / `get_my_active_parcels` (`src/tools/parcels_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Disambiguates active shipments when an authenticated user asks *"Where are my packages?"* without giving a tracking code.
@@ -551,4 +551,6 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.5.0` | 2026-11-02 | **Phase 5 Model Context Protocol (FastMCP) Server Complete:** Implemented `src/mcp/server.py` with 4 FastMCP tools (`track_parcel`, `estimate_shipping_fee`, `get_my_active_parcels`, `explain_company_policies`), 2 authoritative context resources (`swiftdrop://policies`, `swiftdrop://sla-matrix`), STDIO desktop entrypoint, and `src/mcp/__init__.py`. Implemented 12 tests in `test_mcp.py`. | `81 passed in 49.61s` |
 | `2.6.0` | 2026-11-02 | **Phase 6 Transport Layer & Core API Endpoints Complete:** Implemented `src/main.py` (FastAPI app, lifespan, CORS, RFC-7807 global exception handlers), `src/api/routers/health.py` (decoupled `/health/live`, `/health/ready`, `/health/metrics`), and `src/api/routers/chat.py` (`POST /api/v1/ai/chat` with session memory continuity and non-blocking Bearer auth forwarding). Built 31 new automated tests across health, chat, resilience, security, and concurrency. | `112 passed in 97.45s` |
 | `2.7.0` | 2026-11-02 | **Conversational Memory & Repetitive Intro Elimination Complete:** Refined prompt rules in `src/llm/prompts.py`, added multi-turn entity resolution in `src/llm/mock_adapter.py`, documented session correlation via `conversation_id` in Swagger UI schemas, added 3 new test suites. | `126 passed in 20.33s` |
-| `2.8.0` | 2026-11-03 | **Sri Lanka Non-District Town Directory & Internal Tool Name Guardrails Complete:** Created `src/core/postal_codes.py` covering all 25 districts and sub-district towns (Walasmulla, Kadugannawa, etc.), implemented read-only tool `lookup_postal_code` in `src/tools/postal_tool.py`, registered in FastMCP and tool registry, added Pydantic before-validator auto-resolving town names in fee quotes, and scrubbed leaked internal tool names in `src/llm/guardrails.py`. | Verified & Tested |
+| `2.8.0` | 2026-11-03 | **Sri Lanka Non-District Town Directory & Internal Tool Name Guardrails Complete:** Created `src/core/postal_codes.py` covering all 25 districts and sub-district towns (Walasmulla, Kadugannawa, etc.), implemented read-only tool `lookup_postal_code` in `src/tools/postal_tool.py`, registered in FastMCP and tool registry, added Pydantic before-validator auto-resolving town names in fee quotes, and scrubbed leaked internal tool names in `src/llm/guardrails.py`. | `133 passed in 23.41s` |
+| `2.8.1` | 2026-11-03 | **Clean Integer Sri Lankan Rupee Pricing & Action Card Dual Prefill Complete:** Updated fee quotation logic to format conversational quotes in whole integer Rupees (e.g. `LKR 1,595` instead of `LKR 1,595.00`) per Sri Lankan commerce conventions. Extended generative action prefill payload with `"estimated_fee": 1595` alongside `"estimated_fee_cents": 159500` for seamless 1-click booking UI pre-population without breaking backend payment processors. | `133 passed in 25.60s` |
+| `2.8.2` | 2026-11-03 | **Web-Only Platform Boundary & Mobile App Hallucination Guardrail Complete:** Added explicit platform boundary rules in `src/llm/prompts.py` declaring SwiftDrop strictly a web platform (`/portal`) without native iOS/Android apps. Extended `src/llm/guardrails.py` to scrub any model hallucinations referring to a "mobile app", converting them to "SwiftDrop web portal". Added automated test `test_mobile_app_hallucination_scrubbing_guardrail`. | `134 passed in 22.82s` |

@@ -152,3 +152,18 @@ def test_internal_tool_name_scrubbing_guardrail():
     assert "parcel tracking system" in scrubbed
     assert "order lookup system" in scrubbed
 
+
+def test_mobile_app_hallucination_scrubbing_guardrail():
+    """Verify sanitize_assistant_identity replaces mobile app references with web portal."""
+    from src.llm.guardrails import sanitize_assistant_identity
+
+    raw = (
+        "To see all your current shipments, please log in to your SwiftDrop portal or mobile app. "
+        "Once authenticated, you can check your status on the mobile app."
+    )
+    scrubbed = sanitize_assistant_identity(raw)
+
+    assert "mobile app" not in scrubbed.lower()
+    assert "web portal" in scrubbed.lower()
+
+

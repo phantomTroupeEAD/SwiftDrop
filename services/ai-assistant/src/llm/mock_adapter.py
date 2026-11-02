@@ -179,7 +179,7 @@ class MockLLMAdapter(BaseLLMClient):
             else:
                 reply = (
                     f"Could not retrieve active shipments: {record.error_message}. "
-                    "Please ensure you are signed in."
+                    "Please ensure you are signed in to the SwiftDrop web portal."
                 )
 
         # -------------------------------------------------------------
@@ -261,6 +261,7 @@ class MockLLMAdapter(BaseLLMClient):
                 err_msg = (record.error_message or "").lower()
                 if "network error" in err_msg or "timed out" in err_msg or "connection" in err_msg:
                     fee_cents = int(35000 + (weight * 10000))
+                    total_fee_lkr = fee_cents // 100
                     act = GenerativeAction(
                         action_type=ActionType.NAVIGATE_BOOKING,
                         label="Book Delivery Now",
@@ -269,6 +270,8 @@ class MockLLMAdapter(BaseLLMClient):
                             "pickup_postal_code": pickup,
                             "delivery_postal_code": delivery,
                             "weight_kg": weight,
+                            "service_type": "STANDARD",
+                            "estimated_fee": total_fee_lkr,
                             "estimated_fee_cents": fee_cents,
                             "currency": "LKR",
                         },
@@ -278,7 +281,7 @@ class MockLLMAdapter(BaseLLMClient):
                         f"**Delivery Fee Estimate:**\n"
                         f"- **Chargeable Weight:** {weight} kg\n"
                         f"- **Route:** Postal Code {pickup} → {delivery}\n"
-                        f"- **Total Fee:** LKR {fee_cents / 100:.2f}\n"
+                        f"- **Total Fee:** LKR {total_fee_lkr:,}\n"
                         f"- **Estimated Transit:** 48 hours\n\n"
                         f"I have prepared a **1-click booking card** below for you to finalize this booking."
                     )

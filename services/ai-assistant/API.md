@@ -107,7 +107,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 ```json
 {
   "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "reply": "The estimated shipping fee for a 2.5kg package from Colombo to Kandy is **LKR 750.00** via **STANDARD** delivery (estimated transit: 48 hours).",
+  "reply": "The estimated shipping fee for a 2.5kg package from Colombo to Kandy is **LKR 750** via **STANDARD** delivery (estimated transit: 48 hours).",
   "actions": [
     {
       "action_type": "NAVIGATE_BOOKING",
@@ -118,6 +118,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
         "pickup_postal_code": "00100",
         "delivery_postal_code": "20000",
         "service_type": "STANDARD",
+        "estimated_fee": 750,
         "estimated_fee_cents": 75000,
         "currency": "LKR"
       }
@@ -130,6 +131,8 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
   "grounded": true
 }
 ```
+
+> **Note on Sri Lankan Currency Formatting:** In Sri Lankan commerce, transactions operate exclusively in whole integer Sri Lankan Rupees (`LKR`); fractional cents are not used. The assistant formats all conversational fees as clean integers (e.g. `LKR 750`, `LKR 1,595`). Generative action cards provide both `"estimated_fee": 750` (clean integer Rupee ready for booking forms) and `"estimated_fee_cents": 75000` (minor units for Core API and payment gateway compatibility).
 
 #### Error Responses (Standard RFC-7807 Format)
 

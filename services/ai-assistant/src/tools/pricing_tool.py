@@ -69,8 +69,9 @@ async def pricing_tool(
             )
 
         total_fee_cents = quote_data.get("total_fee_cents") or quote_data.get("total_cents", 0)
+        total_fee_lkr = quote_data.get("total_fee") or int(round(total_fee_cents / 100.0))
         currency = quote_data.get("currency", "LKR")
-        display_amount = f"{currency} {total_fee_cents / 100:.2f}"
+        display_amount = f"{currency} {total_fee_lkr:,}"
 
         # Construct validated GenerativeAction card for the web portal
         action = GenerativeAction(
@@ -82,6 +83,7 @@ async def pricing_tool(
                 "delivery_postal_code": input_data.delivery_postal_code,
                 "weight_kg": input_data.weight_kg,
                 "service_type": input_data.service_type.value,
+                "estimated_fee": total_fee_lkr,
                 "estimated_fee_cents": total_fee_cents,
                 "currency": currency,
             },
@@ -92,6 +94,9 @@ async def pricing_tool(
             "pickup_postal_code": input_data.pickup_postal_code,
             "delivery_postal_code": input_data.delivery_postal_code,
             "service_type": input_data.service_type.value,
+            "estimated_fee": total_fee_lkr,
+            "base_fee": int(round(quote_data.get("base_fee_cents", 0) / 100.0)),
+            "weight_fee": int(round(quote_data.get("weight_fee_cents", 0) / 100.0)),
             "base_fee_cents": quote_data.get("base_fee_cents", 0),
             "weight_fee_cents": quote_data.get("weight_fee_cents", 0),
             "total_fee_cents": total_fee_cents,
@@ -106,6 +111,7 @@ async def pricing_tool(
         if close_client and settings.is_mock_mode:
             # Deterministic offline mock calculation for CI / local test execution
             fee_cents = int(35000 + (input_data.weight_kg * 7500))
+            total_fee_lkr = int(round(fee_cents / 100.0))
             currency = "LKR"
             action = GenerativeAction(
                 action_type=ActionType.NAVIGATE_BOOKING,
@@ -116,6 +122,7 @@ async def pricing_tool(
                     "delivery_postal_code": input_data.delivery_postal_code,
                     "weight_kg": input_data.weight_kg,
                     "service_type": input_data.service_type.value,
+                    "estimated_fee": total_fee_lkr,
                     "estimated_fee_cents": fee_cents,
                     "currency": currency,
                 },
@@ -125,11 +132,14 @@ async def pricing_tool(
                 "pickup_postal_code": input_data.pickup_postal_code,
                 "delivery_postal_code": input_data.delivery_postal_code,
                 "service_type": input_data.service_type.value,
+                "estimated_fee": total_fee_lkr,
+                "base_fee": 350,
+                "weight_fee": total_fee_lkr - 350,
                 "base_fee_cents": 35000,
                 "weight_fee_cents": fee_cents - 35000,
                 "total_fee_cents": fee_cents,
                 "currency": currency,
-                "formatted_display": f"{currency} {fee_cents / 100:.2f}",
+                "formatted_display": f"{currency} {total_fee_lkr:,}",
                 "estimated_transit_hours": 48,
                 "action": action.model_dump(),
                 "grounded": True,

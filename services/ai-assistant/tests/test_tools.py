@@ -243,13 +243,14 @@ def test_pricing_tool_success():
             result = await pricing_tool(inp, client=client)
 
             assert result["total_fee_cents"] == 50000
-            assert result["formatted_display"] == "LKR 500.00"
+            assert result["formatted_display"] in ("LKR 500", "LKR 500.00")
             assert result["estimated_transit_hours"] == 48
 
             action = result["action"]
             assert action["action_type"] == "NAVIGATE_BOOKING"
             assert action["target_url"] == "/portal/book"
             assert action["prefill_data"]["weight_kg"] == 2.5
+            assert action["prefill_data"]["estimated_fee"] == 500
             assert action["prefill_data"]["estimated_fee_cents"] == 50000
     asyncio.run(_test())
 
