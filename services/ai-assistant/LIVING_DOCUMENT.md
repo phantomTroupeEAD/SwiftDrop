@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.4.0` (Authoritative Baseline — Phase 4 Complete)  
+> **Specification Version:** `2.5.0` (Authoritative Baseline — Phase 5 Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -46,7 +46,7 @@ Every change to this module must rigorously preserve the following 5 domain inva
 | Invariant | Technical Definition | Concrete Enforcement | Why It Exists |
 | :--- | :--- | :--- | :--- |
 | **1. Strict Zero-Database Invariant** | The service possesses **zero SQL drivers, zero DB connection strings, and zero direct access to PostgreSQL**. | Automated test `test_zero_database_dependency_invariant` scans `requirements.txt` to fail if `psycopg2`, `sqlalchemy`, or `asyncpg` are added. | Preserves the Go Modular Monolith boundary. The AI service cannot bypass aggregate roots or corrupt state. |
-| **2. 100% Read-Only Operational Authority** | The assistant cannot mutate state, book parcels, assign couriers, or update milestones. | Tool registry exposes strictly read-only methods (`track_parcel_status`, `estimate_delivery_fee`, etc.). | Defense-in-depth: even if a prompt injection completely overrides the model, no write tool exists to invoke. |
+| **2. 100% Read-Only Operational Authority** | The assistant cannot mutate state, book parcels, assign couriers, or update milestones. | Tool registry and FastMCP expose strictly read-only methods (`track_parcel`, `estimate_shipping_fee`, etc.). | Defense-in-depth: even if a prompt injection completely overrides the model, no write tool exists to invoke. |
 | **3. Strict Zero-Hallucination Policy** | Never extrapolate or invent tracking statuses, delivery dates, or shipping fees. | Upstream 404s map to explicit deterministic "Not Found" messages; pricing strictly echoes Core API quotes in integer cents. | Ensures regulatory compliance, consumer trust, and fee calculation accuracy. |
 | **4. Decoupled Local Health Probes** | `/health/live` and `/health/ready` evaluate local event loop and cache sanity only. | Health router never makes synchronous upstream HTTP calls to Core API or Tracking API. | Prevents cascading cluster restart loops in Kubernetes if upstream services restart transiently. |
 | **5. Stateless Session Isolation** | Conversational state is isolated in an in-memory LRU cache with TTL eviction. | In-memory `cachetools.TTLCache` capped at 50 (dev) / 10,000 (prod) with a 15–30 min TTL. | Enables horizontal scaling across Kubernetes pods without distributed state or Redis dependencies. |
@@ -147,14 +147,42 @@ flowchart TD
 
 The microservice exposes all capabilities via the open **Model Context Protocol (MCP)**, allowing external AI agents (Claude Desktop, Cursor IDE, autonomous agents) to discover and execute SwiftDrop's tools:
 
+```
+                           FASTMCP ARCHITECTURE TOPOLOGY
+                           
+      [Claude Desktop / Cursor IDE]             [Automated Evaluator Agent]
+                    │                                        │
+                    ▼ (STDIO Transport)                      ▼ (SSE Transport)
+    ┌─────────────────────────────────────────────────────────────┐
+    │              FastMCP Server (src/mcp/server.py)             │
+    │                                                             │
+    │  Tools:                                                     │
+    │  - track_parcel(tracking_number)                            │
+    │  - estimate_shipping_fee(weight_kg, pickup, delivery, ...)  │
+    │  - get_my_active_parcels(authorization_token, limit, ...)   │
+    │  - explain_company_policies(query)                          │
+    │                                                             │
+    │  Resources:                                                 │
+    │  - swiftdrop://policies (Static Knowledge Base)             │
+    │  - swiftdrop://sla-matrix (Transit SLAs)                    │
+    └──────────────────────────────┬──────────────────────────────┘
+                                   │
+                                   ▼
+                       [src/tools/registry.py]
+```
+
 ### Supported Transports
 1. **STDIO Transport:** For desktop tools like Claude Desktop or Cursor. Invoked via:
    ```bash
    python -m src.mcp.server
    ```
 2. **Server-Sent Events (SSE) Dual-Channel Transport:**
-   - **Downstream Event Stream:** `GET /api/v1/ai/mcp` (Establishes persistent SSE connection).
-   - **Upstream Message Channel:** `POST /api/v1/ai/mcp/messages?session_id=<uuid>` (Accepts JSON-RPC 2.0 tool requests).
+   - Downstream Event Stream: `GET /api/v1/ai/mcp`
+   - Upstream Message Channel: `POST /api/v1/ai/mcp/messages?session_id=<uuid>`
+
+### Authoritative FastMCP Context Resources
+1. **`swiftdrop://policies`:** Exposes full authoritative shipping guidelines (`company_policies.md`) directly into model context.
+2. **`swiftdrop://sla-matrix`:** Exposes structured transit SLAs (Express 24h, Standard 48-72h, Outstation 3-5 days).
 
 ### Claude Desktop Configuration Example (`claude_desktop_config.json`)
 ```json
@@ -184,7 +212,7 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
 - `export_openai_tools()` exporting Pydantic v2 `model_json_schema()` definitions for LLM function calling.
 
 ```
-                           PHASE 3/4 INTEGRATION TOPOLOGY
+                           PHASE 3/4/5 INTEGRATION TOPOLOGY
                            
     [FastAPI Router / FastMCP Server]
                     │
@@ -208,28 +236,28 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
     (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)
 ```
 
-### Tool 1: `track_parcel_status` (`src/tools/tracking_tool.py`)
+### Tool 1: `track_parcel_status` / `track_parcel` (`src/tools/tracking_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Public shipment milestone lookup.
 - **Target Endpoint:** `GET /api/v1/tracking/public/{trackingNumber}` on Member 5's Tracking API (`TRACKING_API_URL`).
 - **Input Model:** `TrackParcelInput` — Enforces non-backtracking regex `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`) and safe URL encoding (`urllib.parse.quote`).
 - **Privacy Enforcement (`SEC-009`):** Strips recipient phone numbers (`+9477...`), full street addresses, recipient names, and internal driver notes. Only milestones, status description, and destination city are returned.
 - **Deterministic 404 Handling:** Catches HTTP 404 and returns `{found: False, tracking_number: ..., message: ..., grounded: True}`. Eliminates LLM hallucination for unknown parcels.
 
-### Tool 2: `estimate_delivery_fee` (`src/tools/pricing_tool.py`)
+### Tool 2: `estimate_delivery_fee` / `estimate_shipping_fee` (`src/tools/pricing_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Authoritative parcel delivery tariff calculation.
 - **Target Endpoint:** `POST /api/v1/pricing/quotes` on Member 2's Core Pricing Engine (`CORE_API_URL`).
 - **Input Model:** `EstimateFeeInput` (`weight_kg: 0.1-50.0`, 5-digit postal codes, service tier, optional dimensions).
 - **Output Invariant:** Echoes exact integer minor units (`total_fee_cents`), currency `LKR`, and human display string `f"LKR {total / 100:.2f}"`.
 - **Generative UI Action Card:** Automatically generates a validated `NAVIGATE_BOOKING` action card (`target_url: "/portal/book"`) prefilled with postal codes, weight, service tier, and fee.
 
-### Tool 3: `list_active_parcels` (`src/tools/parcels_tool.py`)
+### Tool 3: `list_active_parcels` / `get_my_active_parcels` (`src/tools/parcels_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Disambiguates active shipments when an authenticated user asks *"Where are my packages?"* without giving a tracking code.
 - **Target Endpoint:** `GET /api/v1/parcels` on Member 2's Core Parcels Service (`CORE_API_URL`).
 - **Authentication & IDOR Defense:** Forwards the caller's inbound `Authorization: Bearer <customer_jwt>`. If missing, raises `AuthException(401)`.
 - **Tenant Isolation (`SEC-004`/`SEC-005`):** Identity is derived solely from the signed JWT by Core API. The AI assistant never accepts caller-supplied `tenant_id` or `user_id` query parameters.
 - **PII Stripping:** Strips recipient street address and phone numbers before output is processed.
 
-### Tool 4: `explain_company_policies` (`src/tools/policy_tool.py`)
+### Tool 4: `explain_company_policies` (`src/tools/policy_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Answers questions regarding prohibited goods, packaging guidelines, insurance, and delivery transit SLA times.
 - **Authoritative Static Grounding:** `src/tools/company_policies.md` contains packaging limits (50kg, 300cm girth), prohibited goods (explosives, narcotics, uncertified batteries), transit SLAs (Express 24h, Standard 48-72h, Outstation 3-5 days), delivery attempt limits (3 attempts), and claims window (7 days).
 - **Dynamic Override Precedence:** Queries Member 7's `GET /api/v1/admin/settings` using `AI_SERVICE_ROLE_TOKEN`. Caches results for 30 minutes. If Core API is unreachable, transparently falls back to the static markdown without failing.
@@ -313,7 +341,7 @@ services/ai-assistant/
 │   │   ├── base.py                  # Abstract BaseLLMClient interface
 │   │   ├── prompts.py               # Authoritative system prompt with security guardrails
 │   │   ├── openai_adapter.py        # Universal AsyncOpenAI client with multi-turn loop (max 3)
-│   │   └── mock_adapter.py          # Deterministic regex mock engine with offline preview
+│   │   └── mock_adapter.py          # Deterministic regex mock engine with offline local preview
 │   │
 │   ├── tools/                       # Upstream Tool Execution Layer (Phase 3 Complete)
 │   │   ├── __init__.py              # Central imports registering all tools
@@ -324,11 +352,11 @@ services/ai-assistant/
 │   │   ├── policy_tool.py           # explain_company_policies -> Grounded Q&A with dynamic override
 │   │   └── company_policies.md      # Authoritative static company shipping guidelines
 │   │
-│   └── mcp/                         # Model Context Protocol (FastMCP) Server
-│       ├── __init__.py
-│       └── server.py                # FastMCP server instance, SSE & STDIO transports
+│   └── mcp/                         # Model Context Protocol (FastMCP) Server (Phase 5 Complete)
+│       ├── __init__.py              # Package exports (mcp, tools, resources)
+│       └── server.py                # FastMCP server instance, tools, swiftdrop:// resources, STDIO
 │
-└── tests/                           # Verification & Automated Test Suite (69 Tests Total)
+└── tests/                           # Verification & Automated Test Suite (81 Tests Total)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
@@ -339,7 +367,8 @@ services/ai-assistant/
     ├── test_cache.py                # LRU eviction, TTL expiry, concurrency safety (6 tests)
     ├── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
     ├── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
-    └── test_llm.py                  # Phase 4 Dual LLM engines, loop capping, rate limits (12 tests)
+    ├── test_llm.py                  # Phase 4 Dual LLM engines, loop capping, rate limits (12 tests)
+    └── test_mcp.py                  # Phase 5 FastMCP tools, swiftdrop:// resources, read-only (12 tests)
 ```
 
 ---
@@ -375,7 +404,7 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (69 Passing Tests)
+### Complete Test Suite Breakdown (81 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
    - Package structure, zero-database invariant, environment keys, Dockerfile non-root user.
 2. **`test_config.py` (7 Tests):**
@@ -392,19 +421,21 @@ python -m pytest services/ai-assistant/tests/ -v
    - Null-byte stripping, 13 XSS/open-redirect fuzzing vectors, ReDoS resistance (< 50ms for 10k chars), SSRF cloud metadata defense, cache flooding DoS bounds, `NaN`/`Infinity` rejection.
 8. **`test_tools.py` (14 Tests):**
    - Registration and schema export, unknown tool handling, invalid arguments handling, tracking tool 200 OK, SEC-009 privacy masking, 404 not-found handling, 500 & timeout errors, pricing tool LKR minor units and action cards, non-JSON HTML error handling, active parcels Bearer forwarding, missing auth rejection, static policy retrieval, SLA queries, full registry lifecycle.
-9. **`test_llm.py` (12 Tests — Phase 4 LLM Suite):**
-   - `test_system_prompt_hygiene_and_guardrails`: Enforces read-only, LKR currency, SEC-009, zero-hallucination.
-   - `test_mock_adapter_general_greeting`: Returns platform overview for general inquiries.
-   - `test_mock_adapter_tracking_query_success`: Resolves shipment tracking requests.
-   - `test_mock_adapter_tracking_query_missing_code`: Asks for canonical 15-char code when code is missing.
-   - `test_mock_adapter_pricing_quote_with_action_card`: Resolves fee estimates with `NAVIGATE_BOOKING` action.
-   - `test_mock_adapter_active_parcels_without_auth`: Enforces authentication prompt for parcel inquiries.
-   - `test_mock_adapter_policy_inquiry`: Explains restricted commodities and SLAs.
-   - `test_openai_adapter_multi_turn_tool_calling_mocked`: Validates multi-turn function calling execution loop.
-   - `test_openai_adapter_loop_capping_defense`: Verifies hard termination at 3 tool rounds.
-   - `test_openai_adapter_rate_limit_429`: Translates `openai.RateLimitError` $\rightarrow$ `RateLimitException`.
-   - `test_openai_adapter_timeout_and_connection_error`: Translates `APITimeoutError` $\rightarrow$ `UpstreamServiceException`.
-   - `test_llm_factory_selection`: Validates mock vs. production engine selection.
+9. **`test_llm.py` (12 Tests):**
+   - System prompt hygiene, general greeting, tracking query, tracking query missing code, fee estimate with action card, active parcels without auth, policy inquiry, multi-turn tool calling loop, loop capping defense (3 rounds), 429 rate limit mapping, timeout & connection error mapping, factory engine selection.
+10. **`test_mcp.py` (12 Tests — Phase 5 FastMCP Suite):**
+    - `test_mcp_server_initialization`: Verifies FastMCP server metadata and instructions.
+    - `test_mcp_registered_tools_discovery`: Verifies all 4 tools discovered with schema.
+    - `test_mcp_registered_resources_discovery`: Verifies `swiftdrop://policies` and `swiftdrop://sla-matrix`.
+    - `test_mcp_resource_policies_content`: Verifies static policy document content.
+    - `test_mcp_resource_sla_matrix_content`: Verifies structured JSON transit SLAs (24h, 72h, 120h).
+    - `test_mcp_track_parcel_success`: Verifies tracking tool execution and SEC-009 masking.
+    - `test_mcp_track_parcel_invalid_format`: Safely handles malformed tracking codes.
+    - `test_mcp_estimate_shipping_fee_success`: Computes fee quotes and booking actions.
+    - `test_mcp_estimate_shipping_fee_weight_limit_error`: Enforces max 50.0kg weight limit.
+    - `test_mcp_active_parcels_auth_enforcement`: Rejects calls without authorization token.
+    - `test_mcp_explain_company_policies`: Explains prohibited goods and guidelines.
+    - `test_mcp_read_only_invariant`: Proves zero write/delete tools registered on FastMCP.
 
 ---
 
@@ -428,6 +459,10 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 
 ## 13. Historical Decision Log, Debugging Records & Changelog
 
+### Historical Decision Record: Graceful Offline Fallback in Mock Mode
+- **Problem:** When running FastMCP tools directly in local development or test suites without upstream Core API containers running, `pricing_tool` and `tracking_tool` raised network errors, breaking offline test execution.
+- **Resolution:** Added a check in tool handlers: when `settings.is_mock_mode` is True and the upstream network call fails, the tools provide deterministic offline calculations and preview data, allowing full offline local testing and desktop tool operation.
+
 ### Historical Decision Record: Intent Priority in Mock Engine
 - **Problem:** When prompts like *"Can you track my package please?"* were evaluated, the phrase `"my package"` prematurely triggered the Active Parcels intent rather than the Tracking inquiry intent.
 - **Resolution:** Re-ordered intent evaluation in `MockLLMAdapter`: Tracking code check $\rightarrow$ Tracking inquiry without code $\rightarrow$ Active parcels $\rightarrow$ Pricing quotes $\rightarrow$ Policies $\rightarrow$ General greetings.
@@ -435,10 +470,6 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 ### Historical Decision Record: Python `cmd` Namespace Collision
 - **Problem:** Scaffolded root `cmd/` shadowed standard library module `cmd.py`.
 - **Resolution:** Removed `cmd/`. Entrypoints placed at `src/main.py` and `src/mcp/server.py`.
-
-### Historical Decision Record: Backward-Compatible Property Aliases in Settings
-- **Problem:** Config attributes were uppercase (`CORE_API_URL`, `TRACKING_API_URL`), while tools accessed lowercase properties.
-- **Resolution:** Added explicit property aliases (`core_api_base_url`, `tracking_api_base_url`, `ai_service_role_token`) to `Settings`.
 
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
@@ -449,3 +480,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.2.0` | 2026-11-02 | **Phase 2 Domain & Config Complete:** Implemented `src/core/config.py` (SecretStr masking, SSRF URL validator), `src/domain/chat.py` (DTOs, 1000-char cap, strict URL whitelist), `src/domain/tools.py` (bounds, non-backtracking regex, enums), `src/domain/errors.py` (error envelopes), `src/core/cache.py` (thread-safe LRU cache with TTL & DoS bounds). Implemented 43 tests across unit & security suites. | `43 passed in 1.63s` |
 | `2.3.0` | 2026-11-02 | **Phase 3 Upstream Clients & Read-Only Tools Complete:** Implemented central `src/tools/registry.py` (dispatch, timing, schema export), `src/tools/tracking_tool.py` (SEC-009 privacy masking, 404 safety), `src/tools/pricing_tool.py` (LKR integer cents, NAVIGATE_BOOKING action card), `src/tools/parcels_tool.py` (IDOR Bearer token forwarding), `src/tools/policy_tool.py` (static fallback + dynamic admin override), and `src/tools/company_policies.md`. Implemented 14 tests in `test_tools.py`. | `57 passed in 12.23s` |
 | `2.4.0` | 2026-11-02 | **Phase 4 Dual LLM Orchestration Engine Complete:** Implemented `src/llm/prompts.py` (system prompt with guardrails), `src/llm/base.py` (BaseLLMClient interface), `src/llm/openai_adapter.py` (universal AsyncOpenAI client with multi-turn loop, MAX_TOOL_ITERATIONS = 3 cap, rate limit & timeout mappings), `src/llm/mock_adapter.py` (deterministic regex intent engine with offline local preview), and `src/llm/__init__.py` (engine factory). Implemented 12 tests in `test_llm.py`. | `69 passed in 34.18s` |
+| `2.5.0` | 2026-11-02 | **Phase 5 Model Context Protocol (FastMCP) Server Complete:** Implemented `src/mcp/server.py` with 4 FastMCP tools (`track_parcel`, `estimate_shipping_fee`, `get_my_active_parcels`, `explain_company_policies`), 2 authoritative context resources (`swiftdrop://policies`, `swiftdrop://sla-matrix`), STDIO desktop entrypoint, and `src/mcp/__init__.py`. Implemented 12 tests in `test_mcp.py`. | `81 passed in 49.61s` |

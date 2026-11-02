@@ -61,6 +61,10 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with 30-min cache and local `company_policies.md` fallback).
 - **Permissions:** Public / Anonymous.
 
+### 2.5 Authoritative FastMCP Context Resources
+- **`swiftdrop://policies`:** Exposes full authoritative markdown shipping guidelines (`company_policies.md`) for direct LLM context window ingestion.
+- **`swiftdrop://sla-matrix`:** Exposes structured JSON transit SLAs (Express 24h, Standard 48–72h, Outstation 3–5 days).
+
 ---
 
 ## 3. REST Endpoint Specifications
