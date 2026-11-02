@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.2.0` (Authoritative Baseline — Phase 2 Complete)  
+> **Specification Version:** `2.3.0` (Authoritative Baseline — Phase 3 Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -46,8 +46,8 @@ Every change to this module must rigorously preserve the following 5 domain inva
 | Invariant | Technical Definition | Concrete Enforcement | Why It Exists |
 | :--- | :--- | :--- | :--- |
 | **1. Strict Zero-Database Invariant** | The service possesses **zero SQL drivers, zero DB connection strings, and zero direct access to PostgreSQL**. | Automated test `test_zero_database_dependency_invariant` scans `requirements.txt` to fail if `psycopg2`, `sqlalchemy`, or `asyncpg` are added. | Preserves the Go Modular Monolith boundary. The AI service cannot bypass aggregate roots or corrupt state. |
-| **2. 100% Read-Only Operational Authority** | The assistant cannot mutate state, book parcels, assign couriers, or update milestones. | Tool registry exposes strictly read-only methods (`track_parcel_status`, `estimate_shipping_fee`, etc.). | Defense-in-depth: even if a prompt injection completely overrides the model, no write tool exists to invoke. |
-| **3. Strict Zero-Hallucination Policy** | Never extrapolate or invent tracking statuses, delivery dates, or shipping fees. | Upstream 404s map to explicit "Not Found" messages; pricing strictly echoes Core API quotes in integer cents. | Ensures regulatory compliance, consumer trust, and fee calculation accuracy. |
+| **2. 100% Read-Only Operational Authority** | The assistant cannot mutate state, book parcels, assign couriers, or update milestones. | Tool registry exposes strictly read-only methods (`track_parcel_status`, `estimate_delivery_fee`, etc.). | Defense-in-depth: even if a prompt injection completely overrides the model, no write tool exists to invoke. |
+| **3. Strict Zero-Hallucination Policy** | Never extrapolate or invent tracking statuses, delivery dates, or shipping fees. | Upstream 404s map to explicit deterministic "Not Found" messages; pricing strictly echoes Core API quotes in integer cents. | Ensures regulatory compliance, consumer trust, and fee calculation accuracy. |
 | **4. Decoupled Local Health Probes** | `/health/live` and `/health/ready` evaluate local event loop and cache sanity only. | Health router never makes synchronous upstream HTTP calls to Core API or Tracking API. | Prevents cascading cluster restart loops in Kubernetes if upstream services restart transiently. |
 | **5. Stateless Session Isolation** | Conversational state is isolated in an in-memory LRU cache with TTL eviction. | In-memory `cachetools.TTLCache` capped at 50 (dev) / 10,000 (prod) with a 15–30 min TTL. | Enables horizontal scaling across Kubernetes pods without distributed state or Redis dependencies. |
 
@@ -81,7 +81,7 @@ sequenceDiagram
         Engine->>Engine: AsyncOpenAI Function Calling Loop
     end
 
-    Engine->>Tool: Execute required tool (e.g. estimate_shipping_fee)
+    Engine->>Tool: Execute required tool (e.g. estimate_delivery_fee)
     Tool->>Upstream: Upstream REST Call (POST /api/v1/pricing/quotes)
     Upstream-->>Tool: Return JSON (Tariff Breakdown in LKR cents)
     Tool-->>Engine: Tool output returned to model
@@ -167,36 +167,59 @@ The microservice exposes all capabilities via the open **Model Context Protocol 
 
 ## 6. The 4 Authoritative Tools & Upstream REST Contracts
 
-The AI Assistant and FastMCP server expose strictly read-only tools defined in `src/tools/`:
+All tool interactions are centralized through the **Tool Registry (`src/tools/registry.py`)**, which provides:
+- `@register_tool` decorator with strict schema validation.
+- Central execution timing (`duration_ms` tracking on `ToolCallRecord`).
+- Error isolation boundaries converting exceptions into structured error envelopes.
+- `export_openai_tools()` exporting Pydantic v2 `model_json_schema()` definitions for LLM function calling.
 
-### Tool 1: `track_parcel_status`
+```
+                           PHASE 3 INTEGRATION TOPOLOGY
+                           
+   [FastAPI Router / FastMCP Server]
+                   │
+                   ▼
+         [src/tools/registry.py] ── Central Dispatcher, Timing & Error Handling
+                   │
+         ┌─────────┼───────────────────────────┬───────────────────────────┐
+         ▼         ▼                           ▼                           ▼
+   [tracking_tool] [pricing_tool]              [parcels_tool]              [policy_tool]
+         │         │                           │                           │
+         │         │                           │                           ├─► company_policies.md
+         │         │                           │                           │   (Static Knowledge Base)
+         │         │                           │                           │
+         ▼ (HTTP)  ▼ (HTTP)                    ▼ (HTTP + Bearer)           ▼ (HTTP + Service Token)
+   [Tracking API]  [Core Pricing Engine]       [Core Parcels Service]      [Core Admin Settings]
+   (:8081)         (:8080)                     (:8080)                     (:8080)
+   GET /public/{id} POST /quotes               GET /parcels                GET /admin/settings
+   (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)
+```
+
+### Tool 1: `track_parcel_status` (`src/tools/tracking_tool.py`)
 - **Purpose:** Public shipment milestone lookup.
-- **Target Endpoint:** `GET /api/v1/tracking/public/{trackingNumber}` on Member 5's Tracking API (`http://tracking-api:8081`).
-- **Input Argument:** `tracking_number` matching `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`).
-- **Privacy Enforcement (`SEC-009`):** Explicitly omits recipient phone numbers, full street addresses, and recipient names. Only milestone names, timestamps, and destination city/province are returned.
-- **404 Handling:** If the tracking number does not exist, explicitly returns: `"No shipment found matching tracking number SD-..."`. Never hallucinates past milestones.
+- **Target Endpoint:** `GET /api/v1/tracking/public/{trackingNumber}` on Member 5's Tracking API (`TRACKING_API_URL`).
+- **Input Model:** `TrackParcelInput` — Enforces non-backtracking regex `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`) and safe URL encoding (`urllib.parse.quote`).
+- **Privacy Enforcement (`SEC-009`):** Strips recipient phone numbers (`+9477...`), full street addresses, recipient names, and internal driver notes. Only milestones, status description, and destination city are returned.
+- **Deterministic 404 Handling:** Catches HTTP 404 and returns `{found: False, tracking_number: ..., message: ..., grounded: True}`. Eliminates LLM hallucination for unknown parcels.
 
-### Tool 2: `estimate_shipping_fee`
-- **Purpose:** Instant parcel delivery tariff calculation.
-- **Target Endpoint:** `POST /api/v1/pricing/quotes` on Member 2's Core Pricing Engine (`http://core-api:8080`).
-- **Input Arguments:**
-  - `weight_kg`: Float (`gt=0.0`, `le=50.0`).
-  - `pickup_postal_code`: 5-digit string (e.g. `"00100"`).
-  - `delivery_postal_code`: 5-digit string (e.g. `"20000"`).
-  - `service_type`: Enum (`STANDARD`, `EXPRESS`, `SAME_DAY`).
-  - `length_cm`, `width_cm`, `height_cm`: Optional float dimensions (`gt=0.0`, `le=300.0`).
-- **Output Invariant:** Must strictly echo the exact price calculated by Core API, formatted in Sri Lankan Rupees (LKR). Emits a `NAVIGATE_BOOKING` action card.
+### Tool 2: `estimate_delivery_fee` (`src/tools/pricing_tool.py`)
+- **Purpose:** Authoritative parcel delivery tariff calculation.
+- **Target Endpoint:** `POST /api/v1/pricing/quotes` on Member 2's Core Pricing Engine (`CORE_API_URL`).
+- **Input Model:** `EstimateFeeInput` (`weight_kg: 0.1-50.0`, 5-digit postal codes, service tier, optional dimensions).
+- **Output Invariant:** Echoes exact integer minor units (`total_fee_cents`), currency `LKR`, and human display string `f"LKR {total / 100:.2f}"`.
+- **Generative UI Action Card:** Automatically generates a validated `NAVIGATE_BOOKING` action card (`target_url: "/portal/book"`) prefilled with postal codes, weight, service tier, and fee.
 
-### Tool 3: `get_my_active_parcels`
+### Tool 3: `list_active_parcels` (`src/tools/parcels_tool.py`)
 - **Purpose:** Disambiguates active shipments when an authenticated user asks *"Where are my packages?"* without giving a tracking code.
-- **Target Endpoint:** `GET /api/v1/parcels?status=active` on Member 2's Core Parcels Service (`http://core-api:8080`).
-- **Authentication:** Forwards the caller's inbound `Authorization: Bearer <customer_jwt>`.
-- **Tenant Isolation (`SEC-004`/`SEC-005`):** Core API inspects JWT claims (`sub`, `tenant_id`) and restricts the query to parcels owned by that specific customer. The AI Assistant never sees or processes other users' parcels.
+- **Target Endpoint:** `GET /api/v1/parcels` on Member 2's Core Parcels Service (`CORE_API_URL`).
+- **Authentication & IDOR Defense:** Forwards the caller's inbound `Authorization: Bearer <customer_jwt>`. If missing, raises `AuthException(401)`.
+- **Tenant Isolation (`SEC-004`/`SEC-005`):** Identity is derived solely from the signed JWT by Core API. The AI assistant never accepts caller-supplied `tenant_id` or `user_id` query parameters.
+- **PII Stripping:** Strips recipient street address and phone numbers before output is processed.
 
-### Tool 4: `explain_company_policies`
+### Tool 4: `explain_company_policies` (`src/tools/policy_tool.py`)
 - **Purpose:** Answers questions regarding prohibited goods, packaging guidelines, insurance, and delivery transit SLA times.
-- **Static Grounding:** Grounded against `src/tools/company_policies.md`.
-- **Dynamic Override Invariant:** Queries Member 7's `GET /api/v1/admin/settings` using `Authorization: Bearer <AI_SERVICE_ROLE_TOKEN>` (cached for 30 minutes). If an administrative threshold (e.g. max weight cap or COD limit) in the database contradicts the markdown file, the live API setting takes absolute precedence.
+- **Authoritative Static Grounding:** `src/tools/company_policies.md` contains packaging limits (50kg, 300cm girth), prohibited goods (explosives, narcotics, uncertified batteries), transit SLAs (Express 24h, Standard 48-72h, Outstation 3-5 days), delivery attempt limits (3 attempts), and claims window (7 days).
+- **Dynamic Override Precedence:** Queries Member 7's `GET /api/v1/admin/settings` using `AI_SERVICE_ROLE_TOKEN`. Caches results for 30 minutes. If Core API is unreachable, transparently falls back to the static markdown without failing.
 
 ---
 
@@ -260,13 +283,13 @@ services/ai-assistant/
 │   │
 │   ├── core/                        # Technical Drivers & Cross-Cutting Concerns
 │   │   ├── __init__.py
-│   │   ├── config.py                # Pydantic BaseSettings loading .env configuration
+│   │   ├── config.py                # Pydantic BaseSettings loading .env, property aliases, SSRF block
 │   │   ├── cache.py                 # In-memory LRU session store (TTL 15m, max 50 sessions)
 │   │   └── logging.py               # Structured JSON logger with PII masking
 │   │
 │   ├── domain/                      # Pure Domain Logic & Data Transfer Objects
 │   │   ├── __init__.py
-│   │   ├── chat.py                  # ChatMessage, ChatMessageRequest, ChatMessageResponse, GenerativeAction
+│   │   ├── chat.py                  # ChatMessage, ChatMessageRequest, ChatMessageResponse, GenerativeAction, ToolCallRecord
 │   │   ├── tools.py                 # Tool input arguments schemas & validation models
 │   │   └── errors.py                # Standardized domain exceptions & error envelopes
 │   │
@@ -276,20 +299,20 @@ services/ai-assistant/
 │   │   ├── openai_adapter.py        # Universal AsyncOpenAI function-calling client
 │   │   └── mock_adapter.py          # Deterministic regex/fixture mock adapter for offline CI
 │   │
-│   ├── tools/                       # Upstream Tool Execution Layer
-│   │   ├── __init__.py
-│   │   ├── registry.py              # Central tool registration decorator & dispatcher
-│   │   ├── tracking_tool.py         # track_parcel_status -> Tracking API client
-│   │   ├── pricing_tool.py          # estimate_shipping_fee -> Core API pricing client
-│   │   ├── parcels_tool.py          # get_my_active_parcels -> Core API parcels client
-│   │   ├── policy_tool.py           # explain_company_policies -> Grounded Q&A client
+│   ├── tools/                       # Upstream Tool Execution Layer (Phase 3 Complete)
+│   │   ├── __init__.py              # Central imports registering all tools
+│   │   ├── registry.py              # Central @register_tool decorator, timing & error boundary
+│   │   ├── tracking_tool.py         # track_parcel_status -> Tracking API with SEC-009 masking
+│   │   ├── pricing_tool.py          # estimate_delivery_fee -> Core API pricing + NAVIGATE_BOOKING card
+│   │   ├── parcels_tool.py          # list_active_parcels -> Core API parcels with IDOR Bearer forward
+│   │   ├── policy_tool.py           # explain_company_policies -> Grounded Q&A with dynamic override
 │   │   └── company_policies.md      # Authoritative static company shipping guidelines
 │   │
 │   └── mcp/                         # Model Context Protocol (FastMCP) Server
 │       ├── __init__.py
 │       └── server.py                # FastMCP server instance, SSE & STDIO transports
 │
-└── tests/                           # Verification & Automated Test Suite
+└── tests/                           # Verification & Automated Test Suite (57 Tests Total)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
@@ -298,7 +321,8 @@ services/ai-assistant/
     ├── test_domain_tools.py         # Tool argument bounds, regex, and enums (7 tests)
     ├── test_domain_errors.py        # Error envelopes and exception handlers (6 tests)
     ├── test_cache.py                # LRU eviction, TTL expiry, concurrency safety (6 tests)
-    └── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
+    ├── test_security_edge_cases.py  # Prompt injection, XSS paths, ReDoS, memory exhaustion (6 tests)
+    └── test_tools.py                # Phase 3 Tool registry, upstream mocks, SEC-009 privacy (14 tests)
 ```
 
 ---
@@ -334,9 +358,9 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (43 Passing Tests)
+### Complete Test Suite Breakdown (57 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
-   - `test_package_structure`: Asserts all packages (`src/api`, `src/core`, `src/domain`, `src/llm`, `src/mcp`, `src/tools`) contain valid initializers.
+   - `test_package_structure`: Asserts all packages contain valid initializers.
    - `test_zero_database_dependency_invariant`: Asserts zero database drivers exist in `requirements.txt`.
    - `test_env_example_has_mandatory_keys`: Asserts all 11 required environment variables are documented.
    - `test_dockerfile_security_invariants`: Asserts `USER appuser`, healthcheck, and port 8000 in `Dockerfile`.
@@ -375,6 +399,21 @@ python -m pytest services/ai-assistant/tests/ -v
    - `test_ssrf_cloud_metadata_probing`: Proves rejection of all cloud metadata variants.
    - `test_cache_flooding_dos_defense`: Floods 1,000 sessions into a 50-capacity cache and verifies memory stays bounded.
    - `test_floating_point_special_values_in_pricing`: Proves `NaN` and `Infinity` floats are rejected.
+8. **`test_tools.py` (14 Tests — Phase 3 Tool Suite):**
+   - `test_tool_registry_registration_and_export`: Verifies all 4 tools registered, `is_read_only=True`, and valid OpenAPI schemas exported.
+   - `test_execute_tool_unknown_tool`: Verifies unknown tool returns `status="ERROR"` and duration.
+   - `test_execute_tool_invalid_arguments`: Verifies invalid tracking code fails schema validation without crashing.
+   - `test_track_parcel_tool_success`: Verifies upstream 200 OK parsing with milestone extraction.
+   - `test_track_parcel_tool_sec009_privacy_masking`: Verifies recipient phone numbers, street address, and driver notes are completely stripped.
+   - `test_track_parcel_tool_404_not_found`: Proves deterministic grounded not-found response.
+   - `test_track_parcel_tool_upstream_500_and_timeout`: Proves `UpstreamServiceException` handling for 500 status and `httpx.ReadTimeout`.
+   - `test_pricing_tool_success`: Verifies minor unit cents (`total_fee_cents`), display string, and `NAVIGATE_BOOKING` action.
+   - `test_pricing_tool_malformed_json_and_upstream_error`: Verifies non-JSON HTML error page handling.
+   - `test_parcels_tool_success_with_bearer`: Verifies caller's Bearer token is forwarded to Core API and recipient PII is stripped.
+   - `test_parcels_tool_missing_or_unauthorized`: Proves `AuthException` when Bearer token is missing or upstream returns 401.
+   - `test_policy_tool_static_fallback`: Verifies prohibited goods and SLAs retrieved from static markdown.
+   - `test_policy_tool_transit_sla_query`: Verifies Colombo express delivery SLA retrieval.
+   - `test_execute_tool_full_lifecycle_via_registry`: Verifies end-to-end execution through registry with timing and error isolation.
 
 ---
 
@@ -402,6 +441,10 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 - **Problem:** The directory was initially scaffolded with a `cmd/` package matching Go project conventions. In Python, having a root `cmd/` directory shadows the standard library module `cmd.py` (which powers Python's interactive debugger `pdb`). When `pytest` initialized its debugging hooks, it crashed with `AttributeError: module 'cmd' has no attribute 'Cmd'`.
 - **Resolution:** Removed `cmd/`. Entrypoints are placed at `src/main.py` and `src/mcp/server.py`.
 
+### Historical Decision Record: Backward-Compatible Property Aliases in Settings
+- **Problem:** Config attributes were initially defined with uppercase names (`CORE_API_URL`, `TRACKING_API_URL`). Tools referencing lowercase properties (`core_api_base_url`, `tracking_api_base_url`) threw `AttributeError`.
+- **Resolution:** Added explicit property aliases (`core_api_base_url`, `tracking_api_base_url`, `ai_service_role_token`) to `Settings` in `src/core/config.py`, providing seamless dual access without breaking existing code.
+
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
 | :--- | :--- | :--- | :--- |
@@ -409,3 +452,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.0.0` | 2026-10-25 | Harmonized specifications with audit findings | Member 10 & Review Agent |
 | `2.1.0` | 2026-11-02 | **Phase 1 Scaffolding Complete:** Created `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, secure `Dockerfile`, complete layered package tree, removed shadowed `cmd/` directory, automated smoke tests. | `4 passed in 0.05s` |
 | `2.2.0` | 2026-11-02 | **Phase 2 Domain & Config Complete:** Implemented `src/core/config.py` (SecretStr masking, SSRF URL validator), `src/domain/chat.py` (DTOs, 1000-char cap, strict URL whitelist), `src/domain/tools.py` (bounds, non-backtracking regex, enums), `src/domain/errors.py` (error envelopes), `src/core/cache.py` (thread-safe LRU cache with TTL & DoS bounds). Implemented 43 tests across unit & security suites. | `43 passed in 1.63s` |
+| `2.3.0` | 2026-11-02 | **Phase 3 Upstream Clients & Read-Only Tools Complete:** Implemented central `src/tools/registry.py` (dispatch, timing, schema export), `src/tools/tracking_tool.py` (SEC-009 privacy masking, 404 safety), `src/tools/pricing_tool.py` (LKR integer cents, NAVIGATE_BOOKING action card), `src/tools/parcels_tool.py` (IDOR Bearer token forwarding), `src/tools/policy_tool.py` (static fallback + dynamic admin override), and `src/tools/company_policies.md`. Implemented 14 tests in `test_tools.py`. | `57 passed in 12.23s` |

@@ -113,6 +113,18 @@ class Settings(BaseSettings):
         return v_clean
 
     @property
+    def core_api_base_url(self) -> str:
+        return self.CORE_API_URL
+
+    @property
+    def tracking_api_base_url(self) -> str:
+        return self.TRACKING_API_URL
+
+    @property
+    def ai_service_role_token(self) -> SecretStr:
+        return self.AI_SERVICE_ROLE_TOKEN
+
+    @property
     def is_mock_mode(self) -> bool:
         """Determine if service should execute offline deterministic mock LLM."""
         return self.MOCK_LLM_MODE or len(self.LLM_API_KEY.get_secret_value().strip()) == 0

@@ -19,35 +19,47 @@
 
 ---
 
-## 2. FastMCP Tool Definitions
+## 2. FastMCP & Read-Only Tool Definitions
 
-The AI Assistant service also exposes tools via the Model Context Protocol (FastMCP) for desktop and agentic clients:
+The AI Assistant service exposes approved read-only tools via the Model Context Protocol (FastMCP) and standard OpenAI function calling:
 
-### 2.1 `track_parcel`
-- **Description:** Retrieve real-time tracking milestones and current status for a parcel.
+### 2.1 `track_parcel_status`
+- **Description:** Retrieve real-time tracking milestones, status description, and destination city for a parcel.
 - **Parameters:**
-  - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$`.
-- **Target Backend Call:** `GET http://tracking-api:8001/api/v1/tracking/public/{tracking_number}`
+  - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`).
+- **Target Upstream Endpoint:** `GET http://tracking-api:8081/api/v1/tracking/public/{tracking_number}`
+- **Security & Privacy:** Strictly enforces SEC-009 privacy masking (omits phone numbers, street addresses, driver notes).
 - **Permissions:** Public / Anonymous.
 
-### 2.2 `estimate_shipping_fee`
-- **Description:** Compute authoritative delivery fee estimate and tariff breakdown based on parcel dimensions, weight, and delivery zones.
+### 2.2 `estimate_delivery_fee`
+- **Description:** Compute authoritative delivery fee quote, transit hours estimate, and prefilled booking action based on package weight, dimensions, and postal codes.
 - **Parameters:**
-  - `weight_kg` (float, required): Weight in kilograms (> 0).
-  - `length_cm` (float, required): Parcel length in cm (> 0).
-  - `width_cm` (float, required): Parcel width in cm (> 0).
-  - `height_cm` (float, required): Parcel height in cm (> 0).
-  - `service_type` (string, required): Delivery tier: `"STANDARD"`, `"EXPRESS"`, or `"SAME_DAY"`.
-  - `pickup_postal` (string, required): Postal code for pickup origin (e.g. `"10100"`).
-  - `delivery_postal` (string, required): Postal code for delivery destination (e.g. `"00100"`).
-- **Target Backend Call:** `POST http://core-api:8080/api/v1/pricing/quotes`
+  - `weight_kg` (float, required): Package weight in kilograms (`0.0 < weight_kg <= 50.0`).
+  - `pickup_postal_code` (string, required): 5-digit origin postal code (e.g. `"00100"`).
+  - `delivery_postal_code` (string, required): 5-digit destination postal code (e.g. `"20000"`).
+  - `service_type` (string, optional): Delivery tier: `"STANDARD"`, `"EXPRESS"`, or `"SAME_DAY"` (default: `"STANDARD"`).
+  - `length_cm` (float, optional): Package length in cm (`0.0 < length_cm <= 300.0`).
+  - `width_cm` (float, optional): Package width in cm (`0.0 < width_cm <= 300.0`).
+  - `height_cm` (float, optional): Package height in cm (`0.0 < height_cm <= 300.0`).
+- **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes`
+- **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
 - **Permissions:** Public / Anonymous.
 
-### 2.3 `get_my_active_parcels`
-- **Description:** Retrieve currently active shipments (in-transit, out-for-delivery) for the authenticated customer or merchant.
-- **Parameters:** None.
-- **Target Backend Call:** `GET http://core-api:8080/api/v1/parcels` (forwards caller's `Authorization: Bearer <JWT>`).
-- **Permissions:** Customer (`CUSTOMER`) or Merchant (`MERCHANT`).
+### 2.3 `list_active_parcels`
+- **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.
+- **Parameters:**
+  - `status` (string, optional): Filter by parcel lifecycle status (e.g. `"IN_TRANSIT"`).
+  - `limit` (integer, optional): Maximum parcels to return (`1 <= limit <= 50`, default: `10`).
+- **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/parcels` (forwards caller's `Authorization: Bearer <JWT>`).
+- **Security & Isolation:** IDOR-safe; Core API extracts tenant and customer identity from the verified JWT.
+- **Permissions:** Authenticated Customer or Merchant.
+
+### 2.4 `explain_company_policies`
+- **Description:** Explain courier company policies, prohibited goods, packaging standards, transit SLAs, and dispute rules.
+- **Parameters:**
+  - `query` (string, required): Inquired policy topic (e.g. `"prohibited items"`, `"packaging limits"`, `"SLA"`).
+- **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with 30-min cache and local `company_policies.md` fallback).
+- **Permissions:** Public / Anonymous.
 
 ---
 

@@ -120,6 +120,10 @@ class ToolCallRecord(BaseModel):
     result: Optional[Any] = None
     status: str = Field(default="SUCCESS", pattern="^(SUCCESS|ERROR|SKIPPED)$")
     error_message: Optional[str] = None
+    duration_ms: Optional[int] = Field(
+        default=None,
+        description="Execution duration in milliseconds",
+    )
 
 
 class ChatMessageResponse(BaseModel):
