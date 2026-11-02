@@ -26,6 +26,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 
 - **Natural Language Tracking:** Public tracking queries returning sanitized milestone timelines without disclosing personal customer information (`SEC-009`).
 - **Instant Shipping Fee Estimation:** Instantaneous price estimations calculated via Core API's pricing engine.
+- **Sri Lanka Postal Directory & Town Resolution:** Built-in directory of all 25 districts and sub-district towns (e.g. Walasmulla `82450`, Kadugannawa `20430`, Mawanella `71500`), enabling instant postal code lookups and automated quote routing.
 - **Generative UI Action Cards:** Generates pre-filled `NAVIGATE_BOOKING` cards directly in the React web portal for seamless 1-click booking confirmation.
 - **FastMCP Protocol Server:** Exposes tools via STDIO and Server-Sent Events (SSE) for external AI agent integration (**+5 Assignment Bonus Marks**).
 - **Dual LLM Engine:** Universal `AsyncOpenAI` client (OpenRouter, Groq, NVIDIA NIM, OpenAI, Ollama) paired with an offline deterministic mock adapter for zero-cost automated CI testing.
@@ -74,12 +75,23 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 - **Interactive Swagger Docs:** `http://localhost:8000/docs`
 - **Liveness Probe:** `http://localhost:8000/health/live`
 
-### 3. Run the FastMCP Server (For Cursor / Claude Desktop)
+### 3. Run the Unified Mock Upstream Server (Port 8085)
+To test live tool execution in isolation without running the Core API (8080) or Tracking API (8081):
+```bash
+# Terminal 1: Run the mock upstream server on dedicated port 8085
+python -m scripts.mock_upstream_server
+
+# Terminal 2: Run AI assistant with USE_MOCK_UPSTREAM=true in .env
+python -m uvicorn src.main:app --port 8000 --reload
+```
+- **Mock Server Swagger Docs:** `http://localhost:8085/docs`
+
+### 4. Run the FastMCP Server (For Cursor / Claude Desktop)
 ```bash
 python -m src.mcp.server
 ```
 
-### 4. Run Automated Tests
+### 5. Run Automated Tests
 ```bash
 python -m pytest -v
 ```

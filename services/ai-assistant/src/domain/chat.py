@@ -80,7 +80,7 @@ class ChatMessageRequest(BaseModel):
     )
     conversation_id: UUID = Field(
         default_factory=uuid4,
-        description="Unique session UUID for conversation correlation",
+        description="Unique session UUID for conversation correlation. Reusing the returned conversation_id across turns maintains chat memory.",
     )
     locale: str = Field(
         default="en-US",

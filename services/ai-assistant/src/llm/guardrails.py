@@ -63,4 +63,17 @@ def sanitize_assistant_identity(text: str) -> str:
     )
     sanitized = re.sub(p4, r"\1 for the SwiftDrop courier network", sanitized)
 
+    # Pattern 5: Scrub leaked internal tool or function names
+    tool_replacements = [
+        (r"(`)?estimate_delivery_fee(`)?(\s+tool)?", "fee estimation engine"),
+        (r"(`)?estimate_shipping_fee(`)?(\s+tool)?", "fee estimation engine"),
+        (r"(`)?track_parcel_status(`)?(\s+tool)?", "parcel tracking system"),
+        (r"(`)?track_parcel(`)?(\s+tool)?", "parcel tracking system"),
+        (r"(`)?list_active_parcels(`)?(\s+tool)?", "order lookup system"),
+        (r"(`)?get_my_active_parcels(`)?(\s+tool)?", "order lookup system"),
+        (r"(`)?explain_company_policies(`)?(\s+tool)?", "shipping policy guidelines"),
+    ]
+    for pattern, replacement in tool_replacements:
+        sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
+
     return sanitized

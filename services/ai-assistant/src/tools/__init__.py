@@ -12,6 +12,7 @@ from src.tools.tracking_tool import mask_tracking_data, track_parcel_tool
 from src.tools.pricing_tool import pricing_tool
 from src.tools.parcels_tool import parcels_tool, sanitize_parcel_item
 from src.tools.policy_tool import policy_tool
+from src.tools.postal_tool import postal_tool
 
 __all__ = [
     "ToolDefinition",
@@ -26,4 +27,5 @@ __all__ = [
     "parcels_tool",
     "sanitize_parcel_item",
     "policy_tool",
+    "postal_tool",
 ]

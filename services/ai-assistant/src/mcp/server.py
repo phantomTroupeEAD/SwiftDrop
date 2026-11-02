@@ -123,6 +123,19 @@ async def explain_company_policies(query: str) -> Dict[str, Any]:
     return {"error": record.error_message}
 
 
+@mcp.tool()
+async def lookup_postal_code(city_or_area: str) -> Dict[str, Any]:
+    """Lookup Sri Lankan 5-digit postal code, administrative district, and province for any town or suburb.
+
+    Args:
+        city_or_area: City, town, suburb, or postal zone (e.g. 'Walasmulla', 'Kadugannawa', 'Colombo 03', 'Kegalle').
+    """
+    record = await execute_tool("lookup_postal_code", {"query": city_or_area})
+    if record.status == "SUCCESS" and isinstance(record.result, dict):
+        return record.result
+    return {"found": False, "error": record.error_message}
+
+
 # -------------------------------------------------------------------------
 # Authoritative MCP Resources (Context Injection for External LLMs)
 # -------------------------------------------------------------------------

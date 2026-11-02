@@ -66,6 +66,26 @@ class Settings(BaseSettings):
         description="Internal network URL for Tracking Service",
     )
 
+    # Unified Mock Upstream Services Configuration (for local cross-tool testing)
+    USE_MOCK_UPSTREAM: bool = Field(
+        default=False,
+        description="When true, tool HTTP requests route to the local unified mock upstream server",
+    )
+    MOCK_UPSTREAM_PORT: int = Field(
+        default=8085,
+        ge=1024,
+        le=65535,
+        description="Dedicated unallocated port for the unified mock upstream server (avoids collision with 8080)",
+    )
+    MOCK_CORE_API_URL: str = Field(
+        default="http://127.0.0.1:8085",
+        description="URL for the unified mock Core API service",
+    )
+    MOCK_TRACKING_API_URL: str = Field(
+        default="http://127.0.0.1:8085",
+        description="URL for the unified mock Tracking API service",
+    )
+
     # Security, Service Tokens & Rate Limiting
     AI_SERVICE_ROLE_TOKEN: SecretStr = Field(
         default=SecretStr("dev-internal-secret-key-123"),
@@ -102,7 +122,13 @@ class Settings(BaseSettings):
         description="In-memory cache TTL for company policy overrides",
     )
 
-    @field_validator("LLM_BASE_URL", "CORE_API_URL", "TRACKING_API_URL")
+    @field_validator(
+        "LLM_BASE_URL",
+        "CORE_API_URL",
+        "TRACKING_API_URL",
+        "MOCK_CORE_API_URL",
+        "MOCK_TRACKING_API_URL",
+    )
     @classmethod
     def validate_http_url(cls, v: str) -> str:
         """Validate URL scheme and block link-local/cloud metadata SSRF targets."""
@@ -115,10 +141,14 @@ class Settings(BaseSettings):
 
     @property
     def core_api_base_url(self) -> str:
+        if self.USE_MOCK_UPSTREAM:
+            return self.MOCK_CORE_API_URL
         return self.CORE_API_URL
 
     @property
     def tracking_api_base_url(self) -> str:
+        if self.USE_MOCK_UPSTREAM:
+            return self.MOCK_TRACKING_API_URL
         return self.TRACKING_API_URL
 
     @property

@@ -134,3 +134,21 @@ def test_identity_sanitizer_guardrail_unit():
         assert "Gemini" not in sanitized
         assert "Kimi" not in sanitized
 
+
+def test_internal_tool_name_scrubbing_guardrail():
+    """Verify sanitize_assistant_identity replaces raw tool names with customer-facing terminology."""
+    from src.llm.guardrails import sanitize_assistant_identity
+
+    leaked = (
+        "The `estimate_delivery_fee` tool requires precise 5-digit postal codes. "
+        "You can also use track_parcel_status to check updates or list_active_parcels."
+    )
+    scrubbed = sanitize_assistant_identity(leaked)
+
+    assert "estimate_delivery_fee" not in scrubbed
+    assert "track_parcel_status" not in scrubbed
+    assert "list_active_parcels" not in scrubbed
+    assert "fee estimation engine" in scrubbed
+    assert "parcel tracking system" in scrubbed
+    assert "order lookup system" in scrubbed
+

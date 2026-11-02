@@ -378,3 +378,52 @@ def test_execute_tool_full_lifecycle_via_registry():
         assert "300.0 cm" in record.result["policy_content"]
         assert "50.0 kg" in record.result["policy_content"]
     asyncio.run(_test())
+
+
+def test_sri_lanka_city_to_postal_code_resolution():
+    """Verify Sri Lankan city and non-district town names resolve accurately."""
+    from src.core.postal_codes import resolve_postal_code
+
+    assert resolve_postal_code("Anuradhapura") == "50000"
+    assert resolve_postal_code("kegalle") == "71000"
+    assert resolve_postal_code("Walasmulla") == "82450"
+    assert resolve_postal_code("Kadugannawa") == "20430"
+    assert resolve_postal_code("Mawanella") == "71500"
+    assert resolve_postal_code("Colombo") == "00100"
+    assert resolve_postal_code("Kandy") == "20000"
+    assert resolve_postal_code("Galle") == "80000"
+    assert resolve_postal_code("Jaffna") == "40000"
+    assert resolve_postal_code("00100") == "00100"
+    assert resolve_postal_code("unknown_place_xyz") is None
+
+
+def test_lookup_postal_code_tool_execution():
+    """Verify lookup_postal_code tool execution for sub-district towns like Walasmulla and Kadugannawa."""
+    async def _test():
+        # Test Walasmulla (Hambantota district)
+        res_walasmulla = await execute_tool("lookup_postal_code", {"query": "Walasmulla"})
+        assert res_walasmulla.status == "SUCCESS"
+        assert res_walasmulla.result["found"] is True
+        assert res_walasmulla.result["postal_code"] == "82450"
+        assert res_walasmulla.result["district"] == "Hambantota"
+
+        # Test Kadugannawa (Kandy district)
+        res_kadugannawa = await execute_tool("lookup_postal_code", {"query": "Kadugannawa"})
+        assert res_kadugannawa.status == "SUCCESS"
+        assert res_kadugannawa.result["found"] is True
+        assert res_kadugannawa.result["postal_code"] == "20430"
+        assert res_kadugannawa.result["district"] == "Kandy"
+
+    asyncio.run(_test())
+
+
+def test_estimate_fee_input_accepts_city_names():
+    """Verify EstimateFeeInput automatically converts city names to postal codes."""
+    inp = EstimateFeeInput(
+        weight_kg=6.3,
+        pickup_postal_code="Anuradhapura",
+        delivery_postal_code="Kegalle",
+    )
+    assert inp.pickup_postal_code == "50000"
+    assert inp.delivery_postal_code == "71000"
+    assert inp.weight_kg == 6.3

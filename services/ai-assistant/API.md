@@ -64,7 +64,14 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with local `company_policies.md` grounding).
 - **Permissions:** Public / Anonymous.
 
-### 2.5 Authoritative FastMCP Context Resources
+### 2.5 `lookup_postal_code`
+- **Description:** Lookup authoritative Sri Lankan 5-digit postal code, administrative district, and province for any city, town, suburb, or postal division (e.g. "Walasmulla" → 82450, "Kadugannawa" → 20430, "Mawanella" → 71500).
+- **Parameters:**
+  - `query` (string, required): City, town, suburb, or area name (1 to 100 characters).
+- **Data Source:** Authoritative in-memory Sri Lanka Postal Directory (`src/core/postal_codes.py`) covering all 25 districts and commercial towns.
+- **Permissions:** Public / Anonymous.
+
+### 2.6 Authoritative FastMCP Context Resources
 - **`swiftdrop://policies`:** Exposes full authoritative markdown shipping guidelines (`company_policies.md`) for direct LLM context window ingestion.
 - **`swiftdrop://sla-matrix`:** Exposes structured JSON transit SLAs (Express 24h, Standard 48–72h, Outstation 3–5 days).
 
@@ -92,7 +99,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 
 #### Request Fields
 - `prompt` (string, required): Natural language input (1 to 1,000 characters).
-- `conversation_id` (string, optional, UUID format): Correlates multi-turn sessions in the cache. Automatically generated as a UUIDv4 if omitted.
+- `conversation_id` (string, optional, UUID format): Correlates multi-turn sessions in the cache. Supply the returned `conversation_id` across subsequent requests to preserve conversational context, recall prior tracking codes, and avoid redundant self-introductions. Automatically generated as a UUIDv4 if omitted.
 - `locale` (string, optional): Client locale (defaults to `"en-US"`).
 - `history` (array of `ChatMessage`, optional): Explicit prior turns if client manages context locally.
 

@@ -184,3 +184,97 @@ def test_cors_preflight_headers(client: TestClient):
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-origin") in ("*", "http://localhost:5173")
     assert "POST" in response.headers.get("access-control-allow-methods", "")
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_multi_turn_entity_recall_and_no_repetitive_intro(client: TestClient):
+    """Verify follow-up turns do not repeat 'Hello! I am SwiftDrop AI' and recall Turn 1 tracking code."""
+    session_id = str(uuid.uuid4())
+
+    # Turn 1: Tracking request
+    res1 = client.post(
+        "/api/v1/ai/chat",
+        json={
+            "conversation_id": session_id,
+            "prompt": "Track my parcel SD-20261102-00001",
+        },
+    )
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert "SD-20261102-00001" in data1["reply"]
+
+    # Turn 2: Follow-up question referring to "it" without repeating tracking code
+    res2 = client.post(
+        "/api/v1/ai/chat",
+        json={
+            "conversation_id": session_id,
+            "prompt": "Where is it going?",
+        },
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+
+    # Invariant A: Follow-up MUST NOT repeat self-introduction
+    assert not data2["reply"].startswith("Hello! I am SwiftDrop AI")
+    assert not data2["reply"].startswith("Hello! I am **SwiftDrop AI**")
+
+    # Invariant B: Follow-up MUST recall destination or tracking number from Turn 1
+    assert "SD-20261102-00001" in data2["reply"] or "Colombo" in data2["reply"]
+
+    # Turn 3: Acknowledgment
+    res3 = client.post(
+        "/api/v1/ai/chat",
+        json={
+            "conversation_id": session_id,
+            "prompt": "Thank you!",
+        },
+    )
+    assert res3.status_code == 200
+    data3 = res3.json()
+    assert "welcome" in data3["reply"].lower()
+    assert not data3["reply"].startswith("Hello! I am")
+
+
+def test_chat_endpoint_pricing_with_city_names_and_no_tool_leakage(client: TestClient):
+    """Verify chat endpoint resolves city names to postal codes and never leaks raw tool names."""
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"prompt": "How much does it cost to send a 6.3kg box from Anuradhapura to Kegalle?"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    # Must calculate fee using resolved postal codes 50000 -> 71000
+    assert "estimate_delivery_fee" in data["tools_called"]
+    assert "50000" in data["reply"]
+    assert "71000" in data["reply"]
+    assert "6.3 kg" in data["reply"] or "6.3kg" in data["reply"]
+    assert "actions" in data and len(data["actions"]) > 0
+
+    # Must NOT leak raw internal tool names into customer reply
+    assert "estimate_delivery_fee" not in data["reply"]
+    assert "`estimate_delivery_fee`" not in data["reply"]
+
+
+def test_chat_endpoint_non_district_towns_walasmulla_kadugannawa(client: TestClient):
+    """Verify chat endpoint accurately handles non-district towns like Walasmulla and Kadugannawa."""
+    # 1. Quote calculation between sub-district towns
+    res_quote = client.post(
+        "/api/v1/ai/chat",
+        json={"prompt": "How much for 4kg from Walasmulla to Kadugannawa?"},
+    )
+    assert res_quote.status_code == 200
+    data_quote = res_quote.json()
+    assert "82450" in data_quote["reply"]  # Walasmulla postal code
+    assert "20430" in data_quote["reply"]  # Kadugannawa postal code
+    assert "estimate_delivery_fee" in data_quote["tools_called"]
+
+    # 2. Direct postal code query for non-district town
+    res_code = client.post(
+        "/api/v1/ai/chat",
+        json={"prompt": "What is the postal code for Walasmulla?"},
+    )
+    assert res_code.status_code == 200
+    data_code = res_code.json()
+    assert "82450" in data_code["reply"]
+    assert "lookup_postal_code" in data_code["tools_called"]

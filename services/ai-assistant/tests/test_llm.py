@@ -281,3 +281,56 @@ def test_llm_factory_selection():
     # In CI / mock environment, get_llm_client() returns MockLLMAdapter
     client = get_llm_client()
     assert isinstance(client, MockLLMAdapter)
+
+
+def test_mock_adapter_multi_turn_tracking_and_price_recall():
+    """Verify MockLLMAdapter resolves tracking code and postal codes from history."""
+    async def _test():
+        adapter = MockLLMAdapter()
+        conv_id = uuid4()
+
+        # Turn 1: user asks to track a parcel
+        hist = [
+            ChatMessage(role=MessageRole.USER, content="Track SD-20261102-00001"),
+            ChatMessage(
+                role=MessageRole.ASSISTANT,
+                content="Tracking Update for SD-20261102-00001: Destination: Colombo",
+            ),
+        ]
+
+        # Turn 2: user asks follow-up referring to "it"
+        res = await adapter.generate_reply("Where is it going?", hist, conv_id)
+        assert "SD-20261102-00001" in res.reply
+        assert not res.reply.startswith("Hello! I am")
+
+        # Turn 3: user asks for pricing with history containing postal codes
+        hist_pricing = [
+            ChatMessage(role=MessageRole.USER, content="Quote for 2kg from 00100 to 20000"),
+            ChatMessage(role=MessageRole.ASSISTANT, content="Total Fee: LKR 500.00"),
+        ]
+        res_price = await adapter.generate_reply("What about 5kg?", hist_pricing, conv_id)
+        assert "00100" in res_price.reply
+        assert "20000" in res_price.reply
+        assert "5.0 kg" in res_price.reply or "5 kg" in res_price.reply
+        assert not res_price.reply.startswith("Hello! I am")
+
+    asyncio.run(_test())
+
+
+def test_mock_adapter_acknowledgments_and_general_help():
+    """Verify MockLLMAdapter handles 'thanks' and general inquiries without repeating introduction."""
+    async def _test():
+        adapter = MockLLMAdapter()
+        conv_id = uuid4()
+
+        # Thanks inquiry
+        res_thanks = await adapter.generate_reply("Thanks for your help!", [], conv_id)
+        assert "welcome" in res_thanks.reply.lower()
+        assert not res_thanks.reply.startswith("Hello! I am")
+
+        # General inquiry
+        res_general = await adapter.generate_reply("What services do you offer?", [], conv_id)
+        assert not res_general.reply.startswith("Hello! I am **SwiftDrop AI**")
+        assert "track a parcel" in res_general.reply
+
+    asyncio.run(_test())

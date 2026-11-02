@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.6.0` (Authoritative Baseline — Phase 6 Complete)  
+> **Specification Version:** `2.8.0` (Authoritative Baseline — Postal Directory & Name Guardrails Active)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -203,7 +203,7 @@ The microservice exposes all capabilities via the open **Model Context Protocol 
 
 ---
 
-## 6. The 4 Authoritative Tools & Upstream REST Contracts
+## 6. The 5 Authoritative Tools & Upstream REST Contracts
 
 All tool interactions are centralized through the **Tool Registry (`src/tools/registry.py`)**, which provides:
 - `@register_tool` decorator with strict schema validation.
@@ -222,18 +222,18 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
                     ▼
           [src/tools/registry.py] ── Central Dispatcher, Timing & Error Handling
                     │
-          ┌─────────┼───────────────────────────┬───────────────────────────┐
-          ▼         ▼                           ▼                           ▼
-    [tracking_tool] [pricing_tool]              [parcels_tool]              [policy_tool]
-          │         │                           │                           │
-          │         │                           │                           ├─► company_policies.md
-          │         │                           │                           │   (Static Knowledge Base)
-          │         │                           │                           │
-          ▼ (HTTP)  ▼ (HTTP)                    ▼ (HTTP + Bearer)           ▼ (HTTP + Service Token)
-    [Tracking API]  [Core Pricing Engine]       [Core Parcels Service]      [Core Admin Settings]
-    (:8081)         (:8080)                     (:8080)                     (:8080)
-    GET /public/{id} POST /quotes               GET /parcels                GET /admin/settings
-    (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)
+          ┌─────────┼───────────────────────────┬───────────────────────────┬─────────────────────┐
+          ▼         ▼                           ▼                           ▼                     ▼
+    [tracking_tool] [pricing_tool]              [parcels_tool]              [policy_tool]         [postal_tool]
+          │         │                           │                           │                     │
+          │         │                           │                           ├─► policies.md       ├─► postal_codes.py
+          │         │                           │                           │   (Static Policy)   │   (25 Districts)
+          │         │                           │                           │                     │
+          ▼ (HTTP)  ▼ (HTTP)                    ▼ (HTTP + Bearer)           ▼ (HTTP + Svc Token)  ▼ (In-Memory O(1))
+    [Tracking API]  [Core Pricing Engine]       [Core Parcels Service]      [Core Admin Settings] [SL Post Directory]
+    (:8081)         (:8080)                     (:8080)                     (:8080)               (All Towns/Villages)
+    GET /public/{id} POST /quotes               GET /parcels                GET /admin/settings   (Walasmulla, etc.)
+    (SEC-009 Mask)  (Echoes integer cents)      (Tenant/User Isolated)      (Dynamic Precedence)  (5-Digit Resolution)
 ```
 
 ### Tool 1: `track_parcel_status` / `track_parcel` (`src/tools/tracking_tool.py`, `src/mcp/server.py`)
@@ -357,7 +357,11 @@ services/ai-assistant/
 │       ├── __init__.py              # Package exports (mcp, tools, resources)
 │       └── server.py                # FastMCP server instance, tools, swiftdrop:// resources, STDIO
 │
-└── tests/                           # Verification & Automated Test Suite (114 Tests Total)
+├── scripts/                         # Test harness & local development simulators
+│   ├── __init__.py
+│   └── mock_upstream_server.py      # Unified mock Core API & Tracking API server (port 8085)
+│
+└── tests/                           # Verification & Automated Test Suite (123 Tests Total)
     ├── __init__.py
     ├── conftest.py                  # Pytest fixtures setting MOCK_LLM_MODE=true and session reset
     ├── test_scaffolding.py          # Phase 1 scaffolding & invariant smoke tests (4 tests)
@@ -373,8 +377,9 @@ services/ai-assistant/
     ├── test_api_health.py           # Phase 6 Health probes, metrics, OpenAPI docs (6 tests)
     ├── test_api_chat.py             # Phase 6 POST /api/v1/ai/chat happy path & session memory (12 tests)
     ├── test_api_resilience.py       # Phase 6 Fault injection, 500 masking, decoupled probes (4 tests)
-    ├── test_api_security.py         # Phase 6 Null-byte, PII masking, cross-conv isolation (6 tests)
-    └── test_api_concurrency.py      # Phase 6 Async non-blocking load & thread-safe cache (3 tests)
+    ├── test_api_security.py         # Phase 6 Null-byte, PII masking, cross-conv isolation (8 tests)
+    ├── test_api_concurrency.py      # Phase 6 Async non-blocking load & thread-safe cache (3 tests)
+    └── test_mock_upstream_server.py # Unified mock upstream server on port 8085 (9 tests)
 ```
 
 ---
@@ -410,7 +415,7 @@ services/ai-assistant/
 python -m pytest services/ai-assistant/tests/ -v
 ```
 
-### Complete Test Suite Breakdown (114 Passing Tests)
+### Complete Test Suite Breakdown (123 Passing Tests)
 1. **`test_scaffolding.py` (4 Tests):**
    - Package structure, zero-database invariant, environment keys, Dockerfile non-root user.
 2. **`test_config.py` (7 Tests):**
@@ -481,6 +486,16 @@ python -m pytest services/ai-assistant/tests/ -v
     - `test_concurrent_async_chat_requests`: 10 simultaneous async requests complete with 200 OK.
     - `test_concurrent_session_cache_thread_safety`: Concurrent cache reads and writes operate with zero race conditions.
     - `test_health_probe_latency_under_load`: Health liveness probe remains immediate (< 10ms) under active chat traffic.
+16. **`test_mock_upstream_server.py` (9 Tests — Mock Upstream Simulator on Port 8085):**
+    - `test_mock_tracking_parcel_found`: Verifies mock tracking returns 200 OK and milestone data.
+    - `test_mock_tracking_parcel_not_found_404`: Verifies unknown parcel returns 404.
+    - `test_mock_pricing_quote_standard`: Verifies tariff calculation in integer cents.
+    - `test_mock_pricing_quote_express`: Verifies 1.5x multiplier for express service tier.
+    - `test_mock_pricing_weight_limit_422`: Verifies rejection of packages > 50kg with 422.
+    - `test_mock_parcels_unauthorized`: Verifies 401 response when Bearer token is omitted.
+    - `test_mock_parcels_authorized`: Verifies active parcels list returned with valid token.
+    - `test_mock_admin_settings_authorized`: Verifies SLAs and prohibited items list.
+    - `test_config_use_mock_upstream_routing`: Verifies dynamic routing to port 8085 when USE_MOCK_UPSTREAM=True.
 
 ---
 
@@ -516,6 +531,14 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 - **Problem:** Scaffolded root `cmd/` shadowed standard library module `cmd.py`.
 - **Resolution:** Removed `cmd/`. Entrypoints placed at `src/main.py` and `src/mcp/server.py`.
 
+### Historical Decision Record: Natural Conversational Continuity & Repetitive Intro Elimination
+- **Problem:** The assistant prefixed every response with *"Hello! I am SwiftDrop AI, the official AI Delivery Assistant..."* because system prompt Rule 1 stated *"Always introduce and refer to yourself strictly as 'SwiftDrop AI'"*, and the fallback mock engine dumped the greeting for any unclassified query. Furthermore, multi-turn follow-ups (e.g., *"Where is it going?"* after tracking inquiry) failed because `MockLLMAdapter` was ignoring `history`.
+- **Resolution:**
+  1. Updated System Prompt Rule 1 to require introduction only on initial greetings or explicit identity queries; standard inquiries and follow-ups answer directly.
+  2. Added explicit multi-turn entity continuity guidelines in system prompt for LLMs to resolve pronouns and implicit references.
+  3. Upgraded `MockLLMAdapter` to inspect `history` and extract previous tracking codes (`SD-YYYYMMDD-XXXXX`), postal codes, and weights.
+  4. Added dedicated conversational acknowledgment ("thanks") and direct fallback handling without repetitive greeting.
+
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
 | :--- | :--- | :--- | :--- |
@@ -527,3 +550,5 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.4.0` | 2026-11-02 | **Phase 4 Dual LLM Orchestration Engine Complete:** Implemented `src/llm/prompts.py` (system prompt with guardrails), `src/llm/base.py` (BaseLLMClient interface), `src/llm/openai_adapter.py` (universal AsyncOpenAI client with multi-turn loop, MAX_TOOL_ITERATIONS = 3 cap, rate limit & timeout mappings), `src/llm/mock_adapter.py` (deterministic regex intent engine with offline local preview), and `src/llm/__init__.py` (engine factory). Implemented 12 tests in `test_llm.py`. | `69 passed in 34.18s` |
 | `2.5.0` | 2026-11-02 | **Phase 5 Model Context Protocol (FastMCP) Server Complete:** Implemented `src/mcp/server.py` with 4 FastMCP tools (`track_parcel`, `estimate_shipping_fee`, `get_my_active_parcels`, `explain_company_policies`), 2 authoritative context resources (`swiftdrop://policies`, `swiftdrop://sla-matrix`), STDIO desktop entrypoint, and `src/mcp/__init__.py`. Implemented 12 tests in `test_mcp.py`. | `81 passed in 49.61s` |
 | `2.6.0` | 2026-11-02 | **Phase 6 Transport Layer & Core API Endpoints Complete:** Implemented `src/main.py` (FastAPI app, lifespan, CORS, RFC-7807 global exception handlers), `src/api/routers/health.py` (decoupled `/health/live`, `/health/ready`, `/health/metrics`), and `src/api/routers/chat.py` (`POST /api/v1/ai/chat` with session memory continuity and non-blocking Bearer auth forwarding). Built 31 new automated tests across health, chat, resilience, security, and concurrency. | `112 passed in 97.45s` |
+| `2.7.0` | 2026-11-02 | **Conversational Memory & Repetitive Intro Elimination Complete:** Refined prompt rules in `src/llm/prompts.py`, added multi-turn entity resolution in `src/llm/mock_adapter.py`, documented session correlation via `conversation_id` in Swagger UI schemas, added 3 new test suites. | `126 passed in 20.33s` |
+| `2.8.0` | 2026-11-03 | **Sri Lanka Non-District Town Directory & Internal Tool Name Guardrails Complete:** Created `src/core/postal_codes.py` covering all 25 districts and sub-district towns (Walasmulla, Kadugannawa, etc.), implemented read-only tool `lookup_postal_code` in `src/tools/postal_tool.py`, registered in FastMCP and tool registry, added Pydantic before-validator auto-resolving town names in fee quotes, and scrubbed leaked internal tool names in `src/llm/guardrails.py`. | Verified & Tested |

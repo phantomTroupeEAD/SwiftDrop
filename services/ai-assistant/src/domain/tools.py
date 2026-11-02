@@ -2,8 +2,10 @@
 
 from enum import Enum
 import re
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
+
+from src.core.postal_codes import resolve_postal_code
 
 
 class ServiceType(str, Enum):
@@ -65,6 +67,17 @@ class EstimateFeeInput(BaseModel):
         pattern=r"^\d{5}$",
         description="5-digit destination postal code (e.g. 20000 for Kandy)",
     )
+
+    @field_validator("pickup_postal_code", "delivery_postal_code", mode="before")
+    @classmethod
+    def resolve_city_input(cls, v: Any) -> str:
+        """Resolve city name (e.g. 'Anuradhapura', 'Walasmulla') to 5-digit postal code (e.g. '50000', '82450')."""
+        if isinstance(v, str):
+            resolved = resolve_postal_code(v)
+            if resolved:
+                return resolved
+        return str(v)
+
     service_type: ServiceType = Field(
         default=ServiceType.STANDARD,
         description="Delivery service level tier",
@@ -120,4 +133,23 @@ class CompanyPolicyInput(BaseModel):
         cleaned = v.replace("\x00", "").strip()
         if not cleaned:
             raise ValueError("Query string cannot be empty")
+        return cleaned
+
+
+class LookupPostalCodeInput(BaseModel):
+    """Input argument model for lookup_postal_code tool."""
+
+    query: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Sri Lankan city, town, suburb or area name (e.g. 'Walasmulla', 'Kadugannawa', 'Colombo 03')",
+    )
+
+    @field_validator("query")
+    @classmethod
+    def sanitize_location(cls, v: str) -> str:
+        """Sanitize location query string."""
+        cleaned = v.replace("\x00", "").strip()
+        if not cleaned:
+            raise ValueError("Location query cannot be empty")
         return cleaned
