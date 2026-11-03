@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict
 from fastapi import APIRouter
 
+from src import __version__
 from src.core.cache import get_session_cache
 from src.core.config import get_settings
 from src.tools.registry import get_registered_tools
@@ -71,7 +72,7 @@ async def get_metrics() -> Dict[str, Any]:
 
     return {
         "service": "ai-assistant",
-        "version": "2.5.1",
+        "version": __version__,
         "uptime_seconds": uptime_seconds,
         "active_sessions": stats["active_sessions"],
         "max_capacity": stats["max_capacity"],

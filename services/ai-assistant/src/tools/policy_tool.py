@@ -14,28 +14,23 @@ from src.tools.registry import register_tool
 
 # In-memory policy cache: {"data": ..., "timestamp": float}
 _POLICY_CACHE: Dict[str, Any] = {"data": None, "timestamp": 0.0}
-_CACHE_TTL_SECONDS = 1800.0  # 30 minutes
 _POLICY_LOCK: Optional[asyncio.Lock] = None
-_POLICY_LOCK_LOOP: Optional[asyncio.AbstractEventLoop] = None
 
 
 def get_policy_lock() -> asyncio.Lock:
-    """Return the policy lock for the active asyncio event loop."""
-    global _POLICY_LOCK, _POLICY_LOCK_LOOP
-    loop = asyncio.get_running_loop()
-    if _POLICY_LOCK is None or _POLICY_LOCK_LOOP is not loop:
+    """Return the policy lock for thread/coroutine safe refresh."""
+    global _POLICY_LOCK
+    if _POLICY_LOCK is None:
         _POLICY_LOCK = asyncio.Lock()
-        _POLICY_LOCK_LOOP = loop
     return _POLICY_LOCK
 
 
 def reset_policy_cache() -> None:
     """Reset the policy cache for isolated testing."""
-    global _POLICY_LOCK, _POLICY_LOCK_LOOP
+    global _POLICY_LOCK
     _POLICY_CACHE["data"] = None
     _POLICY_CACHE["timestamp"] = 0.0
     _POLICY_LOCK = None
-    _POLICY_LOCK_LOOP = None
 
 
 def _load_static_policy_markdown() -> str:
@@ -92,12 +87,13 @@ async def policy_tool(
     """Retrieve authoritative policy rules with dynamic Core API precedence and static fallback."""
     settings = get_settings()
     now = datetime.now(timezone.utc).timestamp()
+    cache_ttl = settings.POLICY_CACHE_TTL_MINUTES * 60
 
     dynamic_content: Optional[str] = None
     source = "static_knowledge_base"
 
     # 1. Check in-memory cache for dynamic settings (fast path)
-    if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < _CACHE_TTL_SECONDS:
+    if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < cache_ttl:
         dynamic_content = _POLICY_CACHE["data"]
         source = "dynamic_admin_settings_cached"
     else:
@@ -105,7 +101,7 @@ async def policy_tool(
         async with get_policy_lock():
             now = datetime.now(timezone.utc).timestamp()
             # Double-check inside lock: another coroutine might have already refreshed it
-            if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < _CACHE_TTL_SECONDS:
+            if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < cache_ttl:
                 dynamic_content = _POLICY_CACHE["data"]
                 source = "dynamic_admin_settings_cached"
             else:

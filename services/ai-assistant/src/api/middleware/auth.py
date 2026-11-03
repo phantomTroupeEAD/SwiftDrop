@@ -55,8 +55,12 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             token = bearer_match.group(1).strip()
             settings = get_settings()
 
-            # Handle mock tokens during offline testing / CI
-            if settings.is_mock_mode and ("mock-" in token or token.startswith("test-") or "." not in token):
+            # Handle mock tokens during offline testing / CI (prohibited in production)
+            if (
+                settings.ENVIRONMENT in ("development", "test")
+                and settings.is_mock_mode
+                and ("mock-" in token or token.startswith("test-") or "." not in token)
+            ):
                 request.state.user = AuthenticatedUser(
                     user_id="usr_mock_001",
                     role="CUSTOMER",

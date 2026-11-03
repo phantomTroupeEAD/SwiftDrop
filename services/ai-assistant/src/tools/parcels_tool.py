@@ -35,6 +35,7 @@ def sanitize_parcel_item(item: Dict[str, Any]) -> Dict[str, Any]:
     description="Retrieve a list of active shipments belonging to the authenticated customer or merchant.",
     input_schema=ActiveParcelsInput,
     is_read_only=True,
+    aliases=["get_my_active_parcels"],
 )
 async def parcels_tool(
     input_data: ActiveParcelsInput,
@@ -134,12 +135,18 @@ async def parcels_tool(
             "grounded": True,
         }
 
-    except httpx.TimeoutException as exc:
-        raise UpstreamServiceException(
-            "Core API Parcels",
-            f"Parcels request timed out: {exc}",
-        )
-    except httpx.RequestError as exc:
+    except (httpx.TimeoutException, httpx.RequestError) as exc:
+        if close_client and settings.is_mock_mode:
+            return {
+                "count": 0,
+                "parcels": [],
+                "grounded": False,
+            }
+        if isinstance(exc, httpx.TimeoutException):
+            raise UpstreamServiceException(
+                "Core API Parcels",
+                f"Parcels request timed out: {exc}",
+            )
         raise UpstreamServiceException(
             "Core API Parcels",
             f"Network error communicating with parcels service: {exc}",

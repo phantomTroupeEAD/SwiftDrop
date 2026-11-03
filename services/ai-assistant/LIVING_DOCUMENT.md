@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.14.0` (Authoritative Baseline — Phase 8 Production Containerization & Kubernetes Operations Complete)  
+> **Specification Version:** `2.5.1` (Authoritative Baseline — Phase 8 Production Containerization & Kubernetes Operations Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---

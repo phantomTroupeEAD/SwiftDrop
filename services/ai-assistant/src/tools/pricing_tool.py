@@ -11,11 +11,55 @@ from src.domain.tools import EstimateFeeInput
 from src.tools.registry import register_tool
 
 
+def calculate_fallback_pricing(
+    weight_kg: float,
+    pickup_postal_code: str = "00100",
+    delivery_postal_code: str = "20000",
+    service_type: str = "STANDARD",
+) -> Dict[str, Any]:
+    """Calculate deterministic offline fallback tariff for CI and local dev."""
+    fee_cents = int(35000 + (weight_kg * 7500))
+    total_fee_lkr = int(round(fee_cents / 100.0))
+    currency = "LKR"
+    action = GenerativeAction(
+        action_type=ActionType.NAVIGATE_BOOKING,
+        label="Book Delivery Now",
+        target_url="/portal/book",
+        prefill_data={
+            "pickup_postal_code": pickup_postal_code,
+            "delivery_postal_code": delivery_postal_code,
+            "weight_kg": weight_kg,
+            "service_type": service_type,
+            "estimated_fee": total_fee_lkr,
+            "estimated_fee_cents": fee_cents,
+            "currency": currency,
+        },
+    )
+    return {
+        "weight_kg": weight_kg,
+        "pickup_postal_code": pickup_postal_code,
+        "delivery_postal_code": delivery_postal_code,
+        "service_type": service_type,
+        "estimated_fee": total_fee_lkr,
+        "base_fee": 350,
+        "weight_fee": total_fee_lkr - 350,
+        "base_fee_cents": 35000,
+        "weight_fee_cents": fee_cents - 35000,
+        "total_fee_cents": fee_cents,
+        "currency": currency,
+        "formatted_display": f"{currency} {total_fee_lkr:,}",
+        "estimated_transit_hours": 48,
+        "action": action.model_dump(),
+        "grounded": True,
+    }
+
+
 @register_tool(
     name="estimate_delivery_fee",
     description="Calculate authoritative courier shipping fee quotes and transit estimates based on weight, dimensions, and postal codes.",
     input_schema=EstimateFeeInput,
     is_read_only=True,
+    aliases=["estimate_shipping_fee"],
 )
 async def pricing_tool(
     input_data: EstimateFeeInput,
@@ -142,41 +186,12 @@ async def pricing_tool(
 
     except (httpx.TimeoutException, httpx.RequestError) as exc:
         if close_client and settings.is_mock_mode:
-            # Deterministic offline mock calculation for CI / local test execution
-            fee_cents = int(35000 + (billable_weight * 7500))
-            total_fee_lkr = int(round(fee_cents / 100.0))
-            currency = "LKR"
-            action = GenerativeAction(
-                action_type=ActionType.NAVIGATE_BOOKING,
-                label="Book Delivery Now",
-                target_url="/portal/book",
-                prefill_data={
-                    "pickup_postal_code": input_data.pickup_postal_code,
-                    "delivery_postal_code": input_data.delivery_postal_code,
-                    "weight_kg": input_data.weight_kg,
-                    "service_type": input_data.service_type.value,
-                    "estimated_fee": total_fee_lkr,
-                    "estimated_fee_cents": fee_cents,
-                    "currency": currency,
-                },
+            return calculate_fallback_pricing(
+                weight_kg=billable_weight,
+                pickup_postal_code=input_data.pickup_postal_code,
+                delivery_postal_code=input_data.delivery_postal_code,
+                service_type=input_data.service_type.value,
             )
-            return {
-                "weight_kg": input_data.weight_kg,
-                "pickup_postal_code": input_data.pickup_postal_code,
-                "delivery_postal_code": input_data.delivery_postal_code,
-                "service_type": input_data.service_type.value,
-                "estimated_fee": total_fee_lkr,
-                "base_fee": 350,
-                "weight_fee": total_fee_lkr - 350,
-                "base_fee_cents": 35000,
-                "weight_fee_cents": fee_cents - 35000,
-                "total_fee_cents": fee_cents,
-                "currency": currency,
-                "formatted_display": f"{currency} {total_fee_lkr:,}",
-                "estimated_transit_hours": 48,
-                "action": action.model_dump(),
-                "grounded": True,
-            }
         raise UpstreamServiceException(
             "Core API Pricing",
             f"Network error communicating with pricing service: {exc}",

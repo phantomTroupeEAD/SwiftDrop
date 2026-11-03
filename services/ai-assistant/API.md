@@ -4,7 +4,7 @@
 > **Assigned Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Base Path:** `/api/v1/ai`  
 > **Container Port:** `8000`  
-> **Specification Version:** `2.6.0` (Remediated Cloud MCP & Boundary Validation)
+> **Specification Version:** `2.5.1` (Canonical Modular Version)
 
 ---
 

@@ -31,17 +31,22 @@ def register_tool(
     description: str,
     input_schema: Type[BaseModel],
     is_read_only: bool = True,
+    aliases: Optional[List[str]] = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to register an approved tool in the central tool registry."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        _TOOL_REGISTRY[name] = ToolDefinition(
+        tool_def = ToolDefinition(
             name=name,
             description=description,
             input_schema=input_schema,
             handler=func,
             is_read_only=is_read_only,
         )
+        _TOOL_REGISTRY[name] = tool_def
+        if aliases:
+            for alias in aliases:
+                _TOOL_REGISTRY[alias] = tool_def
         return func
 
     return decorator
@@ -60,7 +65,11 @@ def clear_registry() -> None:
 def export_openai_tools() -> List[Dict[str, Any]]:
     """Export all registered tools in standard OpenAI function calling format."""
     schemas: List[Dict[str, Any]] = []
+    seen = set()
     for tool in _TOOL_REGISTRY.values():
+        if tool.name in seen:
+            continue
+        seen.add(tool.name)
         schemas.append(
             {
                 "type": "function",

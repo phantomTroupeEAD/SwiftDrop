@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from src import __version__
 from src.api.middleware import (
     JWTAuthenticationMiddleware,
     SecurityHeadersMiddleware,
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     tools = get_registered_tools()
     engine_name = "Deterministic Mock (CI Mode)" if app_settings.is_mock_mode else f"Live LLM ({app_settings.LLM_MODEL})"
 
-    logger.info("Starting SwiftDrop AI Assistant Service v2.11.0...")
+    logger.info("Starting SwiftDrop AI Assistant Service v%s...", __version__)
     logger.info("Active Engine: %s", engine_name)
     logger.info("Registered Tools (%d): %s", len(tools), ", ".join(tools.keys()))
     logger.info("Interactive API Docs available at /docs and /redoc")
@@ -52,7 +53,7 @@ app = FastAPI(
         "Production AI Delivery Assistant providing grounded parcel tracking, "
         "instant shipping quotations, active parcel summaries, and standardized FastMCP tools."
     ),
-    version="2.11.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -70,7 +71,14 @@ app.add_middleware(JWTAuthenticationMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://localhost:8080",
+        "https://swiftdrop.local",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$|^https://.*\.swiftdrop\.(io|local)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -148,7 +156,7 @@ async def root_greeting() -> dict:
     """Return service identity and quick navigation links."""
     return {
         "service": "SwiftDrop AI Delivery Assistant & FastMCP Service",
-        "version": "2.11.0",
+        "version": __version__,
         "status": "OPERATIONAL",
         "docs_url": "/docs",
         "redoc_url": "/redoc",

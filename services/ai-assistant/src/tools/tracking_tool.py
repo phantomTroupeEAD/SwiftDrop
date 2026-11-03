@@ -51,6 +51,7 @@ def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[s
     description="Track real-time shipment status, milestones, and estimated delivery for a parcel by tracking number.",
     input_schema=TrackParcelInput,
     is_read_only=True,
+    aliases=["track_parcel"],
 )
 async def track_parcel_tool(
     input_data: TrackParcelInput,

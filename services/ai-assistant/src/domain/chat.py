@@ -167,8 +167,7 @@ class StreamChunkEvent(BaseModel):
 
     def to_sse_frame(self) -> str:
         """Format chunk event as standard W3C Server-Sent Event frame."""
-        data_json = json.dumps(self.data, separators=(",", ":"), ensure_ascii=False)
-        return f"event: {self.event.value}\ndata: {data_json}\n\n"
+        return to_sse_frame(self.event, self.data)
 
 
 def to_sse_frame(event_type: StreamEventType | str, data: Any) -> str:

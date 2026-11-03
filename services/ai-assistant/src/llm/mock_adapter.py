@@ -16,6 +16,7 @@ from src.domain.chat import (
 )
 from src.llm.base import BaseLLMClient
 from src.llm.guardrails import sanitize_assistant_identity
+from src.tools.pricing_tool import calculate_fallback_pricing
 from src.tools.registry import execute_tool
 
 
@@ -262,29 +263,22 @@ class MockLLMAdapter(BaseLLMClient):
                 # Upstream Core API offline fallback in local dev / mock mode
                 err_msg = (record.error_message or "").lower()
                 if "network error" in err_msg or "timed out" in err_msg or "connection" in err_msg:
-                    fee_cents = int(35000 + (weight * 10000))
-                    total_fee_lkr = fee_cents // 100
-                    act = GenerativeAction(
-                        action_type=ActionType.NAVIGATE_BOOKING,
-                        label="Book Delivery Now",
-                        target_url="/portal/book",
-                        prefill_data={
-                            "pickup_postal_code": pickup,
-                            "delivery_postal_code": delivery,
-                            "weight_kg": weight,
-                            "service_type": "STANDARD",
-                            "estimated_fee": total_fee_lkr,
-                            "estimated_fee_cents": fee_cents,
-                            "currency": "LKR",
-                        },
+                    fallback_data = calculate_fallback_pricing(
+                        weight_kg=weight,
+                        pickup_postal_code=pickup,
+                        delivery_postal_code=delivery,
                     )
-                    actions.append(act)
+                    if "action" in fallback_data and isinstance(fallback_data["action"], dict):
+                        try:
+                            actions.append(GenerativeAction(**fallback_data["action"]))
+                        except Exception:
+                            pass
                     reply = (
                         f"**Delivery Fee Estimate:**\n"
                         f"- **Chargeable Weight:** {weight} kg\n"
                         f"- **Route:** Postal Code {pickup} → {delivery}\n"
-                        f"- **Total Fee:** LKR {total_fee_lkr:,}\n"
-                        f"- **Estimated Transit:** 48 hours\n\n"
+                        f"- **Total Fee:** {fallback_data['formatted_display']}\n"
+                        f"- **Estimated Transit:** {fallback_data.get('estimated_transit_hours', 48)} hours\n\n"
                         f"I have prepared a **1-click booking card** below for you to finalize this booking."
                     )
                 else:

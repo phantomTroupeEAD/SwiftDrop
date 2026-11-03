@@ -5,6 +5,7 @@ identity guardrails, and turn persistence) from HTTP transport controllers.
 """
 
 from typing import Any, AsyncGenerator, Callable, Coroutine, Dict, List, Optional
+from uuid import UUID
 
 from src.core.cache import SessionCache, get_session_cache
 from src.core.security import AuthenticatedUser
@@ -44,6 +45,42 @@ class ChatService:
             return get_llm_client()
         return self._llm_client
 
+    def _build_execution_context(
+        self,
+        user: Optional[AuthenticatedUser] = None,
+        auth_token: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """Construct unified context dictionary forwarding credentials & caller identity."""
+        context: Dict[str, str] = {}
+        if auth_token:
+            context["auth_token"] = auth_token
+            context["authorization"] = f"Bearer {auth_token}"
+
+        if user:
+            context["user_id"] = user.user_id
+            context["role"] = user.role
+            context["email"] = user.email
+            if user.tenant_id:
+                context["tenant_id"] = user.tenant_id
+        return context
+
+    async def _persist_session_turn(
+        self,
+        conversation_id: UUID,
+        prompt: str,
+        reply: str,
+    ) -> None:
+        """Atomically persist user turn and truncated assistant reply into session cache."""
+        user_turn = ChatMessage(role=MessageRole.USER, content=prompt)
+        assistant_content = reply[:9000] if len(reply) > 9000 else reply
+        assistant_turn = ChatMessage(role=MessageRole.ASSISTANT, content=assistant_content)
+
+        await self.cache.append_turns(
+            conversation_id=conversation_id,
+            user_turn=user_turn,
+            assistant_turn=assistant_turn,
+        )
+
     async def process_chat(
         self,
         request: ChatMessageRequest,
@@ -58,18 +95,8 @@ class ChatService:
         else:
             history = await self.cache.get_history(request.conversation_id)
 
-        # 2. Build execution context (forward credentials & user identity to tools)
-        context: Dict[str, str] = {}
-        if auth_token:
-            context["auth_token"] = auth_token
-            context["authorization"] = f"Bearer {auth_token}"
-
-        if user:
-            context["user_id"] = user.user_id
-            context["role"] = user.role
-            context["email"] = user.email
-            if user.tenant_id:
-                context["tenant_id"] = user.tenant_id
+        # 2. Build execution context
+        context = self._build_execution_context(user=user, auth_token=auth_token)
 
         # 3. Dispatch prompt and context to configured LLM client
         response: ChatMessageResponse = await self.llm_client.generate_reply(
@@ -83,16 +110,10 @@ class ChatService:
         response.reply = sanitize_assistant_identity(response.reply)
 
         # 5. Atomically persist user turn and assistant reply into session cache
-        user_turn = ChatMessage(role=MessageRole.USER, content=request.prompt)
-        assistant_content = (
-            response.reply[:9000] if len(response.reply) > 9000 else response.reply
-        )
-        assistant_turn = ChatMessage(role=MessageRole.ASSISTANT, content=assistant_content)
-
-        await self.cache.append_turns(
+        await self._persist_session_turn(
             conversation_id=request.conversation_id,
-            user_turn=user_turn,
-            assistant_turn=assistant_turn,
+            prompt=request.prompt,
+            reply=response.reply,
         )
 
         return response
@@ -112,17 +133,7 @@ class ChatService:
             history = await self.cache.get_history(request.conversation_id)
 
         # 2. Build execution context
-        context: Dict[str, str] = {}
-        if auth_token:
-            context["auth_token"] = auth_token
-            context["authorization"] = f"Bearer {auth_token}"
-
-        if user:
-            context["user_id"] = user.user_id
-            context["role"] = user.role
-            context["email"] = user.email
-            if user.tenant_id:
-                context["tenant_id"] = user.tenant_id
+        context = self._build_execution_context(user=user, auth_token=auth_token)
 
         accumulated_reply = ""
 
@@ -148,7 +159,7 @@ class ChatService:
 
                 yield chunk.to_sse_frame()
 
-        except Exception as exc:
+        except Exception:
             err_frame = StreamChunkEvent(
                 event=StreamEventType.ERROR,
                 data={
@@ -161,18 +172,10 @@ class ChatService:
 
         # 3. Atomically persist conversation turns into cache on successful stream
         if accumulated_reply:
-            user_turn = ChatMessage(role=MessageRole.USER, content=request.prompt)
-            assistant_content = (
-                accumulated_reply[:9000]
-                if len(accumulated_reply) > 9000
-                else accumulated_reply
-            )
-            assistant_turn = ChatMessage(role=MessageRole.ASSISTANT, content=assistant_content)
-
-            await self.cache.append_turns(
+            await self._persist_session_turn(
                 conversation_id=request.conversation_id,
-                user_turn=user_turn,
-                assistant_turn=assistant_turn,
+                prompt=request.prompt,
+                reply=accumulated_reply,
             )
 
 
