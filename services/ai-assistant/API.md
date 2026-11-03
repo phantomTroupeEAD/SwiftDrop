@@ -96,7 +96,7 @@ Configure `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "swiftdrop": {
+    "swiftdrop-local": {
       "command": "E:\Projects\SwiftDrop\services\ai-assistant\.venv\Scripts\python.exe",
       "args": [
         "E:\Projects\SwiftDrop\services\ai-assistant\src\mcp\server.py"
@@ -124,7 +124,7 @@ Configure `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "swiftdrop-cloud": {
+    "swiftdrop": {
       "url": "http://127.0.0.1:8002/mcp",
       "headers": {
         "X-API-Key": "sd_live_demo_merchant_123"
@@ -137,7 +137,7 @@ Configure `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "swiftdrop-cloud": {
+    "swiftdrop": {
       "command": "npx.cmd",
       "args": [
         "-y",
