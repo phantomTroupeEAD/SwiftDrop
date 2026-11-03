@@ -33,6 +33,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 - **Role-Aware Tiered Rate Limiting:** Configurable SlowAPI engine enforcing 20 RPM for anonymous visitors, 60 RPM for authenticated customers, and 100 RPM for merchants/staff with RFC-7807 429 envelopes.
 - **Cryptographic JWT Tenant Verification:** Zero-dependency HMAC-SHA256 token verification matching Core API standards (ADR-003, SEC-004/005) with IDOR defense.
 - **Strict Invariants:** 100% read-only operations with **zero direct database access**; all persistence is mediated through authoritative Core APIs.
+- **Real-Time Token & Tool Streaming (SSE):** Supports W3C-compliant Server-Sent Events (`POST /api/v1/ai/chat/stream`) yielding token-by-token deltas, tool lifecycle events (`tool_start`, `tool_end`), and generative UI action cards in real time with proxy buffering prevention (`X-Accel-Buffering: no`).
 - **Enterprise Layered Clean Architecture:** Clean separation of concerns with Transport Layer (`src/api`), Application Service Layer (`src/services/chat_service.py`), Pure Domain Models (`src/domain`), Cross-Cutting Drivers (`src/core/security.py`, `src/core/logging.py`), and Modular Test Suites (`tests/{unit,api,security,e2e}/`).
 
 ---

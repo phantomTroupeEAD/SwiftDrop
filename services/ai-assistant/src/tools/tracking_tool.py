@@ -62,7 +62,12 @@ async def track_parcel_tool(
     encoded_num = urllib.parse.quote(input_data.tracking_number, safe="")
     target_url = f"{settings.tracking_api_base_url.rstrip('/')}/api/v1/tracking/public/{encoded_num}"
 
-    timeouts = httpx.Timeout(connect=2.0, read=5.0, write=5.0, pool=5.0)
+    timeouts = httpx.Timeout(
+        connect=0.2 if settings.is_mock_mode else 2.0,
+        read=5.0,
+        write=5.0,
+        pool=5.0,
+    )
 
     # Use injected client if provided (e.g. for mock testing), else create one
     close_client = False

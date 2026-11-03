@@ -11,6 +11,8 @@ from src.domain.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     MessageRole,
+    StreamChunkEvent,
+    StreamEventType,
 )
 from src.llm.base import BaseLLMClient
 from src.services.chat_service import ChatService, get_chat_service
@@ -42,6 +44,18 @@ class DummyLLMClient(BaseLLMClient):
             action_cards=[],
             suggestions=[],
             latency_ms=12,
+        )
+
+    async def generate_reply_stream(
+        self,
+        prompt: str,
+        history,
+        conversation_id: str,
+        context=None,
+    ):
+        yield StreamChunkEvent(
+            event=StreamEventType.TOKEN,
+            data={"delta": self.reply},
         )
 
 

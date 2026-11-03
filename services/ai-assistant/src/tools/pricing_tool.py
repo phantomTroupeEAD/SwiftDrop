@@ -45,7 +45,12 @@ async def pricing_tool(
             "height_cm": input_data.height_cm,
         }
 
-    timeouts = httpx.Timeout(connect=2.0, read=5.0, write=5.0, pool=5.0)
+    timeouts = httpx.Timeout(
+        connect=0.2 if settings.is_mock_mode else 2.0,
+        read=5.0,
+        write=5.0,
+        pool=5.0,
+    )
     close_client = False
     if client is None:
         client = httpx.AsyncClient(timeout=timeouts)

@@ -4,7 +4,7 @@ Separates business workflow (session retrieval, context assembly, LLM dispatch,
 identity guardrails, and turn persistence) from HTTP transport controllers.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, AsyncGenerator, Callable, Coroutine, Dict, List, Optional
 
 from src.core.cache import SessionCache, get_session_cache
 from src.core.security import AuthenticatedUser
@@ -13,6 +13,8 @@ from src.domain.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     MessageRole,
+    StreamChunkEvent,
+    StreamEventType,
 )
 from src.llm import get_llm_client
 from src.llm.base import BaseLLMClient
@@ -94,6 +96,84 @@ class ChatService:
         )
 
         return response
+
+    async def stream_chat(
+        self,
+        request: ChatMessageRequest,
+        user: Optional[AuthenticatedUser] = None,
+        auth_token: Optional[str] = None,
+        is_disconnected: Optional[Callable[[], Coroutine[Any, Any, bool]]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Execute a streaming turn, yielding formatted SSE wire frames and persisting turns on completion."""
+        # 1. Resolve multi-turn history
+        if request.history:
+            history: List[ChatMessage] = list(request.history)
+        else:
+            history = await self.cache.get_history(request.conversation_id)
+
+        # 2. Build execution context
+        context: Dict[str, str] = {}
+        if auth_token:
+            context["auth_token"] = auth_token
+            context["authorization"] = f"Bearer {auth_token}"
+
+        if user:
+            context["user_id"] = user.user_id
+            context["role"] = user.role
+            context["email"] = user.email
+            if user.tenant_id:
+                context["tenant_id"] = user.tenant_id
+
+        accumulated_reply = ""
+
+        try:
+            generator = self.llm_client.generate_reply_stream(
+                prompt=request.prompt,
+                history=history,
+                conversation_id=request.conversation_id,
+                context=context,
+            )
+
+            async for chunk in generator:
+                # EC-1: Check client disconnection mid-stream
+                if is_disconnected and await is_disconnected():
+                    break
+
+                if chunk.event == StreamEventType.TOKEN:
+                    delta = chunk.data.get("delta", "")
+                    # SEC-009 / Model Guardrails sanitization
+                    delta_clean = sanitize_assistant_identity(delta)
+                    accumulated_reply += delta_clean
+                    chunk.data["delta"] = delta_clean
+
+                yield chunk.to_sse_frame()
+
+        except Exception as exc:
+            err_frame = StreamChunkEvent(
+                event=StreamEventType.ERROR,
+                data={
+                    "code": "INTERNAL_STREAM_ERROR",
+                    "message": "An error occurred during stream generation. Please try again.",
+                },
+            ).to_sse_frame()
+            yield err_frame
+            return
+
+        # 3. Atomically persist conversation turns into cache on successful stream
+        if accumulated_reply:
+            user_turn = ChatMessage(role=MessageRole.USER, content=request.prompt)
+            assistant_content = (
+                accumulated_reply[:9000]
+                if len(accumulated_reply) > 9000
+                else accumulated_reply
+            )
+            assistant_turn = ChatMessage(role=MessageRole.ASSISTANT, content=assistant_content)
+
+            await self.cache.append_turns(
+                conversation_id=request.conversation_id,
+                user_turn=user_turn,
+                assistant_turn=assistant_turn,
+            )
 
 
 # Singleton / dependency provider for FastAPI injection

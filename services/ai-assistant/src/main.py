@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     tools = get_registered_tools()
     engine_name = "Deterministic Mock (CI Mode)" if app_settings.is_mock_mode else f"Live LLM ({app_settings.LLM_MODEL})"
 
-    logger.info("Starting SwiftDrop AI Assistant Service v2.10.0...")
+    logger.info("Starting SwiftDrop AI Assistant Service v2.11.0...")
     logger.info("Active Engine: %s", engine_name)
     logger.info("Registered Tools (%d): %s", len(tools), ", ".join(tools.keys()))
     logger.info("Interactive API Docs available at /docs and /redoc")
@@ -52,7 +52,7 @@ app = FastAPI(
         "Production AI Delivery Assistant providing grounded parcel tracking, "
         "instant shipping quotations, active parcel summaries, and standardized FastMCP tools."
     ),
-    version="2.10.0",
+    version="2.11.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -148,7 +148,7 @@ async def root_greeting() -> dict:
     """Return service identity and quick navigation links."""
     return {
         "service": "SwiftDrop AI Delivery Assistant & FastMCP Service",
-        "version": "2.10.0",
+        "version": "2.11.0",
         "status": "OPERATIONAL",
         "docs_url": "/docs",
         "redoc_url": "/redoc",
