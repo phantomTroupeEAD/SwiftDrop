@@ -17,7 +17,8 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 | Document | Description |
 | :--- | :--- |
 | 📖 **[`LIVING_DOCUMENT.md`](./LIVING_DOCUMENT.md)** | **Exhaustive System Living Document:** Complete A-Z technical specifications, architectural decisions, invariant justifications, file-by-file breakdowns, and audit history. |
-| 🌐 **[`API.md`](./API.md)** | **Co-Located API Contract:** Full HTTP REST and FastMCP endpoint contracts, JSON schemas, headers, and error response models. |
+| 🌐 **[`API.md`](./API.md)** | **Co-Located API Contract:** Full HTTP REST endpoint contracts, JSON schemas, headers, and error response models. |
+| 🔌 **[`MCP.md`](./MCP.md)** | **Dedicated FastMCP Integration Guide:** Complete Model Context Protocol guide, client setup recipes (Antigravity, Claude Desktop, Cursor), tools, resources, auth hierarchy, and troubleshooting. |
 | 🗺️ **[`ROADMAP.md`](./ROADMAP.md)** | **Implementation Roadmap:** Complete 8-phase development roadmap and acceptance checklist. |
 
 ---

@@ -25,7 +25,7 @@
 
 ## 2. FastMCP & Read-Only Tool Definitions
 
-The AI Assistant service exposes approved read-only tools via the Model Context Protocol (FastMCP) and standard OpenAI function calling:
+The AI Assistant service exposes approved read-only tools via the Model Context Protocol (FastMCP) and standard OpenAI function calling (for a dedicated client setup guide covering Antigravity, Claude Desktop, and Cursor, see **[`MCP.md`](./MCP.md)**):
 
 ### 2.1 `track_parcel_status`
 - **Description:** Retrieve real-time tracking milestones, status description, and destination city for a parcel.
