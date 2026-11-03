@@ -1,51 +1,34 @@
 # SwiftDrop — Model Context Protocol (FastMCP) Integration Guide
 
 > **Service:** `services/ai-assistant`  
-> **Role:** Member 10 — AI Assistant / MCP & Cross-Workflow Quality  
-> **Primary Connection Standard:** Remote Server-Sent Events (SSE) via FastMCP  
-> **Default Endpoint:** `http://127.0.0.1:8002/mcp` (or remote hosted gateway)  
+> **Protocol:** Model Context Protocol (MCP) Standard — JSON-RPC 2.0 over Server-Sent Events (SSE)  
 > **Server Name:** `swiftdrop`  
-> **Specification Version:** `2.13.0`
+> **Endpoint:** `http://127.0.0.1:8002/mcp`  
 
 ---
 
-## 1. ⚡ Quick Start: Connect in 60 Seconds (Recommended)
+## 1. Quick Start: Connect via SSE (Recommended)
 
-You do **not** need to clone the repository, install Python, or configure local database containers to use SwiftDrop MCP. 
-
-The primary and recommended integration method is **Remote Server-Sent Events (SSE)**. The SwiftDrop MCP service runs as an independent daemon exposing a standard JSON-RPC 2.0 SSE endpoint at `http://127.0.0.1:8002/mcp`. You simply paste the configuration block below into your AI client, and your assistant immediately gains live access to parcel tracking, fee estimation, postal directory lookups, and courier policy guidance.
+SwiftDrop MCP is exposed as a standard Server-Sent Events (SSE) service. You do not need to install Python or clone the repository to use SwiftDrop tools. Add the server definition to your AI client configuration to start using the tools immediately.
 
 ```
-                  ZERO-FRICTION MCP ARCHITECTURE
-                  
    [Antigravity IDE]     [Claude Desktop]      [Cursor IDE]     [Autonomous Agents]
           │                     │                   │                    │
           └─────────────────────┼───────────────────┼────────────────────┘
                                 │
-                                ▼ (Standard JSON-RPC 2.0 over SSE)
-                  ┌───────────────────────────---┐
-                  │ http://ai.swiftdrop.work/mcp │
-                  │    Server: 'swiftdrop'       │
-                  └─────────────┬─────────────---┘
-                                │
-                                ▼
-         ┌──────────────────────────────────────────────┐
-         │       SwiftDrop FastMCP Gateway Daemon       │
-         │  - 100% Read-Only Safety                     │
-         │  - Zero Direct Database Access               │
-         │  - SEC-009 Customer Privacy Masking          │
-         │  - In-Memory Sri Lanka Postal Directory      │
-         └──────────────────────────────────────────────┘
+                                ▼ (JSON-RPC 2.0 over SSE)
+                  ┌───────────────────────────┐
+                  │ http://127.0.0.1:8002/mcp │
+                  │    Server: 'swiftdrop'    │
+                  └───────────────────────────┘
 ```
 
 ---
 
-## 2. Drop-in Client Configuration Recipes
+## 2. Client Configurations
 
-Choose your AI environment below and add the configuration block to your settings file:
-
-### 2.1 Google Antigravity Configuration
-File location: `~/.gemini/config/mcp_config.json`
+### 2.1 Google Antigravity
+File: `~/.gemini/config/mcp_config.json`
 
 ```json
 {
@@ -64,12 +47,12 @@ File location: `~/.gemini/config/mcp_config.json`
   }
 }
 ```
-*(On macOS / Linux, replace `npx.cmd` with `npx`).*
+*(On macOS / Linux, use `"npx"` instead of `"npx.cmd"`).*
 
 ---
 
-### 2.2 Claude Desktop Configuration
-File location:
+### 2.2 Claude Desktop
+File:
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -93,10 +76,8 @@ File location:
 
 ---
 
-### 2.3 Cursor IDE Configuration
-File location: `<workspace>/.cursor/mcp.json` or Global Cursor Settings
-
-Cursor natively supports direct SSE URLs without requiring `npx`:
+### 2.3 Cursor IDE
+File: `<workspace>/.cursor/mcp.json` or Global Cursor Settings
 
 ```json
 {
@@ -113,8 +94,8 @@ Cursor natively supports direct SSE URLs without requiring `npx`:
 
 ---
 
-### 2.4 Windsurf / VS Code Roo Code Configuration
-File location: Global Settings $\rightarrow$ `mcp_settings.json`
+### 2.4 Windsurf / VS Code Roo Code
+File: `mcp_settings.json`
 
 ```json
 {
@@ -136,121 +117,70 @@ File location: Global Settings $\rightarrow$ `mcp_settings.json`
 
 ---
 
-## 3. Authentication & API Key Management
+## 3. Authentication
 
-The SwiftDrop MCP gateway supports both anonymous public operations and authenticated merchant capabilities:
-
-### Public Tools (Zero Configuration Required)
-Tools that query non-sensitive or public data do not require credentials:
-- `track_parcel` (Milestone tracking with SEC-009 privacy masking)
-- `estimate_shipping_fee` (Tariff calculations & booking preview cards)
-- `lookup_postal_code` (Sri Lanka postal directory)
-- `explain_company_policies` (Shipping guidelines & prohibited goods)
-
-### Authenticated Tools (`get_my_active_parcels`)
-Tools accessing private merchant or customer shipments require authentication. SwiftDrop uses an **Out-of-Band Auth Hierarchy** so secret keys are never typed into LLM prompts:
-
-1. **`mcp-remote` Environment Injection:** Define `SWIFTDROP_API_KEY` in your client config (as shown in Section 2). The proxy automatically injects the credential into the SSE connection.
-2. **SSE Gateway Header:** Directly configure `"headers": { "X-API-Key": "sd_live_..." }` in clients supporting HTTP headers (e.g. Cursor).
-3. **Canonical Key Format:** Merchant keys must match `^sd_(live|test)_[a-zA-Z0-9_-]{8,}$` (e.g. `sd_live_demo_merchant_123`).
+- **Public Tools:** `track_parcel`, `estimate_shipping_fee`, `lookup_postal_code`, and `explain_company_policies` require no authentication.
+- **Authenticated Tools:** `get_my_active_parcels` requires a Merchant API Key (`sd_live_...`) or Bearer token passed via:
+  - Header: `"X-API-Key": "sd_live_..."`
+  - Environment variable: `SWIFTDROP_API_KEY="sd_live_..."`
 
 ---
 
-## 4. Complete Tool Catalog & Schemas
+## 4. Available Tools
 
-Once connected, your AI assistant automatically gains access to five production-grade tools:
-
-### 4.1 `estimate_shipping_fee`
-Calculates official shipping fees, transit SLAs, and generates a 1-click booking card based on package weight, dimensions, and postal codes.
-
-- **Parameters:**
-  - `weight_kg` *(float, required)*: Package gross weight in kg (`0.01 <= weight_kg <= 50.0`).
-  - `pickup_postal_code` *(string, required)*: 5-digit origin postal code (e.g. `"00100"`).
-  - `delivery_postal_code` *(string, required)*: 5-digit destination postal code (e.g. `"20000"`).
-  - `service_type` *(string, optional)*: `"STANDARD"` (default), `"EXPRESS"`, or `"SAME_DAY"`.
-  - `length_cm` *(float, optional)*: Package length in cm (`0.1 <= length_cm <= 300.0`).
-  - `width_cm` *(float, optional)*: Package width in cm (`0.1 <= width_cm <= 300.0`).
-  - `height_cm` *(float, optional)*: Package height in cm (`0.1 <= height_cm <= 300.0`).
-- **Courier Invariants & Guardrails:**
-  - **All-or-None 3D Dimensions:** If any dimension is specified, all three must be provided. Partial dimensions return a clean validation error.
-  - **Maximum Girth Limit:** Length $+ 2 \times (\text{Width} + \text{Height}) \le 300.0\text{ cm}$.
-  - **Maximum Volumetric Weight:** $(L \times W \times H) / 5000 \le 50.0\text{ kg}$.
-  - **Billable Weight Calculation:** Evaluated automatically as $\max(\text{gross\_weight}, \text{volumetric\_weight})$.
-- **Example Natural Language Prompt:**
-  > *"How much to send a 2.5kg package from Colombo 01 (00100) to Kandy (20000) using Express delivery?"*
-
----
-
-### 4.2 `track_parcel`
-Retrieves public milestone tracking events, current transit status, and destination city for a shipment.
-
-- **Parameters:**
-  - `tracking_number` *(string, required)*: Tracking code matching `^SD-\d{8}-\d{5}$` (e.g. `SD-20261102-00001`).
-- **SEC-009 Privacy Masking:** Strictly scrubs recipient phone numbers, full street addresses, and driver delivery notes. Only sanitized milestone timestamps and destination cities are returned.
-- **Example Natural Language Prompt:**
-  > *"Where is my package SD-20261102-00001 right now?"*
-
----
-
-### 4.3 `get_my_active_parcels`
-Retrieves active shipments (`BOOKED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`) belonging to the authenticated merchant or customer.
-
-- **Parameters:**
-  - `status` *(string, optional)*: Filter by milestone (e.g. `"IN_TRANSIT"`). Dispatches both `status` and `status_filter` parameters to upstream Core API.
-  - `limit` *(integer, optional)*: Maximum items to return (`1 <= limit <= 50`, default: `10`).
-  - `authorization_token` *(string, optional)*: Optional customer Bearer JWT (defaults to environment or gateway credential).
-- **Tenant Isolation:** Safe against IDOR; Core API derives merchant tenant ID directly from validated token claims.
-- **Example Natural Language Prompt:**
-  > *"Show me all my active deliveries that are currently in transit."*
-
----
-
-### 4.4 `explain_company_policies`
-Explains courier delivery rules, prohibited goods, packing standards, transit SLAs, and dispute claims.
-
-- **Parameters:**
-  - `query` *(string, required)*: Topic of inquiry (e.g. `"prohibited items"`, `"fragile packing"`, `"dispute deadline"`).
-- **Token Inflation Defense:** Unmatched general queries return a structured 4-chapter policy summary index (< 800 chars) instead of dumping the full 5KB markdown into the LLM context window.
-- **Example Natural Language Prompt:**
-  > *"Can I send lithium-ion batteries or perfumes through SwiftDrop?"*
-
----
-
-### 4.5 `lookup_postal_code`
-Looks up official Sri Lankan 5-digit postal codes, administrative districts, and provinces for any city, town, or rural postal area.
-
-- **Parameters:**
-  - `city_or_area` *(string, required)*: Name of city, town, or postal division (e.g. `"Walasmulla"`, `"Kadugannawa"`, `"Mawanella"`, `"Mirissa"`).
-- **Coverage:** Complete in-memory directory covering all 25 districts and commercial towns.
-- **Example Natural Language Prompt:**
-  > *"What is the postal code for Walasmulla or Kadugannawa?"*
-
----
-
-## 5. Authoritative Context Resources
-
-FastMCP context resources allow AI models to inspect static knowledge directly without executing a tool call:
-
-| Resource URI | Content | Purpose |
+| Tool | Description | Access |
 | :--- | :--- | :--- |
-| **`swiftdrop://policies`** | Markdown shipping guidelines | Factual grounding on packaging and claim procedures. |
-| **`swiftdrop://sla-matrix`** | JSON delivery transit time SLAs | Authoritative reference for Express (24h) and Standard (48–72h) delivery times. |
+| **`track_parcel`** | Retrieve tracking status and delivery milestones for a parcel. | Public |
+| **`estimate_shipping_fee`** | Calculate shipping rate quote and estimated transit time. | Public |
+| **`get_my_active_parcels`** | List active shipments for the authenticated merchant or customer. | Authenticated |
+| **`explain_company_policies`** | Query courier shipping policies, prohibited items, and claims rules. | Public |
+| **`lookup_postal_code`** | Lookup Sri Lankan 5-digit postal code by city or area name. | Public |
+
+### Tool Parameters
+
+#### `track_parcel`
+- `tracking_number` *(string, required)*: Parcel tracking code (format: `SD-YYYYMMDD-XXXXX`).
+
+#### `estimate_shipping_fee`
+- `weight_kg` *(float, required)*: Package gross weight in kilograms (`0.01` to `50.0`).
+- `pickup_postal_code` *(string, required)*: 5-digit origin postal code.
+- `delivery_postal_code` *(string, required)*: 5-digit destination postal code.
+- `service_type` *(string, optional)*: Delivery tier (`"STANDARD"`, `"EXPRESS"`, or `"SAME_DAY"`).
+- `length_cm` *(float, optional)*: Package length in cm.
+- `width_cm` *(float, optional)*: Package width in cm.
+- `height_cm` *(float, optional)*: Package height in cm.
+
+#### `get_my_active_parcels`
+- `status` *(string, optional)*: Filter by milestone (`"BOOKED"`, `"IN_TRANSIT"`, etc.).
+- `limit` *(integer, optional)*: Max records to return (default: `10`, max: `50`).
+- `authorization_token` *(string, optional)*: Bearer token (defaults to configured API key or gateway header).
+
+#### `explain_company_policies`
+- `query` *(string, required)*: Topic to query (e.g., `"prohibited items"`, `"packaging"`).
+
+#### `lookup_postal_code`
+- `city_or_area` *(string, required)*: City, town, or area name.
 
 ---
 
-## 6. Testing & Connectivity Verification
+## 5. Context Resources
 
-You can test connectivity to the SwiftDrop SSE gateway using standard command-line tools:
+| Resource URI | Description | MIME Type |
+| :--- | :--- | :--- |
+| **`swiftdrop://policies`** | Official shipping guidelines and packaging policy. | `text/markdown` |
+| **`swiftdrop://sla-matrix`** | Delivery service transit time SLAs. | `application/json` |
+
+---
+
+## 6. Connectivity Verification
+
+Verify connection to the SSE server using `curl`:
 
 ```bash
-# 1. Test SSE handshake
 curl -i -N http://127.0.0.1:8002/mcp
-
-# 2. Test handshake with Merchant API Key
-curl -i -N -H "X-API-Key: sd_live_demo_merchant_123" http://127.0.0.1:8002/mcp
 ```
 
-Expected HTTP Response:
+Expected response:
 ```http
 HTTP/1.1 200 OK
 content-type: text/event-stream
@@ -260,61 +190,35 @@ x-accel-buffering: no
 
 ---
 
-## 7. Troubleshooting & FAQ
+## 7. Troubleshooting
 
-#### Q: Connecting to `http://127.0.0.1:8002/mcp` returns `401 Unauthorized`.
-**Fix:** The server has handshake authentication enabled (`--require-auth`). Ensure your client configuration passes a valid `X-API-Key` matching `^sd_(live|test)_[a-zA-Z0-9_-]{8,}$` (e.g. `sd_live_demo_merchant_123`).
-
-#### Q: Why did `estimate_shipping_fee` return a `422 Unprocessable Entity`?
-**Fix:** Verify that:
-1. All three dimensions (`length_cm`, `width_cm`, `height_cm`) were supplied together, or none at all.
-2. Girth constraint is respected: $\text{Length} + 2 \times (\text{Width} + \text{Height}) \le 300\text{ cm}$.
-3. Volumetric weight is within limits: $(L \times W \times H) / 5000 \le 50\text{ kg}$.
-4. Gross weight is at least $0.01\text{ kg}$.
-
-#### Q: Can the MCP server create shipments or make financial charges?
-**Answer:** **No.** By design, the MCP server is 100% read-only. For parcel bookings, `estimate_shipping_fee` returns a pre-filled `NAVIGATE_BOOKING` action card (`/portal/book`) for human confirmation in the web application.
+- **`401 Unauthorized` on connection:** Ensure your configuration supplies a valid `X-API-Key` (e.g., `sd_live_...`).
+- **`422 Unprocessable Entity` on fee estimation:** Ensure weight is $\ge 0.01\text{ kg}$, and if providing dimensions, supply all three (`length_cm`, `width_cm`, `height_cm`).
+- **Tools not appearing in AI client:** Verify the SSE service is running on port `8002` or check your client's MCP configuration logs.
 
 ---
 
-## 8. 🧑‍💻 [Advanced / Contributor] Running Locally via STDIO (`swiftdrop-local`)
+## 8. Local Contributor Setup (STDIO)
 
-> [!NOTE]
-> This section is strictly for **SwiftDrop core developers** who are actively modifying the Python source code or running offline unit tests. End-users and AI tool integrators should use the **SSE (`swiftdrop`)** configuration in Section 2.
+For contributors developing the Python service locally who prefer direct process execution without an SSE network daemon:
 
-If you are developing inside the SwiftDrop repository and wish to run the FastMCP server directly as a local subprocess without a network daemon:
-
-### Local Subprocess Setup
-1. **Prepare Virtual Environment:**
-   ```powershell
-   cd services/ai-assistant
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
-2. **Verify Tool Handshake Directly:**
-   ```powershell
-   python scripts/verify_mcp_cli.py
-   ```
-3. **Configure Client for STDIO (`swiftdrop-local`):**
-   Add to your `mcp_config.json`:
-   ```json
-   {
-     "mcpServers": {
-       "swiftdrop-local": {
-         "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
-         "args": [
-           "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
-         ],
-         "env": {
-           "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
-           "CORE_API_URL": "http://localhost:8080",
-           "TRACKING_API_URL": "http://localhost:8081",
-           "MOCK_LLM_MODE": "true",
-           "USE_MOCK_UPSTREAM": "true",
-           "SWIFTDROP_API_KEY": "sd_live_demo_merchant_123"
-         }
-       }
-     }
-   }
-   ```
+```json
+{
+  "mcpServers": {
+    "swiftdrop-local": {
+      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081",
+        "MOCK_LLM_MODE": "true",
+        "USE_MOCK_UPSTREAM": "true",
+        "SWIFTDROP_API_KEY": "sd_live_demo_merchant_123"
+      }
+    }
+  }
+}
+```
