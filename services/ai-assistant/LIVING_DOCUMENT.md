@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.13.0` (Authoritative Baseline — Cloud MCP Security Remediation & Boundary Validation Complete)  
+> **Specification Version:** `2.14.0` (Authoritative Baseline — Phase 8 Production Containerization & Kubernetes Operations Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -557,10 +557,18 @@ docker build -t swiftdrop/ai-assistant:latest services/ai-assistant/
 docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assistant:latest
 ```
 
-### Container Hardening Specifications
-- **Base Image:** `python:3.11-slim` (minimal attack surface).
-- **Non-Root Execution:** Container runs under unprivileged `appuser` (UID 10001, GID 10001).
-- **Decoupled Probe:** `HEALTHCHECK` queries `http://localhost:8000/health/live`.
+### Container & Kubernetes Hardening Specifications
+- **Multi-Stage Build:** `builder` stage compiles dependencies into `/opt/venv`; ultra-lean `runtime` stage copies `/opt/venv` with zero compiler tooling or development packages (< 150MB).
+- **Dual-Port Exposure:** Exposes port `8000` (FastAPI REST API & Chat SSE) and port `8002` (FastMCP Remote SSE Gateway).
+- **Process Supervisor (`entrypoint.sh`):** Supports `api`, `mcp`, and `dual` operational modes with POSIX signal trapping forwarding `SIGTERM`/`SIGINT` to children, guaranteeing 20-second graceful stream draining.
+- **Non-Root Execution:** Container runs under unprivileged system user `appuser` (UID 10001, GID 10001).
+- **Read-Only Root Filesystem:** Manifest specifies `readOnlyRootFilesystem: true` with a 64MB `emptyDir` mounted at `/tmp` for scratch operations.
+- **Capabilities Dropped:** All Linux capabilities dropped (`drop: ["ALL"]`) with `allowPrivilegeEscalation: false`.
+- **Decoupled Probes:** Liveness probe (`/health/live`) and readiness probe (`/health/ready`) evaluate local process loop only, completely immune to upstream Core API / Tracking API outages.
+- **Traefik Edge Integration:** Dynamic routes in `deploy/gateway/traefik/dynamic-routes.yml` bind `PathPrefix('/api/v1/ai')` to port 8000 and `PathPrefix('/mcp')` to port 8002 with `X-Accel-Buffering: no` for real-time SSE streaming.
+- **Production Kubernetes Suite:** Canonical manifests located in `deploy/kubernetes/ai-assistant/` (`deployment.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml.example`, `hpa.yaml`).
+
+
 
 ---
 
@@ -606,3 +614,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.11.0` | 2026-11-03 | **Server-Sent Events (SSE) Real-Time Chat Streaming Complete:** Implemented `POST /api/v1/ai/chat/stream` delivering token-by-token W3C-compliant SSE streaming (`text/event-stream`). Added typed event lifecycle (`tool_start`, `tool_end`, `token`, `action_card`, `done`, `error`), extended `BaseLLMClient` with `generate_reply_stream()`, enabled deterministic offline token streaming in `MockLLMAdapter`, multi-turn delta accumulation in `OpenAIAdapter`, client disconnect early-termination (`request.is_disconnected()`), proxy buffer bypass (`X-Accel-Buffering: no`), and cross-protocol session memory continuity. Delivered 20 new tests across streaming unit, API, and security suites. | `192 passed in 104.51s (90% coverage)` |
 | `2.12.0` | 2026-11-03 | **FastMCP Security Hardening & Adversarial Resilience Complete:** Remediated security audit findings (`swiftdrop-mcp-security-audit-report.md`). Implemented `SWIFTDROP_API_KEY` (Merchant API Key `sd_live_...`) and `SWIFTDROP_AUTH_TOKEN` (Bearer JWT) injection for `get_my_active_parcels` eliminating credential leaks in LLM transcripts (VULN-001); implemented custom SSE path at `/mcp` (with messages at `/mcp/messages/`); implemented double-checked `asyncio.Lock()` in `src/tools/policy_tool.py` preventing cache stampedes (thundering herds) on Core API admin settings (VULN-005); implemented strict 3D dimension cross-validation in `EstimateFeeInput` requiring all three or none (VULN-006). Added 29 new tests across unit and e2e security suites. | `221 passed (92% coverage)` |
 | `2.13.0` | 2026-11-03 | **Cloud MCP Security & Boundary Remediation Complete:** Remediated all 7 security findings from `swiftdrop-cloud-mcp-vulnerability-report.md`. Corrected query parameter desynchronization by propagating both `status` and `status_filter` (SEC-CLD-001); enforced courier girth limit ($\le 300\text{ cm}$) and volumetric weight limit ($\le 50\text{ kg}$) with billable weight pricing evaluation (SEC-CLD-002); fixed destination city null masking fallback (SEC-CLD-003); aligned minimum weight schema to `ge=0.01` and sanitized upstream 422 JSON trace leakage (SEC-CLD-004); enforced canonical API key verification in mock upstream server (SEC-CLD-005); introduced SSE handshake authentication middleware with `--require-auth` / `MCP_REQUIRE_AUTH` (SEC-CLD-006); mitigated policy token inflation with structured 4-chapter summary index on unmatched queries (SEC-CLD-007). Added 37 new tests across 6 specialized unit suites. | `243 passed in 92.36s (91% coverage)` |
+| `2.14.0` | 2026-11-03 | **Phase 8 Production Containerization & Kubernetes Operations Complete:** Implemented hardened multi-stage Dockerfile (< 150MB, non-root UID 10001, dual ports 8000 & 8002), POSIX process supervisor (`entrypoint.sh`) supporting `api`, `mcp`, and `dual` execution modes with 20s `SIGTERM` graceful drain. Integrated Traefik edge ingress routing (`dynamic-routes.yml`) for `PathPrefix('/api/v1/ai')` and `PathPrefix('/mcp')` with `X-Accel-Buffering: no`. Authored canonical production Kubernetes manifests (`deploy/kubernetes/ai-assistant/`: `deployment.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml.example`, `hpa.yaml`) and unified `deploy/docker-compose.yml`. Delivered 28 new automated tests across 5 specialized test suites (`test_k8s_manifests.py`, `test_docker_specs.py`, `test_process_supervision.py`, `test_traefik_specs.py`, `test_container_resilience.py`). | `271 passed in 118.77s (91% coverage)` |

@@ -175,14 +175,25 @@ python -m pytest -v
 
 ---
 
-## 🐳 Docker Deployment
+## 🐳 Production Containerization & Deployment
 
 ```bash
-# Build Docker image
+# Build multi-stage production Docker image (< 150MB)
 docker build -t swiftdrop/ai-assistant:latest .
 
 # Run container
-docker run -d -p 8000:8000 --env-file .env --name swiftdrop-ai swiftdrop/ai-assistant:latest
+# Run in dual mode (REST API on :8000, FastMCP SSE on :8002)
+docker run -d -p 8000:8000 -p 8002:8002 --env-file .env --name swiftdrop-ai swiftdrop/ai-assistant:latest
+
+# Or run specific modes via the container supervisor:
+# docker run -d -p 8000:8000 swiftdrop/ai-assistant:latest api   # REST only
+# docker run -d -p 8002:8002 swiftdrop/ai-assistant:latest mcp   # FastMCP SSE only
+
+### Kubernetes Manifests (`deploy/kubernetes/ai-assistant/`)
+- `deployment.yaml` — 2 replicas, `RollingUpdate`, `readOnlyRootFilesystem: true`, non-root `appuser` (UID 10001), 20s termination grace.
+- `service.yaml` — Dual-port `ClusterIP` exposing `http-api` (8000) and `mcp-sse` (8002).
+- `configmap.yaml` & `secret.yaml.example` — Cluster environment configuration.
+- `hpa.yaml` — Horizontal Pod Autoscaler (1 to 3 replicas).
 ```
 
 ---

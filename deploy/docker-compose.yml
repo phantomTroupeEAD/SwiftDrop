@@ -1,0 +1,59 @@
+# SwiftDrop Unified Local Development Stack
+# Orchestrated by Member 9 with service definitions from Members 1-10
+# Usage: docker compose -f deploy/docker-compose.yml up -d
+
+services:
+  # Edge Gateway & Reverse Proxy (Traefik v3.1)
+  traefik:
+    image: traefik:v3.1.7
+    container_name: swiftdrop-traefik
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"                    # Public HTTP Ingress
+      - "127.0.0.1:8090:8090"      # Traefik Admin Dashboard (Localhost only)
+    volumes:
+      - ./gateway/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./gateway/traefik/dynamic-routes.yml:/etc/traefik/dynamic/dynamic-routes.yml:ro
+    networks:
+      - swiftdrop-network
+    restart: unless-stopped
+
+  # AI Assistant & FastMCP Service (Python 3.11 / FastAPI / FastMCP)
+  ai-assistant:
+    build:
+      context: ../services/ai-assistant
+      dockerfile: Dockerfile
+    image: swiftdrop/ai-assistant:latest
+    container_name: swiftdrop-ai-assistant
+    restart: unless-stopped
+    ports:
+      - "8000:8000"                # REST API & Chat SSE streaming
+      - "8002:8002"                # FastMCP Remote SSE Gateway
+    environment:
+      - PORT=8000
+      - MCP_PORT=8002
+      - CORE_API_URL=http://core-api:8080
+      - TRACKING_API_URL=http://tracking-api:8081
+      - MOCK_LLM_MODE=true
+      - USE_MOCK_UPSTREAM=true
+      - SWIFTDROP_API_KEY=sd_live_demo_merchant_123
+      - LOG_LEVEL=INFO
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - swiftdrop-network
+
+networks:
+  swiftdrop-network:
+    name: swiftdrop-network
+    driver: bridge
