@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
+import json
 import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -144,3 +145,39 @@ class ChatMessageResponse(BaseModel):
         default=True,
         description="Indicates whether the answer is verified and grounded in tool output",
     )
+
+
+class StreamEventType(str, Enum):
+    """Permitted Server-Sent Events (SSE) event names."""
+
+    TOOL_START = "tool_start"
+    TOOL_END = "tool_end"
+    TOKEN = "token"
+    ACTION_CARD = "action_card"
+    DONE = "done"
+    ERROR = "error"
+    PING = "ping"
+
+
+class StreamChunkEvent(BaseModel):
+    """Standardized representation of a single SSE stream chunk before serialization."""
+
+    event: StreamEventType
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+    def to_sse_frame(self) -> str:
+        """Format chunk event as standard W3C Server-Sent Event frame."""
+        data_json = json.dumps(self.data, separators=(",", ":"), ensure_ascii=False)
+        return f"event: {self.event.value}\ndata: {data_json}\n\n"
+
+
+def to_sse_frame(event_type: StreamEventType | str, data: Any) -> str:
+    """Format arbitrary event payload as a valid W3C SSE frame."""
+    event_name = event_type.value if isinstance(event_type, StreamEventType) else str(event_type)
+    if isinstance(data, BaseModel):
+        data_json = data.model_dump_json()
+    elif isinstance(data, dict):
+        data_json = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+    else:
+        data_json = json.dumps({"value": data}, separators=(",", ":"), ensure_ascii=False)
+    return f"event: {event_name}\ndata: {data_json}\n\n"

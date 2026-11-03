@@ -2,7 +2,7 @@
 
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID
 
 from src.core.postal_codes import SRI_LANKA_CITY_POSTAL_CODES, resolve_postal_code
@@ -11,6 +11,8 @@ from src.domain.chat import (
     ChatMessage,
     ChatMessageResponse,
     GenerativeAction,
+    StreamChunkEvent,
+    StreamEventType,
 )
 from src.llm.base import BaseLLMClient
 from src.llm.guardrails import sanitize_assistant_identity
@@ -427,4 +429,62 @@ class MockLLMAdapter(BaseLLMClient):
             tools_called=tools_called,
             latency_ms=latency_ms,
             grounded=True,
+        )
+
+    async def generate_reply_stream(
+        self,
+        prompt: str,
+        history: List[ChatMessage],
+        conversation_id: UUID,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AsyncGenerator[StreamChunkEvent, None]:
+        """Process conversational turn and yield incremental stream chunk events deterministically."""
+        # 1. Resolve full conversational turn
+        response = await self.generate_reply(
+            prompt=prompt,
+            history=history,
+            conversation_id=conversation_id,
+            context=context,
+        )
+
+        # 2. Emit tool call start and end events for any executed tools
+        for idx, tool_name in enumerate(response.tools_called):
+            call_id = f"mock_call_{idx}_{tool_name}"
+            yield StreamChunkEvent(
+                event=StreamEventType.TOOL_START,
+                data={"tool": tool_name, "call_id": call_id},
+            )
+            yield StreamChunkEvent(
+                event=StreamEventType.TOOL_END,
+                data={
+                    "tool": tool_name,
+                    "call_id": call_id,
+                    "grounded": response.grounded,
+                    "duration_ms": 15,
+                },
+            )
+
+        # 3. Emit any generated action cards
+        for action in response.actions:
+            yield StreamChunkEvent(
+                event=StreamEventType.ACTION_CARD,
+                data=action.model_dump(),
+            )
+
+        # 4. Stream tokens word by word / chunk by chunk
+        tokens = re.findall(r"\S+\s*|\n+", response.reply)
+        for token in tokens:
+            yield StreamChunkEvent(
+                event=StreamEventType.TOKEN,
+                data={"delta": token},
+            )
+
+        # 5. Emit terminal done event
+        yield StreamChunkEvent(
+            event=StreamEventType.DONE,
+            data={
+                "conversation_id": str(response.conversation_id),
+                "latency_ms": response.latency_ms,
+                "tools_called": response.tools_called,
+            },
         )

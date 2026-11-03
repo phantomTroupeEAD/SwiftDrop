@@ -16,6 +16,7 @@
 | `GET` | `/redoc` | Interactive ReDoc Documentation | None (Developer UI) |
 | `GET` | `/openapi.json` | Canonical OpenAPI Schema Specification | None (Public) |
 | `POST` | `/api/v1/ai/chat` | Natural language chat endpoint with automatic tool invocation and grounded responses | Optional (Public for tracking & quotes; Bearer JWT for customer parcel lookup) |
+| `POST` | `/api/v1/ai/chat/stream` | Real-time Server-Sent Events (SSE) token and tool event streaming endpoint | Optional (Public for tracking & quotes; Bearer JWT for customer parcel lookup) |
 | `GET` | `/health/live` | Kubernetes Liveness Probe: confirms FastAPI event loop responsiveness | None (Public) |
 | `GET` | `/health/ready` | Kubernetes Readiness Probe: verifies local LLM config & memory cache sanity | None (Public) |
 | `GET` | `/health/metrics` | Prometheus & runtime metrics endpoint for active sessions, uptime, and capacity | None (Public) |
@@ -216,7 +217,84 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 
 ---
 
-### 3.2 Liveness Probe (`GET /health/live`)
+### 3.2 Chat with Assistant — Server-Sent Events Stream (`POST /api/v1/ai/chat/stream`)
+
+Processes user inquiry and streams response deltas, tool execution events, and generative UI action cards in real time conforming to the standard W3C EventSource wire format.
+
+#### Request Headers
+- `Content-Type: application/json` (Required)
+- `Authorization: Bearer <jwt>` (Optional: Required for queries accessing private account parcels)
+- `X-Correlation-ID: <uuid>` or `X-Request-ID: <uuid>` (Optional: Distributed tracing correlation ID)
+
+#### Response Headers
+- `Content-Type: text/event-stream; charset=utf-8`
+- `Cache-Control: no-cache, no-transform`
+- `Connection: keep-alive`
+- `X-Accel-Buffering: no` (Instructs reverse proxies e.g. Traefik/Nginx not to buffer streaming chunks)
+- `X-Correlation-ID: <uuid>`
+
+#### Request Body Schema (`ChatMessageRequest`)
+Exact same JSON payload structure as `POST /api/v1/ai/chat`:
+```json
+{
+  "prompt": "How much does it cost to ship a 2.5kg package from Colombo to Kandy?",
+  "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+#### Event Stream Protocol (`text/event-stream`)
+
+##### 1. `tool_start` Event
+Emitted immediately when the LLM triggers a read-only tool call:
+```http
+event: tool_start
+data: {"tool":"estimate_delivery_fee","call_id":"call_01"}
+```
+
+##### 2. `tool_end` Event
+Emitted when upstream tool execution completes:
+```http
+event: tool_end
+data: {"tool":"estimate_delivery_fee","call_id":"call_01","grounded":true,"duration_ms":38}
+```
+
+##### 3. `token` Event
+Emitted incrementally for generated text deltas:
+```http
+event: token
+data: {"delta":"The estimated shipping fee is **LKR 750**."}
+```
+
+##### 4. `action_card` Event
+Emitted when a tool output includes a generative UI action:
+```http
+event: action_card
+data: {"action_type":"NAVIGATE_BOOKING","label":"Book Shipment Now","target_url":"/portal/book","prefill_data":{"weight_kg":2.5,"pickup_postal_code":"00100","delivery_postal_code":"20000","service_type":"STANDARD","estimated_fee":750,"estimated_fee_cents":75000,"currency":"LKR"}}
+```
+
+##### 5. `done` Event
+Emitted as the final terminal event of the stream:
+```http
+event: done
+data: {"conversation_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","latency_ms":240,"tools_called":["estimate_delivery_fee"]}
+```
+
+##### 6. `error` Event
+Emitted if an unrecoverable failure occurs mid-stream:
+```http
+event: error
+data: {"code":"INTERNAL_STREAM_ERROR","message":"An error occurred during stream generation. Please try again."}
+```
+
+#### Pre-Stream Error Handling (RFC-7807 JSON)
+If an error occurs *before* streaming begins (e.g. invalid payload, expired auth token, rate limit exceeded), the endpoint returns standard `application/json` with the appropriate status code:
+- **422 Unprocessable Entity:** When prompt fails schema validation.
+- **401 Unauthorized:** When Bearer JWT is expired or tampered.
+- **429 Too Many Requests:** When client exceeds tier rate limit ceiling.
+
+---
+
+### 3.3 Liveness Probe (`GET /health/live`)
 Confirms that the FastAPI process and asyncio event loop are responsive.
 
 ```json
