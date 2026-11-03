@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for parcel dimension cross-field validation in EstimateFeeInput."""
+"""Comprehensive unit tests for parcel dimension, girth, volumetric, and weight validation."""
 
 import pytest
 from pydantic import ValidationError
@@ -20,7 +20,7 @@ def test_dimensions_omitted_valid():
 
 
 def test_dimensions_all_specified_valid():
-    """Quote with all 3 dimensions specified is valid."""
+    """Quote with all 3 dimensions specified within limits is valid."""
     model = EstimateFeeInput(
         weight_kg=2.5,
         pickup_postal_code="00100",
@@ -64,7 +64,7 @@ def test_partial_dimensions_rejected(length, width, height, missing_desc):
 def test_dimensions_min_boundary_valid():
     """Minimum valid dimensions (0.1 cm) must be accepted."""
     model = EstimateFeeInput(
-        weight_kg=0.1,
+        weight_kg=0.01,
         pickup_postal_code="00100",
         delivery_postal_code="20000",
         length_cm=0.1,
@@ -74,21 +74,71 @@ def test_dimensions_min_boundary_valid():
     assert model.length_cm == 0.1
     assert model.width_cm == 0.1
     assert model.height_cm == 0.1
+    assert model.weight_kg == 0.01
 
 
-def test_dimensions_max_boundary_valid():
-    """Maximum valid dimensions (300.0 cm) must be accepted."""
+def test_dimensions_courier_girth_boundary_valid():
+    """Maximum allowable girth (300.0 cm) and volumetric (50.0 kg) boundary must be accepted."""
     model = EstimateFeeInput(
         weight_kg=50.0,
         pickup_postal_code="00100",
         delivery_postal_code="20000",
-        length_cm=300.0,
-        width_cm=300.0,
-        height_cm=300.0,
+        length_cm=100.0,
+        width_cm=50.0,
+        height_cm=50.0,
     )
-    assert model.length_cm == 300.0
-    assert model.width_cm == 300.0
-    assert model.height_cm == 300.0
+    assert model.length_cm == 100.0
+    assert model.width_cm == 50.0
+    assert model.height_cm == 50.0
+
+
+def test_dimensions_girth_exceeded_rejected():
+    """Girth exceeding 300.0 cm must be rejected per courier policy."""
+    with pytest.raises(ValidationError) as exc_info:
+        EstimateFeeInput(
+            weight_kg=5.0,
+            pickup_postal_code="00100",
+            delivery_postal_code="20000",
+            length_cm=150.0,
+            width_cm=100.0,
+            height_cm=100.0,
+        )
+    assert "Package girth (550.0 cm) exceeds maximum courier limit of 300.0 cm" in str(exc_info.value)
+
+
+def test_dimensions_girth_just_above_boundary_rejected():
+    """Girth just 0.1 cm above 300.0 cm must be rejected."""
+    with pytest.raises(ValidationError) as exc_info:
+        EstimateFeeInput(
+            weight_kg=2.5,
+            pickup_postal_code="00100",
+            delivery_postal_code="20000",
+            length_cm=100.1,
+            width_cm=50.0,
+            height_cm=50.0,
+        )
+    assert "exceeds maximum courier limit of 300.0 cm" in str(exc_info.value)
+
+
+def test_minimum_weight_boundary_accepted():
+    """Minimum gross weight of 0.01 kg must be accepted."""
+    model = EstimateFeeInput(
+        weight_kg=0.01,
+        pickup_postal_code="00100",
+        delivery_postal_code="20000",
+    )
+    assert model.weight_kg == 0.01
+
+
+def test_minimum_weight_below_boundary_rejected():
+    """Weight below 0.01 kg must be rejected by ge=0.01."""
+    with pytest.raises(ValidationError) as exc_info:
+        EstimateFeeInput(
+            weight_kg=0.009,
+            pickup_postal_code="00100",
+            delivery_postal_code="20000",
+        )
+    assert "greater than or equal to 0.01" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(

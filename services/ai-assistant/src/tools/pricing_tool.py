@@ -27,8 +27,21 @@ async def pricing_tool(
     target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/pricing/quotes"
 
     # Build upstream payload conforming to Core API contract
+    volumetric_kg = 0.0
+    billable_weight = input_data.weight_kg
+    if (
+        input_data.length_cm is not None
+        and input_data.width_cm is not None
+        and input_data.height_cm is not None
+    ):
+        volumetric_kg = round(
+            (input_data.length_cm * input_data.width_cm * input_data.height_cm) / 5000.0,
+            2,
+        )
+        billable_weight = max(input_data.weight_kg, volumetric_kg)
+
     request_payload: Dict[str, Any] = {
-        "weight_kg": input_data.weight_kg,
+        "weight_kg": billable_weight,
         "pickup_postal_code": input_data.pickup_postal_code,
         "delivery_postal_code": input_data.delivery_postal_code,
         "service_type": input_data.service_type.value,
@@ -60,10 +73,25 @@ async def pricing_tool(
         response = await client.post(target_url, json=request_payload)
 
         if response.status_code >= 400:
-            raise UpstreamServiceException(
-                "Core API Pricing",
-                f"Received HTTP {response.status_code} while calculating quote: {response.text}",
-            )
+            error_msg = f"Received HTTP {response.status_code} while calculating quote"
+            try:
+                err_json = response.json()
+                if isinstance(err_json, dict):
+                    if "detail" in err_json and isinstance(err_json["detail"], list):
+                        details = [
+                            f"{'.'.join(str(loc) for loc in d.get('loc', []))}: {d.get('msg')}"
+                            for d in err_json["detail"]
+                            if isinstance(d, dict)
+                        ]
+                        if details:
+                            error_msg = f"Validation error: {'; '.join(details)}"
+                    elif "message" in err_json:
+                        error_msg = str(err_json["message"])
+                    elif "error" in err_json and isinstance(err_json["error"], dict) and "message" in err_json["error"]:
+                        error_msg = str(err_json["error"]["message"])
+            except Exception:
+                pass
+            raise UpstreamServiceException("Core API Pricing", error_msg)
 
         try:
             quote_data = response.json()
@@ -115,7 +143,7 @@ async def pricing_tool(
     except (httpx.TimeoutException, httpx.RequestError) as exc:
         if close_client and settings.is_mock_mode:
             # Deterministic offline mock calculation for CI / local test execution
-            fee_cents = int(35000 + (input_data.weight_kg * 7500))
+            fee_cents = int(35000 + (billable_weight * 7500))
             total_fee_lkr = int(round(fee_cents / 100.0))
             currency = "LKR"
             action = GenerativeAction(

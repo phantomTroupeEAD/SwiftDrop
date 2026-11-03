@@ -55,9 +55,9 @@ class EstimateFeeInput(BaseModel):
     """Input argument model for estimate_shipping_fee tool."""
 
     weight_kg: float = Field(
-        gt=0.0,
+        ge=0.01,
         le=50.0,
-        description="Gross package weight in kilograms (must be > 0.0 and <= 50.0 kg)",
+        description="Gross package weight in kilograms (must be between 0.01 kg and 50.0 kg)",
     )
     pickup_postal_code: str = Field(
         pattern=r"^\d{5}$",
@@ -103,7 +103,7 @@ class EstimateFeeInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_complete_dimensions(self) -> "EstimateFeeInput":
-        """Ensure parcel dimensions are either fully specified (all three: length, width, height) or omitted entirely."""
+        """Ensure parcel dimensions are complete and adhere to courier girth and volumetric weight limits."""
         dims = [self.length_cm, self.width_cm, self.height_cm]
         specified = [d for d in dims if d is not None]
         if specified and len(specified) < 3:
@@ -111,6 +111,23 @@ class EstimateFeeInput(BaseModel):
                 "All three dimensions (length_cm, width_cm, height_cm) must be provided together. "
                 "Partial dimensions cannot be calculated."
             )
+
+        if self.length_cm is not None and self.width_cm is not None and self.height_cm is not None:
+            # 1. Courier maximum girth limit: Length + 2*(Width + Height) <= 300.0 cm
+            girth = self.length_cm + 2.0 * (self.width_cm + self.height_cm)
+            if girth > 300.0:
+                raise ValueError(
+                    f"Package girth ({girth:.1f} cm) exceeds maximum courier limit of 300.0 cm. "
+                    "Formula: Length + 2 * (Width + Height)."
+                )
+
+            # 2. Maximum volumetric weight limit: (L * W * H) / 5000 <= 50.0 kg
+            volumetric_kg = (self.length_cm * self.width_cm * self.height_cm) / 5000.0
+            if volumetric_kg > 50.0:
+                raise ValueError(
+                    f"Volumetric weight ({volumetric_kg:.1f} kg) exceeds maximum courier limit of 50.0 kg."
+                )
+
         return self
 
 

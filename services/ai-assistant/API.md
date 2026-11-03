@@ -1,10 +1,10 @@
-﻿# AI Assistant & FastMCP API Specifications
+# AI Assistant & FastMCP API Specifications
 
 > **Service:** `services/ai-assistant`  
 > **Assigned Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Base Path:** `/api/v1/ai`  
 > **Container Port:** `8000`  
-> **Specification Version:** `2.5.1` (Authoritative System Baseline)
+> **Specification Version:** `2.6.0` (Remediated Cloud MCP & Boundary Validation)
 
 ---
 
@@ -38,14 +38,20 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 ### 2.2 `estimate_delivery_fee`
 - **Description:** Compute authoritative delivery fee quote, transit hours estimate, and prefilled booking action based on package weight, dimensions, and postal codes.
 - **Parameters:**
-  - `weight_kg` (float, required): Package weight in kilograms (`0.0 < weight_kg <= 50.0`).
+  - `weight_kg` (float, required): Package weight in kilograms (`0.01 <= weight_kg <= 50.0`).
   - `pickup_postal_code` (string, required): 5-digit origin postal code (e.g. `"00100"`).
   - `delivery_postal_code` (string, required): 5-digit destination postal code (e.g. `"20000"`).
   - `service_type` (string, optional): Delivery tier: `"STANDARD"`, `"EXPRESS"`, or `"SAME_DAY"` (default: `"STANDARD"`).
   - `length_cm` (float, optional): Package length in cm (`0.0 < length_cm <= 300.0`).
   - `width_cm` (float, optional): Package width in cm (`0.0 < width_cm <= 300.0`).
   - `height_cm` (float, optional): Package height in cm (`0.0 < height_cm <= 300.0`).
-- **Validation Invariant (VULN-006):** Strict 3D dimension cross-validation: if any dimension is provided, all three (`length_cm`, `width_cm`, `height_cm`) must be supplied together. Partial dimensions trigger a `422 Unprocessable Entity` validation error.
+- **Validation Invariants (VULN-006, SEC-CLD-002, SEC-CLD-004):**
+  - Strict 3D dimension cross-validation: if any dimension is provided, all three (`length_cm`, `width_cm`, `height_cm`) must be supplied together. Partial dimensions trigger a `422 Unprocessable Entity` validation error.
+  - Minimum gross weight: strictly enforces `weight_kg >= 0.01 kg`.
+  - Maximum package girth: strictly enforces `Length + 2 * (Width + Height) <= 300.0 cm`.
+  - Maximum volumetric weight: strictly enforces `(Length * Width * Height) / 5000 <= 50.0 kg`.
+  - Billable weight calculation: dynamically evaluates `billable_weight = max(weight_kg, volumetric_kg)`.
+  - Upstream 422 error sanitization: upstream schema validation errors are sanitized into human-readable messages without leaking internal trace dictionaries.
 - **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes`
 - **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
 - **Permissions:** Public / Anonymous.
@@ -54,7 +60,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.
 - **Parameters:**
   - `authorization_token` (string, optional): Customer or merchant JWT Bearer token (defaults to `null`). Can be passed explicitly or injected via environment variable `SWIFTDROP_AUTH_TOKEN`.
-  - `status` (string, optional): Filter by parcel lifecycle status (e.g. `"IN_TRANSIT"`).
+  - `status` (string, optional): Filter by parcel lifecycle status (e.g. `"IN_TRANSIT"`). Dispatches both `status` and `status_filter` query parameters to upstream Core API to guarantee contract compatibility (SEC-CLD-001).
   - `limit` (integer, optional): Maximum parcels to return (`1 <= limit <= 50`, default: `10`).
 - **Authentication Hierarchy (VULN-001):**
   1. `context["authorization"]` (HTTP / SSE gateway header)
@@ -68,7 +74,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Description:** Explain courier company policies, prohibited goods, packaging standards, transit SLAs, and dispute rules.
 - **Parameters:**
   - `query` (string, required): Inquired policy topic (e.g. `"prohibited items"`, `"packaging limits"`, `"SLA"`).
-- **Concurrency & Caching (VULN-005):** In-memory 30-minute policy cache protected by `asyncio.Lock()` double-checked locking, preventing thundering herds (cache stampedes) on Core API admin settings.
+- **Concurrency & Caching (VULN-005, SEC-CLD-007):** In-memory 30-minute policy cache protected by `asyncio.Lock()` double-checked locking, preventing thundering herds (cache stampedes) on Core API admin settings. When a query cannot be matched to specific section keywords, the tool returns a concise 4-chapter policy summary index (< 800 chars) instead of dumping the full 5KB markdown into LLM context.
 - **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with local `company_policies.md` grounding).
 - **Permissions:** Public / Anonymous.
 
@@ -109,9 +115,9 @@ Configure `~/.gemini/config/mcp_config.json`:
 ```
 
 #### Mode B: Cloud / Remote SSE Server (`http://127.0.0.1:8002/mcp`)
-Start the FastMCP SSE daemon:
+Start the FastMCP SSE daemon (optional `--require-auth` flag or `MCP_REQUIRE_AUTH=true` env var enforces API key / Bearer token validation at SSE handshake):
 ```powershell
-python src/mcp/server.py --transport sse --port 8002
+python src/mcp/server.py --transport sse --port 8002 --require-auth
 ```
 
 Configure `~/.gemini/config/mcp_config.json`:

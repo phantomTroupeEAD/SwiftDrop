@@ -103,6 +103,10 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         description="Optional Merchant API key (e.g. sd_live_...) for FastMCP authenticated queries",
     )
+    MCP_REQUIRE_AUTH: bool = Field(
+        default=False,
+        description="When true, FastMCP SSE endpoint requires valid X-API-Key or Bearer token on GET /mcp",
+    )
     AI_SERVICE_ROLE_TOKEN: SecretStr = Field(
         default=SecretStr("dev-internal-secret-key-123"),
         description="Shared secret token for internal Core API service-role requests",

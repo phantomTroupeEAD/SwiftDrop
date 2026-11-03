@@ -70,7 +70,7 @@ async def parcels_tool(
 
     if not auth_header and not api_key:
         raise AuthException(
-            "Authentication required to retrieve customer shipments. "
+            "Authentication required: Authentication token required to retrieve customer shipments. "
             "Please configure SWIFTDROP_API_KEY (or SWIFTDROP_AUTH_TOKEN) in environment or provide authorization."
         )
 
@@ -89,7 +89,9 @@ async def parcels_tool(
 
     params: Dict[str, Any] = {"limit": input_data.limit}
     if input_data.status:
-        params["status"] = input_data.status.value
+        status_val = input_data.status.value
+        params["status"] = status_val
+        params["status_filter"] = status_val
 
     timeouts = httpx.Timeout(connect=2.0, read=5.0, write=5.0, pool=5.0)
     close_client = False

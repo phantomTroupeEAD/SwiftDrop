@@ -7,6 +7,7 @@ Provides realistic endpoints for local testing:
 - GET  /api/v1/admin/settings                    (Core API Admin Settings)
 """
 
+import re
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -200,9 +201,24 @@ def calculate_quote(quote_req: PricingQuoteRequest) -> Dict[str, Any]:
             detail="Package weight exceeds maximum allowed boundary of 50.0kg",
         )
 
+    # Volumetric weight calculation (if dimensions are supplied)
+    billable_weight = quote_req.weight_kg
+    if (
+        quote_req.dimensions
+        and quote_req.dimensions.length_cm
+        and quote_req.dimensions.width_cm
+        and quote_req.dimensions.height_cm
+    ):
+        volumetric_weight = (
+            quote_req.dimensions.length_cm
+            * quote_req.dimensions.width_cm
+            * quote_req.dimensions.height_cm
+        ) / 5000.0
+        billable_weight = max(billable_weight, volumetric_weight)
+
     # Base pricing logic (in LKR minor unit cents)
     base_fee_cents = 35000  # LKR 350.00
-    weight_fee_cents = int(quote_req.weight_kg * 15000)  # LKR 150.00 per kg
+    weight_fee_cents = int(billable_weight * 15000)  # LKR 150.00 per kg
 
     # Tier multipliers
     st_upper = quote_req.service_type.upper()
@@ -236,20 +252,29 @@ def calculate_quote(quote_req: PricingQuoteRequest) -> Dict[str, Any]:
 )
 def list_active_parcels(
     authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     limit: int = 10,
     status_filter: Optional[str] = None,
+    status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Return active customer parcels. Requires valid Bearer JWT."""
-    if not authorization or not authorization.startswith("Bearer "):
+    """Return active customer parcels. Requires valid Bearer JWT or canonical Merchant X-API-Key."""
+    if x_api_key:
+        if not re.match(r"^sd_(live|test)_[a-zA-Z0-9_-]{8,}$", x_api_key.strip()):
+            raise HTTPException(
+                status_code=401,
+                detail={"error": {"code": "UNAUTHORIZED", "message": "Invalid or unrecognized X-API-Key format"}},
+            )
+    elif not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": {"code": "UNAUTHORIZED", "message": "Bearer authentication token required"}},
+            status_code=401,
+            detail={"error": {"code": "UNAUTHORIZED", "message": "Bearer authentication token or valid X-API-Key required"}},
         )
 
     # Return seeded parcels limited by request param
     results = CUSTOMER_ACTIVE_PARCELS
-    if status_filter:
-        results = [p for p in results if p["status"] == status_filter.upper()]
+    active_filter = status_filter or status
+    if active_filter:
+        results = [p for p in results if p["status"] == active_filter.upper()]
 
     return results[:limit]
 

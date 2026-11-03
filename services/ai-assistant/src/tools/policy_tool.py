@@ -66,8 +66,16 @@ def _filter_policy_sections(full_text: str, query: str) -> str:
     if matched_sections:
         return "\n\n---\n\n".join(matched_sections)
 
-    # If no specific section matched, return full text (it's concise and fits well within context)
-    return full_text.strip()
+    # If no specific section matched, return structured category index to prevent token inflation
+    return (
+        "No specific policy sections matched your inquiry. "
+        "SwiftDrop policies cover 4 main categories:\n"
+        "1. **Packaging Standards:** Maximum weight 50.0kg, maximum girth (Length + 2*(Width + Height)) 300.0cm.\n"
+        "2. **Prohibited Items:** Explosives, radioactive material, flammable liquids, narcotics, perishables.\n"
+        "3. **Transit SLAs:** Express (24 hours), Standard (48-72 hours), Outstation (3-5 business days).\n"
+        "4. **Claims & Disputes:** Damaged package claims must be filed with photographic proof within 48 hours.\n"
+        "Please specify which category you would like more information on."
+    )
 
 
 @register_tool(

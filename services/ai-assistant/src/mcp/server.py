@@ -195,8 +195,39 @@ def get_sla_matrix_resource() -> str:
 # Server Execution Entrypoint (STDIO or SSE)
 # -------------------------------------------------------------------------
 
+class SSEHandshakeAuthMiddleware:
+    """Validate X-API-Key or Bearer token on GET /mcp when authentication is enabled."""
+
+    def __init__(self, app: Any):
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope["path"] == "/mcp" and scope["method"] == "GET":
+            import re
+            from starlette.responses import Response
+            headers = dict(scope.get("headers", []))
+            api_key = headers.get(b"x-api-key", b"").decode("utf-8")
+            auth = headers.get(b"authorization", b"").decode("utf-8")
+            valid = False
+            if api_key and re.match(r"^sd_(live|test)_[a-zA-Z0-9_-]{8,}$", api_key.strip()):
+                valid = True
+            elif auth and auth.startswith("Bearer "):
+                valid = True
+
+            if not valid:
+                response = Response(
+                    content=json.dumps({"error": "Unauthorized: valid X-API-Key or Bearer token required for /mcp"}),
+                    status_code=401,
+                    media_type="application/json",
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 if __name__ == "__main__":
     import argparse
+    from src.core.config import get_settings
 
     parser = argparse.ArgumentParser(description="SwiftDrop FastMCP Server")
     parser.add_argument(
@@ -216,6 +247,11 @@ if __name__ == "__main__":
         default="127.0.0.1",
         help="Bind host for SSE transport (default: 127.0.0.1)",
     )
+    parser.add_argument(
+        "--require-auth",
+        action="store_true",
+        help="Require valid X-API-Key or Bearer token on SSE /mcp handshake",
+    )
     args = parser.parse_args()
 
     if args.transport == "sse":
@@ -223,12 +259,24 @@ if __name__ == "__main__":
             f"Starting SwiftDrop FastMCP SSE Server at http://{args.host}:{args.port}/mcp",
             file=sys.stderr,
         )
-        mcp.run(
-            transport="sse",
-            host=args.host,
-            port=args.port,
-            sse_path="/mcp",
-            message_path="/mcp/messages/",
-        )
+        settings = get_settings()
+        require_auth = args.require_auth or settings.MCP_REQUIRE_AUTH
+        if require_auth:
+            import uvicorn
+            import anyio
+            print("Enforcing X-API-Key / Bearer auth on /mcp handshake", file=sys.stderr)
+            raw_app = mcp.sse_app(sse_path="/mcp", message_path="/mcp/messages/", host=args.host)
+            authed_app = SSEHandshakeAuthMiddleware(raw_app)
+            config = uvicorn.Config(authed_app, host=args.host, port=args.port, log_level=mcp.settings.log_level.lower())
+            server = uvicorn.Server(config)
+            anyio.run(server.serve)
+        else:
+            mcp.run(
+                transport="sse",
+                host=args.host,
+                port=args.port,
+                sse_path="/mcp",
+                message_path="/mcp/messages/",
+            )
     else:
         mcp.run(transport="stdio")

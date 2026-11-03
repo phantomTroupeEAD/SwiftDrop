@@ -13,12 +13,12 @@ from src.tools.registry import register_tool
 
 def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[str, Any]:
     """Apply SEC-009 privacy masking, extracting only non-sensitive milestone and city information."""
-    destination = raw_data.get("destination") or {}
-    destination_city = (
-        destination.get("city")
-        if isinstance(destination, dict)
-        else raw_data.get("destination_city", "Unknown")
-    )
+    destination_city = "Unknown"
+    dest_obj = raw_data.get("destination")
+    if isinstance(dest_obj, dict) and dest_obj.get("city"):
+        destination_city = dest_obj["city"]
+    elif raw_data.get("destination_city"):
+        destination_city = raw_data["destination_city"]
 
     raw_milestones = raw_data.get("milestones") or []
     sanitized_milestones: List[Dict[str, Any]] = []

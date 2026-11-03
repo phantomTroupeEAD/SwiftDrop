@@ -152,7 +152,7 @@ Configure `~/.gemini/config/mcp_config.json`:
 
 #### Option B: Remote / Cloud SSE Server (`http://127.0.0.1:8002/mcp`)
 ```bash
-python src/mcp/server.py --transport sse --port 8002
+python src/mcp/server.py --transport sse --port 8002 --require-auth
 ```
 Configure `~/.gemini/config/mcp_config.json`:
 ```json
@@ -201,6 +201,7 @@ Key environment variables in [`.env.example`](./.env.example):
 | `TRACKING_API_URL` | `http://tracking-api:8081` | Tracking Service URL |
 | `AI_SERVICE_ROLE_TOKEN` | `dev-internal-secret-key-123` | Shared secret for internal service calls |
 | `AI_RATE_LIMIT_RPM` | `20` | Max chat requests per minute per IP |
+| `MCP_REQUIRE_AUTH` | `false` | Enforce API key / Bearer token on FastMCP SSE handshake (`/mcp`) |
 
 ---
 
