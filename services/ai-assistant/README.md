@@ -8,7 +8,7 @@
 
 The **SwiftDrop AI Delivery Assistant** (`services/ai-assistant`) is an independently deployable microservice providing natural language parcel tracking, instant shipping fee quotations, active delivery overviews, and 1-click booking navigation for the SwiftDrop courier platform. 
 
-It also functions as an official **Model Context Protocol (FastMCP) Server**, enabling developer tools (Claude Desktop, Cursor, autonomous agents) to interact with SwiftDrop logistics tools over standardized interfaces.
+It also functions as an official **Model Context Protocol (FastMCP) Server**, enabling developer tools (Antigravity, Claude Desktop, Cursor, autonomous agents) to interact with SwiftDrop logistics tools over standardized interfaces.
 
 ---
 
@@ -44,7 +44,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 flowchart TD
     subgraph Clients["Clients & Gateways"]
         Portal["React Web Portal"]
-        Cursor["Claude / Cursor (MCP)"]
+        Cursor["Antigravity / Claude / Cursor (MCP)"]
     end
 
     subgraph TransportLayer["Transport Layer (src/api)"]
@@ -122,9 +122,30 @@ python -m uvicorn src.main:app --port 8000 --reload
 ```
 - **Mock Server Swagger Docs:** `http://localhost:8085/docs`
 
-### 4. Run the FastMCP Server (For Cursor / Claude Desktop)
+### 4. Run the FastMCP Server (For Antigravity / Cursor / Claude Desktop)
 ```bash
 python -m src.mcp.server
+```
+
+#### Antigravity Configuration (`~/.gemini/config/mcp_config.json`)
+```json
+{
+  "mcpServers": {
+    "swiftdrop": {
+      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081",
+        "MOCK_LLM_MODE": "true",
+        "USE_MOCK_UPSTREAM": "true"
+      }
+    }
+  }
+}
 ```
 
 ### 5. Run Automated Tests

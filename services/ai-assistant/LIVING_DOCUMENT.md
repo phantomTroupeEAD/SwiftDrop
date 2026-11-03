@@ -184,6 +184,29 @@ The microservice exposes all capabilities via the open **Model Context Protocol 
 1. **`swiftdrop://policies`:** Exposes full authoritative shipping guidelines (`company_policies.md`) directly into model context.
 2. **`swiftdrop://sla-matrix`:** Exposes structured transit SLAs (Express 24h, Standard 48-72h, Outstation 3-5 days).
 
+### Antigravity & Claude Desktop Configuration Example
+
+#### Antigravity Configuration (`~/.gemini/config/mcp_config.json`)
+```json
+{
+  "mcpServers": {
+    "swiftdrop": {
+      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081",
+        "MOCK_LLM_MODE": "true",
+        "USE_MOCK_UPSTREAM": "true"
+      }
+    }
+  }
+}
+```
+
 ### Claude Desktop Configuration Example (`claude_desktop_config.json`)
 ```json
 {

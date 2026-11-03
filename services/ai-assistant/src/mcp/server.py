@@ -1,8 +1,14 @@
 """Official Model Context Protocol (FastMCP) server for SwiftDrop AI Delivery Assistant."""
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+# Ensure project root (services/ai-assistant) is in sys.path for direct execution
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 try:
     # mcp >= 2.0 (FastMCP renamed to MCPServer in mcp.server.mcpserver)

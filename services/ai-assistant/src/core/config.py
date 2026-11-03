@@ -1,6 +1,7 @@
 """Central runtime configuration and environment settings for SwiftDrop AI Assistant."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,7 +11,10 @@ class Settings(BaseSettings):
     """Configuration settings loaded from environment variables or .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            str(Path(__file__).resolve().parent.parent.parent / ".env"),
+            ".env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,

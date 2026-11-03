@@ -1,4 +1,4 @@
-# AI Assistant & FastMCP API Specifications
+﻿# AI Assistant & FastMCP API Specifications
 
 > **Service:** `services/ai-assistant`  
 > **Assigned Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
@@ -76,6 +76,28 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **`swiftdrop://policies`:** Exposes full authoritative markdown shipping guidelines (`company_policies.md`) for direct LLM context window ingestion.
 - **`swiftdrop://sla-matrix`:** Exposes structured JSON transit SLAs (Express 24h, Standard 48–72h, Outstation 3–5 days).
 
+### 2.7 Antigravity MCP Client Configuration
+To connect SwiftDrop to Google Antigravity as an active MCP server, configure `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "swiftdrop": {
+      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "CORE_API_URL": "http://localhost:8080",
+        "TRACKING_API_URL": "http://localhost:8081",
+        "MOCK_LLM_MODE": "true",
+        "USE_MOCK_UPSTREAM": "true"
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## 3. REST Endpoint Specifications
@@ -97,7 +119,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 - `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` (SlowAPI rate limit tracking)
 
 #### Request Body Schema (`ChatMessageRequest`)
-```json
+````json
 {
   "prompt": "How much does it cost to ship a 2.5kg package from Colombo to Kandy?",
   "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -113,7 +135,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 - `history` (array of `ChatMessage`, optional): Explicit prior turns if client manages context locally.
 
 #### Success Response (`200 OK`)
-```json
+````json
 {
   "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "reply": "The estimated shipping fee for a 2.5kg package from Colombo to Kandy is **LKR 750** via **STANDARD** delivery (estimated transit: 48 hours).",
@@ -146,7 +168,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 #### Error Responses (Standard RFC-7807 Format)
 
 ##### 422 Unprocessable Entity (Semantic Validation Failure)
-```json
+````json
 {
   "error": {
     "code": "VALIDATION_ERROR",
@@ -162,7 +184,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 ```
 
 ##### 401 Unauthorized (Authentication Failure)
-```json
+````json
 {
   "error": {
     "code": "AUTH_UNAUTHORIZED",
@@ -173,7 +195,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 ```
 
 ##### 429 Too Many Requests (Rate Limit Exceeded)
-```json
+````json
 {
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
@@ -189,7 +211,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 ```
 
 ##### 502 Bad Gateway (Upstream Service Failure)
-```json
+````json
 {
   "error": {
     "code": "UPSTREAM_SERVICE_UNAVAILABLE",
@@ -205,7 +227,7 @@ Processes a user prompt, executes necessary read-only tools, and returns a groun
 ```
 
 ##### 500 Internal Server Error (Masked Server Error)
-```json
+````json
 {
   "error": {
     "code": "INTERNAL_SERVER_ERROR",
@@ -235,7 +257,7 @@ Processes user inquiry and streams response deltas, tool execution events, and g
 
 #### Request Body Schema (`ChatMessageRequest`)
 Exact same JSON payload structure as `POST /api/v1/ai/chat`:
-```json
+````json
 {
   "prompt": "How much does it cost to ship a 2.5kg package from Colombo to Kandy?",
   "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -297,7 +319,7 @@ If an error occurs *before* streaming begins (e.g. invalid payload, expired auth
 ### 3.3 Liveness Probe (`GET /health/live`)
 Confirms that the FastAPI process and asyncio event loop are responsive.
 
-```json
+````json
 {
   "status": "UP",
   "timestamp": "2026-11-02T13:30:00.000000+00:00",
@@ -310,7 +332,7 @@ Confirms that the FastAPI process and asyncio event loop are responsive.
 ### 3.3 Readiness Probe (`GET /health/ready`)
 Verifies local cache sanity, engine mode, and tool registrations. **Strictly decoupled from external upstream services.**
 
-```json
+````json
 {
   "status": "READY",
   "engine": "live",
@@ -325,7 +347,7 @@ Verifies local cache sanity, engine mode, and tool registrations. **Strictly dec
 ### 3.4 Telemetry Metrics (`GET /health/metrics`)
 Operational metrics for health monitoring and capacity audits.
 
-```json
+````json
 {
   "service": "ai-assistant",
   "version": "2.5.1",
