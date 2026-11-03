@@ -123,32 +123,50 @@ python -m uvicorn src.main:app --port 8000 --reload
 - **Mock Server Swagger Docs:** `http://localhost:8085/docs`
 
 ### 4. Run the FastMCP Server (For Antigravity / Cursor / Claude Desktop)
-```bash
-python -m src.mcp.server
-```
 
-#### Antigravity Configuration (`~/.gemini/config/mcp_config.json`)
+#### Option A: Local STDIO Subprocess (Desktop / Local Dev)
+```bash
+python src/mcp/server.py
+```
+Configure `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
     "swiftdrop": {
-      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "command": "E:\Projects\SwiftDrop\services\ai-assistant\.venv\Scripts\python.exe",
       "args": [
-        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+        "E:\Projects\SwiftDrop\services\ai-assistant\src\mcp\server.py"
       ],
       "env": {
-        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "PYTHONPATH": "E:\Projects\SwiftDrop\services\ai-assistant",
         "CORE_API_URL": "http://localhost:8080",
         "TRACKING_API_URL": "http://localhost:8081",
         "MOCK_LLM_MODE": "true",
         "USE_MOCK_UPSTREAM": "true",
-        "SWIFTDROP_AUTH_TOKEN": "Bearer <customer_jwt_optional>"
+        "SWIFTDROP_API_KEY": "sd_live_demo_merchant_123"
       }
     }
   }
 }
 ```
 
+#### Option B: Remote / Cloud SSE Server (`http://127.0.0.1:8002/mcp`)
+```bash
+python src/mcp/server.py --transport sse --port 8002
+```
+Configure `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "swiftdrop-cloud": {
+      "url": "http://127.0.0.1:8002/mcp",
+      "headers": {
+        "X-API-Key": "sd_live_demo_merchant_123"
+      }
+    }
+  }
+}
+```
 ### 5. Run Automated Tests
 ```bash
 python -m pytest -v

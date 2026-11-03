@@ -12,13 +12,15 @@ from src.tools.parcels_tool import parcels_tool
 
 
 class MockParcelsTransport(httpx.AsyncBaseTransport):
-    """Transport that captures the Authorization header sent upstream."""
+    """Transport that captures the Authorization and X-API-Key headers sent upstream."""
 
     def __init__(self):
         self.captured_auth_header: str = ""
+        self.captured_api_key_header: str = ""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.captured_auth_header = request.headers.get("Authorization", "")
+        self.captured_api_key_header = request.headers.get("X-API-Key", "")
         import json
         return httpx.Response(
             status_code=200,
@@ -79,7 +81,7 @@ async def test_auth_hierarchy_missing_all_tokens_raises_auth_exception(monkeypat
         with pytest.raises(AuthException) as exc_info:
             await parcels_tool(ActiveParcelsInput(limit=5), context={}, client=client)
 
-    assert "Authentication token required" in str(exc_info.value)
+    assert "Authentication required" in str(exc_info.value)
     assert transport.captured_auth_header == ""
 
 
@@ -88,8 +90,40 @@ async def test_auth_hierarchy_whitespace_tokens_rejected(monkeypatch):
     """Whitespace tokens in context and environment are rejected."""
     settings = get_settings()
     monkeypatch.setattr(settings, "SWIFTDROP_AUTH_TOKEN", SecretStr("   "))
+    monkeypatch.setattr(settings, "SWIFTDROP_API_KEY", SecretStr("   "))
 
     transport = MockParcelsTransport()
     async with httpx.AsyncClient(transport=transport) as client:
         with pytest.raises(AuthException):
             await parcels_tool(ActiveParcelsInput(limit=5), context={"authorization": "   "}, client=client)
+
+
+@pytest.mark.asyncio
+async def test_auth_hierarchy_merchant_api_key_via_context(monkeypatch):
+    """Merchant API key in context is passed as X-API-Key header."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "SWIFTDROP_AUTH_TOKEN", SecretStr(""))
+    monkeypatch.setattr(settings, "SWIFTDROP_API_KEY", SecretStr(""))
+
+    transport = MockParcelsTransport()
+    async with httpx.AsyncClient(transport=transport) as client:
+        context = {"x-api-key": "sd_live_merchant_test_123"}
+        await parcels_tool(ActiveParcelsInput(limit=5), context=context, client=client)
+
+    assert transport.captured_api_key_header == "sd_live_merchant_test_123"
+    assert transport.captured_auth_header == ""
+
+
+@pytest.mark.asyncio
+async def test_auth_hierarchy_merchant_api_key_via_env(monkeypatch):
+    """SWIFTDROP_API_KEY in environment is used when no context headers provided."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "SWIFTDROP_AUTH_TOKEN", SecretStr(""))
+    monkeypatch.setattr(settings, "SWIFTDROP_API_KEY", SecretStr("sd_live_merchant_from_env_456"))
+
+    transport = MockParcelsTransport()
+    async with httpx.AsyncClient(transport=transport) as client:
+        await parcels_tool(ActiveParcelsInput(limit=5), context={}, client=client)
+
+    assert transport.captured_api_key_header == "sd_live_merchant_from_env_456"
+    assert transport.captured_auth_header == ""

@@ -45,39 +45,47 @@ async def parcels_tool(
     context = context or {}
     settings = get_settings()
 
-    auth_header = (
+    # 1. Check for Merchant API Key (e.g. sd_live_...)
+    raw_api_key = (
+        context.get("x-api-key")
+        or context.get("X-API-Key")
+        or context.get("api_key")
+        or settings.swiftdrop_api_key.get_secret_value()
+    )
+    api_key = raw_api_key.strip() if isinstance(raw_api_key, str) else ""
+
+    # 2. Check for Customer JWT Bearer token
+    raw_auth = (
         context.get("authorization")
         or context.get("Authorization")
         or context.get("customer_jwt")
         or context.get("authorization_token")
     )
+    auth_header = raw_auth.strip() if isinstance(raw_auth, str) else ""
 
-    # Fallback to configured SWIFTDROP_AUTH_TOKEN setting if not provided in context
-    if not auth_header:
+    if not auth_header and not api_key:
         env_token = settings.swiftdrop_auth_token.get_secret_value().strip()
         if env_token:
             auth_header = env_token
 
-    if not auth_header or not auth_header.strip():
+    if not auth_header and not api_key:
         raise AuthException(
-            "Authentication token required to retrieve customer shipments. "
-            "Please configure SWIFTDROP_AUTH_TOKEN in environment or provide authorization."
+            "Authentication required to retrieve customer shipments. "
+            "Please configure SWIFTDROP_API_KEY (or SWIFTDROP_AUTH_TOKEN) in environment or provide authorization."
         )
 
-    # Format bearer token cleanly
-    auth_clean = auth_header.strip()
-    if not auth_clean.lower().startswith("bearer "):
-        bearer_token = f"Bearer {auth_clean}"
-    else:
-        bearer_token = auth_clean
-
-    settings = get_settings()
     target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/parcels"
 
-    headers = {
-        "Authorization": bearer_token,
+    headers: Dict[str, str] = {
         "Accept": "application/json",
     }
+    if api_key:
+        headers["X-API-Key"] = api_key
+    elif auth_header:
+        if not auth_header.lower().startswith("bearer "):
+            headers["Authorization"] = f"Bearer {auth_header}"
+        else:
+            headers["Authorization"] = auth_header
 
     params: Dict[str, Any] = {"limit": input_data.limit}
     if input_data.status:

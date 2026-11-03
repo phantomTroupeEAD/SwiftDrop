@@ -84,28 +84,67 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **`swiftdrop://sla-matrix`:** Exposes structured JSON transit SLAs (Express 24h, Standard 48–72h, Outstation 3–5 days).
 
 ### 2.7 Antigravity MCP Client Configuration
-To connect SwiftDrop to Google Antigravity as an active MCP server, configure `~/.gemini/config/mcp_config.json`:
+
+#### Mode A: Local STDIO Subprocess (Desktop / Local Dev)
+Configure `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
     "swiftdrop": {
-      "command": "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\.venv\\Scripts\\python.exe",
+      "command": "E:\Projects\SwiftDrop\services\ai-assistant\.venv\Scripts\python.exe",
       "args": [
-        "E:\\Projects\\SwiftDrop\\services\\ai-assistant\\src\\mcp\\server.py"
+        "E:\Projects\SwiftDrop\services\ai-assistant\src\mcp\server.py"
       ],
       "env": {
-        "PYTHONPATH": "E:\\Projects\\SwiftDrop\\services\\ai-assistant",
+        "PYTHONPATH": "E:\Projects\SwiftDrop\services\ai-assistant",
         "CORE_API_URL": "http://localhost:8080",
         "TRACKING_API_URL": "http://localhost:8081",
         "MOCK_LLM_MODE": "true",
         "USE_MOCK_UPSTREAM": "true",
-        "SWIFTDROP_AUTH_TOKEN": "Bearer <customer_jwt_optional>"
+        "SWIFTDROP_API_KEY": "sd_live_demo_merchant_123"
       }
     }
   }
 }
 ```
 
+#### Mode B: Cloud / Remote SSE Server (`http://127.0.0.1:8002/mcp`)
+Start the FastMCP SSE daemon:
+```powershell
+python src/mcp/server.py --transport sse --port 8002
+```
+
+Configure `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "swiftdrop-cloud": {
+      "url": "http://127.0.0.1:8002/mcp",
+      "headers": {
+        "X-API-Key": "sd_live_demo_merchant_123"
+      }
+    }
+  }
+}
+```
+*(Or via `mcp-remote` proxy bridge):*
+```json
+{
+  "mcpServers": {
+    "swiftdrop-cloud": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:8002/mcp"
+      ],
+      "env": {
+        "SWIFTDROP_API_KEY": "sd_live_demo_merchant_123"
+      }
+    }
+  }
+}
+```
 ---
 
 ## 3. REST Endpoint Specifications

@@ -95,6 +95,7 @@ async def estimate_shipping_fee(
 @mcp.tool()
 async def get_my_active_parcels(
     authorization_token: Optional[str] = None,
+    api_key: Optional[str] = None,
     limit: int = 10,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -102,6 +103,7 @@ async def get_my_active_parcels(
 
     Args:
         authorization_token: Optional customer/merchant JWT Bearer token (can also be configured via SWIFTDROP_AUTH_TOKEN in environment).
+        api_key: Optional Merchant API Key (e.g. 'sd_live_...' - can also be configured via SWIFTDROP_API_KEY in environment).
         limit: Maximum number of active parcels to return (1-50, default: 10).
         status: Optional lifecycle status filter (e.g. IN_TRANSIT, OUT_FOR_DELIVERY).
     """
@@ -112,6 +114,8 @@ async def get_my_active_parcels(
     context: Dict[str, Any] = {}
     if authorization_token:
         context["authorization"] = authorization_token
+    if api_key:
+        context["x-api-key"] = api_key
 
     record = await execute_tool("list_active_parcels", arguments, context=context)
     if record.status == "SUCCESS" and isinstance(record.result, dict):
@@ -188,9 +192,43 @@ def get_sla_matrix_resource() -> str:
 
 
 # -------------------------------------------------------------------------
-# Server Execution Entrypoint (STDIO for Claude Desktop / Cursor)
+# Server Execution Entrypoint (STDIO or SSE)
 # -------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Run STDIO transport by default for desktop clients
-    mcp.run(transport="stdio")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SwiftDrop FastMCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
+        help="Transport protocol to use (stdio or sse)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8002,
+        help="Port for SSE transport (default: 8002)",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host for SSE transport (default: 127.0.0.1)",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "sse":
+        print(
+            f"Starting SwiftDrop FastMCP SSE Server at http://{args.host}:{args.port}/mcp",
+            file=sys.stderr,
+        )
+        mcp.run(
+            transport="sse",
+            host=args.host,
+            port=args.port,
+            sse_path="/mcp",
+            message_path="/mcp/messages/",
+        )
+    else:
+        mcp.run(transport="stdio")

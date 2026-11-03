@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         description="Optional customer or merchant JWT Bearer token for FastMCP authenticated queries",
     )
+    SWIFTDROP_API_KEY: SecretStr = Field(
+        default=SecretStr(""),
+        description="Optional Merchant API key (e.g. sd_live_...) for FastMCP authenticated queries",
+    )
     AI_SERVICE_ROLE_TOKEN: SecretStr = Field(
         default=SecretStr("dev-internal-secret-key-123"),
         description="Shared secret token for internal Core API service-role requests",
@@ -190,6 +194,11 @@ class Settings(BaseSettings):
     def swiftdrop_auth_token(self) -> SecretStr:
         """Return the optional FastMCP authentication token."""
         return self.SWIFTDROP_AUTH_TOKEN
+
+    @property
+    def swiftdrop_api_key(self) -> SecretStr:
+        """Return the optional Merchant API Key for FastMCP tool execution."""
+        return self.SWIFTDROP_API_KEY
 
     @property
     def ai_service_role_token(self) -> SecretStr:
