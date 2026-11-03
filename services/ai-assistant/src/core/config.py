@@ -95,6 +95,10 @@ class Settings(BaseSettings):
         default=SecretStr("swiftdrop-development-secret-key-change-in-production-32chars"),
         description="Shared HMAC-SHA256 secret key for verifying Core API access tokens",
     )
+    SWIFTDROP_AUTH_TOKEN: SecretStr = Field(
+        default=SecretStr(""),
+        description="Optional customer or merchant JWT Bearer token for FastMCP authenticated queries",
+    )
     AI_SERVICE_ROLE_TOKEN: SecretStr = Field(
         default=SecretStr("dev-internal-secret-key-123"),
         description="Shared secret token for internal Core API service-role requests",
@@ -181,6 +185,11 @@ class Settings(BaseSettings):
     def jwt_secret_key(self) -> str:
         """Return the active JWT secret key string for token validation."""
         return self.JWT_SECRET.get_secret_value()
+
+    @property
+    def swiftdrop_auth_token(self) -> SecretStr:
+        """Return the optional FastMCP authentication token."""
+        return self.SWIFTDROP_AUTH_TOKEN
 
     @property
     def ai_service_role_token(self) -> SecretStr:

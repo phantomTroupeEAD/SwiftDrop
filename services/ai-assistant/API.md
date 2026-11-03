@@ -45,6 +45,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - `length_cm` (float, optional): Package length in cm (`0.0 < length_cm <= 300.0`).
   - `width_cm` (float, optional): Package width in cm (`0.0 < width_cm <= 300.0`).
   - `height_cm` (float, optional): Package height in cm (`0.0 < height_cm <= 300.0`).
+- **Validation Invariant (VULN-006):** Strict 3D dimension cross-validation: if any dimension is provided, all three (`length_cm`, `width_cm`, `height_cm`) must be supplied together. Partial dimensions trigger a `422 Unprocessable Entity` validation error.
 - **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes`
 - **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
 - **Permissions:** Public / Anonymous.
@@ -52,8 +53,13 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 ### 2.3 `get_my_active_parcels`
 - **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.
 - **Parameters:**
+  - `authorization_token` (string, optional): Customer or merchant JWT Bearer token (defaults to `null`). Can be passed explicitly or injected via environment variable `SWIFTDROP_AUTH_TOKEN`.
   - `status` (string, optional): Filter by parcel lifecycle status (e.g. `"IN_TRANSIT"`).
   - `limit` (integer, optional): Maximum parcels to return (`1 <= limit <= 50`, default: `10`).
+- **Authentication Hierarchy (VULN-001):**
+  1. `context["authorization"]` (HTTP / SSE gateway header)
+  2. `authorization_token` parameter (optional tool argument)
+  3. `SWIFTDROP_AUTH_TOKEN` environment variable (ideal for FastMCP clients to prevent token leakage in LLM prompt transcripts)
 - **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/parcels` (forwards caller's `Authorization: Bearer <JWT>`).
 - **Security & Isolation:** IDOR-safe; Core API extracts tenant and customer identity from the verified JWT.
 - **Permissions:** Authenticated Customer or Merchant.
@@ -62,6 +68,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 - **Description:** Explain courier company policies, prohibited goods, packaging standards, transit SLAs, and dispute rules.
 - **Parameters:**
   - `query` (string, required): Inquired policy topic (e.g. `"prohibited items"`, `"packaging limits"`, `"SLA"`).
+- **Concurrency & Caching (VULN-005):** In-memory 30-minute policy cache protected by `asyncio.Lock()` double-checked locking, preventing thundering herds (cache stampedes) on Core API admin settings.
 - **Target Upstream Endpoint:** `GET http://core-api:8080/api/v1/admin/settings` (with local `company_policies.md` grounding).
 - **Permissions:** Public / Anonymous.
 
@@ -91,7 +98,8 @@ To connect SwiftDrop to Google Antigravity as an active MCP server, configure `~
         "CORE_API_URL": "http://localhost:8080",
         "TRACKING_API_URL": "http://localhost:8081",
         "MOCK_LLM_MODE": "true",
-        "USE_MOCK_UPSTREAM": "true"
+        "USE_MOCK_UPSTREAM": "true",
+        "SWIFTDROP_AUTH_TOKEN": "Bearer <customer_jwt_optional>"
       }
     }
   }

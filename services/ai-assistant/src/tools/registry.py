@@ -99,11 +99,16 @@ async def execute_tool(
         validated_input = tool_def.input_schema(**arguments)
     except ValidationError as val_err:
         duration_ms = int((time.perf_counter() - start_time) * 1000)
+        messages = [
+            f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg')}"
+            for err in val_err.errors()
+        ]
+        error_summary = "; ".join(messages) if messages else str(val_err)
         return ToolCallRecord(
             tool_name=name,
             arguments=arguments,
             status="ERROR",
-            error_message=f"Invalid arguments for tool '{name}': {val_err}",
+            error_message=f"Invalid arguments for tool '{name}': {error_summary}",
             duration_ms=duration_ms,
         )
 

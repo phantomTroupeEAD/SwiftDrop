@@ -133,6 +133,7 @@ SRI_LANKA_POSTAL_DIRECTORY: List[Dict[str, str]] = [
     {"city": "Bentota", "alias": "bentota", "code": "80500", "district": "Galle", "province": "Southern"},
     {"city": "Matara", "alias": "matara", "code": "81000", "district": "Matara", "province": "Southern"},
     {"city": "Weligama", "alias": "weligama", "code": "81700", "district": "Matara", "province": "Southern"},
+    {"city": "Mirissa", "alias": "mirissa", "code": "81740", "district": "Matara", "province": "Southern"},
     {"city": "Dikwella", "alias": "dikwella", "code": "81100", "district": "Matara", "province": "Southern"},
     {"city": "Akuressa", "alias": "akuressa", "code": "81300", "district": "Matara", "province": "Southern"},
     {"city": "Kamburupitiya", "alias": "kamburupitiya", "code": "81100", "district": "Matara", "province": "Southern"},
@@ -150,6 +151,8 @@ SRI_LANKA_POSTAL_DIRECTORY: List[Dict[str, str]] = [
     {"city": "Yatiyantota", "alias": "yatiyantota", "code": "71720", "district": "Kegalle", "province": "Sabaragamuwa"},
     {"city": "Dehiowita", "alias": "dehiowita", "code": "71400", "district": "Kegalle", "province": "Sabaragamuwa"},
     {"city": "Ratnapura", "alias": "ratnapura", "code": "70000", "district": "Ratnapura", "province": "Sabaragamuwa"},
+    {"city": "Nivitigala", "alias": "nivitigala", "code": "70450", "district": "Ratnapura", "province": "Sabaragamuwa"},
+    {"city": "Niwithigala", "alias": "niwithigala", "code": "70450", "district": "Ratnapura", "province": "Sabaragamuwa"},
     {"city": "Balangoda", "alias": "balangoda", "code": "70100", "district": "Ratnapura", "province": "Sabaragamuwa"},
     {"city": "Pelmadulla", "alias": "pelmadulla", "code": "70070", "district": "Ratnapura", "province": "Sabaragamuwa"},
     {"city": "Embilipitiya", "alias": "embilipitiya", "code": "70200", "district": "Ratnapura", "province": "Sabaragamuwa"},
@@ -265,7 +268,7 @@ def lookup_postal_record(query: str) -> Optional[Dict[str, str]]:
     for entry in SRI_LANKA_POSTAL_DIRECTORY:
         alias = entry["alias"]
         city_lower = entry["city"].lower()
-        if alias in cleaned or cleaned in alias or city_lower in cleaned:
+        if alias in cleaned or city_lower in cleaned or (len(cleaned) >= 4 and cleaned in alias):
             return dict(entry)
 
     return None

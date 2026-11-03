@@ -43,20 +43,33 @@ async def parcels_tool(
 ) -> Dict[str, Any]:
     """Query Member 2 Core API parcels endpoint strictly forwarding authenticated user credentials."""
     context = context or {}
+    settings = get_settings()
+
     auth_header = (
         context.get("authorization")
         or context.get("Authorization")
         or context.get("customer_jwt")
+        or context.get("authorization_token")
     )
 
+    # Fallback to configured SWIFTDROP_AUTH_TOKEN setting if not provided in context
     if not auth_header:
-        raise AuthException("Authentication token required to retrieve customer shipments")
+        env_token = settings.swiftdrop_auth_token.get_secret_value().strip()
+        if env_token:
+            auth_header = env_token
+
+    if not auth_header or not auth_header.strip():
+        raise AuthException(
+            "Authentication token required to retrieve customer shipments. "
+            "Please configure SWIFTDROP_AUTH_TOKEN in environment or provide authorization."
+        )
 
     # Format bearer token cleanly
-    if not auth_header.startswith("Bearer "):
-        bearer_token = f"Bearer {auth_header}"
+    auth_clean = auth_header.strip()
+    if not auth_clean.lower().startswith("bearer "):
+        bearer_token = f"Bearer {auth_clean}"
     else:
-        bearer_token = auth_header
+        bearer_token = auth_clean
 
     settings = get_settings()
     target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/parcels"

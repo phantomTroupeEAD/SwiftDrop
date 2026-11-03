@@ -26,7 +26,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 
 - **Natural Language Tracking:** Public tracking queries returning sanitized milestone timelines without disclosing personal customer information (`SEC-009`).
 - **Instant Shipping Fee Estimation:** Instantaneous price estimations calculated via Core API's pricing engine.
-- **Sri Lanka Postal Directory & Town Resolution:** Built-in directory of all 25 districts and sub-district towns (e.g. Walasmulla `82450`, Kadugannawa `20430`, Mawanella `71500`), enabling instant postal code lookups and automated quote routing.
+- **Sri Lanka Postal Directory & Town Resolution:** Built-in directory of all 25 districts and sub-district towns (e.g. Walasmulla `82450`, Kadugannawa `20430`, Mawanella `71500`, Mirissa `81740`, Nivitigala `70450`), enabling instant postal code lookups and automated quote routing with length-bounded fuzzy substring matching.
 - **Generative UI Action Cards:** Generates pre-filled `NAVIGATE_BOOKING` cards directly in the React web portal for seamless 1-click booking confirmation.
 - **FastMCP Protocol Server:** Exposes tools via STDIO and Server-Sent Events (SSE) for external AI agent integration (**+5 Assignment Bonus Marks**).
 - **Dual LLM Engine:** Universal `AsyncOpenAI` client (OpenRouter, Groq, NVIDIA NIM, OpenAI, Ollama) paired with an offline deterministic mock adapter for zero-cost automated CI testing.
@@ -141,7 +141,8 @@ python -m src.mcp.server
         "CORE_API_URL": "http://localhost:8080",
         "TRACKING_API_URL": "http://localhost:8081",
         "MOCK_LLM_MODE": "true",
-        "USE_MOCK_UPSTREAM": "true"
+        "USE_MOCK_UPSTREAM": "true",
+        "SWIFTDROP_AUTH_TOKEN": "Bearer <customer_jwt_optional>"
       }
     }
   }

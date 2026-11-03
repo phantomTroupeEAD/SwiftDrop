@@ -94,14 +94,14 @@ async def estimate_shipping_fee(
 
 @mcp.tool()
 async def get_my_active_parcels(
-    authorization_token: str,
+    authorization_token: Optional[str] = None,
     limit: int = 10,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieve currently active shipments belonging to the authenticated customer or merchant.
 
     Args:
-        authorization_token: Customer or merchant JWT Bearer token (required for IDOR isolation).
+        authorization_token: Optional customer/merchant JWT Bearer token (can also be configured via SWIFTDROP_AUTH_TOKEN in environment).
         limit: Maximum number of active parcels to return (1-50, default: 10).
         status: Optional lifecycle status filter (e.g. IN_TRANSIT, OUT_FOR_DELIVERY).
     """
@@ -109,7 +109,10 @@ async def get_my_active_parcels(
     if status is not None:
         arguments["status"] = status
 
-    context = {"authorization": authorization_token}
+    context: Dict[str, Any] = {}
+    if authorization_token:
+        context["authorization"] = authorization_token
+
     record = await execute_tool("list_active_parcels", arguments, context=context)
     if record.status == "SUCCESS" and isinstance(record.result, dict):
         return record.result

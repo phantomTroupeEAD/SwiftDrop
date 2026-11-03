@@ -1,5 +1,6 @@
 """Company policy knowledge base tool with dynamic admin settings and static markdown fallback."""
 
+import asyncio
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -14,6 +15,27 @@ from src.tools.registry import register_tool
 # In-memory policy cache: {"data": ..., "timestamp": float}
 _POLICY_CACHE: Dict[str, Any] = {"data": None, "timestamp": 0.0}
 _CACHE_TTL_SECONDS = 1800.0  # 30 minutes
+_POLICY_LOCK: Optional[asyncio.Lock] = None
+_POLICY_LOCK_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def get_policy_lock() -> asyncio.Lock:
+    """Return the policy lock for the active asyncio event loop."""
+    global _POLICY_LOCK, _POLICY_LOCK_LOOP
+    loop = asyncio.get_running_loop()
+    if _POLICY_LOCK is None or _POLICY_LOCK_LOOP is not loop:
+        _POLICY_LOCK = asyncio.Lock()
+        _POLICY_LOCK_LOOP = loop
+    return _POLICY_LOCK
+
+
+def reset_policy_cache() -> None:
+    """Reset the policy cache for isolated testing."""
+    global _POLICY_LOCK, _POLICY_LOCK_LOOP
+    _POLICY_CACHE["data"] = None
+    _POLICY_CACHE["timestamp"] = 0.0
+    _POLICY_LOCK = None
+    _POLICY_LOCK_LOOP = None
 
 
 def _load_static_policy_markdown() -> str:
@@ -66,43 +88,51 @@ async def policy_tool(
     dynamic_content: Optional[str] = None
     source = "static_knowledge_base"
 
-    # 1. Check in-memory cache for dynamic settings
+    # 1. Check in-memory cache for dynamic settings (fast path)
     if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < _CACHE_TTL_SECONDS:
         dynamic_content = _POLICY_CACHE["data"]
         source = "dynamic_admin_settings_cached"
     else:
-        # Attempt to query Core API admin settings if token is configured
-        service_token = settings.ai_service_role_token.get_secret_value()
-        if service_token:
-            target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/admin/settings"
-            headers = {
-                "Authorization": f"Bearer {service_token}",
-                "Accept": "application/json",
-            }
-            timeouts = httpx.Timeout(connect=2.0, read=4.0, write=4.0, pool=4.0)
-            close_client = False
-            if client is None:
-                client_instance = httpx.AsyncClient(timeout=timeouts)
-                close_client = True
+        # Cache miss or expired: acquire lock for thread/coroutine safe refresh
+        async with get_policy_lock():
+            now = datetime.now(timezone.utc).timestamp()
+            # Double-check inside lock: another coroutine might have already refreshed it
+            if _POLICY_CACHE["data"] is not None and (now - _POLICY_CACHE["timestamp"]) < _CACHE_TTL_SECONDS:
+                dynamic_content = _POLICY_CACHE["data"]
+                source = "dynamic_admin_settings_cached"
             else:
-                client_instance = client
+                # Attempt to query Core API admin settings if token is configured
+                service_token = settings.ai_service_role_token.get_secret_value()
+                if service_token:
+                    target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/admin/settings"
+                    headers = {
+                        "Authorization": f"Bearer {service_token}",
+                        "Accept": "application/json",
+                    }
+                    timeouts = httpx.Timeout(connect=2.0, read=4.0, write=4.0, pool=4.0)
+                    close_client = False
+                    if client is None:
+                        client_instance = httpx.AsyncClient(timeout=timeouts)
+                        close_client = True
+                    else:
+                        client_instance = client
 
-            try:
-                resp = await client_instance.get(target_url, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Look for policy overrides in settings JSON
-                    if isinstance(data, dict) and "policies" in data:
-                        dynamic_content = json.dumps(data["policies"], indent=2)
-                        _POLICY_CACHE["data"] = dynamic_content
-                        _POLICY_CACHE["timestamp"] = now
-                        source = "dynamic_admin_settings"
-            except Exception:
-                # Dynamic fetch failed; gracefully fallback to static file
-                pass
-            finally:
-                if close_client:
-                    await client_instance.aclose()
+                    try:
+                        resp = await client_instance.get(target_url, headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            # Look for policy overrides in settings JSON
+                            if isinstance(data, dict) and "policies" in data:
+                                dynamic_content = json.dumps(data["policies"], indent=2)
+                                _POLICY_CACHE["data"] = dynamic_content
+                                _POLICY_CACHE["timestamp"] = now
+                                source = "dynamic_admin_settings"
+                    except Exception:
+                        # Dynamic fetch failed; gracefully fallback to static file
+                        pass
+                    finally:
+                        if close_client:
+                            await client_instance.aclose()
 
     # 2. Use dynamic content or fallback to static markdown
     if dynamic_content:

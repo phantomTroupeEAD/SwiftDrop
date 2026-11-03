@@ -4,7 +4,7 @@
 > **Service:** `services/ai-assistant/`  
 > **Primary Owner:** Member 10 — AI Assistant/MCP & Cross-Workflow Quality  
 > **Container Port:** `8000` | **Traefik Ingress Gateway Path:** `/api/v1/ai`  
-> **Specification Version:** `2.9.0` (Authoritative Baseline — Phase 7 Security, Auth & Rate Limiting Complete)  
+> **Specification Version:** `2.12.0` (Authoritative Baseline — Phase 7 Security, SSE Streaming & FastMCP Hardening Complete)  
 > **Target Audience:** Any software engineer, architect, or academic evaluator seeking 100% complete understanding of the system without inspecting raw source code.
 
 ---
@@ -231,7 +231,7 @@ The microservice exposes all capabilities via the open **Model Context Protocol 
 All tool interactions are centralized through the **Tool Registry (`src/tools/registry.py`)**, which provides:
 - `@register_tool` decorator with strict schema validation.
 - Central execution timing (`duration_ms` tracking on `ToolCallRecord`).
-- Error isolation boundaries converting exceptions into structured error envelopes.
+- Error isolation boundaries converting exceptions into structured error envelopes with sanitized validation summaries without internal trace URLs.
 - `export_openai_tools()` exporting Pydantic v2 `model_json_schema()` definitions for LLM function calling.
 
 ```
@@ -604,3 +604,4 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 | `2.9.0` | 2026-11-03 | **Phase 7 Edge Security Hardening, Auth, Rate Limiting & E2E Complete:** Implemented `src/api/middleware/auth.py` (authoritative zero-dependency HMAC-SHA256 JWT verifier matching Member 1 Go Core API), `src/api/middleware/rate_limit.py` (SlowAPI role-aware tiered rate limiting configurable via `RATE_LIMIT_*_RPM` env vars with RFC-7807 429 handler), `src/api/middleware/security.py` (edge response headers), and SEC-009 customer phone PII scrubbing in `src/llm/guardrails.py`. Delivered 28 new automated tests across 5 specialized suites (`test_api_ratelimit.py`, `test_api_auth.py`, `test_security_penetration.py`, `test_e2e_workflows.py`, `test_concurrency_benchmarks.py`). Achieved 90% overall code coverage. | `162 passed in 57.67s (90% coverage)` |
 | `2.10.0` | 2026-11-03 | **Enterprise Layered Clean Architecture & Test Suite Reorganization Complete:** Extracted domain cryptography to `src/core/security.py`, introduced application service layer `src/services/chat_service.py` decoupling HTTP controllers from domain orchestration, added structured logging and distributed `X-Correlation-ID` propagation in `src/core/logging.py`, reorganized all tests into modular directories (`tests/unit/`, `tests/api/`, `tests/security/`, `tests/e2e/`), and added 10 new unit tests covering ChatService and logging. | `172 passed in 59.64s (91% coverage)` |
 | `2.11.0` | 2026-11-03 | **Server-Sent Events (SSE) Real-Time Chat Streaming Complete:** Implemented `POST /api/v1/ai/chat/stream` delivering token-by-token W3C-compliant SSE streaming (`text/event-stream`). Added typed event lifecycle (`tool_start`, `tool_end`, `token`, `action_card`, `done`, `error`), extended `BaseLLMClient` with `generate_reply_stream()`, enabled deterministic offline token streaming in `MockLLMAdapter`, multi-turn delta accumulation in `OpenAIAdapter`, client disconnect early-termination (`request.is_disconnected()`), proxy buffer bypass (`X-Accel-Buffering: no`), and cross-protocol session memory continuity. Delivered 20 new tests across streaming unit, API, and security suites. | `192 passed in 104.51s (90% coverage)` |
+| `2.12.0` | 2026-11-03 | **FastMCP Security Hardening & Adversarial Resilience Complete:** Remediated security audit findings (`swiftdrop-mcp-security-audit-report.md`). Implemented `SWIFTDROP_AUTH_TOKEN` environment variable and context injection for `get_my_active_parcels` eliminating JWT leaks in LLM transcripts (VULN-001); implemented double-checked `asyncio.Lock()` in `src/tools/policy_tool.py` preventing cache stampedes (thundering herds) on Core API admin settings (VULN-005); implemented strict 3D dimension cross-validation in `EstimateFeeInput` requiring all three or none (VULN-006). Added 27 new tests across unit and e2e security suites. | `219 passed in 102.79s (92% coverage)` |

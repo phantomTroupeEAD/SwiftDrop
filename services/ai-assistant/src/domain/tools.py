@@ -3,7 +3,7 @@
 from enum import Enum
 import re
 from typing import Any, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.postal_codes import resolve_postal_code
 
@@ -100,6 +100,18 @@ class EstimateFeeInput(BaseModel):
         le=300.0,
         description="Optional package height in centimeters",
     )
+
+    @model_validator(mode="after")
+    def validate_complete_dimensions(self) -> "EstimateFeeInput":
+        """Ensure parcel dimensions are either fully specified (all three: length, width, height) or omitted entirely."""
+        dims = [self.length_cm, self.width_cm, self.height_cm]
+        specified = [d for d in dims if d is not None]
+        if specified and len(specified) < 3:
+            raise ValueError(
+                "All three dimensions (length_cm, width_cm, height_cm) must be provided together. "
+                "Partial dimensions cannot be calculated."
+            )
+        return self
 
 
 class ActiveParcelsInput(BaseModel):
