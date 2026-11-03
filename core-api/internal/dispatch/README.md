@@ -109,3 +109,4 @@ All dispatch components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-02 | Implemented Phase 5 transport layer: DispatchHandler, CourierShiftHandler, ErrorMapper, Request/Response DTOs, Route registration with RBAC middleware, co-located living API.md, and httptest unit tests | Member 3 (Antigravity) |
 | 2026-11-02 | Implemented Phase 6 system wiring: registered in cmd/api/wiring_dispatch_delivery.go, hooked into BuildAppContainer(), wired fallback mocks for local dev, and added container tests | Member 3 (Antigravity) |
 | 2026-11-02 | Implemented Phase 7 acceptance tests: AT-013 10-goroutine assignment race test proving concurrency serialization and unique active assignment invariant | Member 3 (Antigravity) |
+| 2026-11-03 | Phase 8 living documentation alignment: zero-drift contract verification against API.md, synchronized tests/README.md, and finalized roadmap sign-off | Member 3 (Antigravity) |

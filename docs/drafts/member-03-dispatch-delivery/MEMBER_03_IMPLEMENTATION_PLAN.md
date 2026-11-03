@@ -352,17 +352,32 @@ Synchronously update co-located documentation to maintain zero-drift:
 
 ---
 
-## 6. Summary Checklist for Implementation Kickoff
+## 6. Implementation Lifecycle & Execution Status
 
-When ready to begin coding:
-- [ ] Check out working branch `feature/member-03-dispatch-delivery`.
-- [ ] Implement Phase 1: Migrations `000006_create_couriers.up.sql` and `000007_create_dispatch_and_delivery.up.sql`.
-- [ ] Implement Phase 2: Domain entities, value objects, and domain errors in `internal/dispatch/domain` and `internal/delivery/domain`.
-- [ ] Run pure domain unit tests to 100% pass rate.
-- [ ] Implement Phase 3 & 4: Application use cases, repository interfaces, Postgres implementations, and R2/local storage adapter.
-- [ ] Implement Phase 5: Transport handlers, DTOs, and error mappers.
-- [ ] Wire dependencies in `internal/app/wiring.go`.
-- [ ] Run test suite with `-race` including AT-006 and AT-013.
-- [ ] Update `README.md` and `API.md` in both modules.
-- [ ] Deliver structured Task Completion Report per `AGENTS.md` §12.
+All phases for Member 3 have been completed and verified:
+- [x] Check out working branch `feature/member-03-dispatch-delivery`.
+- [x] Implement Phase 1: Migrations `20261021000006_create_couriers.up.sql` and `20261021000007_create_dispatch_and_delivery.up.sql`.
+- [x] Implement Phase 2: Domain entities, value objects, and domain errors in `internal/dispatch/domain` and `internal/delivery/domain`.
+- [x] Run pure domain unit tests to 100% pass rate.
+- [x] Implement Phase 3 & 4: Application use cases, repository interfaces, Postgres implementations, and R2/local storage adapter.
+- [x] Implement Phase 5: Transport handlers, DTOs, and error mappers.
+- [x] Wire dependencies in `cmd/api/wiring_dispatch_delivery.go` and `cmd/api/wiring.go`.
+- [x] Run test suite with `-race` including AT-006, AT-013, and ADR-004.
+- [x] Update `README.md` and `API.md` in both modules.
+- [x] Deliver structured Task Completion Report per `AGENTS.md` §12.
+
+---
+
+## 7. Master Phase Status Summary
+
+| Phase | Description | Status | Verification & Deliverables |
+| :--- | :--- | :---: | :--- |
+| **Phase 1** | Database Migrations & DDL Constraints | **COMPLETED** | Migrations `000006` and `000007`, partial unique index `idx_assignments_parcel_single_active`, ADR-004 checks, seed fixtures. |
+| **Phase 2** | Pure Domain Layer Architecture | **COMPLETED** | `Courier`, `CourierAssignment`, `VehicleType`, `ShiftStatus`, `DeliveryAttempt`, `ProofOfDelivery`, `FailureReasonCode`, zero external dependencies. |
+| **Phase 3** | Application Layer & Ports | **COMPLETED** | `AssignCourierUseCase`, `CancelAssignmentUseCase`, `RescheduleParcelUseCase`, `StartDeliveryRunUseCase`, `CompleteDeliveryUseCase`, `RecordFailedAttemptUseCase`. |
+| **Phase 4** | Infrastructure Layer & Drivers | **COMPLETED** | `PostgresCourierRepository`, `PostgresAssignmentRepository`, `PostgresDeliveryRepository`, `LocalStorageClient`, `S3StorageClient` (SigV4 presigning). |
+| **Phase 5** | Transport Layer & REST Handlers | **COMPLETED** | 14 REST endpoints, RFC 7807 problem details error mappers, DTOs, `API.md` for dispatch and delivery. |
+| **Phase 6** | System Wiring & DI Container | **COMPLETED** | `wiring_dispatch_delivery.go`, hooked into `BuildAppContainer()`, offline fallback mocks, Agreement A2 probe decoupling. |
+| **Phase 7** | Acceptance & Concurrency Tests | **COMPLETED** | `at_013_assignment_concurrency_test.go` (10-goroutine race), `at_006_courier_idor_test.go` (IDOR defense), `adr_004_delivery_ceiling_test.go`, `delivery_atomicity_test.go`. |
+| **Phase 8** | Living Documentation Alignment | **COMPLETED** | Zero-drift sync across all module `README.md`, `API.md`, master roadmap, and `tests/README.md`. |
 
