@@ -98,5 +98,4 @@ if ($Failed) {
     exit 1
 } else {
     Write-Host "  [SUCCESS] All checks passed. Ready for review." -ForegroundColor Green
-    exit 0
 }
