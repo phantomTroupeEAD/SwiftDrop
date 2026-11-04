@@ -204,6 +204,9 @@ func BuildAppContainer() *AppContainer {
 	// 8. Register Member 08 Events & Messaging Operations & Swagger UI
 	registerEventsModules(mux, dbConn, security)
 
+	// 9. Register Member 03 Dispatch & Delivery Modules
+	registerDispatchAndDeliveryModules(mux, dbConn, security)
+
 	return &AppContainer{
 		Mux:         mux,
 		AuthSvc:     authService,
