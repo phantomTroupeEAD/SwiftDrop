@@ -106,25 +106,24 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
    - **Chargeable weight formula:**
      $$\text{Chargeable Weight (kg)} = \max(\text{Actual Weight}, \text{Volumetric Weight})$$
    - **Universal calculation:** The engine consistently evaluates $\max(\text{actual\_weight}, \text{volumetric\_weight})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$). The previous proposal that used actual weight only for parcels up to 1.0 kg is discontinued.
-   - **Precision preservation & rounding:** Full decimal precision is preserved during volumetric and chargeable weight computation prior to tariff/band lookup. Any specific intermediate decimal rounding rule is marked as requiring team confirmation, while final financial amounts are strictly integer minor units (`BIGINT` cents in LKR).
+   - **Precision preservation & rounding:** Full decimal precision is preserved during volumetric and chargeable weight computation prior to tariff lookup. Any specific intermediate decimal rounding rule is marked as requiring team confirmation, while final financial amounts are strictly integer minor units (`BIGINT` cents in LKR).
    - **Operational weight ceiling:** If either the actual weight or the calculated chargeable weight exceeds 30.00 kg, the request is rejected with HTTP `422 Unprocessable Entity` (`PARCEL_LIMITS_EXCEEDED`).
-5. The engine assigns the chargeable weight to its applicable tariff tier or weight band:
-   - **Weight band assignment (Proposed Baseline):**
-     - **Band 1:** $0 < W \le 0.5\text{ kg}$
-     - **Band 2:** $0.5 < W \le 1.0\text{ kg}$
-     - **Band 3:** $1.0 < W \le 2.0\text{ kg}$
-     - **Band 4:** $2.0 < W \le 5.0\text{ kg}$
-     - **Band 5:** $5.0 < W \le 10.0\text{ kg}$
-     - **Band 6:** $10.0 < W \le 20.0\text{ kg}$
-     - **Band 7:** $20.0 < W \le 30.0\text{ kg}$
-     *(Note: The exact weight-band boundaries and tariff structure represent a proposed baseline diverging from `pricing-rules.md`, which defines base fee + per-kg surcharge. This discrepancy is documented and marked for formal team approval).*
-6. The pricing engine retrieves the configured delivery fee from the applicable, enabled pricing rule matching the pickup zone, destination zone, and chargeable weight:
-   $$\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$$
-   $$\text{Rule Active} = (\text{Enabled} = \text{TRUE}) \land (\text{Effective From} \le \text{NOW}) \land (\text{Effective To is NULL} \lor \text{Effective To} > \text{NOW})$$
-   The pricing module is responsible for identifying the applicable tariff, retrieving the active rule, calculating the fee, generating the quote, and preserving the tariff ID and version. Tariff creation, updating, activation, deactivation, and administrative configuration belong exclusively to Member 7's admin workflow. Member 2 does not independently implement or document competing tariff administration responsibilities.
+5. The pricing engine queries the active tariff rule configured for the requested route `(pickup_zone_id, destination_zone_id)`. For each pickup-zone and destination-zone combination, the applicable tariff defines:
+   - `base_fee_cents` (`BIGINT` / `int64` in LKR cents)
+   - `per_kg_rate_cents` (`BIGINT` / `int64` in LKR cents)
+   - `currency` (`VARCHAR(3)`, standard `'LKR'`)
+   - `effective_from` (`TIMESTAMPTZ`)
+   - `effective_to` (`TIMESTAMPTZ`, nullable)
+   - `version` (`INT`)
+   - `is_active` (`BOOLEAN`)
+   $$\text{Rule Active} = (\text{is\_active} = \text{TRUE}) \land (\text{effective\_from} \le \text{NOW}) \land (\text{effective\_to is NULL} \lor \text{effective\_to} > \text{NOW})$$
+6. The pricing engine calculates the authoritative delivery fee using the **Base Fee + Per-Kilogram Surcharge** formula:
+   $$\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$$
+   $$\text{fee\_cents} = \text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$$
+   The pricing module is responsible for identifying the applicable tariff for the zone pair, retrieving the active rule, calculating the fee, generating the quote, and preserving the tariff ID and version. Tariff creation, updating, activation, deactivation, and administrative configuration belong exclusively to Member 7's admin workflow. Member 2 does not independently implement or document competing tariff administration responsibilities.
 7. The use case persists the generated quote into `pricing_quotes` with a **15-minute validity window**:
    $$\text{Expires At} = \text{NOW} + 15\text{ minutes}$$
-8. The endpoint returns HTTP `200 OK` (or `201 Created`) containing `quote_id`, `fee_cents`, `currency = "LKR"`, `pricing_rule_id`, `pricing_rule_version`, input snapshot, breakdown (actual weight, volumetric weight, chargeable weight, assigned weight band), `created_at`, and `expires_at`.
+8. The endpoint returns HTTP `200 OK` (or `201 Created`) containing `quote_id`, `fee_cents`, `currency = "LKR"`, `pricing_rule_id`, `pricing_rule_version`, input snapshot, breakdown (actual weight, volumetric weight, chargeable weight, base fee, weight surcharge rate), `created_at`, and `expires_at`.
 
 ## Alternate and Failure Flows
 
@@ -136,58 +135,57 @@ A customer or approved merchant needs to obtain a binding delivery-fee quote bef
 | Dimensions exceed 150 cm or girth $> 300\text{ cm}$ | Return `422 Unprocessable Entity` (`DIMENSIONS_LIMIT_EXCEEDED`). |
 | Chargeable weight exceeds 30.00 kg | Return `422 Unprocessable Entity` (`PARCEL_LIMITS_EXCEEDED`). |
 | Origin or destination zone unsupported | Return `422 Unprocessable Entity` (`PRICING_ZONE_UNSUPPORTED`); never guess fallback rates. |
-| No active pricing rule matches zone pair & weight band | Return `422 Unprocessable Entity` (`PRICING_UNAVAILABLE`); never fabricate a fee or use fallback prices. |
+| No active pricing rule matches zone pair | Return `422 Unprocessable Entity` (`PRICING_UNAVAILABLE`); never fabricate a fee or use fallback prices. |
 | Multiple overlapping rules create ambiguity | Fail safely and return `500 Internal Server Error` (`PRICING_CONFIGURATION_ERROR`); log diagnostic alert for Member 7/Admin. |
 | Database connection unavailable | Return `503 Service Unavailable` with `Retry-After` header. Never return fabricated amounts. |
 
 ## Pricing Rules and Invariants
 
 1. **Integer Minor Units:** All calculations and persistent fees use 64-bit integer minor units (cents in LKR, `BIGINT`). Floating-point arithmetic is strictly prohibited — *Confirmed Project Standard*.
-2. **Fixed Complete Tariffs:** Delivery fees are evaluated as a complete tariff per zone pair and weight band. No separate common base fee, per-kilogram charge, distance charge, or service tier multiplier is added.
+2. **Base Fee + Per-Kilogram Surcharge Formula:** Delivery fees are evaluated deterministically using the formula $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$. For each zone pair, the applicable tariff defines `base_fee_cents` and `per_kg_rate_cents`.
 3. **Canonical Volumetric Divisor (5000):** Volumetric weight is calculated using the canonical divisor $5000\text{ cm}^3/\text{kg}$: $\text{Volumetric Weight} = \frac{L \times W \times H}{5000}$. Chargeable weight is always $\max(\text{Actual Weight}, \text{Volumetric Weight})$ across all parcel weights up to 30.00 kg. The previous Option A threshold exemption for parcels $\le 1\text{ kg}$ is discontinued.
-4. **Seven Non-Overlapping Weight Bands (Proposed Baseline):** Bands are partitioned with strict, non-overlapping boundaries covering positive weights up to 30 kg. The exact weight band boundaries and tariff structure remain subject to team ratification vs `pricing-rules.md`.
+4. **Chargeable Weight Multiplier & Rounding Notice:** The chargeable weight ($\max(\text{actual}, \text{volumetric})$) is directly multiplied by the per-kilogram surcharge rate. If the canonical pricing contract leaves intermediate decimal rounding of fractional kilograms unspecified (e.g. ceiling rounding vs exact decimal multiplication to the nearest cent), this is tracked as an open question for team confirmation, while all final fees are represented strictly in integer minor units (LKR cents).
 5. **Backend Quote Expiry:** Generated quotes in `pricing_quotes` freeze prices for **15 minutes** (`expires_at = created_at + 15m`). Expiry is strictly enforced on the server at `current_time >= expires_at`. Expired quotes cannot be accepted for booking.
 6. **Administrative Decoupling:** Administrative management of pricing rules and tariffs belongs to Member 7's admin workflow; Member 2 owns the deterministic calculation engine, quote generation, and tariff retrieval interface. Member 2 does not independently implement competing tariff administration responsibilities.
-7. **Safe Failure:** If no tariff is configured for a zone-pair and band, the system returns `PRICING_UNAVAILABLE`. The engine never fabricates, guesses, or falls back to default rates.
+7. **Safe Failure:** If no active tariff is configured for a zone-pair, the system returns `PRICING_UNAVAILABLE`. The engine never fabricates, guesses, or falls back to default rates.
 
 > [!IMPORTANT]
-> **Provisional Pricing Baseline Notice (Pending Team Approval):**
-> The seven weight bands, volumetric divisor ($5000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, fixed zone-pair/band tariff model, and 15-minute quote TTL represent the **current Member 2 design baseline**. All example figures are illustrative, not commercial price promises. The underlying architectural invariants—server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`—are fixed and invariant.
+> **Pricing Model Status (Team Ratified Decision):**
+> The Base Fee + Per-Kilogram Surcharge model ($\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$), volumetric divisor ($5000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, and 15-minute quote TTL represent the **authoritative Member 2 design**. All example figures are illustrative, not commercial price promises. The underlying architectural invariants—server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`—are fixed and invariant.
 
 ### Illustrative Worked Examples
 
-*(The following examples illustrate the calculation rules under the canonical 5000 cm³/kg divisor. They do not constitute commercial price promises or approved production rates).*
+*(The following examples illustrate the calculation rules under the canonical 5000 cm³/kg divisor and Base Fee + Per-Kilogram tariff formula. They do not constitute commercial price promises or approved production rates).*
+
+- **Primary Example: Colombo-to-Kandy Delivery ($6.00\text{ kg}$ Chargeable Weight)**
+  - Route: Colombo Metro (`ZONE-WESTERN-01`) $\rightarrow$ Kandy Central (`ZONE-CENTRAL-01`)
+  - Configured Tariff: Base fee = LKR 300.00 (`base_fee_cents = 30000`), Per-kilogram rate = LKR 100.00 (`per_kg_rate_cents = 10000`)
+  - Actual weight: $5.00\text{ kg}$; Dimensions: $40 \times 30 \times 25\text{ cm}$
+  - Volumetric weight: $(40 \times 30 \times 25) / 5000 = 30,000 / 5000 = 6.00\text{ kg}$
+  - Chargeable weight: $\max(5.00, 6.00) = 6.00\text{ kg}$
+  - Calculation:
+    $$\text{Delivery Fee} = 300 + (6 \times 100) = \text{LKR } 900.00$$
+    $$\text{fee\_cents} = 30000 + (6 \times 10000) = 30000 + 60000 = 90000\text{ cents}$$
 
 - **Example 1: Small Bulky Package ($W_{\text{vol}} > W_{\text{act}}$)**
-  - Actual weight: $0.80\text{ kg}$.
-  - Dimensions: $25 \times 20 \times 15\text{ cm}$.
-  - Volumetric weight: $(25 \times 20 \times 15) / 5000 = 7,500 / 5000 = 1.50\text{ kg}$.
-  - Chargeable weight: $\max(0.80, 1.50) = 1.50\text{ kg}$.
-  - Applicable band: **Band 3** ($1.0 < W \le 2.0\text{ kg}$).
-  - Result: The engine queries the tariff configured for `(pickup_zone_id, destination_zone_id, Band 3)`.
+  - Actual weight: $0.80\text{ kg}$; Dimensions: $25 \times 20 \times 15\text{ cm}$
+  - Volumetric weight: $(25 \times 20 \times 15) / 5000 = 7,500 / 5000 = 1.50\text{ kg}$
+  - Chargeable weight: $\max(0.80, 1.50) = 1.50\text{ kg}$
+  - Assuming Base fee = `35000` cents (LKR 350.00), Per-kg rate = `10000` cents (LKR 100.00):
+    $$\text{fee\_cents} = 35000 + (1.50 \times 10000) = 35000 + 15000 = 50000\text{ cents } (\text{LKR } 500.00)$$
 
-- **Example 2: Medium Package ($W_{\text{vol}} > W_{\text{act}}$)**
-  - Actual weight: $2.00\text{ kg}$.
-  - Dimensions: $40 \times 30 \times 28\text{ cm}$.
-  - Volumetric weight: $(40 \times 30 \times 28) / 5000 = 33,600 / 5000 = 6.72\text{ kg}$.
-  - Chargeable weight: $\max(2.00, 6.72) = 6.72\text{ kg}$.
-  - Applicable band: **Band 5** ($5.0 < W \le 10.0\text{ kg}$).
-  - Result: The engine queries the tariff configured for `(pickup_zone_id, destination_zone_id, Band 5)`.
+- **Example 2: Heavy Package ($W_{\text{act}} > W_{\text{vol}}$)**
+  - Actual weight: $4.50\text{ kg}$; Dimensions: $20 \times 20 \times 15\text{ cm}$
+  - Volumetric weight: $(20 \times 20 \times 15) / 5000 = 6,000 / 5000 = 1.20\text{ kg}$
+  - Chargeable weight: $\max(4.50, 1.20) = 4.50\text{ kg}$
+  - Assuming Base fee = `35000` cents (LKR 350.00), Per-kg rate = `10000` cents (LKR 100.00):
+    $$\text{fee\_cents} = 35000 + (4.50 \times 10000) = 35000 + 45000 = 80000\text{ cents } (\text{LKR } 800.00)$$
 
 - **Example 3: Bulky Package Exceeding Maximum Chargeable Weight**
-  - Actual weight: $8.00\text{ kg}$.
-  - Dimensions: $80 \times 60 \times 40\text{ cm}$.
-  - Volumetric weight: $(80 \times 60 \times 40) / 5000 = 192,000 / 5000 = 38.40\text{ kg}$.
-  - Chargeable weight: $\max(8.00, 38.40) = 38.40\text{ kg}$.
+  - Actual weight: $8.00\text{ kg}$; Dimensions: $80 \times 60 \times 40\text{ cm}$
+  - Volumetric weight: $(80 \times 60 \times 40) / 5000 = 192,000 / 5000 = 38.40\text{ kg}$
+  - Chargeable weight: $\max(8.00, 38.40) = 38.40\text{ kg}$
   - Result: **Rejected** with HTTP `422 Unprocessable Entity` (`PARCEL_LIMITS_EXCEEDED`) because the chargeable weight ($38.40\text{ kg}$) exceeds the $30.00\text{ kg}$ maximum limit.
-
-> [!NOTE]
-> **Arithmetic Baseline & Pricing Formula Clarification (Audit Resolution):**
-> An arithmetic discrepancy noted in the system audit involves an intra-zone 2.5 kg delivery (55000 vs 51000 cents at baseline 8000 cents/kg):
-> - Under the legacy formula in `docs/contracts/pricing-rules.md` Table 4, Metro $\to$ Metro defines base fee 35000 cents and additional rate 8000 cents/kg: $35000 + \lceil 2.5 - 1.0 \rceil \times 8000 = 35000 + (2 \times 8000) = 51000\text{ cents}$ (LKR 510.00).
-> - An earlier draft example assumed an additional rate of 10000 cents/kg, yielding $35000 + (2 \times 10000) = 55000\text{ cents}$.
-> - Under Member 2's proposed complete-tariff schedule, delivery fees are looked up directly as a single complete tariff per zone pair and weight band (e.g. Band 4: $2 < W \le 5\text{ kg}$), with 55000 cents used as an illustrative flat Band 4 rate.
-> - Because team ratification of the complete-tariff schedule versus the legacy formula is still pending, the specific formula and numerical examples remain **provisional and unresolved** pending formal team decision. Commercial rates will be populated in database seed fixtures and never hardcoded into domain logic.
 
 ## UML Sequence Diagram
 
@@ -212,7 +210,7 @@ An authenticated customer confirms a delivery booking. The system supports two d
    - If an unexpired record exists with differing `request_hash`, abort with HTTP `409 Conflict`.
 4. The application layer validates booking parameters:
    - If `quote_id` is supplied: verifies `quote_id` exists in `pricing_quotes`, belongs to the authenticated caller/tenant context under the approved authorization model, has not been consumed (`accepted_parcel_id IS NULL`), is unexpired (`current_time < expires_at`), and matches the submitted weight, dimensions, and zones.
-   - If `quote_id` is omitted (direct booking): evaluates the applicable enabled pricing rule for the zone pair and weight band and calculates the authoritative complete fee deterministically.
+   - If `quote_id` is omitted (direct booking): evaluates the applicable enabled pricing rule for the zone pair (`base_fee_cents`, `per_kg_rate_cents`) and calculates the authoritative fee deterministically using `base_fee_cents + (chargeable_weight * per_kg_rate_cents)`.
 5. The application layer generates a unique tracking number in the canonical format `SD-YYYYMMDD-XXXXXX`.
 6. Within a single PostgreSQL transaction:
    - Inserts row into `parcels` with initial status `CREATED`, `pickup_address` JSONB snapshot, `dropoff_address` JSONB snapshot, `price_cents`, `currency = 'LKR'`, `pricing_rule_id`, `pricing_rule_version`, `version = 1`, and `attempt_count = 0`.
@@ -547,7 +545,7 @@ The table below documents the status of architectural decisions governing functi
 | :--- | :--- | :--- | :--- |
 | **Pricing Endpoint & Quote Persistence** | **RESOLVED** | Standardized on `POST /api/v1/pricing/quotes` with quote persistence in `pricing_quotes`. | Audit §4.A, `pricing-rules.md` §6 |
 | **Monetary Representation** | **RESOLVED** | Integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floats. | Engineering Standards §5.2, `pricing-rules.md` §1 |
-| **Pricing Model & Tariffs** | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** | Complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands. Retrieval interface owned by M2; admin UI owned by M7. | Member 2 Baseline |
+| **Pricing Model & Tariffs** | **RESOLVED** | Option 2: Base Fee + Per-Kilogram Surcharge (`Delivery Fee = Base Fee + (Chargeable Weight * PerKgRate)`). Retrieval interface owned by M2; admin UI owned by M7. | Team Decision, `pricing-rules.md` |
 | **Volumetric Divisor (5000)** | **RESOLVED** | Volumetric weight uses divisor 5000 cm³/kg: $(L \times W \times H) / 5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | SRS §13.2, `pricing-rules.md` §2 |
 | **Quote Validity Window (15m)** | **RESOLVED** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | `pricing-rules.md` §6 |
 | **Address Snapshots** | **RESOLVED** | Immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`. Note: Track conflict with `database-schema.md` `parcel_addresses` child table. | Audit §4.D, SRS §7.1 |
@@ -561,20 +559,20 @@ The table below documents the status of architectural decisions governing functi
 
 ### 13.1 Pricing Policy Dependency & Impact Analysis (If Pricing Rules Change)
 
-If the team modifies the provisional pricing formula, weight bands, divisor, or quote TTL:
+If the team modifies tariff rates, base fees, per-kg rates, divisor, or quote TTL:
 1. **Core Parcel Architecture Remains Invariant:** The aggregate lifecycle, booking transactions, address snapshots, tracking numbers, and outbox event publishing do not depend on the specific pricing formula.
-2. **API Changes:** The `POST /api/v1/pricing/quotes` response envelope remains stable (`quote_id`, `fee_cents`, `currency`, `expires_at`), with breakdown attributes reflecting the chargeable weight and selected band.
-3. **Database Changes:** The `pricing_rules` table structure in migration `000004` stores complete zone-pair/band fees; updates to tariff values occur through administrative maintenance without DDL changes.
+2. **API Changes:** The `POST /api/v1/pricing/quotes` response envelope remains stable (`quote_id`, `fee_cents`, `currency`, `expires_at`), with breakdown attributes reflecting the chargeable weight, base fee, and per-kg surcharge.
+3. **Database Changes:** The `pricing_rules` table structure stores zone-pair base fees and per-kg rates (`base_fee_cents`, `per_kg_rate_cents`); updates to tariff values occur through Member 7 administrative maintenance without DDL changes.
 4. **Validation Bounds:** Input validation limits in `internal/pricing/transport/dto.go` (max actual weight 30 kg, max chargeable weight 30 kg, positive dimensions required) adapt to operational capacity limits.
-5. **Test Case Updates:** Automated test assertions in `internal/pricing/domain/` cover divisor 5000, $\max(\text{actual}, \text{volumetric})$, exact boundaries, and missing tariff rejection.
+5. **Test Case Updates:** Automated test assertions in `internal/pricing/domain/` cover divisor 5000, $\max(\text{actual}, \text{volumetric})$, base fee calculation, per-kg weight surcharge, and missing tariff rejection.
 6. **Integration Coordination:** Member 6 (Frontend) checkout timer matches the ratified 15-minute quote expiration duration.
 
 # 14. Acceptance Criteria
 
 The workflows are considered ready for implementation review when:
 
-1. A valid quote request to `POST /api/v1/pricing/quotes` deterministically calculates fees in LKR cents using divisor 5000 cm³/kg and $\max(\text{actual\_weight}, \text{volumetric\_weight})$, returning a 15-minute quote snapshot with backend expiry enforcement.
-2. Invalid parcel inputs, negative weights, weights exceeding 30 kg, and unconfigured route/band combinations return structured validation errors (`400`/`422`, `PRICING_UNAVAILABLE`) without inventing fallback rates.
+1. A valid quote request to `POST /api/v1/pricing/quotes` deterministically calculates fees in LKR cents using divisor 5000 cm³/kg and $\text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$, returning a 15-minute quote snapshot with backend expiry enforcement.
+2. Invalid parcel inputs, negative weights, weights exceeding 30 kg, and unconfigured route combinations return structured validation errors (`400`/`422`, `PRICING_UNAVAILABLE`) without inventing fallback rates.
 3. A valid booking atomically commits the parcel record, JSONB address snapshots, initial status history, idempotency cache, and outbox event (`parcel.booked.v1`).
 4. Replaying a booking with the same `Idempotency-Key` and payload returns the cached result; replaying with a different payload returns HTTP `409 Conflict`.
 5. Parcel lifecycle transitions are strictly governed by the `Parcel` aggregate root, rejecting direct SQL status modifications and enforcing the 3-attempt ceiling.

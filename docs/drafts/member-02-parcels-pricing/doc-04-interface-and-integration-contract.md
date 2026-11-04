@@ -105,8 +105,9 @@ Content-Type: application/json
     "actual_weight_kg": 2.50,
     "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
-    "weight_band": "BAND_4",
-    "weight_band_range": "2 < W <= 5 kg"
+    "base_fee_cents": 30000,
+    "per_kg_rate_cents": 10000,
+    "weight_surcharge_cents": 25000
   },
   "expires_at": "2026-10-25T14:45:00Z",
   "created_at": "2026-10-25T14:30:00Z"
@@ -114,8 +115,8 @@ Content-Type: application/json
 ```
 
 > [!NOTE]
-> **Provisional Pricing Notice (Pending Team Approval):**
-> The mathematical parameters (seven weight bands, volumetric divisor $5000\text{ cm}^3/\text{kg}$, 30 kg weight limits, zone-pair tariff model, and 15-minute quote validity) represent the **current Member 2 design baseline**. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements. Missing tariffs return `422 PRICING_UNAVAILABLE`. Quotes expired at `current_time >= expires_at` are rejected upon booking.
+> **Pricing Contract Status (Team Ratified Decision):**
+> Delivery fees are computed using the Base Fee + Per-Kilogram Surcharge formula: $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$. For each zone pair, the tariff defines `base_fee_cents` and `per_kg_rate_cents`. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$ using divisor $5000\text{ cm}^3/\text{kg}$. Operational weight ceiling is 30.00 kg. Quotes carry a confirmed 15-minute price freeze window. Missing tariffs return `422 PRICING_UNAVAILABLE`. Quotes expired at `current_time >= expires_at` are rejected upon booking.
 
 ---
 
@@ -362,7 +363,7 @@ To comply with global privacy standards and project security rules, the public t
 | `400 Bad Request` | `PRICING_INVALID_INPUT` | Missing mandatory fields, non-positive dimensions, or invalid weight. |
 | `422 Unprocessable` | `PARCEL_LIMITS_EXCEEDED` | Actual weight or chargeable weight exceeds proposed maximum limit (30 kg). |
 | `422 Unprocessable` | `DIMENSION_LIMIT_EXCEEDED` | Dimension exceeds maximum allowable threshold (150 cm). |
-| `422 Unprocessable` | `PRICING_UNAVAILABLE` | No active pricing rule covers the requested zone combination and weight band. |
+| `422 Unprocessable` | `PRICING_UNAVAILABLE` | No active pricing rule covers the requested zone combination. |
 | `500 Server Error` | `PRICING_CONFIGURATION_ERROR` | Ambiguous active pricing rules detected; fails safely. |
 | `500 Server Error` | `INTERNAL_SYSTEM_ERROR` | Unhandled internal error; sanitized response returned. |
 
@@ -429,8 +430,7 @@ flowchart TD
 | Decision Topic | Aligned Specification Baseline | Status / Source |
 | :--- | :--- | :--- |
 | **Canonical Quote Route & Persistence** | `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes` | Aligned with Member 10 & API Conventions |
-| **Pricing Model & Complete Tariff** | Fixed complete tariff `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`; no separate base fee, per-kg charge, distance fee, or multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`; 55000 cents in example is flat Band 4 rate vs 51000 cents in legacy formula) |
-| **Weight Bands (7 Bands)** | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg actual and chargeable weight | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model & Tariffs** | Option 2: Base Fee + Per-Kilogram Surcharge (`Delivery Fee = Base Fee + (Chargeable Weight * PerKgRate)`) | **RESOLVED** (Team Decision, `pricing-rules.md`) |
 | **Volumetric Divisor (5000)** | Volumetric weight calculated using canonical divisor 5000 cm³/kg: $(L \times W \times H) / 5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
 | **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **RESOLVED** (`pricing-rules.md` §6) |
 | **Monetary Data Type** | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
@@ -446,11 +446,11 @@ flowchart TD
 
 | Integration Boundary | Invariant Contract Elements | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **Member 6 (Customer UI)** | Endpoint `POST /api/v1/pricing/quotes`, `quote_id`, and `fee_cents` binding. | Checkout countdown timer reflects 15-minute validity; UI prompts for dimensions only if actual weight > 1 kg. |
-| **Member 4 (Merchant Ingress)** | `POST /api/v1/merchant/parcels` delegates to Member 2 booking use case. | Direct bookings evaluate the new complete tariff rules; no change to merchant transport layer. |
-| **Member 7 (Admin UI)** | Tariff configuration screens manage `(pickup_zone_id, destination_zone_id, weight_band_id) -> fee_cents` rules and effective date windows. | Admin portal configures complete fees without calculating multipliers or per-kg formulas. |
+| **Member 6 (Customer UI)** | Endpoint `POST /api/v1/pricing/quotes`, `quote_id`, and `fee_cents` binding. | Checkout countdown timer reflects 15-minute validity; breakdown exposes base fee and weight surcharge. |
+| **Member 4 (Merchant Ingress)** | `POST /api/v1/merchant/parcels` delegates to Member 2 booking use case. | Direct bookings evaluate the active base fee and per-kg rate; no change to merchant transport layer. |
+| **Member 7 (Admin UI)** | Tariff configuration screens manage `(pickup_zone_id, destination_zone_id) -> (base_fee_cents, per_kg_rate_cents)` rules and effective date windows. | Admin portal configures base fee and per-kg rate values. |
 | **Member 10 (AI Assistant)** | Tool calls approved Core API `POST /api/v1/pricing/quotes` with auth context. | AI Tool returns updated fee amounts deterministically; prompt guides reflect 15-minute validity window and 30 kg maximum. |
-| **Database Migrations** | Core `parcels` and `pricing_quotes` schema and foreign keys remain fixed. | `pricing_rules` stores `weight_band_id`, boundaries, and complete `fee_cents` without separate multiplier columns. |
+| **Database Migrations** | Core `parcels` and `pricing_quotes` schema and foreign keys remain fixed. | `pricing_rules` stores `base_fee_cents` and `per_kg_rate_cents`. |
 
 ---
 

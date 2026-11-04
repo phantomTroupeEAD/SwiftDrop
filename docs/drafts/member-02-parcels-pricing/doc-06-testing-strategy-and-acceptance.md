@@ -105,8 +105,9 @@ flowchart TD
 ### 5.1 Deterministic Pricing & Quote Management (`TC-PRC-*`)
 
 > [!NOTE]
-> **Pricing Alignment Status:**
-> Chargeable weight is computed consistently using $\max(\text{actual\_weight}, \text{volumetric\_weight})$ with volumetric divisor $5000\text{ cm}^3/\text{kg}$ across all eligible weights ($0.01 \le W \le 30.00\text{ kg}$). Quotes carry a strict 15-minute validity window. Note: The exact tariff calculation structure (7 complete-tariff weight bands proposed in Section 5.1 vs. base + per-kg surcharge in `pricing-rules.md`) remains pending team ratification.
+> **Pricing Alignment Status (Ratified Base Fee + Per-Kg Surcharge):**
+> Delivery fees are computed using the ratified formula: $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$.
+> Chargeable weight is computed consistently using $\max(\text{actual\_weight}, \text{volumetric\_weight})$ with volumetric divisor $5000\text{ cm}^3/\text{kg}$ across all eligible weights ($0.01 \le W \le 30.00\text{ kg}$). Quotes carry a strict 15-minute validity window. Monetary calculations use exact integer minor units (`BIGINT` LKR cents). Intermediate rounding for fractional kilograms remains an open item pending team confirmation.
 
 #### `TC-PRC-001`: Volumetric Weight Calculation (Divisor 5,000 cm³/kg)
 - **Objective:** Verify standard volumetric weight calculation using the IATA standard divisor of $5000\text{ cm}^3/\text{kg}$.
@@ -122,7 +123,8 @@ flowchart TD
 - **Calculations:**
   - Volumetric weight = $(20 \times 20 \times 15) / 5000 = 6000 / 5000 = 1.20\text{ kg}$.
   - Chargeable weight = $\max(4.50, 1.20) = 4.50\text{ kg}$.
-- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 4.50`, `volumetric_weight_kg == 1.20`, and fee calculated based on 4.50 kg.
+  - For tariff (Base = 35,000 cents, Per-kg = 10,000 cents): Weight surcharge = $4.50 \times 10000 = 45000$ cents. Total fee = $35000 + 45000 = 80000$ cents (LKR 800.00).
+- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 4.50`, `volumetric_weight_kg == 1.20`, and `fee_cents == 80000`.
 
 #### `TC-PRC-003`: Volumetric Weight Greater Than Actual Weight
 - **Objective:** Verify that when volumetric weight exceeds actual weight, volumetric weight is selected as chargeable weight.
@@ -130,7 +132,8 @@ flowchart TD
 - **Calculations:**
   - Volumetric weight = $(40 \times 30 \times 25) / 5000 = 30000 / 5000 = 6.00\text{ kg}$.
   - Chargeable weight = $\max(2.00, 6.00) = 6.00\text{ kg}$.
-- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 6.00`, `volumetric_weight_kg == 6.00`, and fee calculated based on 6.00 kg.
+  - For tariff (Base = 30,000 cents, Per-kg = 10,000 cents): Weight surcharge = $6.00 \times 10000 = 60000$ cents. Total fee = $30000 + 60000 = 90000$ cents (LKR 900.00).
+- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 6.00`, `volumetric_weight_kg == 6.00`, and `fee_cents == 90000`.
 
 #### `TC-PRC-004`: Equal Actual and Volumetric Weight
 - **Objective:** Verify correct handling when actual weight and volumetric weight are exactly equal.
@@ -138,37 +141,44 @@ flowchart TD
 - **Calculations:**
   - Volumetric weight = $(25 \times 20 \times 25) / 5000 = 12500 / 5000 = 2.50\text{ kg}$.
   - Chargeable weight = $\max(2.50, 2.50) = 2.50\text{ kg}$.
-- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 2.50`, `volumetric_weight_kg == 2.50`, and fee calculated based on 2.50 kg.
+  - For tariff (Base = 30,000 cents, Per-kg = 10,000 cents): Weight surcharge = $2.50 \times 10000 = 25000$ cents. Total fee = $30000 + 25000 = 55000$ cents (LKR 550.00).
+- **Assertions:** Returns HTTP 201; response body contains `chargeable_weight_kg == 2.50`, `volumetric_weight_kg == 2.50`, and `fee_cents == 55000`.
 
-#### `TC-PRC-005`: All Seven Weight Bands & Boundary Invariants
-- **Objective:** Verify non-overlapping coverage of all 7 proposed weight bands at exact boundary points.
-- **Test Matrix:**
-  - $W = 0.50\text{ kg} \implies$ Band 1 ($0 < W \le 0.5\text{ kg}$).
-  - $W = 0.501\text{ kg} \implies$ Band 2 ($0.5 < W \le 1.0\text{ kg}$).
-  - $W = 1.00\text{ kg} \implies$ Band 2.
-  - $W = 1.001\text{ kg} \implies$ Band 3 ($1.0 < W \le 2.0\text{ kg}$).
-  - $W = 2.00\text{ kg} \implies$ Band 3.
-  - $W = 2.001\text{ kg} \implies$ Band 4 ($2.0 < W \le 5.0\text{ kg}$).
-  - $W = 5.00\text{ kg} \implies$ Band 4.
-  - $W = 5.001\text{ kg} \implies$ Band 5 ($5.0 < W \le 10.0\text{ kg}$).
-  - $W = 10.00\text{ kg} \implies$ Band 5.
-  - $W = 10.001\text{ kg} \implies$ Band 6 ($10.0 < W \le 20.0\text{ kg}$).
-  - $W = 20.00\text{ kg} \implies$ Band 6.
-  - $W = 20.001\text{ kg} \implies$ Band 7 ($20.0 < W \le 30.0\text{ kg}$).
-  - $W = 30.00\text{ kg} \implies$ Band 7.
-- **Assertions:** Every test weight matches exactly one band; zero ambiguity or missing coverage. *(Pending team confirmation on tariff structure)*.
+#### `TC-PRC-005`: Combined Base Fee and Weight Surcharge Calculation
+- **Objective:** Verify deterministic execution of the complete fee formula: $\text{Delivery Fee} = \text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$.
+- **Inputs:** Zone pair `COLOMBO_METRO` $\to$ `KANDY_CENTRAL`; Chargeable weight = 6.00 kg.
+- **Tariff Rule:** `base_fee_cents = 30000` (LKR 300.00), `per_kg_rate_cents = 10000` (LKR 100.00).
+- **Calculations:**
+  - Base fee component = 30,000 cents.
+  - Weight surcharge component = $6.00 \times 10000 = 60000$ cents.
+  - Total delivery fee = $30000 + 60000 = 90000$ cents (LKR 900.00).
+- **Assertions:** Returns HTTP 201; response body contains `base_fee_cents == 30000`, `per_kg_rate_cents == 10000`, `weight_surcharge_cents == 60000`, and `fee_cents == 90000`.
 
-#### `TC-PRC-006`: No Premature Rounding Before Tariff Lookup
-- **Objective:** Ensure calculations preserve decimal precision and do not round prematurely before band assignment or rate calculation.
-- **Inputs:** Parcel resulting in chargeable weight 5.02 kg.
-- **Assertions:** Must NOT round down to 5.00 kg (Band 4); must select Band 5 ($5 < W \le 10\text{ kg}$).
+#### `TC-PRC-006`: Fractional Chargeable Weights and Intermediate Rounding
+- **Objective:** Verify tariff calculation with fractional kilogram chargeable weights and ensure result is exact integer cents.
+- **Inputs:** Dimensions $25 \times 20 \times 15$ cm (volumetric 1.50 kg), Actual weight = 0.80 kg $\implies$ Chargeable weight = 1.50 kg.
+- **Tariff Rule:** `base_fee_cents = 35000` (LKR 350.00), `per_kg_rate_cents = 10000` (LKR 100.00).
+- **Calculations:**
+  - Continuous calculation: Weight surcharge = $1.50 \times 10000 = 15000$ cents. Total fee = $35000 + 15000 = 50000$ cents (LKR 500.00).
+- **Assertions:** Returns HTTP 201; `fee_cents == 50000`.
+- **Note on Rounding Policy:** If the team ratifies a ceiling policy (e.g. `ceil(chargeable_weight_kg)`), $1.50\text{ kg} \implies 2.00\text{ kg}$, resulting in fee $35000 + (2 \times 10000) = 55000$ cents. This test verifies exact continuous calculation pending team confirmation of ceiling behavior.
 
-#### `TC-PRC-008`: Missing Tariff for a Zone Pair & Ambiguity Handling
-- **Objective:** Return controlled HTTP 422 error if no active tariff exists for the requested zone pair, and fail safely on ambiguous rules.
+#### `TC-PRC-007`: Isolated Base Fee & Per-Kilogram Surcharge Components
+- **Objective:** Verify isolated behavior of the base fee component and per-kilogram rate multiplier.
+- **Cases:**
+  - Case A (Base Fee Isolation): Minimum billable parcel ($W \to 0$ boundary limit or 0.01 kg) incurs the base fee baseline. Base fee is never bypassed or discounted.
+  - Case B (Per-Kg Rate Linearity): For an incremental weight increase of $\Delta W = 1.00\text{ kg}$, fee increases by exactly $\Delta \text{Fee} = \text{per\_kg\_rate\_cents}$.
+- **Assertions:** Base fee component remains constant across all weights for the zone pair; surcharge scales linearly with chargeable weight.
+
+#### `TC-PRC-008`: Missing, Inactive, Expired, or Negative Tariff Values
+- **Objective:** Return controlled HTTP 422 error if no active tariff exists for the requested zone pair, and fail safely on invalid or ambiguous configuration.
 - **Cases:**
   - Case A (Missing Rule): Zone pair with no configured active tariff rule $\implies$ HTTP 422 (`code: "PRICING_UNAVAILABLE"`).
-  - Case B (Ambiguous Match): Multiple active rules match same zone pair and weight band $\implies$ HTTP 500 (`code: "PRICING_CONFIGURATION_ERROR"`).
-- **Assertions:** Neither case fabricates a price or falls back to arbitrary defaults; errors are strictly typed and logged.
+  - Case B (Inactive Rule): Tariff exists with `is_active = FALSE` $\implies$ HTTP 422 (`code: "PRICING_UNAVAILABLE"`).
+  - Case C (Expired Rule): Tariff exists but `effective_to < NOW()` $\implies$ HTTP 422 (`code: "PRICING_UNAVAILABLE"`).
+  - Case D (Negative Rates): Database CHECK constraint rejects `base_fee_cents < 0` or `per_kg_rate_cents < 0`. If encountered at runtime $\implies$ HTTP 500 (`code: "PRICING_CONFIGURATION_ERROR"`).
+  - Case E (Ambiguous Match): Multiple active rules match same zone pair $\implies$ HTTP 500 (`code: "PRICING_CONFIGURATION_ERROR"`).
+- **Assertions:** No case fabricates a price or falls back to arbitrary defaults; errors are strictly typed and logged.
 
 #### `TC-PRC-009`: Expired Pricing Quote Enforcement (`current_time >= expires_at`)
 - **Objective:** Enforce 15-minute quote expiration at the exact boundary during parcel booking.
@@ -179,17 +189,18 @@ flowchart TD
   - Case C: Booking submitted at `T0 + 16m 00s` $\implies$ Rejected HTTP 422 (`code: "QUOTE_EXPIRED"`).
 - **Assertions:** Expiration is evaluated strictly on the backend against server authoritative time; frontend timer displays are non-authoritative.
 
-#### `TC-PRC-010`: Tariff Update After Quote Creation
-- **Objective:** Confirm that updating an active tariff rule does not invalidate or alter already-issued unexpired quotes or confirmed bookings.
-- **Setup:** Tariff Rule v1 is active. Quote Q1 is generated with `fee_cents = 35000`, `pricing_rule_version = 1`. Admin updates tariff to Rule v2 (`fee_cents = 45000`).
+#### `TC-PRC-010`: Tariff Version Changes (Rule v1 to v2)
+- **Objective:** Confirm that updating an active tariff rule (version increment) does not invalidate or alter already-issued unexpired quotes or confirmed bookings.
+- **Setup:** Tariff Rule v1 is active (`base_fee_cents = 30000`, `per_kg_rate_cents = 10000`, `version = 1`). Quote Q1 is generated for 2.0 kg with `fee_cents = 50000`, `pricing_rule_version = 1`. Admin updates tariff to Rule v2 (`base_fee_cents = 35000`, `per_kg_rate_cents = 12000`, `version = 2`).
 - **Action:** Customer books parcel using Quote Q1 within its 15-minute validity window.
-- **Assertions:** Booking succeeds; parcel accepts Quote Q1's agreed fee snapshot: `parcels.price_cents == 35000`, `parcels.pricing_rule_version == 1`. Active Rule v2 does not overwrite the booked agreement.
+- **Assertions:** Booking succeeds; parcel accepts Quote Q1's agreed fee snapshot: `parcels.price_cents == 50000`, `parcels.pricing_rule_version == 1`. Subsequent quote requests generate quotes under Tariff v2 ($35000 + (2 \times 12000) = 59000$ cents, version = 2).
 
-#### `TC-PRC-011`: Tampered or Mismatched Quote Inputs
-- **Objective:** Prevent quote tampering and unauthorized cross-customer quote reuse.
+#### `TC-PRC-011`: Accepted-Price Snapshot Immutability & Quote Tampering Protection
+- **Objective:** Ensure confirmed bookings retain agreed price snapshot permanently in `parcels.price_cents` regardless of subsequent tariff updates, and prevent quote tampering or unauthorized cross-customer quote reuse.
 - **Cases:**
-  - Case A: Client modifies weight, dimensions, or pickup/dropoff zone between quote generation and booking $\implies$ HTTP 422 (`code: "QUOTE_PARAM_MISMATCH"`).
-  - Case B: Customer B attempts to book with Customer A's quote $\implies$ HTTP 403 Forbidden (`code: "QUOTE_FORBIDDEN"`).
+  - Case A (Snapshot Immutability): Subsequent rate updates or rule deletions never alter historical parcel booking records (`parcels.price_cents`).
+  - Case B (Parameter Mismatch): Client modifies weight, dimensions, or pickup/dropoff zone between quote generation and booking $\implies$ HTTP 422 (`code: "QUOTE_PARAM_MISMATCH"`).
+  - Case C (Cross-Customer Theft): Customer B attempts to book with Customer A's quote $\implies$ HTTP 403 Forbidden (`code: "QUOTE_FORBIDDEN"`).
 
 ---
 
@@ -214,7 +225,7 @@ flowchart TD
 #### `TC-VAL-003`: Maximum Parcel Weight Boundary (Exactly 30.00 kg)
 - **Objective:** Verify that parcels with actual and chargeable weight of exactly 30.00 kg are accepted.
 - **Inputs:** Actual weight = 30.00 kg, dimensions = $30 \times 25 \times 20$ cm (volumetric = 3.00 kg). Chargeable weight = 30.00 kg.
-- **Assertions:** Request accepted; HTTP 201 Created (or quote generated successfully in maximum allowable band).
+- **Assertions:** Request accepted; HTTP 201 Created (or quote generated successfully for 30.00 kg limit).
 
 #### `TC-VAL-004`: Weight Exceeding Maximum Limit (> 30.00 kg)
 - **Objective:** Reject parcels where actual weight or chargeable volumetric weight exceeds the operational limit of 30.00 kg.
@@ -463,8 +474,8 @@ go test -v -tags=integration ./internal/parcels/infrastructure/...
 | Testing Topic | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Monetary Validation** | Allowed float fee checks | Exact integer LKR cents comparison (`BIGINT`) | Engineering Standards v1.0 Section 6 |
-| **Pricing Model & Complete Tariff** | General estimation tests | Fixed complete tariff `tariff(pickup, dropoff, band)`; no separate base/per-kg/distance fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model** | 7 Fixed Weight Bands | Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) for each `(pickup_zone_id, destination_zone_id)` pair. Fee = $\text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$. | **RATIFIED TEAM DECISION** (Aligned with `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands | Discontinued. Replaced by continuous chargeable weight $\times$ per-kilogram rate surcharge. | **SUPERSEDED** (Team decision to use Option 2) |
 | **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued | Aligned Decision v2.0 |
 | **Quote Expiry Test** | Undefined quote TTL | 15-minute expiration test (`current_time >= expires_at` enforced on backend) | Aligned Architecture Decision |
 | **Address Verification** | Tested `parcel_addresses` child table | Tests JSONB snapshots on `parcels`; child table creation omitted; schema conflict documented | Architecture Alignment Item (Conflict with `database-schema.md`) |
@@ -478,7 +489,7 @@ go test -v -tags=integration ./internal/parcels/infrastructure/...
 
 | Test Suite / Area | Invariant Framework (Unaffected by Pricing Changes) | Impact If Pricing Policy Changes |
 | :--- | :--- | :--- |
-| **Pricing Unit Tests (`internal/pricing/...`)** | Unit test framework, deterministic calculation assertion, zero-float validation. | Mathematical expected values in `TC-PRC-001` through `TC-PRC-007` test complete tariff lookups and band selections rather than base/per-kg formulas. |
+| **Pricing Unit Tests (`internal/pricing/...`)** | Unit test framework, deterministic calculation assertion, zero-float validation. | Mathematical expected values in `TC-PRC-001` through `TC-PRC-007` test Base Fee + Per-Kg Surcharge formulas rather than weight-band lookups. |
 | **Quote Expiration Tests** | Test verifying expired quotes are rejected during booking with HTTP 422 (`QUOTE_EXPIRED`). | If the 15-minute TTL changes, the synthetic timestamp delta in `TC-PRC-009` will adjust to match the ratified duration. |
 | **Booking & Idempotency Integration** | Booking transaction atomicity, `Idempotency-Key` replay, payload mismatch conflict (409), address snapshots. | **Zero Impact:** Booking workflows test the accepted price snapshot (`TC-BKG-007`) irrespective of internal tariff rules. |
 | **Lifecycle & Concurrency Tests** | 9-state machine transitions, ADR-004 attempt ceiling (max 3), optimistic locking (`version INT`). | **Zero Impact:** Parcel state machine is decoupled from pricing formulas. |
@@ -504,7 +515,7 @@ The following authoritative diagrams provide visual models of the workflows, sta
 | Diagram Title | Associated Acceptance Test Cases | Lucidchart Editable URL | Repository Artifacts |
 | :--- | :--- | :--- | :--- |
 | **01 Parcel Management & Pricing Use-Case Diagram** | Actor boundary validation, RBAC tests (`TC-SEC-001` to `TC-SEC-004`) | [Lucidchart Document](https://lucid.app/lucidchart/da53bbf3-1b48-450c-9945-b1816a32ae17/edit) | [PlantUML Source](./diagrams/01-parcel-pricing-use-case.puml) \| [PNG Preview](./diagrams/01-parcel-pricing-use-case.png) |
-| **02 Delivery Fee Estimation Activity Diagram** | `TC-PRC-001` through `TC-PRC-011` (Band assignment, volumetric thresholds, limit rejections) | [Lucidchart Document](https://lucid.app/lucidchart/e9ac9f8d-5d88-4e74-9a52-5e09e5c696b4/edit) | [PlantUML Source](./diagrams/02-delivery-fee-estimation-activity.puml) \| [PNG Preview](./diagrams/02-delivery-fee-estimation-activity.png) \| [SVG](./diagrams/02-delivery-fee-estimation-activity.svg) |
+| **02 Delivery Fee Estimation Activity Diagram** | `TC-PRC-001` through `TC-PRC-011` (Base fee + per-kg calculation, volumetric thresholds, limit rejections) | [Lucidchart Document](https://lucid.app/lucidchart/e9ac9f8d-5d88-4e74-9a52-5e09e5c696b4/edit) | [PlantUML Source](./diagrams/02-delivery-fee-estimation-activity.puml) \| [PNG Preview](./diagrams/02-delivery-fee-estimation-activity.png) \| [SVG](./diagrams/02-delivery-fee-estimation-activity.svg) |
 | **03 Delivery Fee Estimation Sequence Diagram** | `TC-PRC-008` (Zone/rule lookup), `TC-PRC-009` (Quote 15m expiration & persistence) | [Lucidchart Document](https://lucid.app/lucidchart/456c449a-5f68-4d12-a051-027a04e87663/edit) | [PlantUML Source](./diagrams/03-delivery-fee-estimation-sequence.puml) \| [PNG Preview](./diagrams/03-delivery-fee-estimation-sequence.png) |
 | **04 Customer Parcel Booking Activity Diagram** | `TC-BKG-001` to `TC-BKG-005` (Syntax, zone validation, quote binding, single transaction) | [Lucidchart Document](https://lucid.app/lucidchart/48f368fa-a237-4fea-bb84-c454dd788216/edit) | [PlantUML Source](./diagrams/04-parcel-booking-activity.puml) \| [PNG Preview](./diagrams/04-parcel-booking-activity.png) |
 | **05 Customer Parcel Booking Sequence Diagram** | `TC-BKG-001` through `TC-BKG-007`, `TC-IDM-001` to `TC-IDM-002` (Idempotency, atomic commit, outbox) | [Lucidchart Document](https://lucid.app/lucidchart/c2b3114e-a7b8-4313-8172-1a82336a8cc1/edit) | [PlantUML Source](./diagrams/05-parcel-booking-sequence.puml) \| [PNG Preview](./diagrams/05-parcel-booking-sequence.png) |

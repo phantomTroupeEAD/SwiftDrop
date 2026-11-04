@@ -61,7 +61,7 @@ core-api/internal/
 │   └── README.md             # Co-located living module documentation
 ├── pricing/
 │   ├── domain/               # Deterministic calculation engine & monetary values
-│   │   ├── formula.go        # Volumetric divisor 5000 cm³/kg, max(actual, volumetric), max 30 kg
+│   │   ├── formula.go        # Base fee + per-kg calculation, volumetric divisor 5000 cm³/kg, max(actual, volumetric), max 30 kg
 │   │   └── money.go          # Exact integer minor units (LKR cents)
 │   ├── application/          # Quote calculation & persistence use cases
 │   │   ├── quote_usecase.go  # Evaluates active rule, sets 15m TTL
@@ -139,9 +139,9 @@ migrate -path core-api/migrations -database "postgres://swiftdrop:swiftdrop_dev_
 ### 5.3 Deterministic Tariff Seeding & Test Fixtures
 > [!NOTE]
 > **Illustrative Test Fixture Notice (Not Commercial Price Promises):**
-> Commercial tariffs are determined by business operations and configured exclusively through Member 7's administration workflow. Member 2 never hard-codes commercial rates. For local testing and development only, database fixtures provide illustrative complete tariffs per zone pair and weight band:
-- **Inter-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Illustrative complete tariffs for Bands 1–7 (e.g., Band 1: 35,000 cents, Band 2: 45,000 cents, Band 3: 55,000 cents, Band 4: 75,000 cents, Band 5: 110,000 cents, Band 6: 160,000 cents, Band 7: 220,000 cents).
-- **Intra-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01`: Illustrative complete tariffs for Bands 1–7.
+> Commercial tariffs are determined by business operations and configured exclusively through Member 7's administration workflow. Member 2 never hard-codes commercial rates. For local testing and development only, database fixtures provide illustrative base fee and per-kilogram rates per zone pair:
+- **Inter-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-CENTRAL-01`: Illustrative Base Fee = 35,000 cents (LKR 350.00), Per-Kilogram Rate = 10,000 cents (LKR 100.00/kg).
+- **Intra-zone Fixture:** `ZONE-WESTERN-01` $\to$ `ZONE-WESTERN-01`: Illustrative Base Fee = 25,000 cents (LKR 250.00), Per-Kilogram Rate = 8,000 cents (LKR 80.00/kg).
 
 ---
 
@@ -221,8 +221,8 @@ Exposed via Prometheus standard endpoint `/metrics`:
 | Operational Topic | Pre-Audit Draft State | Post-Audit Aligned Decision | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Pricing Route** | Ambiguous `/pricing/estimate` | `POST /api/v1/pricing/quotes` with quote persistence | Aligned with Member 10 & API Conventions |
-| **Pricing Model & Complete Tariff** | Undefined formula / base+per-kg | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual/chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model** | 7 Fixed Weight Bands | Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) for each `(pickup_zone_id, destination_zone_id)` pair. Fee = $\text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$. | **RATIFIED TEAM DECISION** (Aligned with `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands | Discontinued. Replaced by continuous chargeable weight $\times$ per-kilogram rate surcharge. | **SUPERSEDED** (Team decision to use Option 2) |
 | **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued | Aligned Decision v2.0 |
 | **Quote Expiration TTL** | Unpersisted / arbitrary TTL | 15 minutes (`PRICING_QUOTE_TTL_MINUTES=15`); backend enforced `current_time >= expires_at` | Aligned Architecture Decision |
 | **Monetary Type** | Floating-point fees | Exact integer cents (`BIGINT`, `LKR`) | Engineering Standards v1.0 Section 6 |
@@ -240,7 +240,7 @@ Exposed via Prometheus standard endpoint `/metrics`:
 | :--- | :--- | :--- |
 | **`PRICING_QUOTE_TTL_MINUTES`** | Environment-driven configuration parameter. | Can be dynamically adjusted via environment variable without modifying application code; enforced strictly by backend `current_time >= expires_at`. |
 | **`PRICING_DEFAULT_CURRENCY`** | Controlled via config; default `LKR`. Stored in integer minor units. | Must remain aligned with system-wide currency standards; no code changes required. |
-| **Database Migration 000004** | Table `pricing_rules` structure storing complete tariffs. | If band definitions or zone pairing changes, additive migration scripts coordinate with Member 9 DevOps without affecting existing confirmed parcel bookings. |
+| **Database Migration 000004** | Table `pricing_rules` structure storing base fees and per-kg rates. | If base rates, per-kg rates, or zone pairings change, additive migration scripts coordinate with Member 9 DevOps without affecting existing confirmed parcel bookings. |
 
 ---
 

@@ -34,7 +34,7 @@ This document defines the application security guardrails, data privacy boundari
 
 ### 2.1 Critical Protected Assets
 - **Customer & Recipient PII:** Names, mobile phone numbers, exact physical delivery addresses, and building access codes stored in `pickup_address` and `dropoff_address` JSONB snapshots.
-- **Financial & Commercial Data:** Tariff rules, configured complete fees, weight band boundaries, accepted price snapshots, and merchant-specific discounts.
+- **Financial & Commercial Data:** Tariff rules, configured base fees, per-kg rates, accepted price snapshots, and merchant-specific discounts.
 - **System State & History:** Immutable status transition logs in `parcel_status_history` and integration events in `outbox_events`.
 - **System Credentials:** PostgreSQL database credentials, JWT signing keys, and internal API secrets.
 
@@ -142,8 +142,8 @@ All database interactions in Member 2 utilize parameterized prepared statements 
 
 | Failure Scenario | Root Cause | Impact | Automated Recovery / System Behavior |
 | :--- | :--- | :--- | :--- |
-| **Missing Tariff Rule** | Requested route/weight-band combination has no active rule configured. | Pricing cannot be evaluated. | Server rejects request with `422 PRICING_UNAVAILABLE`. Server never fabricates a price or falls back to an arbitrary default. |
-| **Ambiguous Tariff Match** | Misconfiguration introduces multiple active rules for same zone pair and weight band. | Tariff ambiguity. | Server fails safely with `500 PRICING_CONFIGURATION_ERROR`, logs error with correlation ID, and alerts Member 7 admin. |
+| **Missing Tariff Rule** | Requested zone-pair route has no active rule configured. | Pricing cannot be evaluated. | Server rejects request with `422 PRICING_UNAVAILABLE`. Server never fabricates a price or falls back to an arbitrary default. |
+| **Ambiguous Tariff Match** | Misconfiguration introduces multiple active rules for same zone pair. | Tariff ambiguity. | Server fails safely with `500 PRICING_CONFIGURATION_ERROR`, logs error with correlation ID, and alerts Member 7 admin. |
 | **Quote Expired (>= 15m)** | User delays checkout past quote TTL (`current_time >= expires_at`). | Booking submission with expired quote ID. | Server rejects with `422 QUOTE_EXPIRED`. Expiry is enforced strictly on the backend; client must request a fresh quote via `POST /api/v1/pricing/quotes`. |
 | **Quote Parameter Mismatch** | Client tampers with weight, dimensions, or route after quote. | Attempted tariff circumvention. | Server verifies quote input snapshot against booking payload and rejects with `422 QUOTE_PARAM_MISMATCH`. |
 | **Cross-Customer Quote Reuse** | Customer B attempts to use Quote ID issued to Customer A. | IDOR / quote stealing attempt. | Server verifies caller context against quote ownership and rejects with `403 QUOTE_FORBIDDEN`. |
@@ -181,8 +181,8 @@ Member 2 exposes operational signals for platform monitoring (Member 9):
 | Security / Failure Topic | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Public Tracking Privacy** | Vague field list | Explicit masking matrix: redacts phone, street address, notes, fees | AGENTS.md Section 8 & SRS FR-PAR-009 |
-| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg rates | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no separate base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual and chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model** | 7 Fixed Weight Bands | Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) for each `(pickup_zone_id, destination_zone_id)` pair. Fee = $\text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$. | **RATIFIED TEAM DECISION** (Aligned with `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands | Discontinued. Replaced by continuous chargeable weight $\times$ per-kilogram rate surcharge. | **SUPERSEDED** (Team decision to use Option 2) |
 | **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued | Aligned Decision v2.0 |
 | **Quote TTL & Backend Expiry** | Undefined quote TTL | 15-minute expiration window (`current_time >= expires_at` enforced on server) | Aligned Architecture Decision |
 | **Quote Tampering Protection** | Client supplied price | Server verifies inputs against frozen quote snapshot; rejects tampering with `422` and foreign callers with `403` | Engineering Standards & Audit |

@@ -37,7 +37,7 @@ The following architectural and domain invariants are strictly enforced by Membe
 | ID | Requirement Baseline | Architectural Enforcement |
 | :--- | :--- | :--- |
 | **FR-PAR-001** | Booking Details Capture | Pickup/dropoff address and contact details, weight, dimensions, and service option captured in an immutable snapshot. |
-| **FR-PAR-002** | Upfront Delivery Fee Estimation | Deterministic complete fee calculation via `POST /api/v1/pricing/quotes` across 7 weight bands with a guaranteed 15-minute price freeze window and controlled `pricing_unavailable` rejection. |
+| **FR-PAR-002** | Upfront Delivery Fee Estimation | Deterministic fee calculation via `POST /api/v1/pricing/quotes` using Base Fee + Per-Kilogram Surcharge model with a guaranteed 15-minute price freeze window and controlled `pricing_unavailable` rejection. |
 | **FR-PAR-003** | Accepted-Price Snapshot & Rule Traceability | Persist exact `pricing_rule_id`, rule version, and calculated complete fee `price_cents` directly on `parcels`. |
 | **FR-PAR-004** | Non-Guessable Tracking Number | Generate Crockford Base32 tracking numbers matching pattern `SD-YYYYMMDD-XXXXXX`. |
 | **FR-PAR-005** | Strict Field & Boundary Validation | Reject missing fields, negative dimensions, weights exceeding 30.0 kg, or dimensions exceeding 150 cm with structured HTTP 400/422 responses. |
@@ -147,8 +147,9 @@ Calculates the estimated delivery fee based on weight, dimensions, and pickup/dr
     "actual_weight_kg": 2.50,
     "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
-    "weight_band": "BAND_4",
-    "weight_band_range": "2 < W <= 5 kg"
+    "base_fee_cents": 30000,
+    "per_kg_rate_cents": 10000,
+    "weight_surcharge_cents": 25000
   },
   "expires_at": "2026-10-25T14:45:00Z",
   "created_at": "2026-10-25T14:30:00Z"
@@ -156,14 +157,14 @@ Calculates the estimated delivery fee based on weight, dimensions, and pickup/dr
 ```
 
 > [!NOTE]
-> **Provisional Pricing Proposal Notice:**
-> The mathematical parameters (seven weight bands, volumetric divisor 5000 cm³/kg, 30 kg weight limits, zone-pair tariff model, and 15-minute quote validity) represent the **current Member 2 design baseline**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer LKR cents standard, server-side authority, and quote persistence are stable requirements.
+> **Pricing Model Status (Team Ratified Decision):**
+> Delivery fee uses the Base Fee + Per-Kilogram Surcharge formula: $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$. Volumetric divisor is standardized at 5000 cm³/kg, maximum weight is 30.00 kg, and quotes freeze prices for 15 minutes. Member 7 owns administrative tariff configuration workflows, while Member 2 owns pricing calculation, quote evaluation, and persistence.
 
 #### Error Codes
 - `400 Bad Request`: Malformed JSON, non-positive parameters, or missing mandatory fields (`PRICING_INVALID_INPUT`).
 - `422 Unprocessable Entity`:
   - `ZONE_NOT_FOUND`: Pickup or dropoff zone does not exist.
-  - `PRICING_UNAVAILABLE`: No active, enabled pricing rule covers the requested zone combination and weight band.
+  - `PRICING_UNAVAILABLE`: No active, enabled pricing rule covers the requested zone combination.
   - `PARCEL_LIMITS_EXCEEDED`: Actual weight exceeds 30.00 kg or calculated chargeable weight exceeds 30.00 kg.
   - `DIMENSIONS_LIMIT_EXCEEDED`: Any dimension exceeds 150.00 cm or combined girth exceeds 300.00 cm.
 - `500 Internal Server Error`:
@@ -273,7 +274,7 @@ Books a parcel for delivery. Supports both **Quoted Booking** (providing an unex
 - `422 Unprocessable Entity`:
   - `QUOTE_EXPIRED`: The supplied `quote_id` has expired (`current_time >= expires_at`).
   - `QUOTE_PARAM_MISMATCH`: Weight, dimensions, or zones do not match the frozen quote.
-  - `PRICING_UNAVAILABLE`: No applicable tariff covers the requested route and weight band (for direct booking).
+  - `PRICING_UNAVAILABLE`: No applicable tariff covers the requested route (for direct booking).
   - `PARCEL_LIMITS_EXCEEDED`: Weight exceeds 30.00 kg.
 
 ---
@@ -407,10 +408,8 @@ erDiagram
         int version PK
         varchar origin_zone_id FK
         varchar destination_zone_id FK
-        varchar weight_band_id
-        decimal min_weight_kg
-        decimal max_weight_kg
-        bigint fee_cents
+        bigint base_fee_cents
+        bigint per_kg_rate_cents
         varchar currency
         timestamptz effective_from
         timestamptz effective_to
@@ -546,7 +545,7 @@ Persists generated delivery quotes for 15 minutes to guarantee price stability d
 - `pricing_rule_version` (`INT`, NOT NULL): Applied rule version.
 - `currency` (`VARCHAR(3)`, NOT NULL, DEFAULT `'LKR'`): Currency code.
 - `fee_cents` (`BIGINT`, NOT NULL): Total calculated complete fee in integer cents.
-- `input_snapshot` (`JSONB`, NOT NULL): Complete frozen input parameters (zones, dimensions, weight, band).
+- `input_snapshot` (`JSONB`, NOT NULL): Complete frozen input parameters (zones, dimensions, weight, calculated volumetric and chargeable weight).
 - `accepted_parcel_id` (`UUID`, NULLABLE): References the booked parcel upon checkout confirmation.
 - `expires_at` (`TIMESTAMPTZ`, NOT NULL): Exactly `created_at + INTERVAL '15 minutes'`.
 - `created_at` (`TIMESTAMPTZ`, NOT NULL): Quote generation timestamp.
@@ -675,7 +674,7 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 | Architectural Topic | Pre-Audit Draft State | Post-Audit Aligned Decision | Authoritative Source / Status |
 | :--- | :--- | :--- | :--- |
 | **Pricing Endpoint & Quote Persistence** | Ambiguous (`/estimate` vs `/quotes`) | Standardized on canonical `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes`. | Aligned with Member 10 / Team Standards |
-| **Pricing Model & Tariffs** | Complete tariff proposal vs legacy formula | Fixed complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands proposed by Member 2. `docs/contracts/pricing-rules.md` specifies base fee + surcharge + multipliers. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model & Tariffs** | Complete tariff proposal vs legacy formula | Option 2: Base Fee + Per-Kilogram Surcharge (`Delivery Fee = Base Fee + (Chargeable Weight * PerKgRate)`). Retrieval interface owned by M2; admin UI owned by M7. | **RESOLVED** (Team Decision, `pricing-rules.md`) |
 | **Volumetric Divisor (5000)** | Divisor 5000 vs 6000 | Volumetric weight uses canonical divisor 5000 cm³/kg: $(L \times W \times H) / 5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
 | **Quote Validity Window (15m)** | Arbitrary TTL | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | **RESOLVED** (`pricing-rules.md` §6) |
 | **Monetary Data Type** | Floating-point / arbitrary decimal | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
@@ -685,14 +684,14 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 | **Idempotency Persistence** | Table with FK to `users` | Canonical `idempotency_keys` table with `caller_scope` (24h TTL, SHA-256 hash). No FK to `users` to permit merchant tenant scopes. | Engineering Standards v1.0 Section 7 |
 | **Tariff Administration** | Mixed Member 2 / Member 7 claims | Administrative tariff configuration (CRUD, activation) belongs strictly to Member 7's admin workflow. Member 2 owns tariff lookup and calculation engine only. | Coordinated Boundary / SRS FR-ADM-007 |
 | **Receipt Presentation Format** | Undecided JSON vs PDF rendering | Member 2 returns JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
-| **Arithmetic Baseline Discrepancy** | 55000 vs 51000 at baseline 8000 | Old formula in `pricing-rules.md` yields 51000 cents ($35000 + 2 \times 8000$); older draft used rate 10000 yielding 55000 cents; new proposed complete tariff Band 4 uses illustrative 55000 cents. | **UNRESOLVED / PENDING RATIFICATION** |
+| **Pricing Formula Standardization** | Complete tariff band model vs Base Fee + Surcharge | Standardized on Base Fee + (Chargeable Weight * PerKgRate). Example: Colombo to Kandy (6kg) = 300 + (6 * 100) = LKR 900 (90,000 cents). | **RESOLVED** (Team Decision) |
 
 ### 9.1 Pricing Policy Dependency & Impact Analysis (If Pricing Rules Change)
 
 | Impacted Area | What Changes If Pricing Policy Is Modified | Files & Interfaces to Update |
 | :--- | :--- | :--- |
-| **API Quote DTO** | The fields in `breakdown` object reflect chargeable weight and selected band (Bands 1–7). | `core-api/internal/pricing/transport/dto.go`, `doc-03 §5.1` |
-| **Database Schema** | Table `pricing_rules` stores complete zone-pair/band tariffs. DDL check constraints update if 30 kg limit changes. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05 §3.1` |
+| **API Quote DTO** | The fields in `breakdown` object reflect chargeable weight, base fee, per-kg rate, and surcharge. | `core-api/internal/pricing/transport/dto.go`, `doc-03 §5.1` |
+| **Database Schema** | Table `pricing_rules` stores zone-pair `base_fee_cents` and `per_kg_rate_cents`. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05 §3.1` |
 | **Quote Expiry Validation** | If 15-minute freeze duration is altered, config `PRICING_QUOTE_TTL_MINUTES` and backend check `current_time >= expires_at` adapt. | `core-api/internal/pricing/application/`, `doc-08 §4` |
 | **Validation Boundaries** | If operational maximum weight (30 kg) or dimension (150 cm) changes, handler boundary checks update. | `core-api/internal/parcels/transport/dto.go`, `doc-03 §5.2` |
 | **Core Architecture Stability** | **ZERO IMPACT:** Parcel aggregate root, 9-state machine, tracking number format, address snapshots, and outbox integration remain completely unchanged. | `parcels` domain and persistence layers |

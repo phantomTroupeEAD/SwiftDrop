@@ -1,11 +1,11 @@
 # Pricing Module API Specifications (`/api/v1/pricing`)
 
-> **Module:** `internal/pricing` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Proposed Baseline (Pending Team Approval)
+> **Module:** `internal/pricing` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Ratified Baseline (Aligned with Base Fee + Per-Kg Surcharge)
 
 ---
 
 ## 1. Create Pricing Quote
-Calculates the complete delivery fee tariff based on pickup/dropoff zones and chargeable weight band before booking. Persists the quote in `pricing_quotes` with a guaranteed 15-minute price freeze window.
+Calculates the delivery fee tariff based on pickup/dropoff zones and chargeable weight (using the ratified base fee + per-kg surcharge formula) before booking. Persists the quote in `pricing_quotes` with a guaranteed 15-minute price freeze window.
 
 - **Method / Path:** `POST /api/v1/pricing/quotes`
 - **Auth Required:** Optional (Public with rate limit, or Bearer JWT)
@@ -41,10 +41,9 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
     "actual_weight_kg": 2.50,
     "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
-    "weight_band_id": 4,
-    "weight_band_label": "2 < W <= 5 kg",
-    "band_min_weight_kg": 2.00,
-    "band_max_weight_kg": 5.00
+    "base_fee_cents": 30000,
+    "per_kg_rate_cents": 10000,
+    "weight_surcharge_cents": 25000
   },
   "fee_cents": 55000,
   "expires_at": "2026-10-25T14:45:00Z",
@@ -53,17 +52,17 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 ```
 
 > [!NOTE]
-> **Pricing Alignment Status (Pending Team Ratification):**
+> **Pricing Alignment Status (Ratified Base Fee + Per-Kg Surcharge):**
 > Volumetric divisor is standardized strictly on 5000 cm³/kg. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$). The previous Option A 1 kg threshold exemption is discontinued. Operational maximum actual and chargeable weight is 30.00 kg. Quote validity is confirmed at 15 minutes (`expires_at = created_at + 15m`).
 >
-> *Conflict & Arithmetic Notice:* The Member 2 proposed zone-pair complete tariff model (evaluating 7 weight bands with illustrative flat fee, e.g., 55000 cents for Band 4) diverges from `docs/contracts/pricing-rules.md`, which defines a base fee (35000 cents) + per-kg surcharge (8000 cents) formula (yielding 51000 cents for 2.5 kg Metro->Metro, or 55000 under rate 10000). The exact tariff calculation structure remains pending formal team ratification.
+> *Ratified Pricing Formula:* Delivery fee is calculated as $\text{Delivery Fee} = \text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$. Stored in integer minor units (`BIGINT` cents). Fixed weight bands (7 bands) are discontinued per team design decision. Intermediate rounding of fractional kilograms remains an open item pending team confirmation.
 
 ### Error Responses
 - `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, non-numeric values, or malformed JSON.
 - `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` — Actual weight or chargeable volumetric weight exceeds 30.00 kg.
 - `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` — Length, width, or height exceeds 150.00 cm.
-- `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` — No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
-- `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` — Multiple active rules match the same zone pair and weight band; fails safely.
+- `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` — No active pricing rule covers the requested zone combination. Never fabricates a fee.
+- `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` — Multiple active rules match the same zone pair; fails safely.
 
 ---
 

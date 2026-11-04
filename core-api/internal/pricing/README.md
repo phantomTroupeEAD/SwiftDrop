@@ -3,30 +3,26 @@
 > **Domain:** Deterministic Fee Estimation, Tariffs & Volumetric Weight
 > **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
-> **Status:** Proposed Baseline (Pending Team Ratification vs `docs/contracts/pricing-rules.md`)
+> **Status:** Ratified Baseline (Aligned with Base Fee + Per-Kg Surcharge Model)
 
 ---
 
 ## 1. Module Overview & Responsibilities
-The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), pickup and destination zones, and chargeable weight bands. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
+The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), pickup and destination zones, and chargeable weight. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
 
 ### Key Responsibilities:
 - Tariff lookup and rule evaluation:
-  - $\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$.
-  - Identifies applicable tariff based on pickup zone, destination zone, and chargeable weight band; retrieves rule, calculates delivery fee, and generates pricing quotes.
+  - $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kilogram Rate})$.
+  - Identifies applicable tariff based on pickup zone and destination zone; retrieves rule (`base_fee_cents`, `per_kg_rate_cents`), calculates delivery fee, and generates pricing quotes.
   - Preserves tariff ID and tariff version used for the quote.
 - Volumetric Weight Calculation (Divisor 5,000 cm³/kg):
   - $\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$
   - Chargeable weight is always $\max(\text{Actual Weight}, \text{Volumetric Weight})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$).
   - Consistent calculation across all eligible weights; Option A 1 kg exemption threshold is discontinued.
-- Weight Band Selection (7 non-overlapping bands up to 30 kg, pending team ratification):
-  - Band 1: $0 < W \le 0.5\text{ kg}$
-  - Band 2: $0.5 < W \le 1.0\text{ kg}$
-  - Band 3: $1.0 < W \le 2.0\text{ kg}$
-  - Band 4: $2.0 < W \le 5.0\text{ kg}$
-  - Band 5: $5.0 < W \le 10.0\text{ kg}$
-  - Band 6: $10.0 < W \le 20.0\text{ kg}$
-  - Band 7: $20.0 < W \le 30.0\text{ kg}$
+- Ratified Pricing Formula:
+  - Base Fee + Per-Kilogram Surcharge: For each zone pair, the tariff specifies `base_fee_cents` and `per_kg_rate_cents`.
+  - Delivery Fee = $\text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$.
+  - Fixed weight bands (7 bands) discontinued per team design decision.
 - Maximum limits: Operational maximum actual weight and chargeable weight is 30.00 kg. Single dimension limit is 150.00 cm.
 - Quote persistence in `pricing_quotes` with confirmed 15-minute expiration timestamp (`expires_at = created_at + 15m`).
 - Backend-enforced expiration check (`current_time >= expires_at` is expired).
@@ -60,7 +56,7 @@ internal/pricing/
 
 ## 4. Database Ownership & Migrations
 - `000004_create_pricing_rules.up.sql`:
-  - `pricing_rules`: Tariff configuration (ID, version, pickup/destination zones, weight_band_id, min/max weight bounds, fee_cents, currency, effective dates, active flag).
+  - `pricing_rules`: Tariff configuration (ID, version, pickup/destination zones, base_fee_cents, per_kg_rate_cents, currency, effective dates, active flag).
   - `pricing_quotes`: Pre-booking quotation cache (ID, rule ID/version, fee in cents, input snapshot JSONB, 15m expiration timestamp, optional accepted_parcel_id).
 
 ---
@@ -73,6 +69,7 @@ internal/pricing/
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
 | 2026-10-28 | Aligned with Final Decisions: Standardized on divisor 5000 cm³/kg, max(actual, volumetric) for all eligible parcels, discontinued Option A 1kg threshold, affirmed Member 7 admin workflow ownership | Member 2 |
+| 2026-11-04 | Ratified Pricing Model: Transitioned from 7 fixed weight bands to Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`); aligned with `pricing-rules.md` | Member 2 |
 
 ---
 

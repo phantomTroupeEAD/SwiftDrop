@@ -54,7 +54,7 @@ The module shall aim to:
 | Parcel booking | `FR-PAR-001`, `FR-PAR-005` | Receive, validate, and process parcel-creation requests for customers and authorized merchants via both quoted booking (`quote_id`) and direct booking paths. |
 | Parcel data & address storage | `FR-PAR-001`, `FR-PAR-005` | Maintain authoritative parcel records within PostgreSQL. Persist immutable JSONB address snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`. (Note: Documented divergence with relational `parcel_addresses` child table in `database-schema.md` is reported for team ratification). |
 | Tracking number | `FR-PAR-004` | Generate unique public tracking numbers in the canonical format `SD-YYYYMMDD-XXXXXX` (Crockford Base32) and enforce database uniqueness with bounded collision retries (max 3). |
-| Pricing and estimation | `FR-PAR-002`, `FR-PAR-003` | Calculate deterministic delivery fees via canonical `POST /api/v1/pricing/quotes` (with `/pricing/estimate` compatibility alias). Evaluates zone-pair tariffs with chargeable weight calculated as $\max(\text{actual\_weight}, \text{volumetric\_weight})$ using volumetric divisor $5000\text{ cm}^3/\text{kg}$ across all eligible weights ($0.01 \le W \le 30.00\text{ kg}$), and controlled missing-tariff rejection (`PRICING_UNAVAILABLE`). *(Note: exact tariff calculation structure—7 complete-tariff weight bands vs base + per-kg surcharge—remains pending team ratification).* |
+| Pricing and estimation | `FR-PAR-002`, `FR-PAR-003` | Calculate deterministic delivery fees via canonical `POST /api/v1/pricing/quotes` (with `/pricing/estimate` compatibility alias). Evaluates zone-pair tariffs using Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) with chargeable weight calculated as $\max(\text{actual\_weight}, \text{volumetric\_weight})$ using volumetric divisor $5000\text{ cm}^3/\text{kg}$ across all eligible weights ($0.01 \le W \le 30.00\text{ kg}$), and controlled missing-tariff rejection (`PRICING_UNAVAILABLE`). |
 | Quote persistence | `FR-PAR-002` | Persist 15-minute validity quote records in `pricing_quotes` (`expires_at = created_at + 15m`) with backend-enforced expiry check (`current_time >= expires_at`) to freeze fees prior to booking confirmation. |
 | Price snapshot | `FR-PAR-003` | Atomically preserve the accepted fee (`price_cents` in integer minor units), currency (`LKR`), and pricing-rule/version reference directly on the parcel record as an immutable historical record. |
 | Parcel lifecycle & cancellation | `FR-LIFE-001`, `FR-LIFE-002`, `FR-LIFE-005` | Validate permitted parcel-state transitions through the `Parcel` aggregate root (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`) with optimistic concurrency (`version`), rejecting illegal or direct SQL status updates. Own parcel cancellation via `POST /api/v1/parcels/{id}/cancel` (customer/merchant when `CREATED`, dispatcher/admin when `CREATED` or `ASSIGNED`). |
@@ -144,26 +144,18 @@ The Pricing area owns:
   - $\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$
   - $\text{Chargeable Weight (kg)} = \max(\text{Actual Weight}, \text{Volumetric Weight})$
   - Volumetric divisor standard: strictly $5000\text{ cm}^3/\text{kg}$ (IATA standard). The previous Option A 1 kg threshold exemption is discontinued.
-- Preservation of full decimal precision for volumetric and chargeable weight without premature rounding prior to band selection.
-- Assignment to exactly one of seven unambiguous, non-overlapping chargeable weight bands:
-  - Band 1: $0 < W \le 0.5\text{ kg}$
-  - Band 2: $0.5 < W \le 1.0\text{ kg}$
-  - Band 3: $1.0 < W \le 2.0\text{ kg}$
-  - Band 4: $2.0 < W \le 5.0\text{ kg}$
-  - Band 5: $5.0 < W \le 10.0\text{ kg}$
-  - Band 6: $10.0 < W \le 20.0\text{ kg}$
-  - Band 7: $20.0 < W \le 30.0\text{ kg}$
-- Tariff lookup evaluating the unique applicable, enabled pricing rule for the zone pair and weight band:
-  $$\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$$
-  *(The tariff is the complete delivery fee for that combination; no separate common base fee, per-kilogram charge, distance fee, or service multiplier is added).*
+- Preservation of full decimal precision for volumetric and chargeable weight without premature rounding.
+- Application of the ratified pricing formula for the route:
+  $$\text{Delivery Fee} = \text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$$
+  *(The tariff specifies `base_fee_cents` and `per_kg_rate_cents` in integer minor units for the pickup and destination zone pair. Fixed weight bands are discontinued per team design decision).*
 - Controlled missing-tariff behavior: return a safe `pricing_unavailable` business error if no tariff exists; fail safely and flag a configuration problem if multiple applicable rules create ambiguity (no guessing or fallback rates).
 - Strict integer minor-unit financial representation (`BIGINT` / `int64` in cents, currency `LKR`) — *Confirmed Project Standard*.
 - Quote generation and persistence with a confirmed 15-minute validity window (`expires_at = created_at + 15m`), enforced strictly on the backend upon booking confirmation.
 - Creation and persistence of the immutable accepted-price snapshot embedded in confirmed bookings — *Confirmed Project Standard*.
 
 > [!IMPORTANT]
-> **Provisional Pricing Baseline Notice (Pending Team Approval):**
-> The seven weight bands, volumetric divisor ($5000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, zone-pair tariff model, and 15-minute quote TTL represent the aligned Member 2 design baseline (with exact tariff structure pending formal team approval). All example figures are illustrative, not commercial price promises. The underlying architectural invariants—server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`—are fixed and invariant.
+> **Ratified Pricing Model Baseline:**
+> The pricing model uses Option 2: Base Fee + Per-Kilogram Surcharge, volumetric divisor ($5000\text{ cm}^3/\text{kg}$), 30 kg weight ceilings, zone-pair tariff model, and 15-minute quote TTL. All example figures are illustrative, not commercial price promises. The underlying architectural invariants—server-side price calculation, integer minor units (LKR cents), quote persistence, backend expiry enforcement, missing-tariff rejection, and immutable accepted-price snapshots on `parcels`—are fixed and invariant. Intermediate rounding of fractional kilograms remains an open item pending team confirmation.
 
 The module must calculate prices on the server. It must not trust a client-submitted fee as authoritative.
 
@@ -230,11 +222,11 @@ The module strictly enforces the following core business invariants:
 
 1. **Deterministic Calculation:** Identical inputs evaluated against the same pricing rule version produce identical fees.
 2. **Canonical Financial Representation:** All monetary amounts are stored as 64-bit integers (`BIGINT` / `int64`) in Sri Lankan Rupee minor units (**cents**). Floating-point arithmetic is strictly prohibited.
-3. **Volumetric Standard & Chargeable Weight:** Always $\max(\text{Actual Weight}, \text{Volumetric Weight})$ using volumetric divisor $5000\text{ cm}^3/\text{kg}$: $\text{Volumetric Weight (kg)} = (L \times W \times H) / 5000$. Dimensions in cm, weights in kg. Applied consistently to all eligible parcels ($0.01 \le W \le 30.00\text{ kg}$); Option A 1 kg threshold is discontinued. No rounding before band selection. Maximum actual and chargeable weight is 30.00 kg.
-4. **Tariff Completeness:** Each applicable pricing rule specifies the complete delivery fee for the (pickup zone, destination zone, weight band) combination. No separate common base fee, per-kg charge, distance fee, or multiplier is added. *(Provisional proposal pending team ratification vs `pricing-rules.md`).*
+3. **Volumetric Standard & Chargeable Weight:** Always $\max(\text{Actual Weight}, \text{Volumetric Weight})$ using volumetric divisor $5000\text{ cm}^3/\text{kg}$: $\text{Volumetric Weight (kg)} = (L \times W \times H) / 5000$. Dimensions in cm, weights in kg. Applied consistently to all eligible parcels ($0.01 \le W \le 30.00\text{ kg}$); Option A 1 kg threshold is discontinued. Maximum actual and chargeable weight is 30.00 kg.
+4. **Base Fee + Per-Kilogram Surcharge Formula:** Each applicable pricing rule specifies the `base_fee_cents` and `per_kg_rate_cents` for the (pickup zone, destination zone) combination: $\text{Delivery Fee} = \text{base\_fee\_cents} + (\text{chargeable\_weight\_kg} \times \text{per\_kg\_rate\_cents})$. Ratified team decision replacing earlier weight bands.
 5. **Quote Immutability & Backend Expiry:** Generated quotes in `pricing_quotes` are valid for **15 minutes** (`expires_at = NOW() + 15m`). Backend strictly enforces expiry (`current_time >= expires_at` is expired) upon booking confirmation.
 6. **Accepted Price Lock:** Confirmed bookings lock the accepted price (`price_cents`), currency (`LKR`), and rule/version reference permanently onto the `parcels` record. Subsequent rule changes never alter booked prices.
-7. **No Fallback Guessing:** If no active, enabled pricing rule matches the requested route and weight band, the engine returns a controlled `pricing_unavailable` error. If multiple rules match ambiguously, fail safely. The system never fabricates a fee or falls back to default rates.
+7. **No Fallback Guessing:** If no active, enabled pricing rule matches the requested route, the engine returns a controlled `pricing_unavailable` error. If multiple rules match ambiguously, fail safely. The system never fabricates a fee or falls back to default rates.
 
 ### 5.3 Idempotency and Transaction Invariants
 
@@ -291,7 +283,7 @@ Member 2 owns the specification of the following PostgreSQL tables within the au
 
 - `parcels`: Core parcel aggregate, tracking number, status, JSONB address snapshots (`pickup_address`, `dropoff_address`), accepted price snapshot, optimistic lock version. (Note: The separate child table `parcel_addresses` specified in `database-schema.md` is omitted per the JSONB snapshot architecture; this schema divergence is documented for team harmonization).
 - `parcel_status_history`: Append-only chronological audit log of all parcel status transitions.
-- `pricing_rules`: Zone-pair tariff rates per weight band, complete fee in cents, currency, rule version, enabled state, and effective validity windows.
+- `pricing_rules`: Zone-pair tariff rates defining base fee (`base_fee_cents`) and per-kilogram rate (`per_kg_rate_cents`) in cents, currency, rule version, enabled state, and effective validity windows.
 - `pricing_quotes`: Ephemeral 15-minute quote snapshots locking calculated prices prior to booking confirmation.
 - `idempotency_keys`: Central idempotency store tracking `key` and `caller_scope`, request SHA-256 hash, and cached HTTP responses.
 
@@ -340,7 +332,7 @@ The table below summarizes the alignment between authoritative project sources, 
 |---|---|---|---|---|
 | **Pricing Endpoint & Quote Persistence** | Standardize on `POST /api/v1/pricing/quotes` with persisted quote record. | **RESOLVED:** Adopted canonical endpoint `POST /api/v1/pricing/quotes` and quote persistence in `pricing_quotes`. | Audit §4.A, `docs/contracts/pricing-rules.md` §6 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
 | **Monetary Representation** | Store all monetary values as integer minor units (`BIGINT` / `int64` in cents) with currency `LKR`. Prohibit floating point. | **RESOLVED:** Canonical fields `fee_cents`, `price_cents`, `currency = 'LKR'` (complete tariff snapshot). Strict prohibition of floats. | Engineering Standards §5.2, `pricing-rules.md` §1 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
-| **Pricing Model & Tariffs** | Fixed complete tariff per (pickup zone, destination zone, weight band) vs base fee + weight surcharge + multiplier. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION):** Complete fee model with 7 weight bands proposed by Member 2. `docs/contracts/pricing-rules.md` specifies base fee + surcharge + multipliers. Requires team vote to harmonize. | Member 2 Baseline vs `pricing-rules.md` | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
+| **Pricing Model & Tariffs** | Fixed complete tariff per (pickup zone, destination zone, weight band) vs base fee + weight surcharge. | **RATIFIED TEAM DECISION:** Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) for each zone pair: $\text{Delivery Fee} = \text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$. Fixed weight bands discontinued. Intermediate rounding of fractional kg remains open item for team confirmation. | Team Ratification & `pricing-rules.md` | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
 | **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued. | Aligned Decision v2.0 | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
 | **Quote Validity Period** | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend expiry enforcement (`current_time >= expires_at`). | **RESOLVED:** Standard 15-minute quote TTL with backend enforcement upon booking confirmation. | Aligned Architecture Decision | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
 | **Address Data Model** | Conflict between normalized child table `parcel_addresses` vs immutable JSONB snapshots on `parcels`. | **ALIGNED / PENDING SCHEMA HARMONIZATION:** Member 2 standardizes on immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`; child table creation omitted; schema conflict with `database-schema.md` documented for team ratification. | Audit §4.D, `database-schema.md` | Docs 1, 2, 3, 4, 5, 6, 7, 8 |
@@ -353,7 +345,7 @@ The table below summarizes the alignment between authoritative project sources, 
 | **Merchant Ingress** | Merchant route `POST /api/v1/merchant/orders` owned by Member 4; invokes Member 2 use case in-process. | **RESOLVED:** Standardized on `POST /api/v1/merchant/orders` per SRS §4.1; `/merchant/parcels` noted as legacy alias. | Audit §4.E, SRS §4.1 | Docs 1, 2, 3, 4 |
 | **Tariff Administration** | Administrative write endpoints for zones and pricing rules (`/api/v1/admin/pricing-rules`). | **COORDINATED BOUNDARY:** Member 7 owns Admin UI screens and tariff administration workflows; Member 2 owns the pricing calculation engine and quote evaluation interface. | SRS FR-ADM-007, Team Work Division §3 | Docs 1, 2, 3, 4 |
 | **Receipt Rendering** | Downloadable PDF presentation vs structured JSON receipt endpoint. | **COORDINATED BOUNDARY:** Member 2 standardizes `GET /api/v1/parcels/{id}/receipt` returning structured JSON receipt snapshot; presentation/PDF download coordinated with Member 6. | SRS FR-PAR-008 | Docs 1, 2, 3, 4, 6 |
-| **Arithmetic Baseline Discrepancy** | 55000 vs 51000 at baseline 8000 for 2.5 kg package. | **UNRESOLVED / PENDING RATIFICATION:** Old formula in `pricing-rules.md` yields 51000 cents ($35000 + 2 \times 8000$); older draft used rate 10000 yielding 55000 cents; new proposed complete tariff Band 4 uses illustrative 55000 cents. Requires team ratification of final tariff schedule. | `pricing-rules.md` Table 4 vs Member 2 Baseline | Docs 1, 2, 3, 4, 6 |
+| **Arithmetic Baseline Reconciliation** | 55000 vs 51000 at baseline 8000 for 2.5 kg package. | **HARMONIZED:** Under Option 2 Base Fee (30000 cents) + Per-Kg Rate (10000 cents), 2.5 kg yields 55000 cents ($30000 + 2.5 \times 10000 = 55000$). Illustrative examples align with integer cents arithmetic without floating-point drift. | `pricing-rules.md` & Member 2 Alignment | Docs 1, 2, 3, 4, 6 |
 
 ### 8.1 Pricing-Policy Dependency & Impact Analysis (If Pricing Policy Changes)
 
@@ -363,11 +355,11 @@ The delivery pricing policy has been architected to isolate mathematical formula
 | :--- | :--- | :--- | :--- |
 | **Core Architecture & Persistence** | PostgreSQL persistence, atomic transaction, `parcels` table schema, accepted-price snapshot storage, outbox events. | **Zero Impact:** Booking transactions, address snapshots, and parcel lifecycle remain completely unchanged. | `parcels`, `parcel_status_history`, `outbox_events` |
 | **Monetary Standard** | Integer minor units (`BIGINT` in SQL, `int64` in Go, LKR cents). No binary floating-point. | **Zero Impact:** Any revised tariff must still be stored and calculated in integer minor units. | All schemas and domain structs |
-| **API Contracts** | `POST /api/v1/pricing/quotes` endpoint path and base envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`). | **DTO Alignment:** Breakdown fields reflect chargeable weight, selected band (Bands 1–7), and rule version. | `core-api/internal/pricing/API.md`, `doc-03`, `doc-04` |
-| **Database Schema** | `pricing_quotes` and `pricing_rules` table existence and foreign key relationships. | **Column Alignment:** `pricing_rules` stores fixed complete fee per zone-pair and weight band. Max weight constraint reflects 30 kg limit. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05` |
+| **API Contracts** | `POST /api/v1/pricing/quotes` endpoint path and base envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`). | **DTO Alignment:** Breakdown fields reflect chargeable weight, `base_fee_cents`, `per_kg_rate_cents`, `weight_surcharge_cents`, and rule version. | `core-api/internal/pricing/API.md`, `doc-03`, `doc-04` |
+| **Database Schema** | `pricing_quotes` and `pricing_rules` table existence and foreign key relationships. | **Column Alignment:** `pricing_rules` stores base fee and per-kg rate per zone-pair. Max weight constraint reflects 30 kg limit. | `migrations/000004_create_pricing_rules.up.sql`, `doc-05` |
 | **Quote Expiry Policy** | Quote verification during booking (`quote_id` lookup and backend freeze enforcement). | **TTL & Error Handling:** 15-minute window enforced at `current_time >= expires_at`. | `.env.example`, `doc-08`, Member 6 UI |
 | **Validation Limits** | Bounded validation in Go transport DTOs before persistence. | **Boundary Checks:** Proposed 30 kg max actual weight and 30 kg max chargeable weight enforced. Valid positive dimensions and weight required. | `internal/pricing/transport/dto.go`, `doc-03` |
-| **Automated Tests** | Test structure, mocks, transaction rollback assertions, idempotency checks. | **Test Suite Alignment:** Tests cover all 7 bands, boundary transitions, divisor 5000, $\max(\text{actual}, \text{volumetric})$, and 30 kg ceiling. | `doc-06`, `internal/pricing/domain/formula_test.go` |
+| **Automated Tests** | Test structure, mocks, transaction rollback assertions, idempotency checks. | **Test Suite Alignment:** Tests cover base fee, per-kg rate surcharge, fractional weights, divisor 5000, $\max(\text{actual}, \text{volumetric})$, and 30 kg ceiling. | `doc-06`, `internal/pricing/domain/formula_test.go` |
 
 ## 9. Out-of-Scope Work
 

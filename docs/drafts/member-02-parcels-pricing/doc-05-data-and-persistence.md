@@ -66,7 +66,7 @@ Creates `pricing_rules` and `pricing_quotes` tables.
 
 > [!NOTE]
 > **Pricing Baseline & Tariff Notice:**
-> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the complete tariff schema per zone pair and weight band, the 7 weight bands, volumetric divisor 5000, 30 kg maximum weight limits, and 15-minute quote expiration reflect **the Member 2 design baseline**. Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, quote persistence, and tariff retrieval.
+> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the Base Fee + Per-Kilogram Surcharge schema (`base_fee_cents`, `per_kg_rate_cents`), volumetric divisor 5000 cm³/kg, 30 kg maximum weight limits, and 15-minute quote expiration reflect **the ratified Member 2 design baseline**. Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, quote persistence, and tariff retrieval.
 
 ```sql
 -- Up Migration: 000004_create_pricing_rules.up.sql
@@ -77,10 +77,8 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
     name VARCHAR(128) NOT NULL,
     pickup_zone_id VARCHAR(64) NOT NULL,
     destination_zone_id VARCHAR(64) NOT NULL,
-    weight_band_id INT NOT NULL CHECK (weight_band_id BETWEEN 1 AND 7),
-    min_weight_kg NUMERIC(6,2) NOT NULL CHECK (min_weight_kg >= 0),
-    max_weight_kg NUMERIC(6,2) NOT NULL CHECK (max_weight_kg > min_weight_kg AND max_weight_kg <= 30.00),
-    fee_cents BIGINT NOT NULL CHECK (fee_cents >= 0),
+    base_fee_cents BIGINT NOT NULL CHECK (base_fee_cents >= 0),
+    per_kg_rate_cents BIGINT NOT NULL CHECK (per_kg_rate_cents >= 0),
     currency VARCHAR(3) NOT NULL DEFAULT 'LKR',
     effective_from TIMESTAMPTZ NOT NULL,
     effective_to TIMESTAMPTZ,
@@ -89,11 +87,11 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id, version),
     CONSTRAINT chk_effective_window CHECK (effective_to IS NULL OR effective_to > effective_from),
-    CONSTRAINT uq_zone_band_version UNIQUE (pickup_zone_id, destination_zone_id, weight_band_id, version)
+    CONSTRAINT uq_zone_pair_version UNIQUE (pickup_zone_id, destination_zone_id, version)
 );
 
 CREATE INDEX idx_pricing_rules_lookup
-ON pricing_rules (pickup_zone_id, destination_zone_id, weight_band_id, is_active, effective_from);
+ON pricing_rules (pickup_zone_id, destination_zone_id, is_active, effective_from);
 
 CREATE TABLE IF NOT EXISTS pricing_quotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -260,10 +258,8 @@ DROP TABLE IF EXISTS idempotency_keys;
 | `name` | `VARCHAR(128)` | No | None | Human-readable tariff description. |
 | `pickup_zone_id` | `VARCHAR(64)` | No | None | Canonical pickup zone identifier (FK to `delivery_zones.id`). |
 | `destination_zone_id` | `VARCHAR(64)` | No | None | Canonical destination zone identifier (FK to `delivery_zones.id`). |
-| `weight_band_id` | `INT` | No | None | Weight band index ($1 \le \text{band} \le 7$). |
-| `min_weight_kg` | `NUMERIC(6,2)` | No | None | Lower bound of chargeable weight band ($W_{\min} \ge 0$). |
-| `max_weight_kg` | `NUMERIC(6,2)` | No | None | Upper bound of chargeable weight band ($W_{\max} \le 30.00$). |
-| `fee_cents` | `BIGINT` | No | None | Complete configured delivery fee in integer cents (`fee_cents >= 0`). |
+| `base_fee_cents` | `BIGINT` | No | None | Base delivery fee in integer cents (`base_fee_cents >= 0`). |
+| `per_kg_rate_cents` | `BIGINT` | No | None | Per-kilogram surcharge rate in integer cents (`per_kg_rate_cents >= 0`). |
 | `currency` | `VARCHAR(3)` | No | `'LKR'` | ISO 4217 currency code. |
 | `effective_from` | `TIMESTAMPTZ` | No | None | Start timestamp of tariff validity window. |
 | `effective_to` | `TIMESTAMPTZ` | Yes | `NULL` | Optional end timestamp; must satisfy `effective_to > effective_from`. |
@@ -271,7 +267,7 @@ DROP TABLE IF EXISTS idempotency_keys;
 | `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Audit creation timestamp. |
 | `updated_at` | `TIMESTAMPTZ` | No | `NOW()` | Audit modification timestamp. |
 
-Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, weight_band_id, version)` prevents ambiguous rules.
+Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, version)` prevents ambiguous rules.
 
 ### 4.3 Table: `pricing_quotes`
 
@@ -283,7 +279,7 @@ Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, weight_band
 | `service_level` | `VARCHAR(32)` | No | `'STANDARD'` | Speed tier requested. |
 | `currency` | `VARCHAR(3)` | No | `'LKR'` | Currency code. |
 | `fee_cents` | `BIGINT` | No | None | Calculated complete delivery fee in integer cents. |
-| `input_snapshot` | `JSONB` | No | None | Frozen snapshot of calculation inputs (zones, actual weight, dimensions, chargeable weight, weight band). |
+| `input_snapshot` | `JSONB` | No | None | Frozen snapshot of calculation inputs (zones, actual weight, dimensions, chargeable weight). |
 | `expires_at` | `TIMESTAMPTZ` | No | None | Quote expiration timestamp (`created_at + INTERVAL '15 minutes'`). |
 | `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Quote creation timestamp in UTC. |
 | `accepted_parcel_id` | `UUID` | Yes | `NULL` | Optional parcel ID that consumed this quote (enforces single-use consumption policy). |
@@ -402,8 +398,8 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
 | **Tracking Number** | Arbitrary text format | `SD-YYYYMMDD-XXXXXX` (Crockford Base32) | SRS FR-PAR-004 & Audit |
 | **Quote Persistence** | Optional / unpersisted | Persisted in `pricing_quotes` table | Engineering Standards & Audit |
-| **Pricing Model & Complete Tariff** | Unspecified / base+per-kg formula | Complete tariff per zone-pair and weight band: `tariff(pickup, dest, band)`; no separate base/per-kg/distance fees. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
-| **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Pricing Model** | 7 Fixed Weight Bands | Option 2: Base Fee + Per-Kilogram Surcharge (`base_fee_cents`, `per_kg_rate_cents`) for each `(pickup_zone_id, destination_zone_id)` pair. Fee = $\text{Base Fee} + (\text{Chargeable Weight} \times \text{Per-Kg Rate})$. | **RATIFIED TEAM DECISION** (Aligned with `pricing-rules.md`) |
+| **Weight Bands (7 Bands)** | 7 non-overlapping bands | Discontinued. Replaced by continuous chargeable weight $\times$ per-kilogram rate surcharge. | **SUPERSEDED** (Team decision to use Option 2) |
 | **Volumetric Policy & Divisor (5000)** | Unspecified weight calculation | Volumetric weight uses canonical divisor 5000 cm³/kg: $(L \times W \times H)/5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
 | **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **RESOLVED** (`pricing-rules.md` §6) |
 | **Idempotency Model** | Module-local vs duplicate | Canonical `idempotency_keys` table with `caller_scope` (24h TTL) | Engineering Standards v1.0 & API Conventions |
@@ -418,7 +414,7 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 | :--- | :--- | :--- |
 | **`parcels` Table** | Stores immutable `price_cents`, currency, `pricing_rule_id`, and `pricing_rule_version`. | **Zero Schema Impact:** Column `price_cents` stores the final agreed integer cents snapshot regardless of internal tariff tiering. |
 | **`pricing_quotes` Table** | Stores frozen quote inputs, total fee, and expiration timestamp. | **Zero Schema Impact:** `input_snapshot JSONB` accommodates any revised formula parameters cleanly without DDL changes. |
-| **`pricing_rules` Table** | Stores zone-pair weight-band tariffs with effective dates. | **Additive Migration:** If band count or zone schema is altered, new rules are inserted or updated by Member 7 admin workflow without altering `parcels`. |
+| **`pricing_rules` Table** | Stores zone-pair base fees and per-kg rates with effective dates. | **Additive Migration:** If base rates or per-kg rates are adjusted, new rules/versions are inserted or updated by Member 7 admin workflow without altering `parcels`. |
 | **Check Constraints** | Positive weight and dimension checks ($0 < W \le 30.00\text{ kg}$). | If maximum parcel limits change, table CHECK constraints in `parcels` and `pricing_rules` update via sequential migration. |
 
 ---

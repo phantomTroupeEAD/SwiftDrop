@@ -101,7 +101,7 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
 
 > [!NOTE]
 > **Pricing Contract Authority:**
-> Complete pricing formulas, weight band boundaries, volumetric calculation ($\max(\text{actual}, \text{volumetric})$ with divisor 5000 cm³/kg), and tariff lookup behavior are defined authoritatively in [`core-api/internal/pricing/API.md`](file:///d:/SwiftDrop/SwiftDrop/core-api/internal/pricing/API.md). The parcel booking endpoint validates the quote reference, verifies backend expiration (`current_time >= expires_at`), ensures weight/dimension inputs match the quote snapshot, and persists an immutable price snapshot (`price_cents`, currency, rule version).
+> Complete pricing formulas (Base Fee + Per-Kilogram Surcharge), volumetric calculation ($\max(\text{actual}, \text{volumetric})$ with divisor 5000 cm³/kg), and tariff lookup behavior are defined authoritatively in [`core-api/internal/pricing/API.md`](file:///d:/SwiftDrop/SwiftDrop/core-api/internal/pricing/API.md). The parcel booking endpoint validates the quote reference, verifies backend expiration (`current_time >= expires_at`), ensures weight/dimension inputs match the quote snapshot, and persists an immutable price snapshot (`price_cents`, currency, rule version).
 
 ### Error Responses
 - `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY`, `INVALID_ARGUMENT` (non-positive dimensions or weights), or `MALFORMED_JSON`.
