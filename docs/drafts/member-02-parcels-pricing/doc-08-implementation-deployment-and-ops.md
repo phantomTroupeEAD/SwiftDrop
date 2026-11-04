@@ -61,7 +61,7 @@ core-api/internal/
 │   └── README.md             # Co-located living module documentation
 ├── pricing/
 │   ├── domain/               # Deterministic calculation engine & monetary values
-│   │   ├── formula.go        # Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands (<= 30 kg)
+│   │   ├── formula.go        # Volumetric divisor 5000 cm³/kg, max(actual, volumetric), max 30 kg
 │   │   └── money.go          # Exact integer minor units (LKR cents)
 │   ├── application/          # Quote calculation & persistence use cases
 │   │   ├── quote_usecase.go  # Evaluates active rule, sets 15m TTL
@@ -122,7 +122,7 @@ LOG_FORMAT=json
 ### 5.1 Owned Migration Sequence
 Member 2 owns the following database migrations located in `core-api/migrations/`:
 1. `000004_create_pricing_rules.up.sql` (Creates `pricing_rules` and `pricing_quotes` tables).
-2. `000005_create_parcels_and_quotes.up.sql` (Creates `parcels` and `parcel_status_history` tables).
+2. `000005_create_parcels_and_quotes.up.sql` (Creates `parcels` and `parcel_status_history` tables; persists `pickup_address` and `dropoff_address` as JSONB snapshots directly on `parcels`. Note: Creation of the separate child table `parcel_addresses` specified in `database-schema.md` is omitted per the latest JSONB snapshot architecture; this schema divergence is documented for team ratification).
 3. `000010_create_idempotency_keys.up.sql` (Creates `idempotency_keys` table).
 
 ### 5.2 Executing Migrations
@@ -223,15 +223,15 @@ Exposed via Prometheus standard endpoint `/metrics`:
 | **Pricing Route** | Ambiguous `/pricing/estimate` | `POST /api/v1/pricing/quotes` with quote persistence | Aligned with Member 10 & API Conventions |
 | **Pricing Model & Complete Tariff** | Undefined formula / base+per-kg | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
 | **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual/chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Volumetric Policy & Divisor (6000)** | Volumetric divisor 5000 | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Quote Expiration TTL** | Unpersisted / arbitrary TTL | 15 minutes (`PRICING_QUOTE_TTL_MINUTES=15`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued | Aligned Decision v2.0 |
+| **Quote Expiration TTL** | Unpersisted / arbitrary TTL | 15 minutes (`PRICING_QUOTE_TTL_MINUTES=15`); backend enforced `current_time >= expires_at` | Aligned Architecture Decision |
 | **Monetary Type** | Floating-point fees | Exact integer cents (`BIGINT`, `LKR`) | Engineering Standards v1.0 Section 6 |
-| **Address Persistence** | Child table `parcel_addresses` | Dual Specification: JSONB snapshots on `parcels` vs child table `parcel_addresses` | Architecture Alignment Item |
+| **Address Persistence** | Child table `parcel_addresses` | JSONB snapshots on `parcels`; child table creation omitted; schema conflict documented | Architecture Alignment Item (Conflict with `database-schema.md`) |
 | **Database Migrations** | Unnumbered / unspecified | Migrations `000004`, `000005`, `000010` (co-designed specifications) | Database Migration Baseline |
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
 | **Idempotency Window** | Undefined retention | 24 hours (`IDEMPOTENCY_EXPIRY_HOURS=24`) with `caller_scope` | Engineering Standards v1.0 & API Conventions |
 | **Delivery Failure Logic** | Ambiguous terminal failure | ADR-004: max 3 attempts (`ATTEMPT_FAILED` $\to$ `RETURNED`) | ADR-004 Failed Delivery Semantics |
-| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; candidate REST endpoints served by M2 | Coordinated Boundary |
+| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; M2 provides calculation engine & quote evaluation | Coordinated Boundary |
 | **Receipt File Format** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 9.1 Pricing Policy Dependency & Operational Impact Analysis

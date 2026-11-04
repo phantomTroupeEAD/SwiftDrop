@@ -48,7 +48,7 @@ internal/parcels/
 - `000005_create_parcels_and_quotes.up.sql`:
   - `parcels`: Primary aggregate table (ID, tracking number, sender ID, JSONB addresses, dimensions, price in cents, status, courier ID, version, timestamps).
   - `parcel_status_history`: Append-only audit log of all historical transitions with `ON DELETE RESTRICT`.
-  - *Architecture Alignment Item:* Dual Specification accommodates normalized child table `parcel_addresses` if team ratifies relational address persistence over JSONB snapshots.
+  - *Schema Divergence Notice:* Addresses are persisted as immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`; the separate child table `parcel_addresses` specified in `database-schema.md` is omitted per the latest JSONB snapshot architecture and documented for team harmonization.
 - `000010_create_idempotency_keys.up.sql`:
   - `idempotency_keys`: Keys, `caller_scope`, request hash (SHA-256), cached response status/payload, and 24-hour expiration.
 

@@ -101,14 +101,14 @@ Creates a new parcel booking for the authenticated sender (Customer or Merchant)
 
 > [!NOTE]
 > **Pricing Contract Authority:**
-> Complete pricing formulas, weight band boundaries, Option A threshold rules, and tariff lookup behavior are defined authoritatively in [`core-api/internal/pricing/API.md`](file:///d:/SwiftDrop/SwiftDrop/core-api/internal/pricing/API.md). The parcel booking endpoint validates the quote reference, verifies backend expiration (`current_time >= expires_at`), ensures weight/dimension inputs match the quote snapshot, and persists an immutable price snapshot (`price_cents`, currency, rule version).
+> Complete pricing formulas, weight band boundaries, volumetric calculation ($\max(\text{actual}, \text{volumetric})$ with divisor 5000 cm³/kg), and tariff lookup behavior are defined authoritatively in [`core-api/internal/pricing/API.md`](file:///d:/SwiftDrop/SwiftDrop/core-api/internal/pricing/API.md). The parcel booking endpoint validates the quote reference, verifies backend expiration (`current_time >= expires_at`), ensures weight/dimension inputs match the quote snapshot, and persists an immutable price snapshot (`price_cents`, currency, rule version).
 
 ### Error Responses
-- `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY` or `MALFORMED_JSON`.
+- `400 Bad Request`: `MISSING_IDEMPOTENCY_KEY`, `INVALID_ARGUMENT` (non-positive dimensions or weights), or `MALFORMED_JSON`.
 - `401 Unauthorized`: Missing or invalid Bearer token.
 - `403 Forbidden`: `QUOTE_FORBIDDEN` — Quote was generated for a different customer/tenant context.
 - `409 Conflict`: `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` — Reusing idempotency key with different payload body.
-- `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m; `current_time >= expires_at`), `QUOTE_PARAM_MISMATCH` (inputs altered), `PARCEL_LIMITS_EXCEEDED` (actual or chargeable weight $> 30.00\text{ kg}$), `DIMENSIONS_REQUIRED_ABOVE_1KG` (missing dimensions when weight $> 1\text{ kg}$), or `PRICING_UNAVAILABLE` (no tariff rule found).
+- `422 Unprocessable Entity`: `QUOTE_EXPIRED` (Quote older than 15m; `current_time >= expires_at`), `QUOTE_PARAM_MISMATCH` (inputs altered), `PARCEL_LIMITS_EXCEEDED` (actual or chargeable weight $> 30.00\text{ kg}$), `DIMENSION_LIMIT_EXCEEDED` (dimension $> 150.00\text{ cm}$), or `PRICING_UNAVAILABLE` (no tariff rule found).
 
 ---
 

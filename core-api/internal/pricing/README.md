@@ -11,13 +11,15 @@
 The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), pickup and destination zones, and chargeable weight bands. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
 
 ### Key Responsibilities:
-- Complete tariff lookup and rule evaluation:
+- Tariff lookup and rule evaluation:
   - $\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$.
-  - Complete tariff represents the total fee; there is no separate base fee, per-kg charge, distance fee, or service multiplier (provisional proposal diverging from legacy `pricing-rules.md`).
-- Option A Volumetric Threshold Policy:
-  - Actual weight $\le 1.00\text{ kg}$: dimensions do not affect price; $\text{Chargeable Weight} = \text{Actual Weight}$.
-  - Actual weight $> 1.00\text{ kg}$: dimensions in cm are required; $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{6000}$; $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
-- Weight Band Selection (7 non-overlapping bands up to 30 kg):
+  - Identifies applicable tariff based on pickup zone, destination zone, and chargeable weight band; retrieves rule, calculates delivery fee, and generates pricing quotes.
+  - Preserves tariff ID and tariff version used for the quote.
+- Volumetric Weight Calculation (Divisor 5,000 cm³/kg):
+  - $\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$
+  - Chargeable weight is always $\max(\text{Actual Weight}, \text{Volumetric Weight})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$).
+  - Consistent calculation across all eligible weights; Option A 1 kg exemption threshold is discontinued.
+- Weight Band Selection (7 non-overlapping bands up to 30 kg, pending team ratification):
   - Band 1: $0 < W \le 0.5\text{ kg}$
   - Band 2: $0.5 < W \le 1.0\text{ kg}$
   - Band 3: $1.0 < W \le 2.0\text{ kg}$
@@ -25,23 +27,23 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
   - Band 5: $5.0 < W \le 10.0\text{ kg}$
   - Band 6: $10.0 < W \le 20.0\text{ kg}$
   - Band 7: $20.0 < W \le 30.0\text{ kg}$
-- Maximum limits: Proposed maximum actual weight and chargeable weight is 30.00 kg.
-- Quote persistence in `pricing_quotes` with 15-minute expiration timestamp (`expires_at = created_at + 15m`).
+- Maximum limits: Operational maximum actual weight and chargeable weight is 30.00 kg. Single dimension limit is 150.00 cm.
+- Quote persistence in `pricing_quotes` with confirmed 15-minute expiration timestamp (`expires_at = created_at + 15m`).
 - Backend-enforced expiration check (`current_time >= expires_at` is expired).
 - Safe failure: Returns controlled `pricing_unavailable` if no tariff exists; fails safely on ambiguous multiple matches. Never fabricates a price.
 - In-process domain service interface consumed by `internal/parcels`.
 - Public/authenticated fee estimation endpoint `POST /api/v1/pricing/quotes`.
-- Candidate REST CRUD endpoints for administrative tariff management (`/api/v1/admin/pricing-rules`) served for Member 7's Admin UI.
+- Administrative boundary: Tariff creation, updating, activation, and administrative configuration belong to Member 7's admin workflow. Member 2 does not expose competing admin endpoints.
 
 ---
 
 ## 2. Domain Invariants & Business Rules
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
-3. **Deterministic Complete Tariff:** Given identical zone pairs and weight band, tariff lookup returns the unique configured fee for that rule version — *Confirmed Project Standard*.
-4. **Option A Threshold & Volumetric Divisor (6000):** Actual weight $\le 1\text{ kg}$ uses actual weight only. Weight $> 1\text{ kg}$ requires dimensions and uses divisor 6000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{6000}$ — *Proposed Baseline (Pending Team Ratification)*.
-5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Proposed Baseline (Pending Team Ratification)*.
-6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
+3. **Deterministic Tariff Lookup:** Given identical zone pairs and chargeable weight, tariff lookup returns the unique configured fee for that rule version — *Confirmed Project Standard*.
+4. **Standard Volumetric Divisor (5000 cm³/kg):** Chargeable weight is always $\max(\text{actual\_weight}, \text{volumetric\_weight})$ using standard IATA divisor 5,000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. Applied consistently for all weights; Option A 1 kg threshold is discontinued.
+5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Architecture Standard*.
+6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow (`/api/v1/admin/pricing-rules`); Member 2 owns calculation engine behavior, quote generation, and tariff-retrieval interface.
 
 ---
 
@@ -70,6 +72,7 @@ internal/pricing/
 | 2026-10-25 | Aligned with Audit v2.0.0: Standardized on POST /api/v1/pricing/quotes, integer LKR cents, 15-minute quote validity, and migration 000004 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
+| 2026-10-28 | Aligned with Final Decisions: Standardized on divisor 5000 cm³/kg, max(actual, volumetric) for all eligible parcels, discontinued Option A 1kg threshold, affirmed Member 7 admin workflow ownership | Member 2 |
 
 ---
 

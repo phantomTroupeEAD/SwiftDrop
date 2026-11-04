@@ -14,7 +14,7 @@
 This document defines the formal RESTful API contracts, request/response DTO schemas, HTTP error envelopes, and logical data models for Member 2's **Parcel Management & Pricing** bounded contexts within the SwiftDrop Core API Go modular monolith.
 
 ### 1.1 In-Scope Capabilities
-- **Pricing Calculation & Quote Generation:** Deterministic tariff evaluation across seven weight bands, Option A threshold volumetric calculation (divisor 6000 cm³/kg, 1 kg actual weight threshold, 30 kg max limits), quote persistence, and 15-minute quote validity enforcement with backend expiration checks (`POST /api/v1/pricing/quotes`).
+- **Pricing Calculation & Quote Generation:** Deterministic tariff evaluation across zone pairs and chargeable weight tiers, canonical volumetric calculation using divisor 5000 cm³/kg ($\text{chargeable\_weight} = \max(\text{actual\_weight}, \text{volumetric\_weight})$ across all weights up to 30 kg), quote persistence, and 15-minute quote validity enforcement with backend expiration checks (`POST /api/v1/pricing/quotes`).
 - **Parcel Booking & Invariant Enforcement:** Idempotent customer booking (`POST /api/v1/parcels`), quote verification, deterministic fallback calculation for direct bookings, tracking number generation (`SD-YYYYMMDD-XXXXXX`), immutable JSONB address snapshots, and atomic transactional outbox writes.
 - **Parcel Queries & Reporting:** Secure, tenant/customer-scoped parcel retrieval (`GET /api/v1/parcels/{id}`, `GET /api/v1/parcels`), chronological status audit history (`GET /api/v1/parcels/{id}/history`), and booking receipt snapshot generation (`GET /api/v1/parcels/{id}/receipt`).
 - **State Machine & Concurrency Control:** Authoritative 9-state parcel lifecycle management with optimistic concurrency control (`version` column) and integration with ADR-004 delivery failure semantics.
@@ -93,7 +93,7 @@ All error responses adhere to the unified SwiftDrop API error envelope:
 
 | HTTP Method & Path | Primary Operation | Required RBAC Role | Idempotent | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `POST /api/v1/pricing/quotes` | Create Pricing Quote | `CUSTOMER`, `MERCHANT`, `ADMIN` | Safe / No | Evaluates zone-pair tariffs across 7 weight bands, calculates threshold volumetric weight (divisor 6000), and persists a 15-minute quote. |
+| `POST /api/v1/pricing/quotes` | Create Pricing Quote | `CUSTOMER`, `MERCHANT`, `ADMIN` | Safe / No | Evaluates zone-pair tariffs, calculates volumetric weight (divisor 5000 cm³/kg), evaluates chargeable weight as max(actual, volumetric), and persists a 15-minute quote. |
 | `POST /api/v1/parcels` | Book Customer Parcel | `CUSTOMER` | Yes (`Idempotency-Key`) | Validates quote/direct booking, generates tracking number, commits parcel and outbox event. |
 | `GET /api/v1/parcels/{id}` | Get Parcel Details | `CUSTOMER`, `MERCHANT`, `COURIER`, `ADMIN` | Safe | Retrieves full parcel domain model scoped to authenticated caller. |
 | `GET /api/v1/parcels` | List Parcels | `CUSTOMER`, `MERCHANT`, `ADMIN` | Safe | Returns paginated list of parcels filtered by status and tenant ownership. |
@@ -106,7 +106,7 @@ All error responses adhere to the unified SwiftDrop API error envelope:
 ## 5. Detailed API Contracts & Schemas
 
 ### 5.1 POST /api/v1/pricing/quotes
-Calculates the estimated delivery fee based on weight, dimensions (if actual weight $> 1$ kg), and pickup/dropoff zones. Persists the calculated quote in `pricing_quotes` with a 15-minute expiration timestamp.
+Calculates the estimated delivery fee based on weight, dimensions, and pickup/dropoff zones. Persists the calculated quote in `pricing_quotes` with a 15-minute expiration timestamp.
 
 #### Request Headers
 - `Authorization: Bearer <jwt>` (Optional)
@@ -129,11 +129,11 @@ Calculates the estimated delivery fee based on weight, dimensions (if actual wei
 #### Field Specifications (Request)
 - `pickup_zone_id` (`string`, required): Identifier of origin zone (must match active `delivery_zones.id`).
 - `dropoff_zone_id` (`string`, required): Identifier of destination zone (must match active `delivery_zones.id`).
-- `weight_kg` (`number`, required): Actual measured physical weight in kilograms ($0 < W \le 30.00\text{ kg}$, max 2 decimal places).
-- `dimensions` (`object`, required if `weight_kg > 1.0 kg`; optional if `weight_kg \le 1.0 kg`):
-  - `length_cm` (`number`, required if dimensions provided): Length in centimeters ($1.0 \le l \le 150.0\text{ cm}$).
-  - `width_cm` (`number`, required if dimensions provided): Width in centimeters ($1.0 \le w \le 150.0\text{ cm}$).
-  - `height_cm` (`number`, required if dimensions provided): Height in centimeters ($1.0 \le h \le 150.0\text{ cm}$).
+- `weight_kg` (`number`, required): Actual measured physical weight in kilograms ($0.01 \le W \le 30.00\text{ kg}$, max 2 decimal places).
+- `dimensions` (`object`, required):
+  - `length_cm` (`number`, required): Length in centimeters ($1.0 \le l \le 150.0\text{ cm}$).
+  - `width_cm` (`number`, required): Width in centimeters ($1.0 \le w \le 150.0\text{ cm}$).
+  - `height_cm` (`number`, required): Height in centimeters ($1.0 \le h \le 150.0\text{ cm}$).
 
 #### Response Payload (`201 Created`)
 ```json
@@ -145,7 +145,7 @@ Calculates the estimated delivery fee based on weight, dimensions (if actual wei
   "fee_cents": 55000,
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 1.88,
+    "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
     "weight_band": "BAND_4",
     "weight_band_range": "2 < W <= 5 kg"
@@ -157,10 +157,10 @@ Calculates the estimated delivery fee based on weight, dimensions (if actual wei
 
 > [!NOTE]
 > **Provisional Pricing Proposal Notice:**
-> The mathematical parameters (seven weight bands, 1 kg threshold policy, volumetric divisor 6000 cm³/kg, 30 kg weight limits, fixed complete tariff per zone-pair/band, and 15-minute quote validity) represent the **current proposed design baseline, pending formal team approval**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer LKR cents standard, server-side authority, and quote persistence are stable requirements.
+> The mathematical parameters (seven weight bands, volumetric divisor 5000 cm³/kg, 30 kg weight limits, zone-pair tariff model, and 15-minute quote validity) represent the **current Member 2 design baseline**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer LKR cents standard, server-side authority, and quote persistence are stable requirements.
 
 #### Error Codes
-- `400 Bad Request`: Malformed JSON, non-positive parameters, or dimensions omitted when actual weight $> 1.0\text{ kg}$ (`DIMENSIONS_REQUIRED_ABOVE_1KG`).
+- `400 Bad Request`: Malformed JSON, non-positive parameters, or missing mandatory fields (`PRICING_INVALID_INPUT`).
 - `422 Unprocessable Entity`:
   - `ZONE_NOT_FOUND`: Pickup or dropoff zone does not exist.
   - `PRICING_UNAVAILABLE`: No active, enabled pricing rule covers the requested zone combination and weight band.
@@ -517,10 +517,13 @@ Authoritative business store for parcel aggregate roots.
 - `version` (`INT`, NOT NULL, DEFAULT `1`): Optimistic concurrency control counter.
 - `created_at`, `updated_at` (`TIMESTAMPTZ`, NOT NULL): Audit timestamps.
 
-#### 6.2.2 Address Model Specifications (Dual Specification Pending Ratification)
-To preserve point-in-time snapshot immutability, Member 2 specifies two compatible models:
-1. **Embedded JSONB Snapshots (Proposed by Member 2):** Stored directly on `parcels` as `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL`, eliminating relational joins and shielding historical orders from retroactive profile edits.
-2. **Normalized Child Table (`parcel_addresses`, Authoritative per `database-schema.md`):** Child table keyed by `(id UUID PK, parcel_id UUID FK, address_type VARCHAR(32), contact_name, contact_phone, address_line1, address_line2, city, postal_code, zone_id FK)` with foreign key `ON DELETE RESTRICT`.
+#### 6.2.2 Address Model Specifications: JSONB Snapshots on `parcels`
+To preserve point-in-time snapshot immutability, Member 2 implements embedded JSONB snapshots directly on `parcels`:
+- Stored as `pickup_address JSONB NOT NULL` and `dropoff_address JSONB NOT NULL`.
+- Eliminates relational joins and guarantees that subsequent customer profile address changes do not alter historical orders.
+- Validates mandatory address fields before booking.
+- Contact details are protected by access controls and strictly redacted from public tracking projections (Member 5).
+- *(Architecture Conflict Notice: While Member 2 implements embedded JSONB snapshots, `docs/architecture/database-schema.md` explicitly specifies a separate normalized child table `parcel_addresses`. This schema discrepancy is formally documented and reported for cross-team coordination).*
 
 *JSONB Address Snapshot Schema Example:*
 ```json
@@ -673,14 +676,14 @@ Emitted when a customer or admin cancels a booking prior to courier pickup.
 | :--- | :--- | :--- | :--- |
 | **Pricing Endpoint & Quote Persistence** | Ambiguous (`/estimate` vs `/quotes`) | Standardized on canonical `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes`. | Aligned with Member 10 / Team Standards |
 | **Pricing Model & Tariffs** | Complete tariff proposal vs legacy formula | Fixed complete tariff per (pickup zone, destination zone, weight band) across 7 weight bands proposed by Member 2. `docs/contracts/pricing-rules.md` specifies base fee + surcharge + multipliers. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Volumetric Threshold & Divisor (6000)** | Divisor 5000 vs 6000 | Option A threshold (weight $\le 1$ kg exempt from volumetric pricing); divisor 6000 cm³/kg for $> 1$ kg; 30 kg max limits. Differs from divisor 5000 in `pricing-rules.md`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Quote Validity Window (15m)** | Arbitrary TTL | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM APPROVAL)** |
+| **Volumetric Divisor (5000)** | Divisor 5000 vs 6000 | Volumetric weight uses canonical divisor 5000 cm³/kg: $(L \times W \times H) / 5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
+| **Quote Validity Window (15m)** | Arbitrary TTL | 15-minute price freeze window (`expires_at = created_at + 15m`). Backend strictly enforces expiry at `current_time >= expires_at`. | **RESOLVED** (`pricing-rules.md` §6) |
 | **Monetary Data Type** | Floating-point / arbitrary decimal | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
-| **Address Data Model** | Normalized child table vs JSONB snapshots | Member 2 proposes immutable `pickup_address` & `dropoff_address` JSONB on `parcels`; `database-schema.md` defines relational child table `parcel_addresses`. Both models documented. | **PENDING TEAM RATIFICATION (Dual Specification)** |
+| **Address Data Model** | Normalized child table vs JSONB snapshots | Embedded JSONB snapshots (`pickup_address`, `dropoff_address`) directly on `parcels`. Schema conflict with `database-schema.md`'s `parcel_addresses` child table documented and reported. | Architecture Alignment Item |
 | **Tracking Number Format** | Unspecified / numeric | `SD-YYYYMMDD-XXXXXX` (Crockford Base32, uppercase) | Aligned with Member 5 & SRS FR-PAR-004 |
 | **Delivery Failure Lifecycle** | Vague `FAILED` terminal state | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED`. Generic `FAILED` state removed. | ADR-004 Failed Delivery Semantics |
 | **Idempotency Persistence** | Table with FK to `users` | Canonical `idempotency_keys` table with `caller_scope` (24h TTL, SHA-256 hash). No FK to `users` to permit merchant tenant scopes. | Engineering Standards v1.0 Section 7 |
-| **Tariff Administration** | Mixed Member 2 / Member 7 claims | Member 2 provides `/api/v1/admin/pricing-rules` REST CRUD endpoints; Member 7 owns Admin UI screens and workflows. | Coordinated Boundary / SRS FR-ADM-007 |
+| **Tariff Administration** | Mixed Member 2 / Member 7 claims | Administrative tariff configuration (CRUD, activation) belongs strictly to Member 7's admin workflow. Member 2 owns tariff lookup and calculation engine only. | Coordinated Boundary / SRS FR-ADM-007 |
 | **Receipt Presentation Format** | Undecided JSON vs PDF rendering | Member 2 returns JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
 | **Arithmetic Baseline Discrepancy** | 55000 vs 51000 at baseline 8000 | Old formula in `pricing-rules.md` yields 51000 cents ($35000 + 2 \times 8000$); older draft used rate 10000 yielding 55000 cents; new proposed complete tariff Band 4 uses illustrative 55000 cents. | **UNRESOLVED / PENDING RATIFICATION** |
 

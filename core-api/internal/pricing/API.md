@@ -27,7 +27,7 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
   "service_level": "STANDARD"
 }
 ```
-*Note: Dimensions are optional if `weight_kg <= 1.0` (Option A threshold policy); dimensions are strictly required if `weight_kg > 1.0`.*
+*Note: Dimensions and weight must be strictly positive numeric values ($0.01 \le W \le 30.00\text{ kg}$). Volumetric weight is calculated using standard divisor 5000 cm³/kg: $(L \times W \times H) / 5000$.*
 
 ### Success Response (`201 Created`)
 ```json
@@ -39,7 +39,7 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
   "currency": "LKR",
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 1.875,
+    "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
     "weight_band_id": 4,
     "weight_band_label": "2 < W <= 5 kg",
@@ -53,29 +53,22 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 ```
 
 > [!NOTE]
-> **Provisional Pricing Proposal Notice (Pending Team Ratification):**
-> Delivery fee is a proposed fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cm³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
+> **Pricing Alignment Status (Pending Team Ratification):**
+> Volumetric divisor is standardized strictly on 5000 cm³/kg. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$). The previous Option A 1 kg threshold exemption is discontinued. Operational maximum actual and chargeable weight is 30.00 kg. Quote validity is confirmed at 15 minutes (`expires_at = created_at + 15m`).
 >
-> *Conflict & Arithmetic Notice:* This proposed model diverges from `docs/contracts/pricing-rules.md`, which defines a formula with base fee (35000), per-kg surcharge (8000), service multiplier, and divisor 5000 (yielding 51000 cents for 2.5 kg Metro->Metro, or 55000 under rate 10000). The 55000 cents in this example represents an illustrative flat Band 4 complete tariff pending formal team ratification.
+> *Conflict & Arithmetic Notice:* The Member 2 proposed zone-pair complete tariff model (evaluating 7 weight bands with illustrative flat fee, e.g., 55000 cents for Band 4) diverges from `docs/contracts/pricing-rules.md`, which defines a base fee (35000 cents) + per-kg surcharge (8000 cents) formula (yielding 51000 cents for 2.5 kg Metro->Metro, or 55000 under rate 10000). The exact tariff calculation structure remains pending formal team ratification.
 
 ### Error Responses
-- `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, or malformed JSON.
-- `422 Unprocessable Entity`: `DIMENSIONS_REQUIRED_ABOVE_1KG` — Parcel weight exceeds 1.0 kg but dimensions are missing.
-- `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` — Actual weight or applicable chargeable weight exceeds 30.00 kg.
+- `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, non-numeric values, or malformed JSON.
+- `422 Unprocessable Entity`: `PARCEL_LIMITS_EXCEEDED` — Actual weight or chargeable volumetric weight exceeds 30.00 kg.
 - `422 Unprocessable Entity`: `DIMENSION_LIMIT_EXCEEDED` — Length, width, or height exceeds 150.00 cm.
 - `422 Unprocessable Entity`: `PRICING_UNAVAILABLE` — No active pricing rule covers the requested zone combination and weight band. Never fabricates a fee.
 - `500 Internal Server Error`: `PRICING_CONFIGURATION_ERROR` — Multiple active rules match the same zone pair and weight band; fails safely.
 
 ---
 
-## 2. Admin Pricing Tariff Rules Management (Candidate Endpoints)
+## 2. Admin Pricing Tariff Rules Management (Member 7 Boundary)
 
 > [!NOTE]
 > **Boundary Coordination (Member 2 / Member 7):**
-> Member 2's pricing context serves the candidate backend tariff CRUD REST endpoints to allow administrative tariff maintenance. Member 7 owns the Admin UI portal consuming these endpoints. Full ratification of endpoint ownership is pending team approval.
-
-- `POST /api/v1/admin/pricing-rules`: Create a new tariff rule for a zone-pair and weight band.
-- `GET /api/v1/admin/pricing-rules`: List all active/inactive tariff rules with filtering by zone and band.
-- `GET /api/v1/admin/pricing-rules/{id}`: Retrieve detailed pricing rule definition.
-- `PUT /api/v1/admin/pricing-rules/{id}`: Update tariff fee or validity window (creates new rule version).
-- `DELETE /api/v1/admin/pricing-rules/{id}`: Deactivate tariff rule.
+> Administrative creation, updating, activation, and deactivation of tariff rules (`/api/v1/admin/pricing-rules`) belong strictly to **Member 7's admin workflow**. Member 2 is responsible for evaluating active rules, calculating delivery fees, and validating quotes during booking, and does not maintain or expose competing administrative CRUD endpoints.

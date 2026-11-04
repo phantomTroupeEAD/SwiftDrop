@@ -24,7 +24,7 @@ else Valid syntax
         UseCase --> Handler: ErrZoneOrLimitExceeded
         Handler --> Customer: 422 Unprocessable Entity (DELIVERY_ZONE_UNSUPPORTED / PARCEL_LIMITS_EXCEEDED)
     else Route & Limits valid
-        Engine -> Engine: DetermineChargeableWeight(weight_kg, dims)\n[Apply 1kg Option A threshold & 6000 divisor]
+        Engine -> Engine: DetermineChargeableWeight(weight_kg, dims)\n[Calculate max(actual, volumetric) using 5000 divisor]
         Engine -> Engine: AssignWeightBand(chargeable_weight)
         Engine --> UseCase: WeightCalculationResult(band_id, chargeable_kg)
         deactivate Engine

@@ -46,10 +46,7 @@ This document defines the authoritative external and inter-module interface cont
 | `GET /api/v1/parcels/{id}/history` | Get Parcel History | Customer, Merchant, Courier, Admin | Safe (Yes) | JWT (Resource Owner / Assigned Staff) |
 | `GET /api/v1/parcels/{id}/receipt` | Get Booking Receipt | Customer, Merchant, Admin | Safe (Yes) | JWT (Resource Owner / Admin) |
 | `POST /api/v1/merchant/orders` | Create Merchant Parcel | Merchant | Yes (`Idempotency-Key`) | *Member 4 owns transport/auth; invokes Member 2 use case* |
-| `POST /api/v1/admin/pricing-rules` | Create Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
-| `GET /api/v1/admin/pricing-rules` | List Tariff Rules (Candidate) | Admin | Safe (Yes) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
-| `PUT /api/v1/admin/pricing-rules/{id}` | Update Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
-| `DELETE /api/v1/admin/pricing-rules/{id}` | Delete Tariff Rule (Candidate) | Admin | Safe (No) | JWT (`ROLE_ADMIN`) — *Served by M2 for M7 UI* |
+| *(Tariff Administration)* | *Manage Tariffs (CRUD)* | *Admin* | *Managed by Member 7* | *Belongs exclusively to Member 7 admin workflow* |
 
 ---
 
@@ -91,10 +88,10 @@ Content-Type: application/json
 | `pickup_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-WESTERN-01`). |
 | `dropoff_zone_id` | String | Required, matches `delivery_zones.id` | Alphanumeric zone code (e.g., `ZONE-CENTRAL-01`). |
 | `weight_kg` | Float | Required, $0.01 \le w \le 30.00$ | Physical measured weight in kilograms. |
-| `dimensions` | Object | Required if $w > 1.0\text{ kg}$; optional if $w \le 1.0\text{ kg}$ | Package measurements in cm. Under threshold policy, dimensions do not affect price at $w \le 1.0\text{ kg}$. |
-| `dimensions.length_cm` | Float | Required if dimensions provided, $1.0 \le l \le 150.0$ | Parcel length in centimeters. |
-| `dimensions.width_cm` | Float | Required if dimensions provided, $1.0 \le w \le 150.0$ | Parcel width in centimeters. |
-| `dimensions.height_cm` | Float | Required if dimensions provided, $1.0 \le h \le 150.0$ | Parcel height in centimeters. |
+| `dimensions` | Object | Required | Package measurements in cm to compute volumetric weight ($L \times W \times H / 5000$). |
+| `dimensions.length_cm` | Float | Required, $1.0 \le l \le 150.0$ | Parcel length in centimeters. |
+| `dimensions.width_cm` | Float | Required, $1.0 \le w \le 150.0$ | Parcel width in centimeters. |
+| `dimensions.height_cm` | Float | Required, $1.0 \le h \le 150.0$ | Parcel height in centimeters. |
 
 #### Response Payload (`201 Created`)
 ```json
@@ -106,7 +103,7 @@ Content-Type: application/json
   "fee_cents": 55000,
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 1.88,
+    "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
     "weight_band": "BAND_4",
     "weight_band_range": "2 < W <= 5 kg"
@@ -118,7 +115,7 @@ Content-Type: application/json
 
 > [!NOTE]
 > **Provisional Pricing Notice (Pending Team Approval):**
-> The mathematical parameters (seven weight bands, 1 kg threshold policy, volumetric divisor $6000\text{ cm}^3/\text{kg}$, 30 kg weight limits, fixed complete tariff per zone-pair/band, and 15-minute quote validity) represent the **current proposed design baseline, pending formal team approval**. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements. Missing tariffs return `422 PRICING_UNAVAILABLE`. Quotes expired at `current_time >= expires_at` are rejected upon booking.
+> The mathematical parameters (seven weight bands, volumetric divisor $5000\text{ cm}^3/\text{kg}$, 30 kg weight limits, zone-pair tariff model, and 15-minute quote validity) represent the **current Member 2 design baseline**. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. The payload envelope (`quote_id`, `fee_cents`, `currency`, `expires_at`), integer cents standard, and quote persistence are stable requirements. Missing tariffs return `422 PRICING_UNAVAILABLE`. Quotes expired at `current_time >= expires_at` are rejected upon booking.
 
 ---
 
@@ -264,18 +261,9 @@ Content-Type: application/json
 
 ---
 
-### 4.4 Admin Pricing Rules Management Contract (Candidate — Coordination with M7)
+### 4.4 Tariff Administration Workflow (Owned by Member 7)
 
-> [!NOTE]
-> **Boundary Coordination (Member 2 / Member 7):**
-> Member 2's Pricing Context serves these candidate backend REST APIs to allow administrative tariff maintenance. Member 7 owns the Admin UI portal consuming these endpoints. Full ratification of endpoint ownership is pending team approval.
-
-#### Candidate Endpoints
-- `POST /api/v1/admin/pricing-rules`: Create new pricing tariff rule.
-- `GET /api/v1/admin/pricing-rules`: List all configured tariff rules (filterable by zone and band).
-- `GET /api/v1/admin/pricing-rules/{id}`: Retrieve detailed rule definition.
-- `PUT /api/v1/admin/pricing-rules/{id}`: Update rule effective window or fee.
-- `DELETE /api/v1/admin/pricing-rules/{id}`: Deactivate or soft-delete tariff rule.
+Administrative creation, updating, activation, deactivation, and configuration of pricing rules and tariffs belong strictly to Member 7's admin workflow (`core-api/internal/admin/` and Member 7 Admin Portal). Member 2 does not independently implement or document competing tariff administration endpoints; Member 2's pricing context acts solely as a consumer of configured tariffs, evaluating active rules at runtime to generate quotes and calculate delivery fees.
 
 ---
 
@@ -371,7 +359,7 @@ To comply with global privacy standards and project security rules, the public t
 | `403 Forbidden` | `QUOTE_FORBIDDEN` | Quote was issued to a different customer or merchant context. |
 | `422 Unprocessable` | `QUOTE_EXPIRED` | Quote timestamp is expired (`current_time >= expires_at`). |
 | `422 Unprocessable` | `QUOTE_PARAM_MISMATCH` | Booking inputs do not match frozen quote parameters. |
-| `422 Unprocessable` | `DIMENSIONS_REQUIRED_ABOVE_1KG` | Dimensions required when actual weight > 1.0 kg under Option A policy. |
+| `400 Bad Request` | `PRICING_INVALID_INPUT` | Missing mandatory fields, non-positive dimensions, or invalid weight. |
 | `422 Unprocessable` | `PARCEL_LIMITS_EXCEEDED` | Actual weight or chargeable weight exceeds proposed maximum limit (30 kg). |
 | `422 Unprocessable` | `DIMENSION_LIMIT_EXCEEDED` | Dimension exceeds maximum allowable threshold (150 cm). |
 | `422 Unprocessable` | `PRICING_UNAVAILABLE` | No active pricing rule covers the requested zone combination and weight band. |
@@ -430,7 +418,7 @@ flowchart TD
 | **Member 4 (Merchants)** | Exposes `POST /api/v1/merchant/orders`, validates API keys, handles webhook registrations. | Invokes Member 2's `CreateParcelUseCase` directly with verified merchant context. |
 | **Member 5 (Tracking)** | Exposes public read endpoints and SSE streaming. | Reads authoritative state from database/read projection; redacts private PII fields. |
 | **Member 6 (Frontend)** | Implements React booking and tracking portals. | Consumes `POST /api/v1/pricing/quotes` and `POST /api/v1/parcels` via OpenAPI DTOs. |
-| **Member 7 (Admin)** | Implements dispatcher and administration dashboards. | Consumes zone and parcel admin endpoints; monitors attempt counts. Manages tariff rules via candidate `/api/v1/admin/pricing-rules` endpoints. |
+| **Member 7 (Admin)** | Implements dispatcher and administration dashboards. | Consumes zone and parcel admin endpoints; monitors attempt counts. Manages tariff rules via Member 7's administrative workflow. |
 | **Member 8 (Events)** | Implements Outbox Relay publisher and RabbitMQ consumer workers. | Polls `outbox_events` table populated by Member 2; relays messages to RabbitMQ exchanges. |
 | **Member 10 (AI Assistant)** | Implements conversational support bot. | Calls `POST /api/v1/pricing/quotes` using authorized client credentials; zero direct DB access. |
 
@@ -443,14 +431,14 @@ flowchart TD
 | **Canonical Quote Route & Persistence** | `POST /api/v1/pricing/quotes` with persistence in `pricing_quotes` | Aligned with Member 10 & API Conventions |
 | **Pricing Model & Complete Tariff** | Fixed complete tariff `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`; no separate base fee, per-kg charge, distance fee, or multipliers | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`; 55000 cents in example is flat Band 4 rate vs 51000 cents in legacy formula) |
 | **Weight Bands (7 Bands)** | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg actual and chargeable weight | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Volumetric Policy & Divisor (6000)** | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Divisor (5000)** | Volumetric weight calculated using canonical divisor 5000 cm³/kg: $(L \times W \times H) / 5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
+| **Quote Expiration Window** | Guaranteed 15 minutes (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at` | **RESOLVED** (`pricing-rules.md` §6) |
 | **Monetary Data Type** | Exact integer cents (`BIGINT` in SQL, `int64` in Go, LKR) | Engineering Standards v1.0 Section 6 |
-| **Address Persistence Model** | Dual specification: JSONB snapshots (`pickup_address`, `dropoff_address`) on `parcels` table vs child table `parcel_addresses` per `database-schema.md` | Dual Specification (Architecture Alignment Item) |
+| **Address Persistence Model** | Embedded JSONB snapshots (`pickup_address`, `dropoff_address`) on `parcels` table. Track conflict with `database-schema.md` `parcel_addresses` child table. | Architecture Alignment Item |
 | **Tracking Number Format** | `SD-YYYYMMDD-XXXXXX` (Crockford Base32 uppercase) | SRS FR-PAR-004 & Member 5 Alignment |
 | **Delivery Failure Lifecycle** | Transient `ATTEMPT_FAILED` (max 3) vs terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
 | **Idempotency Mechanism** | Header `Idempotency-Key`, `idempotency_keys` table with `caller_scope`, SHA-256 | Engineering Standards v1.0 & API Conventions |
-| **Tariff Administration** | Admin write UI & maintenance workflow owned by Member 7; candidate REST endpoints served by Member 2 | Coordinated Boundary |
+| **Tariff Administration** | Administrative tariff configuration (CRUD, activation) belongs strictly to Member 7's admin workflow. Member 2 owns tariff lookup and calculation engine only. | Coordinated Boundary |
 | **Missing Tariff Behavior** | Controlled `422 PRICING_UNAVAILABLE`; ambiguous matches fail safely | Proposed Baseline |
 | **Receipt Rendering Format** | Member 2 outputs JSON snapshot; Member 6 renders UI/PDF | `PENDING TEAM CONFIRMATION` |
 

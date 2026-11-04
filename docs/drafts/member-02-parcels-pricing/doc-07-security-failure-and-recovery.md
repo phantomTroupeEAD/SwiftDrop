@@ -60,7 +60,7 @@ All incoming HTTP requests to Member 2 endpoints pass through the platform authe
 | `/api/v1/parcels/{id}/history`| `GET` | `CUSTOMER`, `MERCHANT`, `COURIER`, `ADMIN` | Enforces ownership check; redacts courier internal notes for non-staff. |
 | `/api/v1/parcels/{id}/receipt`| `GET` | `CUSTOMER`, `MERCHANT`, `ADMIN` | Enforces ownership check; returns frozen financial snapshot. |
 | `/api/v1/merchant/orders` | `POST` | `MERCHANT` | Owned by Member 4 for transport/API-key auth; delegates to Member 2. |
-| `/api/v1/admin/pricing-rules` | `POST`, `GET`, `PUT`, `DELETE` | `ADMIN` | Candidate tariff maintenance APIs served by M2 for Member 7 Admin UI. |
+| `/api/v1/admin/pricing-rules` | `POST`, `GET`, `PUT`, `DELETE` | `ADMIN` | Owned and served by Member 7 admin workflow; Member 2 provides calculation engine only. |
 
 *\*Note: Anonymous quote queries are subject to edge API Gateway rate limiting.*
 
@@ -122,14 +122,15 @@ flowchart LR
 ## 5. Input Validation & Abuse Prevention
 
 ### 5.1 Request Sanitization & Boundary Rules
-- **Physical Weight:** Constrained strictly between $0.01$ kg and $30.00$ kg. Actual weight $> 30.00$ kg is rejected with `422 PARCEL_LIMITS_EXCEEDED`.
-- **Dimensions & Volumetric Threshold (Option A):**
-  - For actual weight $\le 1.00$ kg: dimensions are optional and do not alter the delivery price (`chargeable_weight = actual_weight`).
-  - For actual weight $> 1.00$ kg: dimensions (length, width, height in cm) are strictly required. Missing dimensions are rejected with `422 DIMENSIONS_REQUIRED_ABOVE_1KG`.
-  - Dimensions are constrained between $1.0$ cm and $150.0$ cm per side. Single dimension $> 150.0$ cm is rejected with `422 DIMENSION_LIMIT_EXCEEDED`.
-  - Volumetric weight is calculated as $(L \times W \times H) / 6000$.
-- **Chargeable Weight Limit:** Maximum chargeable weight is $30.00$ kg. If $\max(\text{actual}, \text{volumetric}) > 30.00$ kg, the request is rejected with `422 PARCEL_LIMITS_EXCEEDED`.
-- **Address Strings:** Contact names, address lines, and cities are trimmed and bounded to 255 characters to prevent buffer and memory exhaustion attacks.
+- **Dimensions & Volumetric Calculation (Divisor 5,000 cm³/kg):**
+  - Chargeable weight is computed as $\max(\text{actual\_weight}, \text{volumetric\_weight})$ for all eligible parcel weights.
+  - Volumetric weight formula: $\text{volumetric\_weight} = (L \times W \times H) / 5000$ (with dimensions in centimetres and weight in kilograms).
+  - All dimensions (length, width, height) must be strictly positive numeric values ($> 0.0$ cm). Non-positive dimensions are rejected with `400 INVALID_ARGUMENT`.
+  - Single dimension limit: No single dimension may exceed $150.0$ cm; single dimension $> 150.0$ cm is rejected with `422 DIMENSION_LIMIT_EXCEEDED`.
+- **Operational Weight Limits:**
+  - Physical weight must be strictly positive: $0.01\text{ kg} \le W \le 30.00\text{ kg}$. Non-positive or non-numeric weight is rejected with `400 INVALID_ARGUMENT`.
+  - Maximum chargeable weight limit is $30.00$ kg. If $\max(\text{actual}, \text{volumetric}) > 30.00$ kg, the request is rejected with `422 PARCEL_LIMITS_EXCEEDED`.
+- **Address Strings:** Contact names, address lines, and cities are trimmed and bounded to 255 characters to prevent buffer and memory exhaustion attacks. Mandatory address fields (`contact_name`, `contact_phone`, `address_line1`, `city`, `postal_code`, `zone_id`) must be present and valid.
 - **Tracking Number Format:** Validated against pattern `^SD-[0-9]{8}-[0-9A-Z]{6}$`.
 
 ### 5.2 SQL Injection & Sanitization
@@ -182,15 +183,15 @@ Member 2 exposes operational signals for platform monitoring (Member 9):
 | **Public Tracking Privacy** | Vague field list | Explicit masking matrix: redacts phone, street address, notes, fees | AGENTS.md Section 8 & SRS FR-PAR-009 |
 | **Pricing Model & Complete Tariff** | Unspecified / base+per-kg rates | Complete tariff per zone-pair and weight band: `tariff(pickup, dropoff, band)`; no separate base/per-kg fees | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
 | **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands up to 30 kg; max actual and chargeable weight 30.00 kg | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Volumetric Threshold & Divisor (6000)** | Divisor 5000 / arbitrary calculation | Option A: weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)` | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Quote TTL & Backend Expiry** | Undefined quote TTL | 15-minute expiration window (`current_time >= expires_at` enforced on server) | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (5000)** | Divisor 6000 / Option A threshold | Divisor strictly $5000\text{ cm}^3/\text{kg}$; chargeable weight always $\max(\text{actual}, \text{volumetric})$ for all eligible parcels; Option A 1kg threshold discontinued | Aligned Decision v2.0 |
+| **Quote TTL & Backend Expiry** | Undefined quote TTL | 15-minute expiration window (`current_time >= expires_at` enforced on server) | Aligned Architecture Decision |
 | **Quote Tampering Protection** | Client supplied price | Server verifies inputs against frozen quote snapshot; rejects tampering with `422` and foreign callers with `403` | Engineering Standards & Audit |
 | **Missing Tariff Behavior** | Undefined fallback | Server rejects with `422 PRICING_UNAVAILABLE`; zero price fabrication | Proposed Baseline |
 | **Monetary Data Type** | Allowed binary floats | Integer LKR cents (`BIGINT`); prevents precision rounding exploits | Engineering Standards v1.0 Section 6 |
-| **Address Snapshot Integrity** | Child table `parcel_addresses` | Dual Specification: JSONB snapshots on `parcels` vs child table `parcel_addresses` | Architecture Alignment Item |
+| **Address Snapshot Integrity** | Child table `parcel_addresses` | JSONB snapshots on `parcels`; child table creation omitted; schema conflict documented | Architecture Alignment Item (Conflict with `database-schema.md`) |
 | **Idempotency Mechanism** | Duplicate local ideas | Canonical `idempotency_keys` table with `caller_scope` (24h TTL, SHA-256 hash) | Engineering Standards v1.0 & API Conventions |
 | **Delivery Failure Semantics**| Ambiguous terminal failure | ADR-004 3-attempt ceiling (`ATTEMPT_FAILED` $\to$ `RETURNED`) | ADR-004 Failed Delivery Semantics |
-| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; candidate REST endpoints served by M2 | Coordinated Boundary |
+| **Tariff Administration** | Mixed Member 2 admin claims | Admin write UI & workflow owned by M7; M2 provides calculation engine & quote evaluation | Coordinated Boundary |
 | **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 8.1 Pricing Policy Dependency & Security Impact Analysis

@@ -44,6 +44,8 @@ The canonical diagram set enforces the following domain rules and explicit statu
 2. **Address Modeling:** Parcel addresses are stored as immutable JSONB snapshots (`pickup_address`, `dropoff_address`) directly on the `parcels` table.
 3. **Parcel Lifecycle State Machine:** Strictly adheres to the canonical 9 states from ADR-004 (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`). Transient delivery failures increment `attempt_count`; reaching the limit of 3 transitions to `RETURNED`.
 4. **Clean Architecture Module Isolation:** Domain packages (`domain/`) have zero imports of transport or database packages; all outbound operations use interfaces implemented by `infrastructure/`.
-5. **[PROVISIONAL — PENDING TEAM CONFIRMATION]:**
-   - **Tariff Model & Volumetric Divisor:** The complete zone-to-zone tariff matrix across 7 weight bands, the volumetric divisor of 6,000 ($VW = L \times W \times H / 6000$), and the 1.00 kg Option A volumetric exemption threshold are provisional proposals from Member 2 pending final administrative sign-off by Member 7.
-   - **Quote Freeze TTL:** The 15-minute price freeze guarantee (`expires_at = NOW + 15m`) is a provisional proposal pending final team confirmation.
+5. **Volumetric Calculation & Weight Limits:** Volumetric divisor is standardized strictly on 5,000 cm³/kg ($\text{VW} = L \times W \times H / 5000$). Chargeable weight is always $\max(\text{actual}, \text{volumetric})$ across all eligible parcel weights ($0.01 \le W \le 30.00\text{ kg}$). The previous Option A 1 kg exemption threshold is discontinued.
+6. **Quote Validity Window:** Quotes carry a confirmed 15-minute validity window (`expires_at = created_at + 15m`), strictly enforced on the backend.
+7. **Address Storage & Schema Conflict:** Addresses are stored as immutable JSONB snapshots directly on `parcels`. The divergence with `database-schema.md`'s separate `parcel_addresses` child table is documented for team harmonization.
+8. **[PROVISIONAL — PENDING TEAM CONFIRMATION]:**
+   - **Tariff Structure:** The exact zone-to-zone tariff calculation structure (7 complete-tariff weight bands proposed by Member 2 vs. base fee + per-kg surcharge in `pricing-rules.md`) remains pending team ratification. Tariff administration belongs strictly to Member 7.

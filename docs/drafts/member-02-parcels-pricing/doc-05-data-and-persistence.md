@@ -65,8 +65,8 @@ core-api/migrations/
 Creates `pricing_rules` and `pricing_quotes` tables.
 
 > [!NOTE]
-> **Provisional Pricing DDL Notice (Pending Team Confirmation):**
-> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the complete tariff schema per zone pair and weight band, the 7 weight bands, volumetric divisor 6000, 30 kg maximum weight limits, and 15-minute quote expiration reflect **provisional proposals pending team confirmation**. Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior and lookup.
+> **Pricing Baseline & Tariff Notice:**
+> While the table structures `pricing_rules` and `pricing_quotes` are authoritative persistence baselines, the complete tariff schema per zone pair and weight band, the 7 weight bands, volumetric divisor 5000, 30 kg maximum weight limits, and 15-minute quote expiration reflect **the Member 2 design baseline**. Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, quote persistence, and tariff retrieval.
 
 ```sql
 -- Up Migration: 000004_create_pricing_rules.up.sql
@@ -178,28 +178,14 @@ CREATE TABLE IF NOT EXISTS parcel_status_history (
 
 CREATE INDEX idx_parcel_status_history_timeline ON parcel_status_history (parcel_id, occurred_at ASC);
 
--- Candidate Child Table: parcel_addresses (Dual Specification per database-schema.md)
--- Maintained for architecture alignment if normalized address persistence is adopted.
-CREATE TABLE IF NOT EXISTS parcel_addresses (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE RESTRICT,
-    address_type VARCHAR(16) NOT NULL CHECK (address_type IN ('PICKUP', 'DROPOFF')),
-    contact_name VARCHAR(128) NOT NULL,
-    contact_phone VARCHAR(32) NOT NULL,
-    address_line1 VARCHAR(255) NOT NULL,
-    address_line2 VARCHAR(255),
-    city VARCHAR(128) NOT NULL,
-    postal_code VARCHAR(16) NOT NULL,
-    zone_id VARCHAR(64) NOT NULL,
-    instructions TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_parcel_address_type UNIQUE (parcel_id, address_type)
-);
+-- Note: Address snapshots are embedded directly into `parcels` as JSONB (`pickup_address`, `dropoff_address`).
+-- A separate `parcel_addresses` child table is NOT created in this migration.
+-- (Conflict Notice: `docs/architecture/database-schema.md` defines a separate child table `parcel_addresses`;
+-- this shared schema discrepancy is tracked and reported for cross-team coordination).
 ```
 
 ```sql
 -- Down Migration: 000005_create_parcels_and_quotes.down.sql
-DROP TABLE IF EXISTS parcel_addresses;
 DROP TABLE IF EXISTS parcel_status_history;
 DROP TABLE IF EXISTS parcels;
 ```
@@ -249,10 +235,10 @@ DROP TABLE IF EXISTS idempotency_keys;
 | `status` | `VARCHAR(32)` | No | `'CREATED'` | Current state constrained to 9 canonical values. |
 | `service_level` | `VARCHAR(32)` | No | `'STANDARD'` | Speed tier: `STANDARD`, `EXPRESS`, `SAME_DAY`. |
 | `weight_kg` | `NUMERIC(6,2)` | No | None | Measured physical weight in kilograms ($0.01 \le w \le 30.00$). |
-| `length_cm` | `NUMERIC(6,2)` | Yes | None | Physical length in cm ($1.0 \le l \le 150.0$); required if weight > 1 kg. |
-| `width_cm` | `NUMERIC(6,2)` | Yes | None | Physical width in cm ($1.0 \le w \le 150.0$); required if weight > 1 kg. |
-| `height_cm` | `NUMERIC(6,2)` | Yes | None | Physical height in cm ($1.0 \le h \le 150.0$); required if weight > 1 kg. |
-| `chargeable_weight_kg` | `NUMERIC(6,2)` | No | None | Actual weight if $\le 1\text{ kg}$, else $\max(\text{actual}, \frac{L \times W \times H}{6000})$ ($0 < w \le 30.00$). |
+| `length_cm` | `NUMERIC(6,2)` | Yes | None | Physical length in cm ($1.0 \le l \le 150.0$); required for volumetric weight calculation. |
+| `width_cm` | `NUMERIC(6,2)` | Yes | None | Physical width in cm ($1.0 \le w \le 150.0$); required for volumetric weight calculation. |
+| `height_cm` | `NUMERIC(6,2)` | Yes | None | Physical height in cm ($1.0 \le h \le 150.0$); required for volumetric weight calculation. |
+| `chargeable_weight_kg` | `NUMERIC(6,2)` | No | None | $\max(\text{actual\_weight}, \frac{L \times W \times H}{5000})$ ($0.01 \le w \le 30.00$). |
 | `currency` | `VARCHAR(3)` | No | `'LKR'` | ISO 4217 currency code. |
 | `price_cents` | `BIGINT` | No | None | Immutable accepted complete delivery fee snapshot in integer cents. |
 | `pricing_rule_id` | `VARCHAR(64)` | No | None | Identifier of pricing rule applied at booking. |
@@ -331,8 +317,8 @@ Uniqueness constraint: `UNIQUE (pickup_zone_id, destination_zone_id, weight_band
 | `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Record creation timestamp. |
 | `expires_at` | `TIMESTAMPTZ` | No | None | Expiration boundary (`created_at + INTERVAL '24 hours'`). |
 
-### 4.6 Address Persistence: JSONB Snapshots vs Child Table (Dual Specification)
-In Member 2's implementation baseline, addresses are embedded directly into `parcels` as immutable JSONB snapshots (`pickup_address`, `dropoff_address`) to guarantee snapshot isolation without joins:
+### 4.6 Address Persistence: Embedded JSONB Snapshots on `parcels`
+In Member 2's implementation baseline, addresses are embedded directly into `parcels` as immutable JSONB snapshots (`pickup_address`, `dropoff_address`) to guarantee snapshot isolation without joins and protect against customer profile edits altering past deliveries:
 
 ```json
 {
@@ -347,7 +333,10 @@ In Member 2's implementation baseline, addresses are embedded directly into `par
 }
 ```
 
-*Architecture Alignment Notice:* Per `docs/architecture/database-schema.md`, a normalized child table `parcel_addresses` is also specified across system documentation. Member 2 documents both as a Dual Specification pending final architecture review, ensuring that whether stored as JSONB or in `parcel_addresses`, the data elements, zone mappings, and immutability invariants remain identical.
+- **Immutability:** Once stored during booking, address snapshots are never modified, even if a user edits their saved address book.
+- **Validation:** All mandatory fields (`contact_name`, `contact_phone`, `address_line1`, `city`, `postal_code`, `zone_id`) are validated before booking.
+- **Privacy & Masking:** Contact details and street addresses are strictly redacted from public tracking APIs (Member 5).
+- *(Architecture Conflict Notice: While Member 2 implements embedded JSONB snapshots, `docs/architecture/database-schema.md` defines a separate relational child table `parcel_addresses`. This schema discrepancy is documented and reported for cross-team coordination).*
 
 ---
 
@@ -407,7 +396,7 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 
 | Data Item | Initial Draft State | Aligned Final Specification | Source / Status |
 | :--- | :--- | :--- | :--- |
-| **Address Model** | Child table `parcel_addresses` | Dual Specification: JSONB snapshots on `parcels` vs child table `parcel_addresses` per `database-schema.md` | Architecture Alignment Item |
+| **Address Model** | Child table `parcel_addresses` | Embedded JSONB snapshots (`pickup_address`, `dropoff_address`) on `parcels` table. Track conflict with `database-schema.md` `parcel_addresses` child table. | Architecture Alignment Item |
 | **Monetary Type** | Float / Arbitrary Decimal | `BIGINT` integer cents, `LKR` | Engineering Standards v1.0 Section 6 |
 | **Migration Files** | Unnumbered / arbitrary names | `000004`, `000005`, `000010` (co-designed specifications) | Database Migration Baseline |
 | **Zone Reference Type** | Ambiguous UUID vs VARCHAR | `VARCHAR(64)` matching `delivery_zones.id` | Database Schema Standards |
@@ -415,12 +404,12 @@ If rows affected == 0, the transaction aborts and returns `409 Conflict` (`VERSI
 | **Quote Persistence** | Optional / unpersisted | Persisted in `pricing_quotes` table | Engineering Standards & Audit |
 | **Pricing Model & Complete Tariff** | Unspecified / base+per-kg formula | Complete tariff per zone-pair and weight band: `tariff(pickup, dest, band)`; no separate base/per-kg/distance fees. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** (Diverges from legacy formula in `pricing-rules.md`) |
 | **Weight Bands (7 Bands)** | Undefined band boundaries | 7 non-overlapping bands: (0, 0.5], (0.5, 1], (1, 2], (2, 5], (5, 10], (10, 20], (20, 30] kg; proposed max 30 kg weight limits. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Volumetric Policy & Divisor (6000)** | Unspecified weight calculation | Option A: actual weight <= 1 kg uses actual weight only; > 1 kg requires dimensions and uses `max(actual, (L*W*H)/6000)`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
-| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **PROVISIONAL PROPOSAL (PENDING TEAM RATIFICATION)** |
+| **Volumetric Policy & Divisor (5000)** | Unspecified weight calculation | Volumetric weight uses canonical divisor 5000 cm³/kg: $(L \times W \times H)/5000$. Chargeable weight is always $\max(\text{actual}, \text{volumetric})$. Option A 1kg threshold discontinued. | **RESOLVED** (`pricing-rules.md` §2, SRS §13.2) |
+| **Quote Expiry Window (15m)** | Arbitrary / missing duration | 15-minute price freeze window (`expires_at = created_at + 15m`); backend enforced `current_time >= expires_at`. | **RESOLVED** (`pricing-rules.md` §6) |
 | **Idempotency Model** | Module-local vs duplicate | Canonical `idempotency_keys` table with `caller_scope` (24h TTL) | Engineering Standards v1.0 & API Conventions |
 | **Failure States** | Unclear `FAILED` state | Transient `ATTEMPT_FAILED` (max 3), terminal `RETURNED` | ADR-004 Failed Delivery Semantics |
 | **Status History Deletion Policy** | Unspecified / Cascade | `ON DELETE RESTRICT` on `parcel_status_history` to protect regulatory audit records | Engineering Standards & Audit |
-| **Tariff Admin Rights** | Unassigned | Admin write UI & workflow owned by M7; candidate REST endpoints served by M2 | Coordinated Boundary |
+| **Tariff Admin Rights** | Unassigned | Admin write UI & maintenance workflow owned exclusively by Member 7. Member 2 does not implement competing admin endpoints. | Coordinated Boundary |
 | **Receipt Rendering** | Undecided JSON vs PDF | Member 2 stores JSON snapshot; M6 renders | `PENDING TEAM CONFIRMATION` |
 
 ### 6.1 Pricing Policy Dependency & Persistence Impact Analysis
