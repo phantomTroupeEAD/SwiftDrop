@@ -2,7 +2,8 @@
 
 > **Authority:** Fulfills SRS §11.1–11.2 (Deployment & Runtime Architecture) and ADR-002 (Ubuntu VPS Kubernetes Hosting).  
 > **Primary Owner:** Member 9 (DevOps, Kubernetes & Observability)  
-> **Collaborator:** Member 7 (Admin Frontend & API Gateway)
+> **Collaborator:** Member 7 (Admin Frontend & API Gateway)  
+> **Last updated:** 2026-10-28 (paths follow the per-service manifest layout A8; names follow the Member 9 team agreements)
 
 ---
 
@@ -25,7 +26,7 @@ sudo usermod -aG docker $USER
 
 ### Step 2: Clone & Configure Secrets
 ```bash
-git clone https://github.com/Prashani-beep/SwiftDrop.git /opt/swiftdrop
+git clone https://github.com/phantomTroupeEAD/SwiftDrop.git /opt/swiftdrop
 cd /opt/swiftdrop
 
 # Generate production environment file
@@ -35,12 +36,13 @@ nano .env  # Populate production DB passwords, JWT RSA keys, and third-party sec
 
 ### Step 3: Launch Production Stack
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d
 ```
 
 ### Step 4: Run Migrations
+The one-shot `core-api-migrate` service already runs before `core-api` starts. To run it again by hand:
 ```bash
-docker compose run --rm core-api-migrate
+docker compose -f deploy/docker-compose.yml run --rm core-api-migrate
 ```
 
 ---
@@ -74,45 +76,64 @@ helm install traefik traefik/traefik \
 ```
 
 ### Step 4: Configure Cloudflare Origin TLS Certificate
-Create the Kubernetes TLS secret using the 15-year Cloudflare Origin CA certificate:
+Create the Kubernetes TLS secret using the 15-year Cloudflare Origin CA certificate. The name `traefik-origin-tls` is agreed with Member 7; its final namespace is open item C5.
 ```bash
-kubectl create secret tls cloudflare-origin-cert \
+kubectl create secret tls traefik-origin-tls \
   --cert=/etc/ssl/swiftdrop/origin.crt \
   --key=/etc/ssl/swiftdrop/origin.key \
   --namespace swiftdrop
 ```
 
-### Step 5: Provision Secrets & ConfigMaps
+The paths below follow the per-service layout (A8, `deploy/README.md` §2). Until that move is done, the StatefulSets are the flat files `deploy/kubernetes/postgres-statefulset.yml` and `rabbitmq-statefulset.yml`. Manifests write image tags as `${IMAGE_TAG}`, so apply them through `envsubst` with the git SHA:
 ```bash
-# Provision database credentials and JWT keys
-kubectl apply -f deploy/kubernetes/base/secrets.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/configmaps.yaml -n swiftdrop
+export IMAGE_TAG=<git-sha>
+```
+
+### Step 5: Provision Secrets & ConfigMaps
+The repo holds placeholders only (`secrets.example.yaml`). Real values never go into git.
+```bash
+# Fill a private copy OUTSIDE the repo, apply it, then delete it
+cp deploy/kubernetes/secrets.example.yaml ~/swiftdrop-secrets.yaml
+nano ~/swiftdrop-secrets.yaml      # postgres-secrets (one DB URL key per role), rabbitmq-secrets, jwt-secrets, ...
+kubectl apply -f ~/swiftdrop-secrets.yaml -n swiftdrop && shred -u ~/swiftdrop-secrets.yaml
+
+# Non-secret config: one ConfigMap per service
+find deploy/kubernetes -name configmap.yaml -exec kubectl apply -n swiftdrop -f {} \;
 ```
 
 ### Step 6: Deploy Authoritative Persistence
 ```bash
-kubectl apply -f deploy/kubernetes/base/postgres-statefulset.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/rabbitmq-statefulset.yaml -n swiftdrop
+kubectl apply -f deploy/kubernetes/postgres/ -n swiftdrop
+kubectl apply -f deploy/kubernetes/rabbitmq/ -n swiftdrop
 
 # Wait for persistence to become ready
 kubectl wait --for=condition=ready pod -l app=postgres -n swiftdrop --timeout=120s
 kubectl wait --for=condition=ready pod -l app=rabbitmq -n swiftdrop --timeout=120s
 ```
 
-### Step 7: Run Database Migrations Job
+### Step 7: Create DB Roles (first install only) and Run the Migration Job
 ```bash
-kubectl apply -f deploy/kubernetes/base/migrate-job.yaml -n swiftdrop
-kubectl wait --for=condition=complete job/core-api-migrate -n swiftdrop --timeout=60s
+# D6 roles; passwords come from your shell, never from the SQL file
+kubectl exec -i postgres-0 -n swiftdrop -- psql -U swiftdrop -d swiftdrop_db \
+  -v migrator_pw="$MIGRATOR_PW" -v app_pw="$APP_PW" -v tracking_pw="$TRACKING_PW" \
+  -v relay_pw="$RELAY_PW" -v worker_pw="$WORKER_PW" -v reconciler_pw="$RECONCILER_PW" \
+  -f - < deploy/postgres/bootstrap-roles.sql
+
+# One Job per release, backoffLimit: 0 (D1)
+envsubst < deploy/kubernetes/core-api/migrate-job.yaml | kubectl apply -n swiftdrop -f -
+kubectl wait --for=condition=complete job/core-api-migrate-job -n swiftdrop --timeout=120s
 ```
 
-### Step 8: Deploy Application Microservices
+### Step 8: Deploy Application Workloads and Autoscaling
 ```bash
-kubectl apply -f deploy/kubernetes/base/core-api-deployment.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/tracking-deployment.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/outbox-relay-deployment.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/event-worker-deployment.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/ai-assistant-deployment.yaml -n swiftdrop
-kubectl apply -f deploy/kubernetes/base/web-frontend-deployment.yaml -n swiftdrop
+# KEDA CRDs must exist before the event-worker ScaledObject
+helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda -n keda --create-namespace
+
+for dir in core-api tracking-api messaging ai-assistant web; do
+  find deploy/kubernetes/$dir -name "*.yaml" ! -name migrate-job.yaml \
+    -exec sh -c 'envsubst < "$1" | kubectl apply -n swiftdrop -f -' _ {} \;
+done
 ```
 
 ### Step 9: Apply Ingress Routing & Middleware Policies
@@ -138,13 +159,14 @@ Verify system health across all layers:
   ```
 - [ ] **Health Probes Passing:**
   ```bash
-  # Verify internal health probes (internal only, not routed by external ingress):
-  kubectl exec -n swiftdrop deployment/core-api -- wget -qO- http://localhost:8080/health/live
+  # Health is internal only (not routed by Traefik). Distroless images have no wget/curl, so port-forward:
+  kubectl port-forward -n swiftdrop deployment/core-api 8080:8080 &
+  curl -s http://localhost:8080/health/live
   # Expected: HTTP 200 OK {"status":"UP"}
   ```
-- [ ] **Public Tracking Milestone Reachable:**
+- [ ] **Public Tracking Milestone Reachable** (one domain, path routing C17; domain still a placeholder):
   ```bash
-  curl -k -I https://api.swiftdrop.io/api/v1/tracking/public/SD-TEST
+  curl -k -I https://swiftdrop.example.com/api/v1/tracking/public/SD-TEST
   # Expected: HTTP 200 or 404 (not 502 Bad Gateway)
   ```
 - [ ] **Outbox Relay Publishing:**
@@ -154,7 +176,7 @@ Verify system health across all layers:
   ```
 - [ ] **Web SPA Asset Serving:**
   ```bash
-  curl -k -I https://swiftdrop.io/
+  curl -k -I https://swiftdrop.example.com/
   # Expected: HTTP 200 OK, Content-Type: text/html
   ```
 
@@ -163,12 +185,13 @@ Verify system health across all layers:
 ## 5. Automated CI/CD Pipeline Flow
 
 When commits land on `main`:
-1. **GitHub Actions (`.github/workflows/ci.yml`):**
-   - Runs `golangci-lint` and `npm run lint`.
-   - Executes unit tests across Go and React (`go test -v ./...`).
-2. **Container Build & Push (`.github/workflows/deploy.yml`):**
-   - Builds multi-arch Docker images tagged with git SHA.
-   - Pushes images to GitHub Container Registry (`ghcr.io/prashani-beep/swiftdrop/*`).
+1. **GitHub Actions (`.github/workflows/ci.yml`, exists today):**
+   - Secret scan (TruffleHog) on every push and PR.
+   - `gofmt`, `golangci-lint` and `go test -race` for `core-api` (they run once `core-api/go.mod` exists).
+   - Planned (C25): web lint and tests, Python tests, infra checks, E2E (`pytest tests/e2e/ -v`).
+2. **Container Build & Push (`.github/workflows/deploy.yml`, planned):**
+   - Builds x86 (`linux/amd64`) Docker images tagged with the git SHA.
+   - Pushes images to GitHub Container Registry (`ghcr.io/phantomtroupeead/swiftdrop/*`).
 3. **Cluster Rollout:**
    - Authenticates to VPS via SSH / Kubeconfig.
    - Updates image tags on deployments (`kubectl set image deployment/core-api ...`).
