@@ -128,6 +128,8 @@ All engineering activities in `tests/e2e/` are logged below:
 | **2026-11-04T15:21:00+05:30** | `COMMIT` | Git Commit `cbc321c` | Committed initial TypeScript/Playwright scaffolding, 5-actor profiles, fixtures, and grounding suite. | **SUCCESS** |
 | **2026-11-04T21:30:00+05:30** | `WEBHOOK` | Git Commit `1bbd81f` | Built standalone mock webhook receiver with HMAC-SHA256, chaos 500, and visual Tailwind dashboard. | **SUCCESS** |
 | **2026-11-04T21:34:00+05:30** | `TEST` | `tests/e2e/mock-webhook/src/server.test.ts` | Ran unit test suite verifying HMAC, tenant isolation, chaos 500, and native 404 (5/5 passed in 955ms). | **SUCCESS** |
+| **2026-11-04T23:06:00+05:30** | `DOCS` | `tests/e2e/README.md` | Created authoritative developer entrypoint, command reference, and multi-actor viewport table. | **SUCCESS** |
+| **2026-11-04T23:07:00+05:30** | `MILESTONE` | Phase 1 Grounding Locked | Complete grounding foundation delivered. Live journey specs deferred until upstream modules (Core API/Web) are deployed. | **SUCCESS** |
 
 ---
 
@@ -146,8 +148,8 @@ All engineering activities in `tests/e2e/` are logged below:
 | **Offline Dry-Run Spec**| `tests/e2e/flows/dry-run.spec.ts` | TypeScript / Playwright | **COMPLETE** | 10/10 tests passing offline in 11.4s |
 | **Mock Webhook Backend**| `tests/e2e/mock-webhook/src/server.ts` | TypeScript / Express | **COMPLETE** | HMAC-SHA256, DLQ chaos, tenant isolation |
 | **Mock Visual Dashboard**| `tests/e2e/mock-webhook/public/dashboard.html`| HTML / Tailwind | **COMPLETE** | Live tenant isolation badge & 1-click test triggers |
-| **Flow Skeletons (1-4)**| `tests/e2e/flows/flow*.spec.ts` | TypeScript / Playwright | *Pending S5* | 15-mark rubric demonstration |
-| **Entry Point Guide** | `tests/e2e/README.md` | Markdown | *Pending S6* | Industry-standard developer guide |
+| **Entry Point Guide** | `tests/e2e/README.md` | Markdown | **COMPLETE** | Industry-standard developer guide |
+| **Live Flow Journeys (1-4)**| `tests/e2e/flows/flow*.spec.ts` | TypeScript / Playwright | **PAUSED (Awaiting Upstream)** | Deferred until Core API & Web UI screens are built |
 
 ---
 
