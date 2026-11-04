@@ -8,6 +8,7 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:dry-run": "playwright test flows/dry-run.spec.ts",
+    "test:webhook": "npm --prefix mock-webhook test",
     "test:report": "playwright show-report artifacts/report",
     "typecheck": "tsc --noEmit"
   },

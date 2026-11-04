@@ -126,6 +126,8 @@ All engineering activities in `tests/e2e/` are logged below:
 | **2026-11-04T00:20:00+05:30** | `BROWSER` | `npx playwright install chromium` | Downloaded Chromium v1248, FFmpeg v1013, Chrome Headless Shell. | **SUCCESS** |
 | **2026-11-04T00:21:00+05:30** | `VERIFY` | `tests/e2e/flows/dry-run.spec.ts` | Ran dry-run suite verifying 5-actor browser context isolation and mobile emulation (10/10 tests passed in 11.4s). | **SUCCESS** |
 | **2026-11-04T15:21:00+05:30** | `COMMIT` | Git Commit `cbc321c` | Committed initial TypeScript/Playwright scaffolding, 5-actor profiles, fixtures, and grounding suite. | **SUCCESS** |
+| **2026-11-04T21:30:00+05:30** | `WEBHOOK` | Git Commit `1bbd81f` | Built standalone mock webhook receiver with HMAC-SHA256, chaos 500, and visual Tailwind dashboard. | **SUCCESS** |
+| **2026-11-04T21:34:00+05:30** | `TEST` | `tests/e2e/mock-webhook/src/server.test.ts` | Ran unit test suite verifying HMAC, tenant isolation, chaos 500, and native 404 (5/5 passed in 955ms). | **SUCCESS** |
 
 ---
 
@@ -142,8 +144,8 @@ All engineering activities in `tests/e2e/` are logged below:
 | **SSE Listener** | `tests/e2e/helpers/sseListener.ts` | TypeScript / EventSource | **COMPLETE** | Real-time tracking verification |
 | **Evidence Capturer** | `tests/e2e/helpers/evidence.ts` | TypeScript | **COMPLETE** | Full-page milestone screenshots & trace attachment |
 | **Offline Dry-Run Spec**| `tests/e2e/flows/dry-run.spec.ts` | TypeScript / Playwright | **COMPLETE** | 10/10 tests passing offline in 11.4s |
-| **Mock Webhook Backend**| `tests/e2e/mock-webhook/src/server.ts` | TypeScript / Express | *Pending S3* | HMAC-SHA256, DLQ chaos, tenant isolation |
-| **Mock Visual Dashboard**| `tests/e2e/mock-webhook/public/dashboard.html`| HTML / Tailwind | *Pending S3* | Live tenant isolation badge |
+| **Mock Webhook Backend**| `tests/e2e/mock-webhook/src/server.ts` | TypeScript / Express | **COMPLETE** | HMAC-SHA256, DLQ chaos, tenant isolation |
+| **Mock Visual Dashboard**| `tests/e2e/mock-webhook/public/dashboard.html`| HTML / Tailwind | **COMPLETE** | Live tenant isolation badge & 1-click test triggers |
 | **Flow Skeletons (1-4)**| `tests/e2e/flows/flow*.spec.ts` | TypeScript / Playwright | *Pending S5* | 15-mark rubric demonstration |
 | **Entry Point Guide** | `tests/e2e/README.md` | Markdown | *Pending S6* | Industry-standard developer guide |
 

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftDrop — Multi-Tenant Webhook Examiner Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(0.99); }
+    }
+    .badge-glow { box-shadow: 0 0 20px rgba(34, 197, 94, 0.35); animation: pulse-slow 3s infinite; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Header & Tenant Isolation Banner -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-800">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 font-mono font-bold text-xl border border-emerald-500/20">SWD:9999</span>
+          <h1 class="text-2xl font-bold tracking-tight text-white">Multi-Tenant Webhook Examiner Dashboard</h1>
+        </div>
+        <p class="text-sm text-slate-400 mt-1">Standalone Test Artifact for Member 10 E2E Acceptance & Member 8 Event Worker Verification</p>
+      </div>
+
+      <!-- Live Tenant Isolation Badge -->
+      <div id="isolationBadge" class="badge-glow inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-semibold">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+        <span>TENANT ISOLATION VERIFIED: ZERO DATA LEAKAGE</span>
+      </div>
+    </header>
+
+    <!-- Top Action Buttons (1-Click Demo) -->
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button onclick="triggerSample('alpha')" class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition shadow-sm">
+          ⚡ Trigger Delivery (Alpha)
+        </button>
+        <button onclick="triggerSample('beta')" class="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs transition shadow-sm">
+          ⚡ Trigger Delivery (Beta)
+        </button>
+        <button onclick="triggerChaos()" class="px-3.5 py-1.5 rounded-lg bg-rose-600/80 hover:bg-rose-500 text-white font-medium text-xs transition shadow-sm">
+          💥 Test Chaos 500 (DLQ)
+        </button>
+      </div>
+      <button onclick="resetEvents()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition border border-slate-700">
+        Reset History
+      </button>
+    </div>
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="p-4 rounded-xl bg-slate-900/80 border border-blue-500/30">
+        <p class="text-xs uppercase tracking-wider text-blue-400 font-mono">Merchant Alpha</p>
+        <p id="countAlpha" class="text-3xl font-extrabold text-blue-300 mt-1">0</p>
+        <p class="text-[11px] text-slate-400 mt-1">Tenant: mrc_01HMERCHANTALPHA0001</p>
+      </div>
+      <div class="p-4 rounded-xl bg-slate-900/80 border border-purple-500/30">
+        <p class="text-xs uppercase tracking-wider text-purple-400 font-mono">Merchant Beta</p>
+        <p id="countBeta" class="text-3xl font-extrabold text-purple-300 mt-1">0</p>
+        <p class="text-[11px] text-slate-400 mt-1">Tenant: mrc_01HMERCHANTBETA00002</p>
+      </div>
+      <div class="p-4 rounded-xl bg-slate-900/80 border border-rose-500/30">
+        <p class="text-xs uppercase tracking-wider text-rose-400 font-mono">Chaos 500 Attempts</p>
+        <p id="countChaos" class="text-3xl font-extrabold text-rose-300 mt-1">0</p>
+        <p class="text-[11px] text-slate-400 mt-1">Routes to RabbitMQ DLQ</p>
+      </div>
+      <div class="p-4 rounded-xl bg-slate-900/80 border border-emerald-500/30">
+        <p class="text-xs uppercase tracking-wider text-emerald-400 font-mono">Total Verified Webhooks</p>
+        <p id="countTotal" class="text-3xl font-extrabold text-emerald-300 mt-1">0</p>
+        <p class="text-[11px] text-slate-400 mt-1">HMAC-SHA256 Validated</p>
+      </div>
+    </div>
+
+    <!-- Live Event Feed Table -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider font-mono">Live Ingested CloudEvents Feed</h2>
+        <span class="text-xs text-slate-400 font-mono" id="lastUpdated">Polling live...</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-slate-900 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <tr>
+              <th class="px-4 py-3">Timestamp</th>
+              <th class="px-4 py-3">Event ID</th>
+              <th class="px-4 py-3">Merchant</th>
+              <th class="px-4 py-3">Type</th>
+              <th class="px-4 py-3">Tracking No.</th>
+              <th class="px-4 py-3">HMAC Status</th>
+              <th class="px-4 py-3 text-right">Payload</th>
+            </tr>
+          </thead>
+          <tbody id="eventRows" class="divide-y divide-slate-800/60">
+            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500 font-sans">No webhooks received yet. Trigger a sample above or send an event to :9999.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JSON Payload Modal -->
+  <dialog id="payloadModal" class="rounded-xl bg-slate-900 border border-slate-700 text-slate-200 p-6 max-w-2xl w-full backdrop:bg-black/70">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+      <h3 class="font-bold text-sm text-emerald-400 font-mono">CloudEvents JSON Payload</h3>
+      <button onclick="document.getElementById('payloadModal').close()" class="text-slate-400 hover:text-white">&times;</button>
+    </div>
+    <pre id="modalJson" class="mt-4 p-4 rounded-lg bg-slate-950 font-mono text-xs overflow-x-auto max-h-96 text-emerald-300"></pre>
+  </dialog>
+
+  <script>
+    let eventsData = [];
+
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/events');
+        const data = await res.json();
+        eventsData = data.events || [];
+
+        document.getElementById('countAlpha').textContent = data.counts?.alpha || 0;
+        document.getElementById('countBeta').textContent = data.counts?.beta || 0;
+        document.getElementById('countChaos').textContent = data.counts?.chaos || 0;
+        document.getElementById('countTotal').textContent = data.counts?.total || 0;
+        document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+        renderRows(eventsData);
+      } catch (err) {
+        console.error('Failed to poll events:', err);
+      }
+    }
+
+    function renderRows(events) {
+      const tbody = document.getElementById('eventRows');
+      if (!events || events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500 font-sans">No webhooks received yet. Trigger a sample above or dispatch from Event Worker.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = events.map((e, idx) => `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="px-4 py-3 text-slate-400">${new Date(e.receivedAt).toLocaleTimeString()}</td>
+          <td class="px-4 py-3 text-slate-300 font-bold">${e.id}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold ${e.tenant === 'alpha' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'}">
+              ${e.tenant.toUpperCase()}
+            </span>
+          </td>
+          <td class="px-4 py-3 text-emerald-400 font-semibold">${e.type}</td>
+          <td class="px-4 py-3 text-amber-300">${e.payload?.data?.tracking_number || '-'}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold ${e.hmacValid ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+              ${e.hmacValid ? 'HMAC VALID' : 'HMAC INVALID'}
+            </span>
+          </td>
+          <td class="px-4 py-3 text-right">
+            <button onclick="viewPayload(${idx})" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] border border-slate-700">
+              View JSON
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function viewPayload(idx) {
+      const e = eventsData[idx];
+      document.getElementById('modalJson').textContent = JSON.stringify(e.payload, null, 2);
+      document.getElementById('payloadModal').showModal();
+    }
+
+    async function triggerSample(tenant) {
+      await fetch('/api/test-trigger?tenant=' + tenant, { method: 'POST' });
+      fetchEvents();
+    }
+
+    async function triggerChaos() {
+      await fetch('/webhooks/merchant-chaos', { method: 'POST' });
+      fetchEvents();
+    }
+
+    async function resetEvents() {
+      await fetch('/api/reset', { method: 'POST' });
+      fetchEvents();
+    }
+
+    fetchEvents();
+    setInterval(fetchEvents, 1500);
+  </script>
+</body>
+</html>

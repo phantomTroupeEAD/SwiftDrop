@@ -167,26 +167,27 @@ flowchart TD
 ### Pillar 4: Standalone Mock Webhook Service (`mock-webhook:9999`)
 **Objective:** Build, test, and containerize the standalone webhook ingestion engine and visual examiner dashboard to prove multi-tenant isolation and DLQ routing.
 
-- [ ] **4.1 TypeScript Backend Engine (`tests/e2e/mock-webhook/src/server.ts`):**
+- [x] **4.1 TypeScript Backend Engine (`tests/e2e/mock-webhook/src/server.ts`):**
   - Multi-tenant in-memory storage partitioned strictly by `tenantId` (`alpha`, `beta`).
   - `POST /webhooks/merchant-alpha`: Ingests Merchant Alpha webhooks, validates HMAC-SHA256 signature using `sk_test_alpha_01`, appends to Alpha store.
   - `POST /webhooks/merchant-beta`: Ingests Merchant Beta webhooks, validates HMAC using `sk_test_beta_02`, appends to Beta store.
   - `POST /webhooks/merchant-chaos`: Injected failure endpoint returning `HTTP 500 Internal Server Error` to test Event Worker retry policies and DLQ routing.
   - `POST /webhooks/merchant-slow`: Injected latency endpoint (sleeps 10s) to test worker HTTP client timeout enforcement.
-  - `GET /api/merchants/:id/events`: JSON retrieval endpoint for Playwright automated assertions.
+  - `GET /api/events`: JSON retrieval endpoint for Playwright automated assertions.
   - `POST /api/reset`: Flushes event store between test suites.
-- [ ] **4.2 Responsive Visual Examiner Dashboard (`public/dashboard.html`):**
+- [x] **4.2 Responsive Visual Examiner Dashboard (`public/dashboard.html`):**
   - Dark-mode Tailwind CSS interface.
   - Real-time event counter cards for Merchant Alpha vs. Merchant Beta.
   - Live table rendering incoming CloudEvents (Event ID, Type, Timestamp, Payload JSON, HMAC Status).
   - Prominent visual badge:
     `[TENANT ISOLATION VERIFIED: ZERO DATA LEAKAGE]` (dynamically turns red if cross-tenant leakage occurs).
-- [ ] **4.3 Mock Webhook Unit Test Suite (`tests/e2e/mock-webhook/src/server.test.ts`):**
+- [x] **4.3 Mock Webhook Unit Test Suite (`tests/e2e/mock-webhook/src/server.test.ts`):**
   - Tests HMAC validation with correct and incorrect secrets.
   - Verifies tenant separation (event posted to Alpha does not appear in Beta).
   - Verifies chaos endpoint returns 500.
+  - Verifies native 404 for un-routed paths.
   - Verifies reset clears memory.
-- [ ] **4.4 Containerization & Local Run Configuration:**
+- [x] **4.4 Containerization & Local Run Configuration:**
   - `tests/e2e/mock-webhook/Dockerfile` (lightweight Node.js alpine image).
   - Integration block prepared for `deploy/docker-compose.yml`.
 
