@@ -213,6 +213,11 @@ flowchart TD
 - [ ] **6.1 Mock Test Stubs (`flows/*.spec.ts`):**
   - Scaffold `flow1-booking.spec.ts` through `flow4-tracking.spec.ts` with structured step functions and assertions.
   - Tag with `@mock` or conditional skip annotations so tests do not fail in CI while waiting for live service endpoints.
+  - **Flow 4 AI Chatbot Verification Scope:**
+    - *Core Capabilities:* Grounded natural language tracking lookup, dynamic fee calculation, and Generative UI action card 1-click deep navigation (`ai-action-btn-book`).
+    - *Error Handling:* Non-existent tracking number (upstream 404 friendly message), upstream Core API outage (502/503 graceful fallback), and animated typing indicator state.
+    - *Security & Guardrails:* Prompt injection defense ("Ignore all previous instructions..."), strict read-only zero-mutation enforcement, and customer PII masking (`SEC-009`).
+    - *Boundary & Edge Cases:* >1,000 character DoS input overflow, empty/whitespace query rejection, and out-of-domain query redirection.
 - [x] **6.2 Standalone Dry-Run Test (`flows/dry-run.spec.ts`):**
   - Spins up browser contexts.
   - Opens `mock-webhook:9999/dashboard`.

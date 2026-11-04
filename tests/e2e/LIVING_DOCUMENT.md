@@ -106,6 +106,18 @@ sequenceDiagram
 - **Decision:** Build a dedicated, lightweight Node.js/Express service containerized on port `9999` with an embedded dark-mode Tailwind HTML dashboard.
 - **Rationale:** Gives examiners a tangible visual dashboard during live demos and provides automated Playwright assertions with zero cloud dependencies.
 
+### ADR-004: Frontend AI Chatbot Adversarial & Generative UI Verification Contract
+- **Date:** 2026-11-04
+- **Status:** **APPROVED & ADOPTED**
+- **Context:** The AI Assistant (`services/ai-assistant`) interacts with customers and merchants through the React web drawer (`web/`). E2E testing cannot be limited to happy-path text; it must verify operational errors, security guardrails, Generative UI 1-click action cards, and adversarial attacks through the browser.
+- **Decision:** Mandate that E2E Flow 4 tests evaluate 4 comprehensive dimensions:
+  1. *Core Capabilities & Generative UI:* Grounded tracking lookups, dynamic tariff calculations, and 1-click `[Book Parcel]` deep navigation.
+  2. *Error Resilience:* Upstream 404 tracking not found, Core API 502/503 outage fallback, and animated typing indicators.
+  3. *Adversarial Guardrails:* Prompt injection resistance ("Ignore previous instructions..."), strict read-only zero-mutation enforcement, and PII masking (`SEC-009`).
+  4. *Input Boundaries:* >1,000 character DoS input truncation, empty query rejection, and out-of-domain redirection.
+- **Rationale:** Ensures complete cross-workflow quality gate between Member 10 (AI backend) and Member 6 (React frontend) with zero unhandled edge cases.
+- **Consequences:** Published canonical selectors in `helpers/selectors.ts` (`AI_ASSISTANT`) and documented test matrix in `PRE_TESTING_SETUP_ROADMAP.md`.
+
 ---
 
 ## 5. Chronological Implementation & Activity Ledger
@@ -130,6 +142,7 @@ All engineering activities in `tests/e2e/` are logged below:
 | **2026-11-04T21:34:00+05:30** | `TEST` | `tests/e2e/mock-webhook/src/server.test.ts` | Ran unit test suite verifying HMAC, tenant isolation, chaos 500, and native 404 (5/5 passed in 955ms). | **SUCCESS** |
 | **2026-11-04T23:06:00+05:30** | `DOCS` | `tests/e2e/README.md` | Created authoritative developer entrypoint, command reference, and multi-actor viewport table. | **SUCCESS** |
 | **2026-11-04T23:07:00+05:30** | `MILESTONE` | Phase 1 Grounding Locked | Complete grounding foundation delivered. Live journey specs deferred until upstream modules (Core API/Web) are deployed. | **SUCCESS** |
+| **2026-11-04T23:15:00+05:30** | `ADR` | `tests/e2e/LIVING_DOCUMENT.md` | Formalized ADR-004 defining the Frontend AI Chatbot Adversarial & Generative UI Verification Contract. | **SUCCESS** |
 
 ---
 
