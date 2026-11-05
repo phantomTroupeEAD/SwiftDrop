@@ -15,4 +15,10 @@ var (
 	// Quote-related errors.
 	ErrQuoteExpired = errors.New("pricing quote has expired")
 	ErrInvalidQuote = errors.New("invalid pricing quote")
+
+	// Money-related errors.
+	ErrInvalidMoney     = errors.New("invalid monetary amount")
+	ErrInvalidCurrency  = errors.New("unsupported currency")
+	ErrCurrencyMismatch = errors.New("cannot operate on different currencies")
+	ErrMoneyOverflow    = errors.New("monetary calculation overflow")
 )
