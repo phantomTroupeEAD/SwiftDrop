@@ -165,6 +165,9 @@ func TestCalculateWeightInvalidInputs(t *testing.T) {
 			if !errors.Is(err, tt.expectedErr) {
 				t.Errorf(
 					"error = %v, want %v",
+
+
+					
 					err,
 					tt.expectedErr,
 				)
