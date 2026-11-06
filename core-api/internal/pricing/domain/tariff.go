@@ -71,17 +71,28 @@ func (t Tariff) isSupportedServiceLevel() bool {
 }
 
 // ServiceMultiplier returns the multiplier defined for the service level.
-func (t Tariff) ServiceMultiplier() (float64, error) {
+
+func (t Tariff) ServiceMultiplierRatio() (int64, int64, error) {
 	switch t.ServiceLevel {
 	case ServiceLevelStandard:
-		return 1.0, nil
+		return 1, 1, nil
 	case ServiceLevelExpress:
-		return 1.5, nil
+		return 3, 2, nil
 	case ServiceLevelSameDay:
-		return 2.0, nil
+		return 2, 1, nil
 	default:
-		return 0, ErrInvalidTariff
+		return 0, 0, ErrInvalidTariff
 	}
+}
+
+// ServiceMultiplier returns the multiplier as a float for display purposes.
+func (t Tariff) ServiceMultiplier() (float64, error) {
+	numerator, denominator, err := t.ServiceMultiplierRatio()
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(numerator) / float64(denominator), nil
 }
 
 // IsEffectiveAt checks whether the tariff is active at the given time.
