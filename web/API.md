@@ -1,5 +1,9 @@
 # SwiftDrop Web Application — Consumed API Specifications & Client Contracts
 
+Clean UI update (6 November 2026): presentation cleanup introduces no HTTP contract changes. Booking confirmation, order import and tracking lookup remain unconnected and report that outcome on activation. Quote values are fixed sample data; tracking samples do not mirror typed lookup numbers or private booking addresses. No simulated live-connection state is presented as a real service connection.
+
+Theme-preview update (6 November 2026): the Option 3 signature showcase makes no network requests and introduces no API changes. Its sample booking and tracking forms only update a local status message. It is not evidence of backend integration.
+
 > **Workspace:** `web/`  
 > **Target Audience:** Frontend Developers (Members 6 & 7), QA Engineers (Member 10), and Backend Service Owners  
 > **Base Path Variable:** `VITE_API_BASE_URL` (defaults to `/api/v1` via Traefik Gateway)  
@@ -382,3 +386,9 @@ Every interactive form element, trigger button, and status indicator maintains a
 | Tracking Status | `data-testid="tracking-status-badge"` | Current lifecycle badge |
 | Batch CSV Input | `data-testid="batch-csv-file-input"` | Merchant CSV file input |
 | One-Time Key Copy | `data-testid="one-time-key-copy-btn"` | Copies raw API key once |
+
+## Implementation checkpoint — 5 November 2026
+
+This document describes consumed API contracts, not proof that those workflows are integrated. The M6 customer and merchant dashboards currently render prototype data: quotes are calculated locally, booking/receipt actions show alerts, tracking is static, CSV browsing is unwired, and the example key is not an issued one-time credential. These must be replaced with approved service calls before acceptance.
+
+The testability foundation adds DOM selectors and accessible field labels only; it changes no HTTP request, response, authentication or backend contract. See [test-ids.md](test-ids.md) for implemented versus reserved selectors and [design.md](design.md) for the visual baseline. Shared login integration remains a coordinated M6/M7 task.

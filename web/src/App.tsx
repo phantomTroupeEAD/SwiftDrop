@@ -7,6 +7,7 @@ import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
 import { MerchantDashboard } from '@/features/dashboards/MerchantDashboard';
 import { CustomerDashboard } from '@/features/dashboards/CustomerDashboard';
+import { DesignPreviewPage } from '@/features/customer-merchant/preview/DesignPreviewPage';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -40,6 +41,10 @@ export const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/auth/login" element={<LoginPage />} />
+
+      {/* Visual Foundation & Design Preview (Unauthenticated evaluation studio) */}
+      <Route path="/design-preview" element={<DesignPreviewPage />} />
+      <Route path="/preview/design" element={<DesignPreviewPage />} />
 
       {/* 5 Distinct Mock Pages for Each Role */}
       <Route

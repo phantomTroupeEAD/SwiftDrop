@@ -30,6 +30,7 @@ export const CustomerDashboard: React.FC = () => {
       title="Customer Self-Service Parcel Portal"
       subtitle="Book doorstep parcel pickup, calculate delivery tariffs, track live shipment milestones, and download receipts."
     >
+      <section data-testid="customer-dashboard" className="space-y-5">
       {/* 4 Stat Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
@@ -85,6 +86,7 @@ export const CustomerDashboard: React.FC = () => {
       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-5">
         <div className="flex border-b border-slate-800 pb-3 gap-2">
           <button
+            data-testid="customer-track-tab"
             onClick={() => setActiveTab('TRACK')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'TRACK'
@@ -95,6 +97,7 @@ export const CustomerDashboard: React.FC = () => {
             Live Shipment Tracker
           </button>
           <button
+            data-testid="customer-book-tab"
             onClick={() => setActiveTab('BOOK')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'BOOK'
@@ -105,6 +108,7 @@ export const CustomerDashboard: React.FC = () => {
             Book New Parcel Pickup
           </button>
           <button
+            data-testid="customer-history-tab"
             onClick={() => setActiveTab('HISTORY')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'HISTORY'
@@ -118,18 +122,18 @@ export const CustomerDashboard: React.FC = () => {
 
         {/* Tab 1: Live Tracker */}
         {activeTab === 'TRACK' && (
-          <div className="space-y-4">
+          <div data-testid="customer-tracking-panel" className="space-y-4">
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
                     Tracking Number
                   </span>
-                  <div className="text-lg font-mono font-bold text-blue-400">
+                  <div data-testid="customer-demo-tracking-number" className="text-lg font-mono font-bold text-blue-400">
                     SD-20261030-99801
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30 w-fit">
+                <span data-testid="customer-demo-tracking-status" className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30 w-fit">
                   OUT FOR DELIVERY
                 </span>
               </div>
@@ -162,27 +166,33 @@ export const CustomerDashboard: React.FC = () => {
 
         {/* Tab 2: Book Parcel Wizard */}
         {activeTab === 'BOOK' && (
-          <div className="space-y-4 text-xs">
+          <div data-testid="customer-booking-panel" className="space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="font-medium text-slate-300">Pickup Address</label>
+                <label htmlFor="booking-pickup-address" className="font-medium text-slate-300">Pickup Address</label>
                 <input
+                  id="booking-pickup-address"
+                  data-testid="booking-pickup-address"
                   type="text"
                   defaultValue="24 Peradeniya Road, Kandy"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs"
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-slate-300">Destination Address</label>
+                <label htmlFor="booking-address-input" className="font-medium text-slate-300">Destination Address</label>
                 <input
+                  id="booking-address-input"
+                  data-testid="booking-address-input"
                   type="text"
                   defaultValue="42 Galle Road, Colombo 04"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs"
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-slate-300">Package Weight (kg)</label>
+                <label htmlFor="booking-weight-input" className="font-medium text-slate-300">Package Weight (kg)</label>
                 <input
+                  id="booking-weight-input"
+                  data-testid="booking-weight-input"
                   type="number"
                   value={weightKg}
                   onChange={(e) => setWeightKg(e.target.value)}
@@ -190,8 +200,10 @@ export const CustomerDashboard: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="font-medium text-slate-300">Service Level</label>
+                <label htmlFor="booking-service-level" className="font-medium text-slate-300">Service Level</label>
                 <select
+                  id="booking-service-level"
+                  data-testid="booking-service-level"
                   value={serviceLevel}
                   onChange={(e) => setServiceLevel(e.target.value as any)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs"
@@ -209,11 +221,12 @@ export const CustomerDashboard: React.FC = () => {
                 <span className="text-[10px] text-slate-400 uppercase font-semibold">
                   Estimated Delivery Fee
                 </span>
-                <div className="text-xl font-bold text-emerald-400 mt-0.5">{quoteFee}</div>
+                <div data-testid="customer-demo-quote" className="text-xl font-bold text-emerald-400 mt-0.5">{quoteFee}</div>
                 <div className="text-[10px] text-slate-500">Includes zone base fee & weight surcharge</div>
               </div>
               <div className="flex gap-2">
                 <button
+                  data-testid="customer-demo-recalculate-btn"
                   type="button"
                   onClick={calculateQuote}
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-semibold text-xs border border-slate-700 cursor-pointer"
@@ -221,6 +234,7 @@ export const CustomerDashboard: React.FC = () => {
                   Recalculate
                 </button>
                 <button
+                  data-testid="customer-demo-book-btn"
                   type="button"
                   onClick={() => alert("Booking submitted! Tracking number generated.")}
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -235,7 +249,7 @@ export const CustomerDashboard: React.FC = () => {
 
         {/* Tab 3: History & Receipts */}
         {activeTab === 'HISTORY' && (
-          <div className="overflow-x-auto">
+          <div data-testid="customer-history-panel" className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                 <tr>
@@ -252,13 +266,15 @@ export const CustomerDashboard: React.FC = () => {
                   { id: 'SD-20261020-11204', recipient: 'Ruwan Gamage (Galle)', date: '20 Oct 2026', fee: 'LKR 820.00' },
                   { id: 'SD-20261012-99812', recipient: 'Saman Kumara (Kandy)', date: '12 Oct 2026', fee: 'LKR 650.00' },
                 ].map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-800/30">
+                  <tr key={row.id} data-testid="customer-history-row" data-tracking-number={row.id} className="hover:bg-slate-800/30">
                     <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{row.id}</td>
                     <td className="py-2.5 px-3 text-slate-200">{row.recipient}</td>
                     <td className="py-2.5 px-3 text-slate-400">{row.date}</td>
                     <td className="py-2.5 px-3 font-semibold text-emerald-400">{row.fee}</td>
                     <td className="py-2.5 px-3 text-right">
                       <button
+                        data-testid="customer-demo-receipt-btn"
+                        aria-label={`Download receipt for ${row.id}`}
                         onClick={() => alert(`Downloading receipt for ${row.id}...`)}
                         className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
                         title="Download Receipt PDF"
@@ -273,6 +289,7 @@ export const CustomerDashboard: React.FC = () => {
           </div>
         )}
       </div>
+      </section>
     </DashboardLayout>
   );
 };

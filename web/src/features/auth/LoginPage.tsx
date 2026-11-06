@@ -267,6 +267,18 @@ export const LoginPage: React.FC = () => {
               Sign in with Google
             </button>
 
+            {/* Design Preview Entry Link */}
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                data-testid="login-theme-preview-link"
+                onClick={() => navigate('/design-preview')}
+                className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-blue-400 font-medium transition cursor-pointer"
+              >
+                <span>Preview Customer &amp; Merchant Portal &rarr;</span>
+              </button>
+            </div>
+
             {/* Register Link */}
             <p className="text-center text-xs text-slate-400">
               Don't have an account?{' '}
