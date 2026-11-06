@@ -13,8 +13,9 @@ var (
 	ErrInvalidTariff  = errors.New("invalid pricing tariff")
 
 	// Quote-related errors.
-	ErrQuoteExpired = errors.New("pricing quote has expired")
-	ErrInvalidQuote = errors.New("invalid pricing quote")
+	ErrQuoteExpired     = errors.New("pricing quote has expired")
+	ErrInvalidQuote     = errors.New("invalid pricing quote")
+	ErrQuoteAlreadyUsed = errors.New("pricing quote has already been used")
 
 	// Money-related errors.
 	ErrInvalidMoney     = errors.New("invalid monetary amount")
