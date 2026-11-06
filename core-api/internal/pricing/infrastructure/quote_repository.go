@@ -74,12 +74,12 @@ func (r *PostgresQuoteRepository) Save(ctx context.Context, quote domain.Quote) 
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return fmt.Errorf("%w: %v", ErrDuplicateQuote, err)
+			return fmt.Errorf("%w: %w", ErrDuplicateQuote, err)
 		}
 		if errors.Is(err, ErrDuplicateQuote) ||
 			strings.Contains(strings.ToLower(err.Error()), "duplicate") ||
 			strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return fmt.Errorf("%w: %v", ErrDuplicateQuote, err)
+			return fmt.Errorf("%w: %w", ErrDuplicateQuote, err)
 		}
 		return fmt.Errorf("save pricing quote to postgres: %w", err)
 	}
