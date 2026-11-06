@@ -1,0 +1,47 @@
+package application
+
+import "github.com/swiftdrop/core-api/internal/parcels/domain"
+
+// AddressDTO encapsulates the address details supplied in a booking command.
+type AddressDTO struct {
+	ContactName  string
+	ContactPhone string
+	StreetLine1  string
+	StreetLine2  string
+	City         string
+	PostalCode   string
+	ZoneID       string
+	Instructions string
+}
+
+// DimensionsDTO encapsulates the physical dimensions of a package in centimeters.
+type DimensionsDTO struct {
+	LengthCm float64
+	WidthCm  float64
+	HeightCm float64
+}
+
+// BookParcelCommand contains only authoritative caller-supplied booking inputs.
+// In accordance with security and data-integrity rules, callers CANNOT supply
+// delivery fees, tariff versions, chargeable weights, or service-level prices.
+type BookParcelCommand struct {
+	QuoteID             string
+	SenderID            string
+	MerchantID          *string
+	RecipientName       string
+	RecipientPhone      string
+	WeightKg            float64
+	Dimensions          DimensionsDTO
+	PickupAddress       AddressDTO
+	DropoffAddress      AddressDTO
+	ItemDescription     string
+	SpecialInstructions string
+	CorrelationID       string
+}
+
+// BookParcelResult returns the resulting domain aggregate root and initial audit trail.
+type BookParcelResult struct {
+	Parcel        domain.Parcel
+	StatusHistory domain.StatusHistoryEntry
+}
+
