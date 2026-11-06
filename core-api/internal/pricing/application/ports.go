@@ -12,9 +12,8 @@ import (
 type TariffRepository interface {
 	FindApplicable(
 		ctx context.Context,
-		pickupZone string,
-		destinationZone string,
-		serviceLevel domain.ServiceLevel,
+		originZoneID string,
+		destinationZoneID string,
 		at time.Time,
 	) (domain.Tariff, error)
 }

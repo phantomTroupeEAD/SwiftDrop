@@ -13,23 +13,59 @@ const (
 	ServiceLevelSameDay  ServiceLevel = "SAME_DAY"
 )
 
+// Validate checks whether the service level is a supported operational tier.
+func (s ServiceLevel) Validate() error {
+	switch s {
+	case ServiceLevelStandard, ServiceLevelExpress, ServiceLevelSameDay:
+		return nil
+	default:
+		return ErrInvalidServiceLevel
+	}
+}
+
+// MultiplierRatio returns the exact integer numerator and denominator for the service level.
+func (s ServiceLevel) MultiplierRatio() (int64, int64, error) {
+	switch s {
+	case ServiceLevelStandard:
+		return 1, 1, nil
+	case ServiceLevelExpress:
+		return 3, 2, nil
+	case ServiceLevelSameDay:
+		return 2, 1, nil
+	default:
+		return 0, 0, ErrInvalidServiceLevel
+	}
+}
+
+// Multiplier returns the decimal representation of the multiplier for display purposes.
+func (s ServiceLevel) Multiplier() (float64, error) {
+	numerator, denominator, err := s.MultiplierRatio()
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(numerator) / float64(denominator), nil
+}
+
 type Tariff struct {
-	ID              string
-	PickupZone      string
-	DestinationZone string
-	BaseFee         Money
-	PerKgRate       Money
-	ServiceLevel    ServiceLevel
-	EffectiveFrom   time.Time
-	EffectiveUntil  *time.Time
-	Version         int
+	ID                string
+	OriginZoneID      string
+	DestinationZoneID string
+	BaseFee           Money
+	PerKgRate         Money
+	EffectiveFrom     time.Time
+	EffectiveUntil    *time.Time
+	IsActive          bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Version           int
 }
 
 // Validate checks whether the tariff contains valid pricing configuration.
 func (t Tariff) Validate() error {
 	if strings.TrimSpace(t.ID) == "" ||
-		strings.TrimSpace(t.PickupZone) == "" ||
-		strings.TrimSpace(t.DestinationZone) == "" {
+		strings.TrimSpace(t.OriginZoneID) == "" ||
+		strings.TrimSpace(t.DestinationZoneID) == "" {
 		return ErrInvalidTariff
 	}
 
@@ -38,10 +74,6 @@ func (t Tariff) Validate() error {
 	}
 
 	if err := t.PerKgRate.Validate(); err != nil {
-		return ErrInvalidTariff
-	}
-
-	if !t.isSupportedServiceLevel() {
 		return ErrInvalidTariff
 	}
 
@@ -58,46 +90,20 @@ func (t Tariff) Validate() error {
 		return ErrInvalidTariff
 	}
 
+	if !t.CreatedAt.IsZero() && !t.UpdatedAt.IsZero() && t.UpdatedAt.Before(t.CreatedAt) {
+		return ErrInvalidTariff
+	}
+
 	return nil
 }
 
-func (t Tariff) isSupportedServiceLevel() bool {
-	switch t.ServiceLevel {
-	case ServiceLevelStandard, ServiceLevelExpress, ServiceLevelSameDay:
-		return true
-	default:
+// IsEffectiveAt checks whether the tariff is active at the given time.
+// The start is inclusive, the end is exclusive, and IsActive must be true.
+func (t Tariff) IsEffectiveAt(at time.Time) bool {
+	if !t.IsActive {
 		return false
 	}
-}
 
-// ServiceMultiplier returns the multiplier defined for the service level.
-
-func (t Tariff) ServiceMultiplierRatio() (int64, int64, error) {
-	switch t.ServiceLevel {
-	case ServiceLevelStandard:
-		return 1, 1, nil
-	case ServiceLevelExpress:
-		return 3, 2, nil
-	case ServiceLevelSameDay:
-		return 2, 1, nil
-	default:
-		return 0, 0, ErrInvalidTariff
-	}
-}
-
-// ServiceMultiplier returns the multiplier as a float for display purposes.
-func (t Tariff) ServiceMultiplier() (float64, error) {
-	numerator, denominator, err := t.ServiceMultiplierRatio()
-	if err != nil {
-		return 0, err
-	}
-
-	return float64(numerator) / float64(denominator), nil
-}
-
-// IsEffectiveAt checks whether the tariff is active at the given time.
-// The start is inclusive and the end is exclusive.
-func (t Tariff) IsEffectiveAt(at time.Time) bool {
 	if at.Before(t.EffectiveFrom) {
 		return false
 	}

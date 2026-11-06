@@ -8,27 +8,28 @@
 ---
 
 ## 1. Module Overview & Responsibilities
-The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), pickup and destination zones, and chargeable weight bands. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
+The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), origin and destination zones, and requested service levels. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
 
 ### Key Responsibilities:
-- Complete tariff lookup and rule evaluation:
-  - $\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$.
-  - Complete tariff represents the total fee; there is no separate base fee, per-kg charge, distance fee, or service multiplier (provisional proposal diverging from legacy `pricing-rules.md`).
-- Option A Volumetric Threshold Policy:
-  - Actual weight $\le 1.00\text{ kg}$: dimensions do not affect price; $\text{Chargeable Weight} = \text{Actual Weight}$.
-  - Actual weight $> 1.00\text{ kg}$: dimensions in cm are required; $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{6000}$; $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
-- Weight Band Selection (7 non-overlapping bands up to 30 kg):
-  - Band 1: $0 < W \le 0.5\text{ kg}$
-  - Band 2: $0.5 < W \le 1.0\text{ kg}$
-  - Band 3: $1.0 < W \le 2.0\text{ kg}$
-  - Band 4: $2.0 < W \le 5.0\text{ kg}$
-  - Band 5: $5.0 < W \le 10.0\text{ kg}$
-  - Band 6: $10.0 < W \le 20.0\text{ kg}$
-  - Band 7: $20.0 < W \le 30.0\text{ kg}$
-- Maximum limits: Proposed maximum actual weight and chargeable weight is 30.00 kg.
+- Geographic tariff lookup and rule evaluation:
+  - Tariffs represent geographic zone pricing (`OriginZoneID`, `DestinationZoneID`) independent of service level.
+  - Base fee covers the first 1 kg.
+  - Additional weight is charged proportionally: $\text{ExtraKg} = \max(0, \text{ChargeableWeightKg} - 1)$.
+  - $\text{WeightFee} = \text{ExtraKg} \times \text{PerKgRate}$.
+  - $\text{Subtotal} = \text{BaseFee} + \text{WeightFee}$.
+- Service Level Multipliers:
+  - Multipliers are applied separately by the pricing calculator.
+  - `STANDARD`: multiplier ratio 1/1 (1.0x).
+  - `EXPRESS`: multiplier ratio 3/2 (1.5x).
+  - `SAME_DAY`: multiplier ratio 2/1 (2.0x).
+  - $\text{FinalFee} = \text{Subtotal} \times \text{ServiceMultiplier}$ (rounded half-up to nearest LKR minor unit / cent).
+- Volumetric Divisor Policy:
+  - $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{5000}$.
+  - $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
+  - Mandatory dimensions and actual weight; maximum chargeable weight is 30.00 kg.
 - Quote persistence in `pricing_quotes` with 15-minute expiration timestamp (`expires_at = created_at + 15m`).
 - Backend-enforced expiration check (`current_time >= expires_at` is expired).
-- Safe failure: Returns controlled `pricing_unavailable` if no tariff exists; fails safely on ambiguous multiple matches. Never fabricates a price.
+- Safe failure: Returns controlled `ErrTariffNotFound` if no tariff exists. Never fabricates a price.
 - In-process domain service interface consumed by `internal/parcels`.
 - Public/authenticated fee estimation endpoint `POST /api/v1/pricing/quotes`.
 - Candidate REST CRUD endpoints for administrative tariff management (`/api/v1/admin/pricing-rules`) served for Member 7's Admin UI.
@@ -38,9 +39,9 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ## 2. Domain Invariants & Business Rules
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
-3. **Deterministic Complete Tariff:** Given identical zone pairs and weight band, tariff lookup returns the unique configured fee for that rule version — *Confirmed Project Standard*.
-4. **Option A Threshold & Volumetric Divisor (6000):** Actual weight $\le 1\text{ kg}$ uses actual weight only. Weight $> 1\text{ kg}$ requires dimensions and uses divisor 6000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{6000}$ — *Proposed Baseline (Pending Team Ratification)*.
-5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Proposed Baseline (Pending Team Ratification)*.
+3. **Approved Option A Architecture:** `Tariff` represents geographic pricing only (`OriginZoneID`, `DestinationZoneID`, `BaseFee`, `PerKgRate`, `Version`, `IsActive`, `EffectiveFrom`, `EffectiveUntil`). Service levels and multipliers are applied independently during calculation to eliminate duplicate pricing rules.
+4. **Volumetric Divisor (5000 cm³/kg):** Dimensions in cm are required for all parcels. $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$, capped at 30 kg — *Confirmed Project Standard*.
+5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Project Standard*.
 6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
 
 ---
@@ -48,9 +49,9 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ## 3. Layer Breakdown
 ```
 internal/pricing/
-├── domain/                  # Money VO (LKR cents), Tariff entity, FeeCalculationPolicy, domain errors
-├── application/             # CalculateQuote use case & PricingCalculator interface
-├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository
+├── domain/                  # Money VO (LKR cents), Tariff entity, ServiceLevel VO, Quote aggregate, Calculator, domain errors
+├── application/             # GenerateQuoteUseCase, ports (TariffRepository, QuoteRepository, Clock, QuoteIDGenerator)
+├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository (pending migration)
 └── transport/               # HTTP handler (/api/v1/pricing/quotes) and request/response DTOs
 ```
 
@@ -58,8 +59,8 @@ internal/pricing/
 
 ## 4. Database Ownership & Migrations
 - `000004_create_pricing_rules.up.sql`:
-  - `pricing_rules`: Tariff configuration (ID, version, pickup/destination zones, weight_band_id, min/max weight bounds, fee_cents, currency, effective dates, active flag).
-  - `pricing_quotes`: Pre-booking quotation cache (ID, rule ID/version, fee in cents, input snapshot JSONB, 15m expiration timestamp, optional accepted_parcel_id).
+  - `pricing_rules`: Tariff configuration (ID, version, origin/destination zones, base_fee_cents, per_kg_rate_cents, currency, effective dates, active flag).
+  - `pricing_quotes`: Pre-booking quotation cache (ID, rule ID/version, service_level, fee in cents, input snapshot, 15m expiration timestamp, optional accepted_parcel_id).
 
 ---
 
@@ -70,6 +71,7 @@ internal/pricing/
 | 2026-10-25 | Aligned with Audit v2.0.0: Standardized on POST /api/v1/pricing/quotes, integer LKR cents, 15-minute quote validity, and migration 000004 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
+| 2026-11-06 | Task 1: Refactored Tariff domain model to Option A architecture. Removed ServiceLevel from Tariff; renamed Pickup/DestinationZone to Origin/DestinationZoneID; added IsActive, CreatedAt, UpdatedAt; moved multipliers to ServiceLevel; updated Calculator and GenerateQuoteUseCase to support independent service level pricing | Member 2 |
 
 ---
 

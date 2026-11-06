@@ -9,8 +9,9 @@ var (
 	ErrChargeableWeightExceeded = errors.New("chargeable weight exceeds maximum allowed weight")
 
 	// Pricing rule errors.
-	ErrTariffNotFound = errors.New("no applicable pricing tariff found")
-	ErrInvalidTariff  = errors.New("invalid pricing tariff")
+	ErrTariffNotFound      = errors.New("no applicable pricing tariff found")
+	ErrInvalidTariff       = errors.New("invalid pricing tariff")
+	ErrInvalidServiceLevel = errors.New("invalid service level")
 
 	// Quote-related errors.
 	ErrQuoteExpired     = errors.New("pricing quote has expired")

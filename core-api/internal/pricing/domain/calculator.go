@@ -7,10 +7,14 @@ import (
 )
 
 // CalculateDeliveryFee calculates the final delivery fee using
-// proportional additional-weight charging.
-func CalculateDeliveryFee(tariff Tariff, weight Weight) (Money, error) {
+// proportional additional-weight charging and the requested service-level multiplier.
+func CalculateDeliveryFee(tariff Tariff, weight Weight, serviceLevel ServiceLevel) (Money, error) {
 	if err := tariff.Validate(); err != nil {
 		return Money{}, ErrInvalidTariff
+	}
+
+	if err := serviceLevel.Validate(); err != nil {
+		return Money{}, err
 	}
 
 	if err := validateCalculatedWeight(weight); err != nil {
@@ -38,7 +42,7 @@ func CalculateDeliveryFee(tariff Tariff, weight Weight) (Money, error) {
 	subtotal := new(big.Rat).Add(baseFee, weightFee)
 
 	// Obtain the exact service-level multiplier.
-	numerator, denominator, err := tariff.ServiceMultiplierRatio()
+	numerator, denominator, err := serviceLevel.MultiplierRatio()
 	if err != nil {
 		return Money{}, err
 	}

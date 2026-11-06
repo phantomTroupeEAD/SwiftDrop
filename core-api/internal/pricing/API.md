@@ -16,9 +16,9 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
 ### Request Body
 ```json
 {
-  "pickup_zone_id": "ZONE-WESTERN-01",
-  "dropoff_zone_id": "ZONE-CENTRAL-01",
-  "weight_kg": 2.50,
+  "origin_zone_id": "ZONE-WESTERN-01",
+  "destination_zone_id": "ZONE-CENTRAL-01",
+  "actual_weight_kg": 2.50,
   "dimensions": {
     "length_cm": 30.0,
     "width_cm": 25.0,
@@ -27,7 +27,7 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
   "service_level": "STANDARD"
 }
 ```
-*Note: Dimensions are optional if `weight_kg <= 1.0` (Option A threshold policy); dimensions are strictly required if `weight_kg > 1.0`.*
+*Note: Dimensions and actual weight are mandatory. Volumetric weight is calculated using divisor 5000 cm³/kg.*
 
 ### Success Response (`201 Created`)
 ```json
@@ -39,24 +39,27 @@ Calculates the complete delivery fee tariff based on pickup/dropoff zones and ch
   "currency": "LKR",
   "breakdown": {
     "actual_weight_kg": 2.50,
-    "volumetric_weight_kg": 1.875,
+    "volumetric_weight_kg": 2.25,
     "chargeable_weight_kg": 2.50,
-    "weight_band_id": 4,
-    "weight_band_label": "2 < W <= 5 kg",
-    "band_min_weight_kg": 2.00,
-    "band_max_weight_kg": 5.00
+    "base_fee_cents": 35000,
+    "per_kg_rate_cents": 8000,
+    "weight_fee_cents": 12000,
+    "service_multiplier": 1.0
   },
-  "fee_cents": 55000,
-  "expires_at": "2026-10-25T14:45:00Z",
-  "created_at": "2026-10-25T14:30:00Z"
+  "fee_cents": 47000,
+  "expires_at": "2026-11-06T10:15:00Z",
+  "created_at": "2026-11-06T10:00:00Z"
 }
 ```
 
 > [!NOTE]
-> **Provisional Pricing Proposal Notice (Pending Team Ratification):**
-> Delivery fee is a proposed fixed complete tariff: `delivery_fee = tariff(pickup_zone_id, destination_zone_id, weight_band_id)`. There is no separate base fee, per-kilogram charge, distance fee, or service multiplier. Volumetric divisor is 6000 cm³/kg. Chargeable weight uses Option A (actual weight only when actual weight $\le 1\text{ kg}$; $\max(\text{actual}, \text{volumetric})$ when $> 1\text{ kg}$). Proposed maximum actual and chargeable weight is 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
->
-> *Conflict & Arithmetic Notice:* This proposed model diverges from `docs/contracts/pricing-rules.md`, which defines a formula with base fee (35000), per-kg surcharge (8000), service multiplier, and divisor 5000 (yielding 51000 cents for 2.5 kg Metro->Metro, or 55000 under rate 10000). The 55000 cents in this example represents an illustrative flat Band 4 complete tariff pending formal team ratification.
+> **Approved Option A Pricing Architecture:**
+> Delivery fee is calculated using geographic tariff (base fee covering first 1 kg + proportional additional weight rate) and service-level multiplier:
+> `ExtraKg = max(0, ChargeableWeightKg - 1)`
+> `WeightFee = ExtraKg * PerKgRate`
+> `FinalFee = (BaseFee + WeightFee) * ServiceMultiplier`
+> Service multipliers: STANDARD = 1.0x (1/1), EXPRESS = 1.5x (3/2), SAME_DAY = 2.0x (2/1).
+> Volumetric divisor is 5000 cm³/kg. Chargeable weight is $\max(\text{actual}, \text{volumetric})$, capped at 30 kg. Quote validity is 15 minutes (`expires_at = created_at + 15m`).
 
 ### Error Responses
 - `400 Bad Request`: `PRICING_INVALID_INPUT` — Non-positive dimension, weight $\le 0$, or malformed JSON.

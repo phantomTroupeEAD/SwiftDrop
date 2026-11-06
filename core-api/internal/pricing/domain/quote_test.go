@@ -35,6 +35,7 @@ func TestNewQuote(t *testing.T) {
 		"quote-001",
 		validQuoteTariff(),
 		Weight{ActualKg: 2, VolumetricKg: 2.5, ChargeableKg: 2.5},
+		ServiceLevelStandard,
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
 	)
@@ -55,6 +56,10 @@ func TestNewQuote(t *testing.T) {
 		t.Errorf("expected tariff version 1, got %d", quote.TariffVersion)
 	}
 
+	if quote.ServiceLevel != ServiceLevelStandard {
+		t.Errorf("expected service level %s, got %s", ServiceLevelStandard, quote.ServiceLevel)
+	}
+
 	if !quote.ExpiresAt.Equal(createdAt.Add(15 * time.Minute)) {
 		t.Errorf("expected quote to expire after 15 minutes")
 	}
@@ -69,6 +74,7 @@ func TestNewQuoteRejectsInactiveTariff(t *testing.T) {
 		"quote-001",
 		tariff,
 		Weight{ChargeableKg: 2},
+		ServiceLevelStandard,
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
 	)
@@ -85,6 +91,24 @@ func TestNewQuoteRejectsExcessiveWeight(t *testing.T) {
 		"quote-001",
 		validQuoteTariff(),
 		Weight{ChargeableKg: 31},
+		ServiceLevelStandard,
+		Money{Amount: 51000, Currency: CurrencyLKR},
+		createdAt,
+	)
+
+	if err != ErrInvalidQuote {
+		t.Fatalf("expected ErrInvalidQuote, got: %v", err)
+	}
+}
+
+func TestNewQuoteRejectsInvalidServiceLevel(t *testing.T) {
+	createdAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+
+	_, err := NewQuote(
+		"quote-001",
+		validQuoteTariff(),
+		Weight{ChargeableKg: 2},
+		ServiceLevel("INVALID"),
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
 	)

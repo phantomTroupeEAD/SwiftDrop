@@ -19,15 +19,20 @@ type Quote struct {
 	UsedAt             *time.Time
 }
 
-// NewQuote creates a quote using the selected tariff and calculated weight.
+// NewQuote creates a quote using the selected tariff, calculated weight, and service level.
 func NewQuote(
 	id string,
 	tariff Tariff,
 	weight Weight,
+	serviceLevel ServiceLevel,
 	fee Money,
 	createdAt time.Time,
 ) (Quote, error) {
 	if err := tariff.Validate(); err != nil {
+		return Quote{}, ErrInvalidQuote
+	}
+
+	if err := serviceLevel.Validate(); err != nil {
 		return Quote{}, ErrInvalidQuote
 	}
 
@@ -50,7 +55,7 @@ func NewQuote(
 		TariffID:           tariff.ID,
 		TariffVersion:      tariff.Version,
 		ChargeableWeightKg: weight.ChargeableKg,
-		ServiceLevel:       tariff.ServiceLevel,
+		ServiceLevel:       serviceLevel,
 		Fee:                fee,
 		CreatedAt:          createdAt,
 		ExpiresAt:          createdAt.Add(QuoteValidity),
@@ -76,9 +81,7 @@ func (q Quote) Validate() error {
 		return ErrInvalidQuote
 	}
 
-	switch q.ServiceLevel {
-	case ServiceLevelStandard, ServiceLevelExpress, ServiceLevelSameDay:
-	default:
+	if err := q.ServiceLevel.Validate(); err != nil {
 		return ErrInvalidQuote
 	}
 

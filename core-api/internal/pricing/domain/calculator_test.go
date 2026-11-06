@@ -7,14 +7,14 @@ import (
 
 func calculatorTestTariff() Tariff {
 	return Tariff{
-		ID:              "tariff-001",
-		PickupZone:      "COLOMBO",
-		DestinationZone: "GAMPAHA",
-		BaseFee:         Money{Amount: 35000, Currency: CurrencyLKR},
-		PerKgRate:       Money{Amount: 8000, Currency: CurrencyLKR},
-		ServiceLevel:    ServiceLevelStandard,
-		EffectiveFrom:   validTariff().EffectiveFrom,
-		Version:         1,
+		ID:                "tariff-001",
+		OriginZoneID:      "COLOMBO",
+		DestinationZoneID: "GAMPAHA",
+		BaseFee:           Money{Amount: 35000, Currency: CurrencyLKR},
+		PerKgRate:         Money{Amount: 8000, Currency: CurrencyLKR},
+		EffectiveFrom:     validTariff().EffectiveFrom,
+		Version:           1,
+		IsActive:          true,
 	}
 }
 
@@ -94,9 +94,8 @@ func TestCalculateDeliveryFee(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tariff := calculatorTestTariff()
-			tariff.ServiceLevel = test.serviceLevel
 
-			actual, err := CalculateDeliveryFee(tariff, test.weight)
+			actual, err := CalculateDeliveryFee(tariff, test.weight, test.serviceLevel)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -120,7 +119,6 @@ func TestCalculateDeliveryFeeRoundsHalfUp(t *testing.T) {
 	tariff := calculatorTestTariff()
 	tariff.BaseFee = Money{Amount: 1, Currency: CurrencyLKR}
 	tariff.PerKgRate = Money{Amount: 0, Currency: CurrencyLKR}
-	tariff.ServiceLevel = ServiceLevelExpress
 
 	weight := Weight{
 		ActualKg:     1,
@@ -128,7 +126,7 @@ func TestCalculateDeliveryFeeRoundsHalfUp(t *testing.T) {
 		ChargeableKg: 1,
 	}
 
-	actual, err := CalculateDeliveryFee(tariff, weight)
+	actual, err := CalculateDeliveryFee(tariff, weight, ServiceLevelExpress)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -183,6 +181,7 @@ func TestCalculateDeliveryFeeRejectsInvalidWeight(t *testing.T) {
 			_, err := CalculateDeliveryFee(
 				calculatorTestTariff(),
 				test.weight,
+				ServiceLevelStandard,
 			)
 
 			if err != ErrInvalidWeight &&
@@ -195,16 +194,29 @@ func TestCalculateDeliveryFeeRejectsInvalidWeight(t *testing.T) {
 
 func TestCalculateDeliveryFeeRejectsInvalidTariff(t *testing.T) {
 	tariff := calculatorTestTariff()
-	tariff.ServiceLevel = "OVERNIGHT"
+	tariff.OriginZoneID = ""
 
 	weight := Weight{
 		ActualKg: 1, VolumetricKg: 1, ChargeableKg: 1,
 	}
 
-	_, err := CalculateDeliveryFee(tariff, weight)
+	_, err := CalculateDeliveryFee(tariff, weight, ServiceLevelStandard)
 
 	if err != ErrInvalidTariff {
 		t.Fatalf("expected ErrInvalidTariff, got: %v", err)
+	}
+}
+
+func TestCalculateDeliveryFeeRejectsInvalidServiceLevel(t *testing.T) {
+	tariff := calculatorTestTariff()
+	weight := Weight{
+		ActualKg: 1, VolumetricKg: 1, ChargeableKg: 1,
+	}
+
+	_, err := CalculateDeliveryFee(tariff, weight, ServiceLevel("INVALID"))
+
+	if err != ErrInvalidServiceLevel {
+		t.Fatalf("expected ErrInvalidServiceLevel, got: %v", err)
 	}
 }
 
@@ -213,13 +225,12 @@ func TestCalculateDeliveryFeeRejectsOverflow(t *testing.T) {
 	tariff.BaseFee = Money{
 		Amount: maxInt64, Currency: CurrencyLKR,
 	}
-	tariff.ServiceLevel = ServiceLevelSameDay
 
 	weight := Weight{
 		ActualKg: 1, VolumetricKg: 1, ChargeableKg: 1,
 	}
 
-	_, err := CalculateDeliveryFee(tariff, weight)
+	_, err := CalculateDeliveryFee(tariff, weight, ServiceLevelSameDay)
 
 	if err != ErrMoneyOverflow {
 		t.Fatalf("expected ErrMoneyOverflow, got: %v", err)
@@ -236,7 +247,7 @@ func TestCalculateDeliveryFeeRejectsWeightFeeOverflow(t *testing.T) {
 		ActualKg: 2, VolumetricKg: 2, ChargeableKg: 2,
 	}
 
-	_, err := CalculateDeliveryFee(tariff, weight)
+	_, err := CalculateDeliveryFee(tariff, weight, ServiceLevelStandard)
 
 	if err != ErrMoneyOverflow {
 		t.Fatalf("expected ErrMoneyOverflow, got: %v", err)
