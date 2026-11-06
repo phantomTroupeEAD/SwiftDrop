@@ -67,6 +67,7 @@ internal/parcels/
 | 2026-10-25 | Aligned with Audit v2.0.0: Crockford Base32 tracking, JSONB addresses, 9-state machine, integer LKR cents, and migrations 000005 & 000010 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Immutable accepted price snapshot, quote validation, 30 kg operational limits, and backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Added cancellation endpoint `POST /api/v1/parcels/{id}/cancel`, updated `parcel_status_history` fields (`reason_code`, `note`, `RESTRICT`), `caller_scope`, and dual address specification notice | Member 2 |
+| 2026-11-06 | Task 2: Implemented Parcel Management Domain Model (`internal/parcels/domain`). Added `Parcel` aggregate root, 9-state machine (`CREATED` through terminal states), Crockford Base32 tracking number format (`SD-YYYYMMDD-XXXXXX`), immutable address and accepted price snapshots, delivery attempt limit guards (max 3), and status history audit entries | Member 2 |
 
 ---
 
