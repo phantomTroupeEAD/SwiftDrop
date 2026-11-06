@@ -36,26 +36,52 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 ## 3. Layer Breakdown
 ```
 internal/parcels/
-├── domain/                  # Parcel aggregate, TrackingNumber VO, Address VO, Status enum, domain errors
-├── application/             # BookParcel, GetParcelDetails, CancelParcel use cases & repository interfaces
-├── infrastructure/          # PostgresParcelRepository, OutboxAdapter, TrackingNumberGenerator
+├── domain/                  # Parcel aggregate root, TrackingNumber VO, Address VO, Weight & Dimensions, Status enum, domain errors
+├── application/             # BookParcelUseCase, BookParcelCommand, QuoteConsumer, ParcelRepository, StatusHistoryRepository, OutboxWriter
+├── infrastructure/          # PostgresParcelRepository, PostgresStatusHistoryRepository, PostgresQuoteConsumer, CryptoTrackingNumberGenerator
 └── transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
 ```
 
 ---
 
 ## 4. Database Ownership & Migrations
-- `000005_create_parcels_and_quotes.up.sql`:
-  - `parcels`: Primary aggregate table (ID, tracking number, sender ID, JSONB addresses, dimensions, price in cents, status, courier ID, version, timestamps).
-  - `parcel_status_history`: Append-only audit log of all historical transitions with `ON DELETE RESTRICT`.
-  - *Architecture Alignment Item:* Dual Specification accommodates normalized child table `parcel_addresses` if team ratifies relational address persistence over JSONB snapshots.
-- `000010_create_idempotency_keys.up.sql`:
-  - `idempotency_keys`: Keys, `caller_scope`, request hash (SHA-256), cached response status/payload, and 24-hour expiration.
+- **Canonical Migration Directory:** `core-api/migrations/`
+- **Migration Authoring Ownership:** Member 9 (DevOps / Database Migrations)
+- **File Naming Convention:** 14-digit UTC timestamp format `YYYYMMDDHHMMSS_name.up.sql` (e.g., `20261106000002_create_parcel_tables.up.sql`).
+- **Proposed Parcel Schema (Member 9):**
+  - `parcels`: Primary aggregate table:
+    - `id` (`VARCHAR(64)` / `UUID` PK)
+    - `tracking_number` (`VARCHAR(32)` UNIQUE, format `SD-YYYYMMDD-XXXXXX`)
+    - `sender_id` (`VARCHAR(64)` NOT NULL)
+    - `merchant_id` (`VARCHAR(64)` NULL)
+    - `recipient_name` (`VARCHAR(128)` NOT NULL), `recipient_phone` (`VARCHAR(32)` NOT NULL)
+    - `quote_id` (`VARCHAR(64)` NOT NULL)
+    - `pricing_rule_id` (`VARCHAR(64)` NOT NULL), `pricing_rule_version` (`INT` NOT NULL)
+    - `delivery_fee_cents` (`BIGINT` NOT NULL), `currency` (`VARCHAR(3)` NOT NULL)
+    - `origin_zone_id` (`VARCHAR(64)` NOT NULL), `destination_zone_id` (`VARCHAR(64)` NOT NULL)
+    - `service_level` (`VARCHAR(32)` NOT NULL)
+    - `actual_weight_kg`, `volumetric_weight_kg`, `chargeable_weight_kg` (`NUMERIC(8, 2)` NOT NULL)
+    - `length_cm`, `width_cm`, `height_cm` (`NUMERIC(8, 2)` NOT NULL)
+    - `pickup_address` (`JSONB` NOT NULL), `dropoff_address` (`JSONB` NOT NULL)
+    - `status` (`VARCHAR(32)` NOT NULL DEFAULT 'CREATED')
+    - `delivery_attempts` (`INT` NOT NULL DEFAULT 0)
+    - `version` (`INT` NOT NULL DEFAULT 1)
+    - `created_at` (`TIMESTAMPTZ` NOT NULL), `updated_at` (`TIMESTAMPTZ` NOT NULL)
+  - `parcel_status_history`: Append-only audit log:
+    - `id` (`VARCHAR(64)` / `UUID` PK)
+    - `parcel_id` (`VARCHAR(64)` FK referencing `parcels(id)` ON DELETE RESTRICT)
+    - `from_status` (`VARCHAR(32)` NULL for initial CREATED state)
+    - `to_status` (`VARCHAR(32)` NOT NULL)
+    - `actor_id` (`VARCHAR(64)` NOT NULL), `actor_role` (`VARCHAR(32)` NOT NULL)
+    - `reason` (`TEXT` NOT NULL)
+    - `timestamp` (`TIMESTAMPTZ` NOT NULL)
 
 ---
 
 ## 5. Events Emitted (Transactional Outbox)
-- `parcel.booked.v1`: Published upon successful parcel creation.
+- `parcel.booked.v1`: Published atomically upon successful parcel creation within the booking transaction.
+  - Aggregates: `aggregate_type: "parcel"`, `aggregate_id: parcel.ID`, `aggregate_version: 1`.
+  - Schema: `events.ParcelBookedV1`, canonical payload defined in `application.ParcelBookedPayload`.
 - `parcel.cancelled.v1`: Published when a parcel is cancelled before courier pickup.
 
 ---
@@ -68,6 +94,7 @@ internal/parcels/
 | 2026-10-26 | Integrated Member 2 pricing decisions: Immutable accepted price snapshot, quote validation, 30 kg operational limits, and backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Added cancellation endpoint `POST /api/v1/parcels/{id}/cancel`, updated `parcel_status_history` fields (`reason_code`, `note`, `RESTRICT`), `caller_scope`, and dual address specification notice | Member 2 |
 | 2026-11-06 | Task 2: Implemented Parcel Management Domain Model (`internal/parcels/domain`). Added `Parcel` aggregate root, 9-state machine (`CREATED` through terminal states), Crockford Base32 tracking number format (`SD-YYYYMMDD-XXXXXX`), immutable address and accepted price snapshots, delivery attempt limit guards (max 3), and status history audit entries | Member 2 |
+| 2026-11-06 | Task 4: Implemented Parcel Booking Application and Quote Acceptance Integration (`internal/parcels/application`, `internal/parcels/infrastructure`). Added `BookParcelUseCase` orchestrating atomic quote consumption, tracking number generation with bounded retry, parcel creation, initial CREATED status-history logging, and transactional outbox publication (`parcel.booked.v1`) within a single atomic PostgreSQL transaction via `platform/db.WithTx` | Member 2 |
 
 ---
 
