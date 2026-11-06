@@ -51,16 +51,25 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 internal/pricing/
 ├── domain/                  # Money VO (LKR cents), Tariff entity, ServiceLevel VO, Quote aggregate, Calculator, domain errors
 ├── application/             # GenerateQuoteUseCase, ports (TariffRepository, QuoteRepository, Clock, QuoteIDGenerator)
-├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository (pending migration)
+├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository (db.Querier backed)
 └── transport/               # HTTP handler (/api/v1/pricing/quotes) and request/response DTOs
 ```
 
 ---
 
 ## 4. Database Ownership & Migrations
-- `000004_create_pricing_rules.up.sql`:
-  - `pricing_rules`: Tariff configuration (ID, version, origin/destination zones, base_fee_cents, per_kg_rate_cents, currency, effective dates, active flag).
-  - `pricing_quotes`: Pre-booking quotation cache (ID, rule ID/version, service_level, fee in cents, input snapshot, 15m expiration timestamp, optional accepted_parcel_id).
+- **Canonical Migration Directory:** `core-api/migrations/`
+- **Migration Authoring Ownership:** Member 9 (DevOps / Database Migrations)
+- **File Naming Convention:** 14-digit UTC timestamp format `YYYYMMDDHHMMSS_name.up.sql` (e.g., `20261106000001_create_pricing_rules.up.sql`), matching existing migrations in the repository:
+  - `20261021000001_create_identity_tables.up.sql`
+  - `20261021000002_seed_mock_users.up.sql`
+  - `20261101000050_create_outbox_events.up.sql`
+  - `20261101000500_create_worker_dedup_and_webhooks.up.sql`
+- **Proposed Pricing Migrations (Member 9):**
+  - `pricing_rules`: Geographic base tariffs (composite PK `(id, version)`, `origin_zone_id`, `destination_zone_id`, `base_fee_cents`, `per_kg_rate_cents`, `effective_from`, `effective_until`, `version`, `is_active`, `created_at`, `updated_at`).
+  - `pricing_quotes`: Pre-booking quotation cache (PK `id` UUID, `tariff_id`, `tariff_version`, `chargeable_weight_kg`, `service_level`, `fee_cents`, `currency`, `created_at`, `expires_at`, `used_at`).
+  - *Insert-Only Semantics:* `QuoteRepository.Save` performs strict `INSERT` without `ON CONFLICT DO UPDATE`. Duplicate IDs are rejected with `ErrDuplicateQuote`.
+  - *Atomic Single-Use Quote Consumption:* Quote consumption during parcel booking must be executed via an atomic conditional SQL update (`UPDATE pricing_quotes SET used_at = $2 WHERE id = $1 AND used_at IS NULL AND expires_at > $2`).
 
 ---
 
@@ -72,6 +81,7 @@ internal/pricing/
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
 | 2026-11-06 | Task 1: Refactored Tariff domain model to Option A architecture. Removed ServiceLevel from Tariff; renamed Pickup/DestinationZone to Origin/DestinationZoneID; added IsActive, CreatedAt, UpdatedAt; moved multipliers to ServiceLevel; updated Calculator and GenerateQuoteUseCase to support independent service level pricing | Member 2 |
+| 2026-11-06 | Task 3: Implemented and refined Pricing PostgreSQL Repositories (`PostgresTariffRepository`, `PostgresQuoteRepository`). Enforced Option A geographic tariff lookup with version and temporal window queries, strictly insert-only quote persistence (`ErrDuplicateQuote` on duplicate ID; no `ON CONFLICT DO UPDATE` overwriting `used_at`), and comprehensive in-memory test suite via standard `database/sql/driver` test mock | Member 2 |
 
 ---
 
