@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftDrop — Master Design System & Component Library Showcase</title>
+  <style>
+    /* ==========================================================================
+       SwiftDrop Master Design Tokens (Option 3: Swift Signature Teal & Warm Ivory)
+       Derived from: web/design.md, web/M6-UI-REVIEW-FOR-BHAGYA.md, core-api specs
+       ========================================================================== */
+    :root {
+      /* Daylight Ivory Palette (Default) */
+      --ss-canvas: #f7f5ee;
+      --ss-surface: #ffffff;
+      --ss-surface-muted: #eef3ef;
+      --ss-ink: #142e2b;
+      --ss-muted: #4b635c;
+      --ss-line: #d1ded6;
+      --ss-line-subtle: #e3ede6;
+      --ss-primary: #0b5955;
+      --ss-primary-hover: #08433f;
+      --ss-primary-active: #052f2c;
+      --ss-primary-light: #e3efe8;
+      --ss-mint: #e3efe8;
+      --ss-mint-dark: #c5ded0;
+      --ss-accent: #b84d26;
+      --ss-accent-hover: #9c3f1d;
+      --ss-accent-subtle: #fbeee8;
+
+      /* Semantic State Tokens */
+      --ss-amber: #b45309;
+      --ss-amber-bg: #fef3c7;
+      --ss-amber-line: #fde68a;
+      --ss-emerald: #047857;
+      --ss-emerald-bg: #d1fae5;
+      --ss-emerald-line: #a7f3d0;
+      --ss-rose: #b91c1c;
+      --ss-rose-bg: #fee2e2;
+      --ss-rose-line: #fca5a5;
+      --ss-sky: #0369a1;
+      --ss-sky-bg: #e0f2fe;
+      --ss-sky-line: #bae6fd;
+      --ss-purple: #7e22ce;
+      --ss-purple-bg: #f3e8ff;
+      --ss-purple-line: #e9d5ff;
+
+      /* Typography & Spacing Scales */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --radius-sm: 6px;
+      --radius-md: 9px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-full: 9999px;
+      --shadow-sm: 0 1px 2px rgba(20, 46, 43, 0.05);
+      --shadow-md: 0 4px 12px -2px rgba(20, 46, 43, 0.08);
+      --shadow-lg: 0 12px 28px -6px rgba(20, 46, 43, 0.12);
+      --shadow-xl: 0 20px 40px -10px rgba(20, 46, 43, 0.16);
+
+      color-scheme: light;
+    }
+
+    /* Evening Forest Palette (Dark Operational Mode) */
+    [data-theme="evening"] {
+      --ss-canvas: #102824;
+      --ss-surface: #193630;
+      --ss-surface-muted: #132a25;
+      --ss-ink: #f7f5ee;
+      --ss-muted: #b9cec3;
+      --ss-line: #37574d;
+      --ss-line-subtle: #24423a;
+      --ss-primary: #85d4b5;
+      --ss-primary-hover: #a3e3cb;
+      --ss-primary-active: #66bd9c;
+      --ss-primary-light: #214339;
+      --ss-mint: #214339;
+      --ss-mint-dark: #2a5246;
+      --ss-accent: #f2a17d;
+      --ss-accent-hover: #ffbba0;
+      --ss-accent-subtle: #3a231b;
+
+      --ss-amber: #fbbf24;
+      --ss-amber-bg: #451a03;
+      --ss-amber-line: #78350f;
+      --ss-emerald: #34d399;
+      --ss-emerald-bg: #064e3b;
+      --ss-emerald-line: #047857;
+      --ss-rose: #f87171;
+      --ss-rose-bg: #450a0a;
+      --ss-rose-line: #7f1d1d;
+      --ss-sky: #38bdf8;
+      --ss-sky-bg: #082f49;
+      --ss-sky-line: #075985;
+      --ss-purple: #c084fc;
+      --ss-purple-bg: #3b0764;
+      --ss-purple-line: #581c87;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 14px -2px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 12px 30px -6px rgba(0, 0, 0, 0.5);
+      --shadow-xl: 0 20px 44px -10px rgba(0, 0, 0, 0.6);
+
+      color-scheme: dark;
+    }
+
+    /* Base Reset */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--ss-canvas);
+      color: var(--ss-ink);
+      line-height: 1.5;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Focus visible WCAG AA */
+    :focus-visible {
+      outline: 3px solid var(--ss-accent);
+      outline-offset: 2px;
+    }
+
+    /* Master Layout Framework */
+    .app-sidebar {
+      width: 270px;
+      background: var(--ss-surface);
+      border-right: 1px solid var(--ss-line);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      flex-shrink: 0;
+      z-index: 40;
+    }
+
+    .brand-header {
+      padding: 24px 20px;
+      border-bottom: 1px solid var(--ss-line-subtle);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: var(--ss-primary);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(11, 89, 85, 0.3);
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .brand-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--ss-accent);
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--ss-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+
+    .nav-sections {
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .nav-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ss-muted);
+      padding: 12px 10px 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--ss-ink);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      background: var(--ss-surface-muted);
+    }
+
+    .nav-item.active {
+      background: var(--ss-mint);
+      color: var(--ss-primary);
+      font-weight: 600;
+    }
+
+    .nav-item-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      background: var(--ss-line);
+      color: var(--ss-muted);
+      font-weight: 600;
+    }
+
+    .nav-item.active .nav-item-badge {
+      background: var(--ss-primary);
+      color: #ffffff;
+    }
+
+    .main-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      height: 64px;
+      background: var(--ss-surface);
+      border-bottom: 1px solid var(--ss-line);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-container {
+      padding: 36px 40px 100px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Section Styling */
+    .catalog-section {
+      margin-bottom: 56px;
+      scroll-margin-top: 84px;
+    }
+
+    .section-header {
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--ss-line);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ss-ink);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-desc {
+      font-size: 13.5px;
+      color: var(--ss-muted);
+      margin-top: 4px;
+    }
+
+    .spec-tag {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 3px 8px;
+      background: var(--ss-surface-muted);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-sm);
+      color: var(--ss-muted);
+    }
+
+    /* Cards & Grids */
+    .component-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--ss-surface);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-muted {
+      background: var(--ss-surface-muted);
+      border: 1px solid var(--ss-line-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .card-mint {
+      background: var(--ss-mint);
+      border: 1px solid var(--ss-mint-dark);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .card-header {
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ss-ink);
+    }
+
+    .card-subtitle {
+      font-size: 12.5px;
+      color: var(--ss-muted);
+      margin-top: 2px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 18px;
+      min-height: 44px; /* WCAG 2.1 AA */
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid transparent;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12.5px;
+      min-height: 36px;
+      border-radius: var(--radius-sm);
+    }
+
+    .btn-lg {
+      padding: 14px 24px;
+      font-size: 15.5px;
+      min-height: 50px;
+      border-radius: var(--radius-md);
+    }
+
+    .btn-primary {
+      background: var(--ss-primary);
+      color: #ffffff;
+      border-color: var(--ss-primary);
+      box-shadow: 0 1px 3px rgba(11, 89, 85, 0.2);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--ss-primary-hover);
+      border-color: var(--ss-primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--ss-surface);
+      color: var(--ss-ink);
+      border-color: var(--ss-line);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--ss-surface-muted);
+      border-color: var(--ss-muted);
+    }
+
+    .btn-subtle {
+      background: transparent;
+      color: var(--ss-muted);
+      border-color: transparent;
+    }
+    .btn-subtle:hover:not(:disabled) {
+      background: var(--ss-surface-muted);
+      color: var(--ss-ink);
+    }
+
+    .btn-amber {
+      background: var(--ss-amber-bg);
+      color: var(--ss-amber);
+      border-color: var(--ss-amber-line);
+    }
+    .btn-amber:hover:not(:disabled) {
+      background: #fde68a;
+      color: #92400e;
+    }
+
+    .btn-danger {
+      background: var(--ss-rose-bg);
+      color: var(--ss-rose);
+      border-color: var(--ss-rose-line);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: #fecaca;
+      color: #991b1b;
+    }
+
+    .btn-accent {
+      background: var(--ss-accent);
+      color: #ffffff;
+      border-color: var(--ss-accent);
+    }
+    .btn-accent:hover:not(:disabled) {
+      background: var(--ss-accent-hover);
+    }
+
+    .btn-icon-only {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: var(--radius-md);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon-only.btn-sm {
+      width: 36px;
+      height: 36px;
+    }
+
+    /* Badges & Tags */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      line-height: 1.3;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .badge-teal {
+      background: var(--ss-mint);
+      color: var(--ss-primary);
+      border-color: var(--ss-mint-dark);
+    }
+    .badge-teal .badge-dot { background: var(--ss-primary); }
+
+    .badge-amber {
+      background: var(--ss-amber-bg);
+      color: var(--ss-amber);
+      border-color: var(--ss-amber-line);
+    }
+    .badge-amber .badge-dot { background: var(--ss-amber); }
+
+    .badge-emerald {
+      background: var(--ss-emerald-bg);
+      color: var(--ss-emerald);
+      border-color: var(--ss-emerald-line);
+    }
+    .badge-emerald .badge-dot { background: var(--ss-emerald); }
+
+    .badge-rose {
+      background: var(--ss-rose-bg);
+      color: var(--ss-rose);
+      border-color: var(--ss-rose-line);
+    }
+    .badge-rose .badge-dot { background: var(--ss-rose); }
+
+    .badge-sky {
+      background: var(--ss-sky-bg);
+      color: var(--ss-sky);
+      border-color: var(--ss-sky-line);
+    }
+    .badge-sky .badge-dot { background: var(--ss-sky); }
+
+    .badge-purple {
+      background: var(--ss-purple-bg);
+      color: var(--ss-purple);
+      border-color: var(--ss-purple-line);
+    }
+    .badge-purple .badge-dot { background: var(--ss-purple); }
+
+    .badge-muted {
+      background: var(--ss-surface-muted);
+      color: var(--ss-muted);
+      border-color: var(--ss-line);
+    }
+    .badge-muted .badge-dot { background: var(--ss-muted); }
+
+    /* Form Inputs */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ss-ink);
+      margin-bottom: 6px;
+    }
+
+    .form-label-required::after {
+      content: " *";
+      color: var(--ss-rose);
+    }
+
+    .form-helper {
+      font-size: 12px;
+      color: var(--ss-muted);
+      margin-top: 5px;
+    }
+
+    .form-error-msg {
+      font-size: 12px;
+      color: var(--ss-rose);
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-affix-left, .input-affix-right {
+      position: absolute;
+      color: var(--ss-muted);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .input-affix-left { left: 14px; }
+    .input-affix-right { right: 14px; }
+
+    .input-control {
+      width: 100%;
+      height: 44px; /* WCAG 44px target */
+      padding: 0 14px;
+      background: var(--ss-surface);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-md);
+      color: var(--ss-ink);
+      font-family: var(--font-sans);
+      font-size: 14.5px;
+      line-height: 1;
+    }
+
+    .input-control.has-affix-left { padding-left: 38px; }
+    .input-control.has-affix-right { padding-right: 42px; }
+
+    .input-control:focus {
+      border-color: var(--ss-primary);
+    }
+
+    .input-control::placeholder {
+      color: var(--ss-muted);
+      opacity: 0.7;
+    }
+
+    .input-control:disabled {
+      background: var(--ss-surface-muted);
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
+    .input-control.is-invalid {
+      border-color: var(--ss-rose);
+      background-color: var(--ss-rose-bg);
+    }
+
+    select.input-control {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234b635c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 38px;
+    }
+
+    textarea.input-control {
+      height: auto;
+      min-height: 90px;
+      padding: 12px 14px;
+      line-height: 1.4;
+      resize: vertical;
+    }
+
+    /* Checkbox & Switch */
+    .checkbox-label, .radio-label {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13.5px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .custom-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 1.5px solid var(--ss-line);
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      background: var(--ss-surface);
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+
+    input[type="checkbox"]:checked + .custom-checkbox {
+      background: var(--ss-primary);
+      border-color: var(--ss-primary);
+      color: #ffffff;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; }
+
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--ss-line);
+      transition: .2s;
+      border-radius: 34px;
+    }
+
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    input:checked + .switch-slider {
+      background-color: var(--ss-primary);
+    }
+
+    input:checked + .switch-slider:before {
+      transform: translateX(20px);
+    }
+
+    /* File Drag-and-drop zone */
+    .file-dropzone {
+      border: 2px dashed var(--ss-line);
+      border-radius: var(--radius-lg);
+      padding: 32px 20px;
+      text-align: center;
+      background: var(--ss-surface-muted);
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    .file-dropzone:hover {
+      border-color: var(--ss-primary);
+      background: var(--ss-mint);
+    }
+
+    /* Metric KPI Cards */
+    .metric-card {
+      background: var(--ss-surface);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .metric-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .metric-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ss-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-icon-wrap {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--ss-surface-muted);
+      color: var(--ss-primary);
+    }
+
+    .metric-value {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--ss-ink);
+      line-height: 1.1;
+      font-family: var(--font-sans);
+    }
+
+    .metric-footer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--ss-muted);
+    }
+
+    /* Data Tables */
+    .table-container {
+      background: var(--ss-surface);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-lg);
+      overflow-x: auto;
+      box-shadow: var(--shadow-sm);
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13.5px;
+    }
+
+    table.data-table th {
+      background: var(--ss-surface-muted);
+      padding: 12px 18px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ss-muted);
+      border-bottom: 1px solid var(--ss-line);
+      white-space: nowrap;
+    }
+
+    table.data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--ss-line-subtle);
+      color: var(--ss-ink);
+      vertical-align: middle;
+    }
+
+    table.data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.data-table tbody tr:hover {
+      background: var(--ss-surface-muted);
+    }
+
+    .mono-cell {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ss-primary);
+    }
+
+    /* Stepper / Wizard */
+    .stepper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      margin-bottom: 28px;
+    }
+
+    .stepper::before {
+      content: "";
+      position: absolute;
+      top: 18px;
+      left: 36px;
+      right: 36px;
+      height: 2px;
+      background: var(--ss-line);
+      z-index: 1;
+    }
+
+    .step-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+
+    .step-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--ss-surface);
+      border: 2px solid var(--ss-line);
+      color: var(--ss-muted);
+      font-weight: 700;
+      font-size: 13.5px;
+      display: grid;
+      place-items: center;
+    }
+
+    .step-item.is-completed .step-circle {
+      background: var(--ss-primary);
+      border-color: var(--ss-primary);
+      color: #ffffff;
+    }
+
+    .step-item.is-active .step-circle {
+      background: var(--ss-surface);
+      border-color: var(--ss-primary);
+      color: var(--ss-primary);
+      box-shadow: 0 0 0 4px var(--ss-mint);
+    }
+
+    .step-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ss-muted);
+    }
+
+    .step-item.is-active .step-label {
+      color: var(--ss-primary);
+      font-weight: 700;
+    }
+
+    /* Tracking Vertical Milestone Timeline */
+    .milestone-timeline {
+      position: relative;
+      padding-left: 28px;
+    }
+
+    .milestone-timeline::before {
+      content: "";
+      position: absolute;
+      left: 9px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--ss-line);
+    }
+
+    .milestone-item {
+      position: relative;
+      margin-bottom: 22px;
+    }
+
+    .milestone-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .milestone-point {
+      position: absolute;
+      left: -28px;
+      top: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--ss-surface);
+      border: 2px solid var(--ss-line);
+      display: grid;
+      place-items: center;
+    }
+
+    .milestone-item.is-done .milestone-point {
+      background: var(--ss-emerald);
+      border-color: var(--ss-emerald);
+      color: #ffffff;
+    }
+
+    .milestone-item.is-current .milestone-point {
+      background: var(--ss-primary);
+      border-color: var(--ss-primary);
+      color: #ffffff;
+      box-shadow: 0 0 0 4px var(--ss-mint);
+    }
+
+    .milestone-item.is-failed .milestone-point {
+      background: var(--ss-amber);
+      border-color: var(--ss-amber);
+      color: #ffffff;
+    }
+
+    .milestone-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .milestone-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .milestone-status {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ss-ink);
+    }
+
+    .milestone-time {
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      color: var(--ss-muted);
+    }
+
+    .milestone-sub {
+      font-size: 12.5px;
+      color: var(--ss-muted);
+      margin-top: 2px;
+    }
+
+    /* Alerts & Banners */
+    .alert {
+      padding: 16px 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .alert-icon {
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .alert-body {
+      flex: 1;
+    }
+
+    .alert-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .alert-desc {
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .alert-amber {
+      background: var(--ss-amber-bg);
+      border-color: var(--ss-amber-line);
+      color: var(--ss-amber);
+    }
+    .alert-amber .alert-title { color: #92400e; }
+    .alert-amber .alert-desc { color: #78350f; }
+
+    .alert-emerald {
+      background: var(--ss-emerald-bg);
+      border-color: var(--ss-emerald-line);
+      color: var(--ss-emerald);
+    }
+    .alert-emerald .alert-title { color: #065f46; }
+    .alert-emerald .alert-desc { color: #047857; }
+
+    .alert-rose {
+      background: var(--ss-rose-bg);
+      border-color: var(--ss-rose-line);
+      color: var(--ss-rose);
+    }
+    .alert-rose .alert-title { color: #991b1b; }
+    .alert-rose .alert-desc { color: #b91c1c; }
+
+    .alert-sky {
+      background: var(--ss-sky-bg);
+      border-color: var(--ss-sky-line);
+      color: var(--ss-sky);
+    }
+    .alert-sky .alert-title { color: #075985; }
+    .alert-sky .alert-desc { color: #0369a1; }
+
+    /* Live Stream Pulsing Indicator */
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      background: var(--ss-emerald-bg);
+      color: var(--ss-emerald);
+      border: 1px solid var(--ss-emerald-line);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--ss-emerald);
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .pulse-dot::after {
+      content: "";
+      position: absolute;
+      top: -3px; left: -3px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--ss-emerald);
+      opacity: 0.4;
+      animation: pulse-ring 1.8s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.7); opacity: 0.8; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    /* Modal Dialog Overlay Preview */
+    .modal-preview-box {
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-xl);
+      background: var(--ss-surface);
+      box-shadow: var(--shadow-xl);
+      max-width: 520px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--ss-line-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      background: var(--ss-surface-muted);
+      border-top: 1px solid var(--ss-line-subtle);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* Secret Key Mask Box */
+    .secret-box {
+      background: var(--ss-surface-muted);
+      border: 1px solid var(--ss-line);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .app-sidebar { display: none; }
+      .page-container { padding: 24px 16px 80px; }
+      .topbar { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========================================================================
+       Sidebar Navigation & Brand Identity
+       ======================================================================== -->
+  <aside class="app-sidebar">
+    <div class="brand-header">
+      <div class="brand-icon">
+        <!-- Package icon -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6"/>
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.29 7 12 12 20.71 7"/>
+          <line x1="12" y1="22" x2="12" y2="12"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">SwiftDrop <span class="brand-dot"></span></div>
+        <div class="brand-subtitle">Design System Library</div>
+      </div>
+    </div>
+
+    <div class="nav-sections">
+      <div class="nav-group-title">Foundations</div>
+      <a class="nav-item active" href="#tokens">Color Tokens & System <span class="nav-item-badge">v1.0</span></a>
+      <a class="nav-item" href="#typography">Typography & Scales</a>
+      <a class="nav-item" href="#buttons">Buttons & Actions</a>
+      <a class="nav-item" href="#badges">Status Badges & Pills <span class="nav-item-badge">9 States</span></a>
+
+      <div class="nav-group-title">Form Controls</div>
+      <a class="nav-item" href="#inputs">Text, Phone & Dimension Inputs</a>
+      <a class="nav-item" href="#selects">Dropdowns, Radios & Switches</a>
+      <a class="nav-item" href="#file-upload">CSV Batch Upload Zone</a>
+
+      <div class="nav-group-title">Data & Feedback</div>
+      <a class="nav-item" href="#metrics">KPI & Stat Counters</a>
+      <a class="nav-item" href="#tables">Data Grid & Tables</a>
+      <a class="nav-item" href="#alerts">Alerts, Banners & SSE Health</a>
+
+      <div class="nav-group-title">Logistics Modules</div>
+      <a class="nav-item" href="#wizard">Booking 4-Step Stepper</a>
+      <a class="nav-item" href="#tracking">Milestone Tracking Timeline</a>
+      <a class="nav-item" href="#pod">Courier POD & Signature</a>
+      <a class="nav-item" href="#quote">Tariff & Server Quote Card</a>
+      <a class="nav-item" href="#modals">Modal Dialogs & Secrets</a>
+    </div>
+
+    <div style="padding: 16px; border-top: 1px solid var(--ss-line-subtle); font-size: 11.5px; color: var(--ss-muted);">
+      <div><strong>SwiftDrop Web Monorepo</strong></div>
+      <div>Review Branch: <code>m6-clean-ui-bhagya</code></div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       Main Content Workspace
+       ======================================================================== -->
+  <main class="main-workspace">
+    
+    <!-- Topbar Navigation -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span style="font-size: 13.5px; color: var(--ss-muted); font-weight: 500;">
+          SwiftDrop UI System &rarr; <strong style="color: var(--ss-ink);">Master Component Catalog</strong>
+        </span>
+        <span class="spec-tag">Option 3: Swift Signature</span>
+      </div>
+      <div class="topbar-right">
+        <!-- SSE Stream live indicator -->
+        <div class="live-indicator">
+          <span class="pulse-dot"></span>
+          <span>Event Stream Live</span>
+        </div>
+
+        <!-- Daylight / Evening Theme Switcher -->
+        <button id="themeToggleBtn" class="btn btn-secondary btn-sm" onclick="toggleTheme()" style="gap: 6px;">
+          <svg id="themeIconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <span id="themeToggleLabel">Switch to Evening Forest</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="page-container">
+
+      <!-- Hero Header -->
+      <div style="margin-bottom: 40px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+          <span class="badge badge-teal">Official Design Baseline</span>
+          <span class="badge badge-muted">WCAG 2.1 AA Compliant</span>
+          <span class="badge badge-amber">Tech Lead Component Spec</span>
+        </div>
+        <h1 style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px;">
+          SwiftDrop UI Master Catalog & Design Specification
+        </h1>
+        <p style="font-size: 15px; color: var(--ss-muted); max-width: 860px;">
+          Comprehensive interactive component reference covering every visual token, control, container, form element, and logistics domain workflow across Member 6 (Customer & Merchant Portal), Member 7 (Dispatcher & Admin Backoffice), and Member 3 (Courier Mobile Web).
+        </p>
+      </div>
+
+      <!-- ====================================================================
+           1. COLOR TOKENS & PALETTES
+           ==================================================================== -->
+      <section id="tokens" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">1. Color Tokens & Theme Matrix</h2>
+            <p class="section-desc">Authoritative Daylight Ivory and paired Evening Forest operational palettes.</p>
+          </div>
+          <span class="spec-tag">web/src/features/customer-merchant/preview/swift-signature.css</span>
+        </div>
+
+        <div class="component-grid">
+          <!-- Primary & Brand Colors -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 14px;">Primary Brand Palette</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-primary); color: #ffffff; border-radius: var(--radius-md);">
+                <strong>Primary Teal</strong>
+                <code>#0B5955 / #85D4B5</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-canvas); color: var(--ss-ink); border: 1px solid var(--ss-line); border-radius: var(--radius-md);">
+                <strong>Canvas Ivory / Forest</strong>
+                <code>#F7F5EE / #102824</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-surface); color: var(--ss-ink); border: 1px solid var(--ss-line); border-radius: var(--radius-md);">
+                <strong>Elevated Surface</strong>
+                <code>#FFFFFF / #193630</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-mint); color: var(--ss-primary); border: 1px solid var(--ss-mint-dark); border-radius: var(--radius-md);">
+                <strong>Soft Mint Surface</strong>
+                <code>#E3EFE8 / #214339</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-accent); color: #ffffff; border-radius: var(--radius-md);">
+                <strong>Burnt-Orange Accent</strong>
+                <code>#B84D26 / #F2A17D</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- Semantic States -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 14px;">Semantic Logistics States</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-emerald-bg); color: var(--ss-emerald); border: 1px solid var(--ss-emerald-line); border-radius: var(--radius-md);">
+                <strong>Success / Delivered</strong>
+                <code>#047857 / #34D399</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-amber-bg); color: var(--ss-amber); border: 1px solid var(--ss-amber-line); border-radius: var(--radius-md);">
+                <strong>Warning / Action Needed</strong>
+                <code>#B45309 / #FBBF24</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-rose-bg); color: var(--ss-rose); border: 1px solid var(--ss-rose-line); border-radius: var(--radius-md);">
+                <strong>Error / Validation Fail</strong>
+                <code>#B91C1C / #F87171</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-sky-bg); color: var(--ss-sky); border: 1px solid var(--ss-sky-line); border-radius: var(--radius-md);">
+                <strong>Informational / In Transit</strong>
+                <code>#0369A1 / #38BDF8</code>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--ss-purple-bg); color: var(--ss-purple); border: 1px solid var(--ss-purple-line); border-radius: var(--radius-md);">
+                <strong>Admin / System Security</strong>
+                <code>#7E22CE / #C084FC</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           2. TYPOGRAPHY & SCALES
+           ==================================================================== -->
+      <section id="typography" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">2. Typography & Hierarchies</h2>
+            <p class="section-desc">Logistics legibility scale with strict minimum size rules (&ge;11px).</p>
+          </div>
+          <span class="spec-tag">System Sans & Monospace</span>
+        </div>
+
+        <div class="card">
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--ss-muted); margin-bottom: 4px;">Page Title H1 (32px / -0.03em)</div>
+              <div style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2;">Parcel Dispatch & Tracking Console</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--ss-muted); margin-bottom: 4px;">Section Heading H2 (24px / -0.02em)</div>
+              <div style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em;">Customer Booking & Tariffs</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--ss-muted); margin-bottom: 4px;">Card Subtitle H3 (18px)</div>
+              <div style="font-size: 18px; font-weight: 700;">Zone Route & Dimension Specs</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--ss-muted); margin-bottom: 4px;">Body Text (15px / 1.5)</div>
+              <div style="font-size: 15px; color: var(--ss-ink);">The parcel aggregate enforces state transitions atomically within the PostgreSQL transaction, ensuring all audit records commit synchronously before publishing outbox events to RabbitMQ.</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--ss-muted); margin-bottom: 4px;">Monospace Identifiers (13px Mono)</div>
+              <div style="font-family: var(--font-mono); font-size: 13px; color: var(--ss-primary);">Tracking: SD-20261107-99812 | Idempotency: idemp_78e9b1a2-3f44-4e78-9a01-92bc581e2840</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           3. BUTTONS & INTERACTIVE CONTROLS
+           ==================================================================== -->
+      <section id="buttons" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">3. Buttons & Action Elements</h2>
+            <p class="section-desc">Compliant with WCAG 2.1 AA minimum 44px &times; 44px touch targets.</p>
+          </div>
+          <span class="spec-tag">&gt;= 44px Touch Targets</span>
+        </div>
+
+        <div class="component-grid">
+          <!-- Button Variants -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 16px;">Semantic Action Variants</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+              <button class="btn btn-primary">Primary Action</button>
+              <button class="btn btn-secondary">Secondary Action</button>
+              <button class="btn btn-subtle">Subtle Ghost</button>
+              <button class="btn btn-amber">Warning Action</button>
+              <button class="btn btn-danger">Destructive Action</button>
+              <button class="btn btn-accent">Brand Highlight</button>
+            </div>
+
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--ss-muted); margin-bottom: 10px; text-transform: uppercase;">Button States</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <button class="btn btn-primary" disabled>Disabled Primary</button>
+              <button class="btn btn-secondary" disabled>Disabled Secondary</button>
+              <button class="btn btn-primary" style="opacity: 0.85;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Processing...
+              </button>
+            </div>
+            <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+          </div>
+
+          <!-- Button Sizes & Icon Buttons -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 16px;">Sizes & Icon Controls</h3>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
+              <button class="btn btn-primary btn-sm">Small (36px)</button>
+              <button class="btn btn-primary">Default (44px)</button>
+              <button class="btn btn-primary btn-lg">Large (50px)</button>
+            </div>
+
+            <h4 style="font-size: 13px; font-weight: 700; color: var(--ss-muted); margin-bottom: 10px; text-transform: uppercase;">Icon Action Buttons</h4>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <button class="btn btn-secondary btn-icon-only" title="Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </button>
+              <button class="btn btn-secondary btn-icon-only" title="Filter Orders">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              </button>
+              <button class="btn btn-primary btn-icon-only" title="Add Parcel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button class="btn btn-danger btn-icon-only" title="Delete">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           4. BADGES, STATUS PILLS & TAGS
+           ==================================================================== -->
+      <section id="badges" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">4. Status Badges & Logistics Pills</h2>
+            <p class="section-desc">Enforces the 9-state machine for parcels and multi-tenant role tags.</p>
+          </div>
+          <span class="spec-tag">core-api/internal/parcels</span>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom: 16px;">Authoritative 9-State Parcel Lifecycles</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px;">
+            <span class="badge badge-muted"><span class="badge-dot"></span> CREATED</span>
+            <span class="badge badge-sky"><span class="badge-dot"></span> ASSIGNED</span>
+            <span class="badge badge-teal"><span class="badge-dot"></span> PICKED_UP</span>
+            <span class="badge badge-teal"><span class="badge-dot"></span> IN_TRANSIT</span>
+            <span class="badge badge-teal"><span class="badge-dot"></span> OUT_FOR_DELIVERY</span>
+            <span class="badge badge-emerald"><span class="badge-dot"></span> DELIVERED</span>
+            <span class="badge badge-amber"><span class="badge-dot"></span> ATTEMPT_FAILED</span>
+            <span class="badge badge-rose"><span class="badge-dot"></span> RETURNED</span>
+            <span class="badge badge-muted" style="text-decoration: line-through;"><span class="badge-dot"></span> CANCELLED</span>
+          </div>
+
+          <h3 class="card-title" style="margin-bottom: 16px;">System Roles & Service Priorities</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <span class="badge badge-purple">Role: ADMIN</span>
+            <span class="badge badge-sky">Role: DISPATCHER</span>
+            <span class="badge badge-teal">Role: COURIER</span>
+            <span class="badge badge-amber">Role: MERCHANT</span>
+            <span class="badge badge-muted">Role: CUSTOMER</span>
+            <span class="badge badge-rose" style="font-weight: 700;">Priority: SAME_DAY</span>
+            <span class="badge badge-amber" style="font-weight: 700;">Priority: EXPRESS</span>
+            <span class="badge badge-muted">Priority: STANDARD</span>
+            <span class="badge badge-rose">Fragile: Handle with Care</span>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           5. FORM CONTROLS & DATA ENTRY
+           ==================================================================== -->
+      <section id="inputs" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">5. Form Inputs & Interactive Data Entry</h2>
+            <p class="section-desc">Form controls with accessible labels, prefix units, and error validations.</p>
+          </div>
+          <span class="spec-tag">WCAG Form Association</span>
+        </div>
+
+        <div class="component-grid">
+          <!-- Text Inputs -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 16px;">Text, Phone & Dimensions</h3>
+            
+            <div class="form-group">
+              <label class="form-label form-label-required" for="sample-sender">Sender Full Name</label>
+              <input id="sample-sender" type="text" class="input-control" value="Sajini Perera" placeholder="Enter sender name">
+              <div class="form-helper">Verified customer account name</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label form-label-required" for="sample-phone">Recipient Mobile Phone</label>
+              <div class="input-wrapper">
+                <span class="input-affix-left">+94</span>
+                <input id="sample-phone" type="tel" class="input-control has-affix-left" value="77 123 4567" placeholder="7X XXX XXXX">
+              </div>
+              <div class="form-helper">Used for SMS delivery notifications</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label form-label-required" for="sample-weight">Parcel Weight</label>
+              <div class="input-wrapper">
+                <input id="sample-weight" type="number" class="input-control has-affix-right" value="2.50" step="0.1">
+                <span class="input-affix-right">kg</span>
+              </div>
+              <div class="form-helper">Maximum courier weight is 30.00 kg</div>
+            </div>
+          </div>
+
+          <!-- Selects & Radios -->
+          <div class="card" id="selects">
+            <h3 class="card-title" style="margin-bottom: 16px;">Dropdowns, Toggles & Validation</h3>
+            
+            <div class="form-group">
+              <label class="form-label form-label-required" for="sample-zone">Destination Delivery Zone</label>
+              <select id="sample-zone" class="input-control">
+                <option value="WESTERN_COLOMBO_01">WESTERN_COLOMBO_01 (Colombo Central)</option>
+                <option value="CENTRAL_KANDY_01" selected>CENTRAL_KANDY_01 (Kandy Metropolitan)</option>
+                <option value="SOUTHERN_GALLE_01">SOUTHERN_GALLE_01 (Galle Fort Area)</option>
+                <option value="NORTHERN_JAFFNA_01">NORTHERN_JAFFNA_01 (Jaffna Town)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sample-invalid">Dimension Volume (L &times; W &times; H cm)</label>
+              <input id="sample-invalid" type="text" class="input-control is-invalid" value="95 x 80 x 60 cm">
+              <div class="form-error-msg">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Dimensions exceed maximum volumetric cargo capacity (max 50,000 cm&sup3;).
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--ss-line-subtle);">
+              <div>
+                <div style="font-size: 13.5px; font-weight: 600;">Fragile Handling Required</div>
+                <div style="font-size: 12px; color: var(--ss-muted);">Adds dedicated bubble-pack and caution mark</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" checked>
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drag-and-drop CSV Upload -->
+        <div class="card" id="file-upload" style="margin-top: 24px;">
+          <h3 class="card-title" style="margin-bottom: 6px;">Batch CSV Order Ingestion Zone</h3>
+          <p class="card-subtitle" style="margin-bottom: 16px;">High-volume merchant parcel import with format validation.</p>
+          
+          <div class="file-dropzone">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--ss-primary)" stroke-width="2" style="margin-bottom: 10px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div style="font-size: 15px; font-weight: 700; color: var(--ss-ink);">Click to upload or drag & drop CSV file</div>
+            <div style="font-size: 12.5px; color: var(--ss-muted); margin-top: 4px;">Supports UTF-8 CSV with columns: <code>recipient_name, phone, address, city, weight_kg, service_level</code></div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           6. METRIC STAT COUNTERS & KPIS
+           ==================================================================== -->
+      <section id="metrics" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">6. Metric KPI Summary Cards</h2>
+            <p class="section-desc">Real-time counts for merchant hubs and dispatcher operational boards.</p>
+          </div>
+          <span class="spec-tag">Live Operations Metrics</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;">
+          <!-- Total Dispatched -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Total Ingested</span>
+              <div class="metric-icon-wrap">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              </div>
+            </div>
+            <div class="metric-value">1,482</div>
+            <div class="metric-footer">
+              <span style="color: var(--ss-emerald); font-weight: 600;">+12.4%</span> vs yesterday
+            </div>
+          </div>
+
+          <!-- In Transit -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">In Transit & Hub</span>
+              <div class="metric-icon-wrap" style="color: var(--ss-sky);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+              </div>
+            </div>
+            <div class="metric-value">342</div>
+            <div class="metric-footer">
+              <span>94 active delivery couriers</span>
+            </div>
+          </div>
+
+          <!-- Delivered -->
+          <div class="metric-card">
+            <div class="metric-top">
+              <span class="metric-label">Delivered Today</span>
+              <div class="metric-icon-wrap" style="color: var(--ss-emerald);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+            </div>
+            <div class="metric-value">1,128</div>
+            <div class="metric-footer">
+              <span style="color: var(--ss-emerald); font-weight: 600;">98.2%</span> on-time SLA rate
+            </div>
+          </div>
+
+          <!-- Attention Needed -->
+          <div class="metric-card" style="border-color: var(--ss-amber-line); background: var(--ss-surface);">
+            <div class="metric-top">
+              <span class="metric-label" style="color: var(--ss-amber);">Action Needed</span>
+              <div class="metric-icon-wrap" style="color: var(--ss-amber); background: var(--ss-amber-bg);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+            </div>
+            <div class="metric-value" style="color: var(--ss-amber);">12</div>
+            <div class="metric-footer" style="color: var(--ss-amber);">
+              <span>Delivery attempt failed (reschedule)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           7. DATA GRIDS & OPERATIONS TABLES
+           ==================================================================== -->
+      <section id="tables" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">7. Data Grid & Operations Table</h2>
+            <p class="section-desc">Responsive table with monospace tracking, status pills, and action hooks.</p>
+          </div>
+          <span class="spec-tag">Merchant & Dispatcher Board</span>
+        </div>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <!-- Table Controls Toolbar -->
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--ss-line); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 420px;">
+              <div class="input-wrapper" style="width: 100%;">
+                <span class="input-affix-left">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </span>
+                <input type="text" class="input-control has-affix-left" placeholder="Search tracking #, recipient, or city..." style="height: 38px;">
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="btn btn-secondary btn-sm">Filter: All</button>
+              <button class="btn btn-secondary btn-sm">In Transit</button>
+              <button class="btn btn-secondary btn-sm">Action Needed</button>
+              <button class="btn btn-primary btn-sm">+ Ingest CSV</button>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-container" style="border: none; border-radius: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;"><input type="checkbox"></th>
+                  <th>Tracking Number</th>
+                  <th>Recipient & Destination</th>
+                  <th>Delivery Zone</th>
+                  <th>Status</th>
+                  <th>Weight</th>
+                  <th>Date & Time</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="mono-cell">SD-CMB-8921-LK</span></td>
+                  <td>
+                    <div style="font-weight: 600;">Nimal Perera</div>
+                    <div style="font-size: 12px; color: var(--ss-muted);">Colombo 03, Kollupitiya</div>
+                  </td>
+                  <td><span class="spec-tag">WESTERN_COLOMBO_01</span></td>
+                  <td><span class="badge badge-teal"><span class="badge-dot"></span> IN_TRANSIT</span></td>
+                  <td>1.2 kg</td>
+                  <td style="font-size: 12px; color: var(--ss-muted);">07 Nov 2026, 14:30</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm">View Details</button>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="mono-cell">SD-KND-4309-LK</span></td>
+                  <td>
+                    <div style="font-weight: 600;">Anura Wickramasinghe</div>
+                    <div style="font-size: 12px; color: var(--ss-muted);">Peradeniya Road, Kandy</div>
+                  </td>
+                  <td><span class="spec-tag">CENTRAL_KANDY_01</span></td>
+                  <td><span class="badge badge-teal"><span class="badge-dot"></span> OUT_FOR_DELIVERY</span></td>
+                  <td>3.5 kg</td>
+                  <td style="font-size: 12px; color: var(--ss-muted);">07 Nov 2026, 11:15</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm">View Details</button>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="mono-cell">SD-GAL-7721-LK</span></td>
+                  <td>
+                    <div style="font-weight: 600;">Dilani Samarasekera</div>
+                    <div style="font-size: 12px; color: var(--ss-muted);">Lighthouse Street, Galle Fort</div>
+                  </td>
+                  <td><span class="spec-tag">SOUTHERN_GALLE_01</span></td>
+                  <td><span class="badge badge-emerald"><span class="badge-dot"></span> DELIVERED</span></td>
+                  <td>0.8 kg</td>
+                  <td style="font-size: 12px; color: var(--ss-muted);">06 Nov 2026, 16:45</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm">View Details</button>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="mono-cell">SD-JAF-1184-LK</span></td>
+                  <td>
+                    <div style="font-weight: 600;">Kavitha Rajan</div>
+                    <div style="font-size: 12px; color: var(--ss-muted);">Hospital Road, Jaffna Town</div>
+                  </td>
+                  <td><span class="spec-tag">NORTHERN_JAFFNA_01</span></td>
+                  <td><span class="badge badge-amber"><span class="badge-dot"></span> ATTEMPT_FAILED</span></td>
+                  <td>2.1 kg</td>
+                  <td style="font-size: 12px; color: var(--ss-muted);">07 Nov 2026, 09:20</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-amber btn-sm">Authorize Re-attempt</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div style="padding: 14px 20px; border-top: 1px solid var(--ss-line); display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--ss-muted);">
+            <div>Showing <strong>1 to 4</strong> of <strong>1,482</strong> dispatches</div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" disabled>&larr; Previous</button>
+              <button class="btn btn-primary btn-sm">1</button>
+              <button class="btn btn-secondary btn-sm">2</button>
+              <button class="btn btn-secondary btn-sm">3</button>
+              <button class="btn btn-secondary btn-sm">Next &rarr;</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           8. ALERTS, BANNERS & SSE NOTIFICATIONS
+           ==================================================================== -->
+      <section id="alerts" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">8. Alerts, Banners & Correlation Error Handlers</h2>
+            <p class="section-desc">Actionable error envelopes with correlation tracking IDs and retry triggers.</p>
+          </div>
+          <span class="spec-tag">RFC 7807 Error Envelope</span>
+        </div>
+
+        <!-- Warning Banner -->
+        <div class="alert alert-amber">
+          <div class="alert-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div class="alert-body">
+            <div class="alert-title">Delivery Attempt Failed — Action Needed</div>
+            <div class="alert-desc">Recipient was unavailable at delivery location (Attempt 1 of 3). A re-attempt is scheduled for tomorrow morning. You may authorize immediate redelivery or change destination instructions.</div>
+          </div>
+          <button class="btn btn-amber btn-sm">Authorize</button>
+        </div>
+
+        <!-- Error Banner with Correlation ID -->
+        <div class="alert alert-rose">
+          <div class="alert-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+          <div class="alert-body">
+            <div class="alert-title">Pricing Service Gateway Timeout (503 Service Unavailable)</div>
+            <div class="alert-desc">Unable to retrieve dynamic tariff quote from Core API. Please check network connection or retry.</div>
+            <div style="font-family: var(--font-mono); font-size: 11.5px; margin-top: 6px; color: #7f1d1d;">
+              Correlation ID: <code>corr_prc_01HXYZ99812401</code> | Request: <code>POST /api/v1/pricing/quotes</code>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-sm">Retry Connection</button>
+        </div>
+
+        <!-- Success Banner -->
+        <div class="alert alert-emerald">
+          <div class="alert-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="alert-body">
+            <div class="alert-title">Parcel Booking Confirmed & Outbox Committed</div>
+            <div class="alert-desc">Tracking identifier <strong>SD-20261107-88912</strong> created successfully with frozen tariff of <strong>LKR 1,450.00</strong>. Integration event <code>parcel.booked.v1</code> published to event broker.</div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           9. BOOKING 4-STEP WIZARD STEPPER
+           ==================================================================== -->
+      <section id="wizard" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">9. Booking Stepper & Wizard Flow</h2>
+            <p class="section-desc">Multi-step accessible progression across customer shipping bookings.</p>
+          </div>
+          <span class="spec-tag">Member 6 Booking Wizard</span>
+        </div>
+
+        <div class="card">
+          <div class="stepper">
+            <button class="step-item is-completed">
+              <div class="step-circle">&#10003;</div>
+              <div class="step-label">1. Addresses</div>
+            </button>
+            <button class="step-item is-completed">
+              <div class="step-circle">&#10003;</div>
+              <div class="step-label">2. Parcel & Zones</div>
+            </button>
+            <button class="step-item is-active">
+              <div class="step-circle">3</div>
+              <div class="step-label">3. Tariff Quote</div>
+            </button>
+            <button class="step-item">
+              <div class="step-circle">4</div>
+              <div class="step-label">4. Review & Confirm</div>
+            </button>
+          </div>
+
+          <div class="card-muted" style="margin-top: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <h4 style="font-size: 15px; font-weight: 700; color: var(--ss-ink);">Active Step 3: Verified Server Tariff</h4>
+                <p style="font-size: 13px; color: var(--ss-muted);">Authoritative pricing quote retrieved from <code>POST /api/v1/pricing/quotes</code>.</p>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm">&larr; Back: Parcel Details</button>
+                <button class="btn btn-primary btn-sm">Proceed to Review &rarr;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           10. MILESTONE TRACKING TIMELINE
+           ==================================================================== -->
+      <section id="tracking" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">10. Public Tracking Milestone Timeline</h2>
+            <p class="section-desc">Privacy-safe (SEC-016 compliant) customer parcel tracking history.</p>
+          </div>
+          <span class="spec-tag">SEC-016 PII Redaction Rule</span>
+        </div>
+
+        <div class="component-grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Live Tracking: SD-20261107-99812</div>
+                <div class="card-subtitle">Destination: Kandy Central &bull; Courier Assigned</div>
+              </div>
+              <span class="badge badge-teal"><span class="badge-dot"></span> IN_TRANSIT</span>
+            </div>
+
+            <!-- Milestones -->
+            <div class="milestone-timeline">
+              <div class="milestone-item is-done">
+                <div class="milestone-point">&#10003;</div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status">Parcel Booked & Ingested</span>
+                    <span class="milestone-time">07 Nov 08:30</span>
+                  </div>
+                  <div class="milestone-sub">Colombo Central Hub (Electronic notification received)</div>
+                </div>
+              </div>
+
+              <div class="milestone-item is-done">
+                <div class="milestone-point">&#10003;</div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status">Picked Up by Courier</span>
+                    <span class="milestone-time">07 Nov 10:15</span>
+                  </div>
+                  <div class="milestone-sub">Courier assigned and parcel collected from sender</div>
+                </div>
+              </div>
+
+              <div class="milestone-item is-done">
+                <div class="milestone-point">&#10003;</div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status">Sorted at Central Facility</span>
+                    <span class="milestone-time">07 Nov 13:40</span>
+                  </div>
+                  <div class="milestone-sub">Processed at Western Colombo Hub Sorting Line 4</div>
+                </div>
+              </div>
+
+              <div class="milestone-item is-current">
+                <div class="milestone-point">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                </div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status" style="color: var(--ss-primary);">Out for Delivery</span>
+                    <span class="milestone-time">07 Nov 15:10</span>
+                  </div>
+                  <div class="milestone-sub">On delivery vehicle heading toward destination city</div>
+                </div>
+              </div>
+
+              <div class="milestone-item">
+                <div class="milestone-point"></div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status" style="color: var(--ss-muted);">Delivered</span>
+                    <span class="milestone-time">Pending</span>
+                  </div>
+                  <div class="milestone-sub">Awaiting recipient signature & proof of delivery</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 24px; padding: 12px; background: var(--ss-surface-muted); border-radius: var(--radius-sm); font-size: 11.5px; color: var(--ss-muted); display: flex; align-items: center; gap: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span><strong>Privacy Guard (SEC-016):</strong> Street address and recipient phone number are redacted on public tracking view.</span>
+            </div>
+          </div>
+
+          <!-- Failed Attempt Scenario Timeline -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Exception Tracking: SD-20261106-44102</div>
+                <div class="card-subtitle">Destination: Jaffna Town &bull; Attempt 1 Failed</div>
+              </div>
+              <span class="badge badge-amber"><span class="badge-dot"></span> ATTEMPT_FAILED</span>
+            </div>
+
+            <div class="milestone-timeline">
+              <div class="milestone-item is-done">
+                <div class="milestone-point">&#10003;</div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status">Out for Delivery</span>
+                    <span class="milestone-time">06 Nov 09:00</span>
+                  </div>
+                  <div class="milestone-sub">Dispatched from Northern Sorting Center</div>
+                </div>
+              </div>
+
+              <div class="milestone-item is-failed">
+                <div class="milestone-point">!</div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status" style="color: var(--ss-amber);">Delivery Attempt Failed</span>
+                    <span class="milestone-time">06 Nov 11:45</span>
+                  </div>
+                  <div class="milestone-sub">Reason: Recipient premises closed / unattended</div>
+                </div>
+              </div>
+
+              <div class="milestone-item">
+                <div class="milestone-point"></div>
+                <div class="milestone-content">
+                  <div class="milestone-header">
+                    <span class="milestone-status" style="color: var(--ss-muted);">Automatic Re-attempt Scheduled</span>
+                    <span class="milestone-time">08 Nov Morning</span>
+                  </div>
+                  <div class="milestone-sub">Holding securely at Jaffna Local Delivery Depot</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 24px;">
+              <button class="btn btn-amber btn-sm" style="width: 100%;">Authorize Priority Re-dispatch</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           11. COURIER PROOF OF DELIVERY (POD)
+           ==================================================================== -->
+      <section id="pod" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">11. Courier Proof of Delivery (POD) Components</h2>
+            <p class="section-desc">Mobile web interface for signature capture, photo evidence, and recipient handover.</p>
+          </div>
+          <span class="spec-tag">Member 3 Courier Mobile Web</span>
+        </div>
+
+        <div class="component-grid">
+          <!-- Digital Signature Canvas Preview -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 6px;">Touch Signature Canvas</h3>
+            <p class="card-subtitle" style="margin-bottom: 14px;">HTML5 Canvas interface for recipient signature capture.</p>
+            
+            <div style="border: 2px dashed var(--ss-line); border-radius: var(--radius-md); height: 160px; background: var(--ss-surface-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+              <!-- Simulated drawn signature -->
+              <svg width="220" height="90" viewBox="0 0 200 80" fill="none" stroke="var(--ss-primary)" stroke-width="2.5" stroke-linecap="round">
+                <path d="M 20,40 Q 40,10 60,35 T 100,20 T 140,50 T 180,30" />
+              </svg>
+              <span style="font-size: 11px; color: var(--ss-muted); position: absolute; bottom: 8px; right: 12px;">Sign within boundary</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+              <button class="btn btn-subtle btn-sm">Clear Signature</button>
+              <span style="font-size: 12px; color: var(--ss-emerald); font-weight: 600;">&#10003; Signature Captured</span>
+            </div>
+
+            <div class="form-group" style="margin-top: 14px;">
+              <label class="form-label form-label-required" for="pod-name">Received By (Full Name)</label>
+              <input id="pod-name" type="text" class="input-control" value="Kamal Gunaratne" placeholder="Name of recipient">
+            </div>
+          </div>
+
+          <!-- Photo Evidence Capture Preview -->
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 6px;">Delivery Photo Attachment</h3>
+            <p class="card-subtitle" style="margin-bottom: 14px;">Mandatory camera proof for door-drop or unattended packages.</p>
+            
+            <div style="border: 1px solid var(--ss-line); border-radius: var(--radius-md); height: 160px; background: var(--ss-surface-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ss-muted)" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+              </svg>
+              <span style="font-size: 12.5px; font-weight: 600; color: var(--ss-muted); margin-top: 8px;">Tap to Capture Camera Proof</span>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 14px;">
+              <button class="btn btn-secondary btn-sm" style="flex: 1;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Launch Camera
+              </button>
+              <button class="btn btn-primary btn-sm" style="flex: 1;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                Confirm Delivery
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           12. SERVER TARIFF & QUOTE BREAKDOWN CARD
+           ==================================================================== -->
+      <section id="quote" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">12. Tariff Calculation & Server Quote Card</h2>
+            <p class="section-desc">Authoritative pricing calculation snapshot (Integer minor units / LKR cents).</p>
+          </div>
+          <span class="spec-tag">core-api/internal/pricing</span>
+        </div>
+
+        <div class="card" style="max-width: 640px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Delivery Tariff Estimation</div>
+              <div class="card-subtitle">Quote ID: <code>qte_01HXYZ992384A</code> &bull; Expires in: <span style="color: var(--ss-amber); font-weight: 700;">14:38</span></div>
+            </div>
+            <span class="badge badge-emerald">Verified Server Quote</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px 0; border-top: 1px solid var(--ss-line-subtle); border-bottom: 1px solid var(--ss-line-subtle);">
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: var(--ss-muted);">Base Route Charge (Western &rarr; Central)</span>
+              <span style="font-weight: 600;">LKR 650.00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: var(--ss-muted);">Weight Surcharge (2.5 kg @ LKR 120/kg)</span>
+              <span style="font-weight: 600;">LKR 300.00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: var(--ss-muted);">Priority Service Level (Express +30%)</span>
+              <span style="font-weight: 600;">LKR 285.00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: var(--ss-muted);">Special Fragile Handling Insurance</span>
+              <span style="font-weight: 600;">LKR 215.00</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: baseline; padding-top: 18px;">
+            <div>
+              <div style="font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-muted);">Total Delivery Charge</div>
+              <div style="font-size: 11.5px; color: var(--ss-muted);">Includes regulatory logistics taxes (145000 LKR cents)</div>
+            </div>
+            <div style="font-size: 26px; font-weight: 800; color: var(--ss-primary); letter-spacing: -0.02em;">
+              LKR 1,450.00
+            </div>
+          </div>
+
+          <div style="margin-top: 20px; padding: 12px; background: var(--ss-surface-muted); border-radius: var(--radius-sm); font-size: 12px; color: var(--ss-muted);">
+            <em>Pricing Invariant Notice:</em> Fees are calculated solely by Core API pricing rules. The frontend never computes tariffs independently.
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           13. MODALS, DIALOGS & SECRETS REVEAL
+           ==================================================================== -->
+      <section id="modals" class="catalog-section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">13. Modal Dialogs & Secret Reveal Components</h2>
+            <p class="section-desc">One-time secret display pattern for merchant API keys and webhook secrets.</p>
+          </div>
+          <span class="spec-tag">Member 4 Merchant Integration</span>
+        </div>
+
+        <div class="component-grid">
+          <!-- One-Time Secret Modal Preview -->
+          <div class="modal-preview-box">
+            <div class="modal-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ss-amber)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <div style="font-weight: 700; font-size: 16px;">New Merchant API Key Generated</div>
+              </div>
+              <button class="btn btn-subtle btn-sm btn-icon-only">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="alert alert-amber" style="margin-bottom: 16px; padding: 12px 14px;">
+                <div style="font-size: 12.5px;">
+                  <strong>Save this secret immediately!</strong> This secret is held in transient browser memory and will never be shown again after closing this window.
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Live API Key Token</label>
+                <div class="secret-box">
+                  <code>sd_live_9f82a1bc44e789d201ab</code>
+                  <button class="btn btn-secondary btn-sm" onclick="alert('Copied to clipboard!')">Copy</button>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Webhook HMAC Signing Secret</label>
+                <div class="secret-box">
+                  <code>whsec_e3b0c44298fc1c149afbf4c8</code>
+                  <button class="btn btn-secondary btn-sm" onclick="alert('Copied to clipboard!')">Copy</button>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-primary btn-sm">I Have Saved My Secret Keys</button>
+            </div>
+          </div>
+
+          <!-- Dispatcher Courier Assignment Dialog -->
+          <div class="modal-preview-box">
+            <div class="modal-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ss-primary)" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <div style="font-weight: 700; font-size: 16px;">Assign Courier to Dispatch</div>
+              </div>
+              <button class="btn btn-subtle btn-sm btn-icon-only">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div style="font-size: 13.5px; margin-bottom: 16px; color: var(--ss-muted);">
+                Select an active courier from the roster for parcel <strong>SD-20261107-99812</strong> (Weight: 2.5 kg &bull; Zone: Kandy Central).
+              </div>
+
+              <div class="form-group">
+                <label class="form-label form-label-required">Courier Roster</label>
+                <select class="input-control">
+                  <option>Kamal Perera (Motorbike &bull; 4 active / 8 max &bull; 50% capacity)</option>
+                  <option>Ruwan Silva (Van &bull; 2 active / 15 max &bull; 13% capacity)</option>
+                  <option>Sunil Jayasuriya (Motorbike &bull; 7 active / 8 max &bull; 88% capacity)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Dispatch Notes & Priority Instructions</label>
+                <textarea class="input-control" placeholder="Optional delivery instructions for courier..."></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary btn-sm">Cancel</button>
+              <button class="btn btn-primary btn-sm">Confirm Courier Assignment</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       Interactive Showcase Script (Theme Switcher & Active Navigation)
+       ======================================================================== -->
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isEvening = html.getAttribute('data-theme') === 'evening';
+      const newTheme = isEvening ? 'daylight' : 'evening';
+      
+      if (newTheme === 'evening') {
+        html.setAttribute('data-theme', 'evening');
+        document.getElementById('themeToggleLabel').innerText = 'Switch to Daylight Ivory';
+      } else {
+        html.removeAttribute('data-theme');
+        document.getElementById('themeToggleLabel').innerText = 'Switch to Evening Forest';
+      }
+    }
+
+    // Smooth navigation link highlighting
+    const navLinks = document.querySelectorAll('.nav-item');
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash || '#tokens';
+      navLinks.forEach(link => {
+        if (link.getAttribute('href') === hash) {
+          link.classList.add('active');
+        } else {
+          link.classList.remove('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
