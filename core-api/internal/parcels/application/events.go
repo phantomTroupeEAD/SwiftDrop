@@ -1,6 +1,11 @@
 package application
 
-import "time"
+import (
+	"time"
+
+	"github.com/swiftdrop/core-api/internal/events"
+	"github.com/swiftdrop/core-api/internal/parcels/domain"
+)
 
 // ParcelBookedPayload represents the integration event payload published
 // to the transactional outbox upon successful parcel creation.
@@ -25,3 +30,40 @@ type ParcelBookedPayload struct {
 	CreatedAt          time.Time `json:"created_at"`
 }
 
+// ParcelStatusChangedPayload represents the integration event payload published
+// to the transactional outbox upon any successful parcel lifecycle state transition.
+type ParcelStatusChangedPayload struct {
+	ParcelID         string    `json:"parcel_id"`
+	TrackingNumber   string    `json:"tracking_number"`
+	PreviousStatus   string    `json:"previous_status"`
+	NewStatus        string    `json:"new_status"`
+	ActorID          string    `json:"actor_id,omitempty"`
+	ActorRole        string    `json:"actor_role,omitempty"`
+	Reason           string    `json:"reason,omitempty"`
+	DeliveryAttempts int       `json:"delivery_attempts"`
+	OccurredAt       time.Time `json:"occurred_at"`
+}
+
+// EventTypeForStatus maps a target parcel status to its authoritative versioned event type.
+func EventTypeForStatus(target domain.ParcelStatus) string {
+	switch target {
+	case domain.StatusAssigned:
+		return events.ParcelAssignedV1
+	case domain.StatusPickedUp:
+		return events.ParcelPickedUpV1
+	case domain.StatusInTransit:
+		return events.ParcelInTransitV1
+	case domain.StatusOutForDelivery:
+		return events.ParcelOutForDeliveryV1
+	case domain.StatusDelivered:
+		return events.ParcelDeliveredV1
+	case domain.StatusAttemptFailed:
+		return events.ParcelDeliveryFailedV1
+	case domain.StatusReturned:
+		return events.ParcelReturnedV1
+	case domain.StatusCancelled:
+		return events.ParcelCancelledV1
+	default:
+		return ""
+	}
+}
