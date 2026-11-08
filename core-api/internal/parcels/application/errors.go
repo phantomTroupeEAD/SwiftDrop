@@ -14,5 +14,12 @@ var (
 	ErrTrackingNumberCollision = errors.New("unable to allocate unique tracking number after retries")
 	ErrInvalidBookingCommand   = errors.New("invalid booking command")
 	ErrNilTransactionManager   = errors.New("nil transaction manager provided")
-)
 
+	// Parcel lifecycle transition errors.
+	ErrParcelNotFound             = errors.New("parcel not found")
+	ErrConcurrencyConflict        = errors.New("concurrency conflict: parcel was modified by another transaction")
+	ErrInvalidTransitionCommand   = errors.New("invalid transition command")
+	ErrNilParcelRepository        = errors.New("nil parcel repository provided")
+	ErrNilStatusHistoryRepository = errors.New("nil status history repository provided")
+	ErrNilOutboxWriter            = errors.New("nil outbox writer provided")
+)
