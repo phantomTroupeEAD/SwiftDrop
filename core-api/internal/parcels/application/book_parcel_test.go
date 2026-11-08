@@ -144,11 +144,14 @@ func (m *mockQuoteConsumer) ConsumeQuote(ctx context.Context, q db.Querier, quot
 
 // Mock Parcel Repository.
 type mockParcelRepo struct {
-	parcels     map[string]domain.Parcel
-	existingTNs map[string]bool
-	saveErr     error
-	saveCalled  bool
-	existsErr   error
+	parcels      map[string]domain.Parcel
+	existingTNs  map[string]bool
+	saveErr      error
+	saveCalled   bool
+	existsErr    error
+	findErr      error
+	updateErr    error
+	updateCalled bool
 }
 
 func newMockParcelRepo() *mockParcelRepo {
@@ -176,11 +179,30 @@ func (m *mockParcelRepo) ExistsTrackingNumber(ctx context.Context, q db.Querier,
 }
 
 func (m *mockParcelRepo) FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error) {
+	if m.findErr != nil {
+		return domain.Parcel{}, m.findErr
+	}
 	p, ok := m.parcels[id]
 	if !ok {
 		return domain.Parcel{}, domain.ErrInvalidParcelID
 	}
 	return p, nil
+}
+
+func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error {
+	m.updateCalled = true
+	if m.updateErr != nil {
+		return m.updateErr
+	}
+	existing, ok := m.parcels[parcel.ID]
+	if !ok {
+		return domain.ErrInvalidParcelID
+	}
+	if existing.Version != expectedVersion {
+		return ErrConcurrencyConflict
+	}
+	m.parcels[parcel.ID] = parcel
+	return nil
 }
 
 // Mock Status History Repository.
