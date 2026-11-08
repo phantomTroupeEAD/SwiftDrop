@@ -154,13 +154,33 @@ export const SwiftSignatureTheme: React.FC = () => {
   const renderStatusBadge = (status: OrderItem['status']) => {
     switch (status) {
       case 'IN_TRANSIT':
-        return <span className="ss-badge ss-badge-teal">In Transit</span>;
+        return (
+          <span className="ss-badge ss-badge-teal">
+            <span className="ss-badge-dot" />
+            <span>In Transit</span>
+          </span>
+        );
       case 'OUT_FOR_DELIVERY':
-        return <span className="ss-badge ss-badge-teal">Out for Delivery</span>;
+        return (
+          <span className="ss-badge ss-badge-teal">
+            <span className="ss-badge-dot" />
+            <span>Out for Delivery</span>
+          </span>
+        );
       case 'DELIVERED':
-        return <span className="ss-badge ss-badge-emerald">Delivered</span>;
+        return (
+          <span className="ss-badge ss-badge-emerald">
+            <span className="ss-badge-dot" />
+            <span>Delivered</span>
+          </span>
+        );
       case 'ATTEMPT_FAILED':
-        return <span className="ss-badge ss-badge-amber">Action Needed</span>;
+        return (
+          <span className="ss-badge ss-badge-amber">
+            <span className="ss-badge-dot" />
+            <span>Action Needed</span>
+          </span>
+        );
     }
   };
 
@@ -259,7 +279,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                     onClick={() => setBookingStep(1)}
                     data-testid="signature-booking-step-1"
                   >
-                    <div className="ss-step-num">{bookingStep > 1 ? <Check size={14} /> : '1'}</div>
+                    <div className="ss-step-num">{bookingStep > 1 ? <Check size={16} strokeWidth={2.5} /> : '1'}</div>
                     <div className="ss-step-label">Addresses</div>
                   </li>
 
@@ -268,7 +288,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                     onClick={() => setBookingStep(2)}
                     data-testid="signature-booking-step-2"
                   >
-                    <div className="ss-step-num">{bookingStep > 2 ? <Check size={14} /> : '2'}</div>
+                    <div className="ss-step-num">{bookingStep > 2 ? <Check size={16} strokeWidth={2.5} /> : '2'}</div>
                     <div className="ss-step-label">Parcel details</div>
                   </li>
 
@@ -277,7 +297,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                     onClick={() => setBookingStep(3)}
                     data-testid="signature-booking-step-3"
                   >
-                    <div className="ss-step-num">{bookingStep > 3 ? <Check size={14} /> : '3'}</div>
+                    <div className="ss-step-num">{bookingStep > 3 ? <Check size={16} strokeWidth={2.5} /> : '3'}</div>
                     <div className="ss-step-label">Quote</div>
                   </li>
 
@@ -421,7 +441,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--ss-line)]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-[var(--ss-line)]">
                         <span className="text-xs text-[var(--ss-muted)]">Your details stay here as you continue.</span>
                         <button
                           type="submit"
@@ -581,7 +601,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--ss-line)]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-[var(--ss-line)]">
                         <button
                           type="button"
                           className="ss-secondary"
@@ -632,14 +652,12 @@ export const SwiftSignatureTheme: React.FC = () => {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between py-1">
                           <span className="text-[var(--ss-muted)]">Delivery charge</span>
-                          <span>LKR 450.00</span>
+                          <span className="tabular-num font-medium">LKR 450.00</span>
                         </div>
                         <div className="flex justify-between py-1">
                           <span className="text-[var(--ss-muted)]">Weight Charge ({packageWeight} kg)</span>
-                          <span>LKR 150.00</span>
+                          <span className="tabular-num font-medium">LKR 150.00</span>
                         </div>
-
-
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-[var(--ss-line)]">
@@ -648,7 +666,7 @@ export const SwiftSignatureTheme: React.FC = () => {
                           <small className="block text-xs text-[var(--ss-muted)]">Sample price for this layout</small>
                         </div>
                         <div
-                          className="text-2xl font-bold text-[var(--ss-primary)]"
+                          className="text-2xl font-bold text-[var(--ss-primary)] tabular-num"
                           data-testid="signature-booking-quote-display"
                         >
                           LKR 600.00
@@ -656,13 +674,12 @@ export const SwiftSignatureTheme: React.FC = () => {
                       </div>
                     </div>
 
-
-
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--ss-line)]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-[var(--ss-line)]">
                       <button
                         type="button"
                         className="ss-secondary"
                         onClick={() => setBookingStep(2)}
+                        data-testid="signature-booking-back-btn"
                       >
                         <ArrowLeft size={16} />
                         <span>Back to Parcel Specs</span>
@@ -695,14 +712,12 @@ export const SwiftSignatureTheme: React.FC = () => {
                         <span className="text-xs text-[var(--ss-muted)] uppercase font-semibold">Origin &amp; Sender</span>
                         <div><strong>{senderName}</strong> ({senderPhone})</div>
                         <div className="text-xs text-[var(--ss-muted)]">{pickupCity}</div>
-
                       </div>
 
                       <div className="space-y-1">
                         <span className="text-xs text-[var(--ss-muted)] uppercase font-semibold">Destination &amp; Recipient</span>
                         <div><strong>{recipientName}</strong> ({recipientPhone})</div>
                         <div className="text-xs text-[var(--ss-muted)]">{deliveryCity}</div>
-
                       </div>
 
                       <div className="space-y-1 pt-3 border-t border-[var(--ss-line)] md:border-t-0">
@@ -711,15 +726,14 @@ export const SwiftSignatureTheme: React.FC = () => {
                         <div>Dimensions: <strong>{packageDims}</strong></div>
                         <div>Service: <strong className="capitalize">{serviceLevel}</strong></div>
                       </div>
-
-
                     </div>
 
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--ss-line)]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-[var(--ss-line)]">
                       <button
                         type="button"
                         className="ss-secondary"
                         onClick={() => setBookingStep(3)}
+                        data-testid="signature-booking-back-btn"
                       >
                         <ArrowLeft size={16} />
                         <span>Back to Quote</span>
@@ -937,55 +951,67 @@ export const SwiftSignatureTheme: React.FC = () => {
                   {/* 3. Orders Table Content Depending on State */}
                   <div className="mt-4">
                     <div className="ss-table-container">
-                        <table className="ss-table" data-testid="signature-merchant-orders-table">
-                          <thead>
-                            <tr>
-                              <th>Tracking Number</th>
-                              <th>Recipient &amp; Destination</th>
-                              <th>Status</th>
-                              <th>Created</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredOrders.length > 0 ? (
-                              filteredOrders.map((ord) => (
-                                <tr key={ord.id}>
-                                  <td>
-                                    <strong className="font-mono text-sm">{ord.trackingNumber}</strong>
-                                  </td>
-                                  <td>
-                                    <div>{ord.recipientName}</div>
-                                    <small className="text-[var(--ss-muted)]">{ord.recipientCity}</small>
-                                  </td>
-                                  <td>{renderStatusBadge(ord.status)}</td>
-                                  <td className="text-[var(--ss-muted)]">{ord.date}</td>
-                                  <td>
-                                    <button
-                                      className="ss-secondary px-3 py-1.5 text-xs min-h-[36px]"
-                                      onClick={() => setFeedbackMessage(`Selected parcel ${ord.trackingNumber} for review.`)}
-                                    >
-                                      Details
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td colSpan={5} className="text-center py-8 text-[var(--ss-muted)]">
-                                  No orders match your search.
+                      <table className="ss-table" data-testid="signature-merchant-orders-table">
+                        <thead>
+                          <tr>
+                            <th>Tracking Number</th>
+                            <th>Recipient &amp; Destination</th>
+                            <th className="text-right">Weight</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th className="text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredOrders.length > 0 ? (
+                            filteredOrders.map((ord) => (
+                              <tr key={ord.id}>
+                                <td>
+                                  <strong className="font-mono text-sm tabular-num text-[var(--ss-ink)]">{ord.trackingNumber}</strong>
+                                </td>
+                                <td>
+                                  <div className="font-medium text-[var(--ss-ink)]">{ord.recipientName}</div>
+                                  <small className="text-[var(--ss-muted)]">{ord.recipientCity}</small>
+                                </td>
+                                <td className="text-right">
+                                  <span className="tabular-num font-medium text-[var(--ss-ink)]">{ord.weightKg.replace(' kg', '')}</span>{' '}
+                                  <span className="text-[var(--ss-muted)] text-xs">kg</span>
+                                </td>
+                                <td>{renderStatusBadge(ord.status)}</td>
+                                <td className="text-[var(--ss-muted)] tabular-num text-xs whitespace-nowrap">{ord.date}</td>
+                                <td className="text-right">
+                                  <button
+                                    className="ss-secondary ss-btn-sm"
+                                    onClick={() => setFeedbackMessage(`Selected parcel ${ord.trackingNumber} for review.`)}
+                                  >
+                                    Details
+                                  </button>
                                 </td>
                               </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-
-
-
-
-
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="text-center py-10 text-[var(--ss-muted)]">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <Package size={28} className="text-[var(--ss-muted)] opacity-50 mb-1" />
+                                  <p className="font-medium text-sm text-[var(--ss-ink)]">No orders match your search.</p>
+                                  <p className="text-xs text-[var(--ss-muted)]">Try adjusting your keywords or clearing the status filter.</p>
+                                  <button
+                                    className="ss-secondary ss-btn-sm mt-2"
+                                    onClick={() => {
+                                      setMerchantSearch('');
+                                      setMerchantStatusFilter('ALL');
+                                    }}
+                                  >
+                                    Reset filters
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
                   {/* Connection Health & Live SSE Indicator */}

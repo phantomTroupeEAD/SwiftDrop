@@ -46,22 +46,39 @@ The clean UI is organized into two primary workflows accessible via the sidebar 
 
 ### Screen A: Customer Delivery Booking Wizard (`#customer`)
 An accessible, responsive 4-step wizard:
-1. **Addresses:** Sender full name, mobile number, pickup address & city; recipient full name, mobile number, delivery address & city.
-2. **Parcel Details:** Weight in kg (with 30kg courier limit helper), dimensions (L × W × H cm), pickup zone selector (`WESTERN_COLOMBO_01`), destination zone selector (`CENTRAL_KANDY_01`), delivery priority (Standard vs Express), and fragile item handling checkbox.
-3. **Delivery Estimate (Quote):** Displays estimated delivery charges, weight surcharges, and total formatted in LKR (`formatLKR`). Marked with a clear "Sample quote" badge to reflect that the live Pricing API is not yet wired.
-4. **Review & Confirm:** Origin/destination summary, parcel specs, service priority, and a "Confirm booking" primary action.
-5. **Integrated Tracking Lookup:** Public tracking card with tracking number input and a privacy-safe milestone timeline preview (SEC-016 compliant: masks phone numbers and private addresses; displays milestone times and destination city only).
+1. **Connected Stepper Track:** Visual horizontal guide connecting all 4 steps (Addresses → Parcel details → Quote → Review), featuring circular numbered nodes, checkmark indicators (`✓`) for completed steps, active ring highlights, and smooth fluid sizing across mobile and desktop.
+2. **Addresses:** Sender full name, mobile number, pickup address & city; recipient full name, mobile number, delivery address & city.
+3. **Parcel Details:** Weight in kg (with 30kg courier limit helper), dimensions (L × W × H cm), pickup zone selector (`WESTERN_COLOMBO_01`), destination zone selector (`CENTRAL_KANDY_01`), delivery priority (Standard vs Express), and fragile item handling checkbox.
+4. **Delivery Estimate (Quote):** Displays estimated delivery charges, weight surcharges, and total formatted in LKR (`formatLKR`) using tabular figures (`tabular-nums`). Marked with a clear "Sample quote" badge to reflect that the live Pricing API is not yet wired.
+5. **Review & Confirm:** Origin/destination summary, parcel specs, service priority, and a "Confirm booking" primary action with Back and Confirm actions.
+6. **Integrated Tracking Lookup:** Public tracking card with tracking number input and a privacy-safe milestone timeline preview (SEC-016 compliant: masks phone numbers and private addresses; displays milestone times and destination city only).
 
 ### Screen B: Merchant Orders Dashboard (`#merchant`)
 A clean logistics management view:
 1. **Concise Summary KPIs:** Stat cards showing Total orders (`5`), In transit (`2`), Delivered (`1`), and Needs attention (`1` with amber badge).
 2. **Search & Filters:** Real-time text search for tracking numbers, customer names, or destination cities; quick filter pills (`All`, `In Transit`, `Delivered`, `Action Needed`).
-3. **Orders Table:** Clean, responsive data table with Tracking Number (monospace), Recipient & Destination, Status Badge, Ingested Date, and a Details action button.
-4. **Zero-Match Result:** Helpful message ("No orders match your search") displayed when filtering yields 0 rows.
+3. **Refined Orders Table:** Clean, responsive data table with Tracking Number (monospace + tabular figures), Recipient & Destination, Weight (right-aligned tabular numbers with unit separation), Status Badges (pill shape with colored dot indicators + text labels), Ingested Date, and a Details action button (`ss-btn-sm`).
+4. **Zero-Match Result:** Helpful message with package icon and a quick "Reset filters" action button displayed when search or filters return 0 rows.
 
 ---
 
-## 4. How to Install, Run & Open the UI
+## 4. Component Patterns Borrowed from Prototypes
+
+We referenced our teammate's two HTML prototypes in `web/public/` to enhance the React implementation while keeping the Swift Signature Teal & Warm Ivory identity:
+
+### 1. From `scratch.html`
+- **Authentic Swift Signature Palette:** Consistent application of Primary Teal (`#0B5955`), Warm Ivory (`#F7F5EE`), Forest Ink (`#142E2B`), Soft Mint (`#E3EFE8`), and White card surfaces (`#FFFFFF`).
+- **Accessible Form Controls:** Explicit focus-within rings (`box-shadow: 0 0 0 3px rgba(11, 89, 85, 0.15)`), distinct required asterisks (`#B84D26`), and helpful secondary helper hints.
+- **Status Badges with Dot Indicators:** Status pills pairing a colored status dot (`.ss-badge-dot`) with unambiguous text labels, ensuring state is never communicated through color alone.
+
+### 2. From `scratch-apple.html` (Swift Signature archetype)
+- **Connected Track Stepper:** Horizontal connecting rail (`.ss-stepper::before`) running behind circular step indicators (`.ss-step-num`), with checkmarks for completed steps, active ring treatments, and fluid responsive scaling.
+- **Button Hierarchy & Micro-interactions:** Clean primary vs secondary styling with active tap-scaling (`transform: scale(0.98)`), accessible min-height touch targets, and compact table action buttons (`.ss-btn-sm`, 36px height).
+- **Tabular Numerics & Table Alignment:** High-precision data scanning with `font-variant-numeric: tabular-nums` for tracking numbers, dates, weights, and currency, plus right-aligned numerical values with muted unit markers (`kg`).
+
+---
+
+## 5. How to Install, Run & Open the UI
 
 ### Prerequisites
 Node.js 18+ and npm installed locally.
@@ -74,16 +91,21 @@ cd web
 # Install dependencies (if not already installed)
 npm install
 
-# Start the Vite development server on port 3000
+# Start the Vite development server (default port 3000, or port 3001 if 3000 is occupied)
 npm run dev
+# Or run on port 3001 specifically:
+npx vite --port 3001
 ```
 
 ### Actual Routes & Preview URLs
-- **Clean UI Route:** `http://localhost:3000/design-preview` (also mapped to `http://localhost:3000/preview/design`)
-- **Customer Booking Direct:** `http://localhost:3000/design-preview?screen=customer-booking`
-- **Merchant Orders Direct:** `http://localhost:3000/design-preview?screen=merchant-orders`
-- **Evening Mode Direct:** `http://localhost:3000/design-preview?screen=customer-booking&palette=evening`
-- **Login Screen Entry:** `http://localhost:3000/auth/login` includes a direct link button: *"Preview Customer & Merchant Portal →"*
+- **Clean UI Route (Port 3001):** `http://localhost:3001/design-preview` (also mapped to `http://localhost:3001/preview/design`)
+- **Customer Booking Direct:** `http://localhost:3001/design-preview?screen=customer-booking`
+- **Merchant Orders Direct:** `http://localhost:3001/design-preview?screen=merchant-orders`
+- **Evening Mode Direct:** `http://localhost:3001/design-preview?screen=customer-booking&palette=evening`
+- **Login Screen Entry:** `http://localhost:3001/auth/login` includes a direct link button: *"Preview Customer & Merchant Portal →"*
+- **Teammate HTML Prototypes (for reference):**
+  - Prototype 1: `http://localhost:3001/scratch.html`
+  - Prototype 2: `http://localhost:3001/scratch-apple.html`
 
 ---
 
@@ -158,27 +180,29 @@ Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and c
 ### Verification Execution Summary
 | Check | Command | Result |
 | :--- | :--- | :--- |
-| **TypeScript & Bundling** | `npm run build` | **PASSED** (1512 modules transformed, 0 errors) |
+| **TypeScript & Bundling** | `npm run build` | **PASSED** (1511 modules transformed, `tsc && vite build` built in 11.78s, 0 errors) |
 | **Git Diff Cleanliness** | `git diff --check` | **PASSED** (No whitespace or line-break conflicts) |
-| **Viewports Tested** | 1440px (Desktop), 768px (Tablet), 375px (Mobile) | **PASSED** (Fluid layout, zero horizontal page blowout) |
-| **Touch Target Audit** | All interactive controls audited | **PASSED** (Minimum 44px × 44px on buttons, tabs, inputs) |
+| **Viewports Tested** | 1440px (Desktop), 768px (Tablet), 375px (Mobile) | **PASSED** (Fluid layout, zero horizontal page blowout, touch-friendly) |
+| **Touch Target Audit** | All interactive controls audited | **PASSED** (Minimum 44px × 44px on buttons, tabs, inputs; 36px on table action buttons) |
 
 ### Local Screenshot Artifacts
-- **Customer Booking Preview (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\customer_booking_1440.png`
-- **Merchant Orders Dashboard (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\merchant_orders_1440.png`
-- **Tablet Responsive Layout (768px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\responsive_tablet_768.png`
-- **Mobile Responsive Layout (375px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\responsive_mobile_375.png`
-- **Evening Operational Mode (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\evening_palette_1440.png`
+- **Customer Booking Preview (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\customer_booking_1440.png`
+- **Merchant Orders Dashboard (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\merchant_orders_1440.png`
+- **Tablet Responsive Layout (768px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\responsive_tablet_768.png`
+- **Mobile Responsive Layout (375px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\responsive_mobile_375.png`
+- **Merchant Mobile Layout (375px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\merchant_mobile_375.png`
+- **Evening Operational Mode (1440px):** `C:\Users\sajin\.gemini\antigravity\brain\d1500dae-de7a-46a9-bae7-88c3cca6773f\screenshots\evening_palette_1440.png`
 
 ---
 
 ## 10. Concise Review Checklist for Bhagya
 
-- [ ] **Visual Identity:** Review Teal (`#0B5955`) & Warm Ivory (`#F7F5EE`) at `http://localhost:3000/design-preview`.
+- [ ] **Visual Identity:** Review Teal (`#0B5955`) & Warm Ivory (`#F7F5EE`) at `http://localhost:3001/design-preview`.
+- [ ] **Prototypes Reference:** Compare against `http://localhost:3001/scratch.html` and `http://localhost:3001/scratch-apple.html`.
 - [ ] **Daylight vs. Evening:** Toggle the topbar Sun/Moon icon to inspect both lighting conditions.
 - [ ] **Customer Wizard:** Click through Steps 1 → 2 → 3 → 4 to verify form layout, input readability, and step flow.
 - [ ] **Tracking Sample:** Inspect the tracking card for privacy-safe milestone representation.
-- [ ] **Merchant Orders:** Test order search and status filter buttons; verify that zero-match queries render a clean message.
+- [ ] **Merchant Orders:** Test order search and status filter buttons; verify that zero-match queries render a clean message with reset button.
 - [ ] **Mobile Responsiveness:** Shrink browser to 375px; verify that sidebar collapses and tables scroll cleanly without page overflow.
 - [ ] **Shell Unification:** Note any required adjustments for your upcoming Dispatcher Board layout.
 

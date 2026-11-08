@@ -102,22 +102,19 @@ To guarantee comfortable reading across all screen sizes:
 The Option 3 preview at `/design-preview` demonstrates two realistic, isolated portal workflows with 100% sample data:
 
 ### Screen A: Customer Delivery Booking Wizard
+- **Connected Stepper Track:** Visual horizontal rail connecting all 4 steps (Addresses → Parcel details → Quote → Review), featuring circular numbered nodes, checkmark indicators (`✓`) for completed steps, active ring highlights, and fluid scaling across viewports.
 - **Step 1: Addresses:** Sender name, sender mobile (`+94 77 123 4567`), pickup address, recipient name, recipient mobile (`+94 71 987 6543`), delivery destination.
 - **Step 2: Parcel & Zones:** Weight (kg) with limit helper, dimensions (L×W×H cm) for volumetric check, pickup zone selector (`WESTERN_COLOMBO_01`), destination zone selector (`CENTRAL_KANDY_01`), service level selector (Standard vs Express), fragile handling checkbox.
-- **Step 3: Server Quote:** Simulated response from `POST /api/v1/pricing/quotes`, displaying quote ID (`qte_982f1b8c`), 15-minute expiration countdown timer, itemized fee breakdown (Base zone tariff + weight charge + service surcharge), and total fee formatted in LKR. Includes explicit disclaimer that fees are never calculated client-side.
-- **Step 4: Review & Idempotent Confirm:** Origin/destination summary, package specs, stable UUIDv4 idempotency key notice (`idemp_78e9b1a2...`), and preview confirmation action.
+- **Step 3: Server Quote:** Simulated response displaying itemized fee breakdown (delivery charge + weight surcharge) and total fee formatted in LKR (`formatLKR`) using tabular figures (`tabular-nums`). Includes explicit "Sample quote" badge.
+- **Step 4: Review & Idempotent Confirm:** Origin/destination summary, package specs, service priority, and preview confirmation action with honest user feedback banner explaining the action is unconnected.
 - **Quick Tracking Card:** Privacy-safe (SEC-016) public tracking card with masked milestones and destination city.
 
 ### Screen B: Merchant Orders & Operations Dashboard
-- **Summary KPI Bar:** Total ingested orders (`128`), In Transit (`42`), Delivered Today (`78`), Delivery Exceptions (`8`).
-- **Search & Filter Controls:** Search input for tracking numbers or cities; status filter buttons (`All`, `In Transit`, `Delivered`, `Action Needed`); Batch CSV upload button.
-- **Orders Table:** Full shipment list with tracking number, recipient, zone, status badge, weight, date, and detail action.
-- **Interactive State Switcher:** Reviewers can inspect all 4 table conditions:
-  1. *Loaded Table:* Populated with realistic Sri Lankan parcel dispatches.
-  2. *Loading State:* Shimmer spinner (`aria-busy="true"`) with status description.
-  3. *Empty State:* Friendly inbox icon, empty notice, and "Import First CSV Batch" primary action.
-  4. *Error State:* Rose container with `AlertTriangle`, timeout message, correlation ID (`corr_m4_89ab3c4d`), and "Retry Gateway Connection" button.
-- **Stream Health Indicator:** Real-time SSE live connection indicator with toggleable degraded polling fallback notice.
+- **Summary KPI Bar:** Total orders (`5`), In Transit (`2`), Delivered (`1`), Needs attention (`1` with dedicated amber treatment).
+- **Search & Filter Controls:** Search input for tracking numbers or cities; status filter buttons (`All`, `In Transit`, `Delivered`, `Action Needed`); Batch CSV upload placeholder button.
+- **Refined Orders Table:** Full shipment list with monospace tracking number, recipient, weight (right-aligned tabular numbers with unit separation), status pill badges with colored status dots (`.ss-badge-dot`) plus text labels, tabular dates, and touch-friendly details action (`ss-btn-sm`).
+- **Zero-Match Result:** Friendly empty state with package icon and quick "Reset filters" button when search or filters return 0 rows.
+- **Clean Application Presentation:** Reviewer evaluation chrome, forced state toggles, and fake live connection pulses have been removed in favor of a clean, production-styled shipping application with a single subtle **"Sample data"** label in the top bar.
 
 ---
 

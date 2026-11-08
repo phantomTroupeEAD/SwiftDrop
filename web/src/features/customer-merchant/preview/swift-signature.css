@@ -50,16 +50,23 @@
 }
 
 /* The selected design is now an application shell, not a showcase card. */
-.swift-signature { min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
-.swift-signature .ss-app { min-height: 100vh; }
-.swift-signature .ss-main { min-width: 0; }
+.swift-signature {
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+.swift-signature .ss-app { min-height: 100vh; max-width: 100%; }
+.swift-signature .ss-main { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .swift-signature .ss-sidebar { position: sticky; top: 0; height: 100vh; }
 .swift-signature .ss-account { margin-top: auto; }
 .ss-topbar-actions { display: flex; align-items: center; gap: 14px; }
 .ss-sample-label { font-size: 12px; color: var(--ss-muted); white-space: nowrap; }
 .ss-appearance-toggle { display: grid; place-items: center; min-width: 44px; min-height: 44px; border-radius: 50%; color: var(--ss-primary); cursor: pointer; }
 .ss-appearance-toggle:hover { background: var(--ss-mint); }
-.swift-signature .ss-content { max-width: 1360px; margin: 0 auto; width: 100%; padding: 36px clamp(18px, 3vw, 48px); }
+.swift-signature .ss-content { max-width: 1360px; margin: 0 auto; width: 100%; padding: 36px clamp(18px, 3vw, 48px); box-sizing: border-box; }
 .swift-signature .ss-card-header p { max-width: 620px; }
 @media(max-width:768px) {
   .swift-signature .ss-sidebar { position: static; height: auto; }
@@ -215,7 +222,7 @@
   font-weight: 600;
   font-size: 14px;
   white-space: nowrap;
-  transition: all 0.15s ease-in-out;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   min-height: 44px;
   min-width: 44px;
@@ -227,11 +234,17 @@
   background: var(--ss-primary);
   color: #ffffff;
   border: 1px solid var(--ss-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .ss-primary:hover {
   background: var(--ss-primary-hover);
   border-color: var(--ss-primary-hover);
+  transform: translateY(-0.5px);
+}
+
+.ss-primary:active {
+  transform: scale(0.98);
 }
 
 .swift-signature--night .ss-primary {
@@ -243,11 +256,25 @@
   border: 1px solid var(--ss-line);
   background: var(--ss-surface);
   color: var(--ss-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .ss-secondary:hover {
   background: var(--ss-surface-muted);
   border-color: var(--ss-muted);
+  transform: translateY(-0.5px);
+}
+
+.ss-secondary:active {
+  transform: scale(0.98);
+}
+
+.ss-btn-sm {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  border-radius: 7px;
 }
 
 .ss-amber-btn {
@@ -485,6 +512,8 @@
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 4px 12px -2px rgba(20, 46, 43, 0.04);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .ss-card-header {
@@ -510,73 +539,111 @@
   margin: 4px 0 0;
 }
 
-/* Stepper Component */
+/* Stepper Component (Connected horizontal track inspired by scratch-apple.html & scratch.html) */
 .ss-stepper {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
   list-style: none;
   padding: 0;
-  margin: 0 0 24px;
+  margin: 0 0 28px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.ss-stepper::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: 36px;
+  right: 36px;
+  height: 2px;
+  background: var(--ss-line);
+  z-index: 1;
+}
+
+.swift-signature--night .ss-stepper::before {
+  background: var(--ss-line);
 }
 
 .ss-step-item {
+  position: relative;
+  z-index: 2;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--ss-line);
-  background: var(--ss-canvas);
+  gap: 8px;
+  background: transparent;
+  border: none;
   cursor: pointer;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 4px;
   min-height: 44px;
+  text-decoration: none;
   transition: all 0.15s ease-in-out;
-}
-
-.ss-step-item.active {
-  background: var(--ss-surface);
-  border-color: var(--ss-primary);
-  border-width: 2px;
-  box-shadow: 0 2px 6px rgba(11, 89, 85, 0.1);
-}
-
-.ss-step-item.completed {
-  background: var(--ss-mint);
-  border-color: var(--ss-mint-dark);
 }
 
 .ss-step-num {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  background: var(--ss-surface-muted);
+  background: var(--ss-surface);
+  border: 2px solid var(--ss-line);
   color: var(--ss-muted);
   flex-shrink: 0;
+  transition: all 0.15s ease-in-out;
 }
 
 .ss-step-item.active .ss-step-num {
-  background: var(--ss-primary);
-  color: #ffffff;
+  background: var(--ss-surface);
+  border-color: var(--ss-primary);
+  color: var(--ss-primary);
+  box-shadow: 0 0 0 4px var(--ss-mint);
 }
 
 .swift-signature--night .ss-step-item.active .ss-step-num {
-  color: #142e2b;
+  background: var(--ss-surface);
+  border-color: var(--ss-primary);
+  color: var(--ss-primary);
+  box-shadow: 0 0 0 4px rgba(133, 212, 181, 0.2);
 }
 
 .ss-step-item.completed .ss-step-num {
   background: var(--ss-primary);
+  border-color: var(--ss-primary);
   color: #ffffff;
 }
 
+.swift-signature--night .ss-step-item.completed .ss-step-num {
+  background: var(--ss-primary);
+  border-color: var(--ss-primary);
+  color: #142e2b;
+}
+
 .ss-step-label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--ss-ink);
+  color: var(--ss-muted);
   line-height: 1.2;
+  text-align: center;
+  transition: color 0.15s ease;
+  max-width: 100%;
+}
+
+.ss-step-item.active .ss-step-label {
+  color: var(--ss-ink);
+  font-weight: 700;
+}
+
+.ss-step-item.completed .ss-step-label {
+  color: var(--ss-ink);
 }
 
 /* Accessible Form Controls */
@@ -590,6 +657,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .ss-field-group.full-width {
@@ -622,6 +692,9 @@
   min-height: 44px;
   color: var(--ss-ink);
   transition: border-color 0.15s ease-in-out;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .ss-input-wrap:focus-within {
@@ -643,6 +716,7 @@
 .ss-input-wrap select,
 .ss-input-wrap textarea {
   width: 100%;
+  min-width: 0;
   border: none;
   background: transparent;
   color: inherit;
@@ -696,10 +770,19 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 9999px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ss-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .ss-badge-teal {
@@ -724,6 +807,12 @@
   background: var(--ss-rose-bg);
   color: var(--ss-rose);
   border: 1px solid var(--ss-rose-line);
+}
+
+/* Tabular Numbers */
+.tabular-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* KPI Summary Stat Cards */
@@ -782,6 +871,7 @@
   letter-spacing: -0.02em;
   line-height: 1.1;
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Data Table Component */
@@ -790,20 +880,21 @@
   border: 1px solid var(--ss-line);
   border-radius: 10px;
   background: var(--ss-surface);
+  -webkit-overflow-scrolling: touch;
 }
 
 .ss-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .ss-table th {
   background: var(--ss-surface-muted);
   color: var(--ss-muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 12px 16px;
@@ -945,9 +1036,6 @@
   .ss-palette {
     grid-template-columns: repeat(3, 1fr);
   }
-  .ss-stepper {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
@@ -955,13 +1043,23 @@
     flex-direction: column;
     align-items: flex-start;
   }
+  .swift-signature .ss-app,
   .ss-app {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 100vw;
   }
+  .swift-signature .ss-sidebar,
   .ss-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--ss-line);
-    padding: 20px;
+    padding: 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    position: static;
+    height: auto;
   }
   .ss-sidebar-note,
   .ss-account {
@@ -972,17 +1070,48 @@
     flex-wrap: wrap;
     gap: 8px;
   }
+  .swift-signature .ss-main,
+  .ss-main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  .swift-signature .ss-topbar,
+  .ss-topbar {
+    padding: 0 14px;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .swift-signature .ss-content,
   .ss-content {
-    padding: 20px 16px;
+    padding: 16px 12px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .swift-signature .ss-card,
+  .ss-card {
+    padding: 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .swift-signature .ss-table-container,
+  .ss-table-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    display: block;
   }
   .ss-form-grid {
     grid-template-columns: 1fr;
   }
   .ss-field-group.full-width {
     grid-column: span 1;
-  }
-  .ss-stepper {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ss-stat-grid {
     grid-template-columns: 1fr;
@@ -992,12 +1121,49 @@
   }
 }
 
+@media (max-width: 640px) {
+  .ss-stepper {
+    margin-bottom: 20px;
+    width: 100%;
+  }
+  .ss-stepper::before {
+    top: 15px;
+    left: 20px;
+    right: 20px;
+  }
+  .ss-step-item {
+    gap: 4px;
+    padding: 0 1px;
+    min-width: 0;
+  }
+  .ss-step-num {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+  .ss-step-label {
+    font-size: 10.5px;
+    white-space: normal;
+    text-align: center;
+    max-width: 68px;
+    line-height: 1.15;
+    word-break: break-word;
+  }
+  .ss-topbar-breadcrumb {
+    font-size: 11.5px;
+  }
+  .ss-sample-label {
+    font-size: 11px;
+  }
+}
+
 @media (max-width: 480px) {
   .ss-intro {
     padding: 18px 14px;
   }
+  .swift-signature .ss-content,
   .ss-content {
-    padding: 16px 12px;
+    padding: 14px 10px;
   }
   .ss-palette {
     grid-template-columns: 1fr;
