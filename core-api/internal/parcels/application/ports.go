@@ -37,11 +37,19 @@ type ParcelRepository interface {
 	Save(ctx context.Context, q db.Querier, parcel domain.Parcel) error
 	ExistsTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (bool, error)
 	FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error)
+	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
 }
 
 // StatusHistoryRepository defines the append-only persistence port for status audit entries.
 type StatusHistoryRepository interface {
 	Save(ctx context.Context, q db.Querier, entry domain.StatusHistoryEntry) error
+}
+
+// ParcelLifecycleService defines the application port for requesting parcel lifecycle status transitions.
+// Other modules (e.g. Member 3 dispatch and delivery) must interact with parcel status through this interface.
+type ParcelLifecycleService interface {
+	Execute(ctx context.Context, cmd TransitionParcelStatusCommand) (TransitionParcelStatusResult, error)
+	ExecuteTx(ctx context.Context, tx *sql.Tx, cmd TransitionParcelStatusCommand) (TransitionParcelStatusResult, error)
 }
 
 // TrackingNumberGenerator defines the port for producing canonical tracking numbers.
@@ -63,4 +71,3 @@ type Clock interface {
 type TransactionManager interface {
 	WithTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 }
-
