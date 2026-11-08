@@ -302,3 +302,49 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 		UpdatedAt:          updatedAt,
 	})
 }
+
+// UpdateStatus updates the parcel's lifecycle status, attempt count, version, and updated_at
+// in PostgreSQL using optimistic concurrency control with a version condition.
+func (r *PostgresParcelRepository) UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error {
+	querier := q
+	if querier == nil {
+		querier = r.defaultQuerier
+	}
+	if querier == nil {
+		return errors.New("parcel repo: nil db querier")
+	}
+
+	const query = `
+		UPDATE parcels
+		SET status = $1,
+			delivery_attempts = $2,
+			version = version + 1,
+			updated_at = $3
+		WHERE id = $4
+		  AND version = $5;
+	`
+
+	res, err := querier.ExecContext(
+		ctx,
+		query,
+		string(parcel.Status),
+		parcel.DeliveryAttempts,
+		parcel.UpdatedAt,
+		parcel.ID,
+		expectedVersion,
+	)
+	if err != nil {
+		return fmt.Errorf("update parcel status in postgres: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected on parcel update: %w", err)
+	}
+
+	if rows == 0 {
+		return application.ErrConcurrencyConflict
+	}
+
+	return nil
+}
