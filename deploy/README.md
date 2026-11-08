@@ -135,6 +135,7 @@ Connection budgets are strictly enforced per pod ConfigMap:
 
 ## 7. Local & Cluster Deployment Commands
 
+### 7.1 Using GNU Make (Linux / macOS / Git Bash)
 ```bash
 # 1. Start unified local Docker Compose stack
 make up
@@ -145,7 +146,54 @@ make migrate-up
 # 3. Seed demonstration data (refuses in production)
 make seed
 
-# 4. Run automated test suites
+# 4. Check status and follow logs
+make ps
+make logs
+
+# 5. Run automated test suites
 make test
 make test-e2e
+
+# 6. Stop containers / reset volumes
+make down
+make reset
 ```
+
+### 7.2 Native Windows PowerShell (No Make installation required)
+```powershell
+# 1. Start stack
+.\scripts\make.ps1 up
+
+# 2. Run migrations
+.\scripts\make.ps1 migrate-up
+
+# 3. Seed demo accounts
+.\scripts\make.ps1 seed
+
+# 4. Check status & logs
+.\scripts\make.ps1 ps
+.\scripts\make.ps1 logs
+
+# 5. Stop stack
+.\scripts\make.ps1 down
+```
+
+---
+
+## 8. Service Port & Health Probe Inventory
+
+| Container Name | Internal Port | Host Port | Health Check / Probe | Purpose |
+| :--- | :---: | :---: | :--- | :--- |
+| `swiftdrop-traefik` | 80, 8090 | `80`, `127.0.0.1:8090` | Traefik `/ping` | Edge ingress gateway & reverse proxy |
+| `swiftdrop-postgres` | 5432 | `5432` | `pg_isready -U swiftdrop -d swiftdrop_db` | Authoritative PostgreSQL 16 store |
+| `swiftdrop-rabbitmq` | 5672, 15672 | `5672`, `15672` | `rabbitmq-diagnostics -q ping` | AMQP 0-9-1 broker & management UI |
+| `swiftdrop-redis` | 6379 | `6379` | `redis-cli ping` | Ephemeral cache & SSE pub/sub fan-out |
+| `swiftdrop-minio` | 9000, 9001 | `9000`, `9001` | S3 API endpoint | Local S3 object store for proof-of-delivery |
+| `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
+| `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
+| `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
+| `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
+| `swiftdrop-event-worker` | 8083 | `8083` | `GET /health/live`, `/metrics` | Asynchronous consumer worker (KEDA scaled) |
+| `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
+| `swiftdrop-web` | 3000 | `3000` | `GET /healthz` | React/TypeScript SPA served by Nginx |
+
