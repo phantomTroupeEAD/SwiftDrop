@@ -1,7 +1,7 @@
 # SwiftDrop Member 6 Clean UI Review Handoff
 
 **Author:** Sajini (Member 6 — Customer & Merchant Portal)
-**Target Reviewer:** Bhagya (Member 7 — Dispatcher & Admin Backoffice)
+**Audience:** SwiftDrop frontend team
 **Date:** 6 November 2026
 **Status:** Ready for Review
 
@@ -9,12 +9,12 @@
 
 ## 1. Purpose & Scope of this Branch
 
-This review branch isolates the clean visual foundation and customer/merchant user experience for Member 7 (Bhagya) to evaluate before we unify our shared application layouts (`src/app/layouts/DashboardLayout.tsx`) and finalize global design tokens.
+This branch gives the frontend team a customer and merchant UI preview to review before adopting shared application layouts and design tokens.
 
 The UI presents a clean, production-styled shipping application rather than a design showcase. All design-studio evaluation chrome, multi-theme comparison toggles, reviewer forced-state switches, and simulated SSE connection indicators have been removed. Unconnected features explicitly display honest action feedback to prevent confusion during testing.
 
 - **Base Commit:** `3cdc71fb93e964e0291ce69c4a3d557eeac80383` (`main`)
-- **Review Branch:** `review/m6-clean-ui-bhagya`
+- **Review Branch:** `review/m6-clean-ui`
 - **Scope Boundary:** Scoped strictly to the Member 6 customer-merchant preview and associated living documentation. Operational dashboards (`src/features/dashboards/DispatcherDashboard.tsx`, `AdminDashboard.tsx`), authentication guards, and Go Core API contracts remain untouched.
 
 ---
@@ -148,15 +148,15 @@ The following review-only selectors from earlier design comparisons were retired
 
 ---
 
-## 7. Shared-Shell & Theme Decisions for Bhagya's Review
+## 7. Shared Shell & Theme Decisions
 
 Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and consolidate Tailwind tokens, please review:
 
 1. **Brand Identity Consensus:**
-   - Does Member 7 endorse **Teal & Warm Ivory ("Swift Signature")** as the primary theme for SwiftDrop?
+   - Should the frontend team adopt **Teal & Warm Ivory ("Swift Signature")** as the primary theme for SwiftDrop?
    - Or should SwiftDrop offer a toggle between Teal/Ivory and the initial Refined Dark theme?
 2. **Daylight vs. Evening Operational Standard:**
-   - Proposal: Customer and merchant screens default to Daylight Ivory (`#F7F5EE`), while Dispatcher Board and Courier tasks default to the Evening variant (`#102824` / `#193630`) for low-light workstation comfort. Does this fit M7's operational vision?
+   - Proposal: Customer and merchant screens default to Daylight Ivory (`#F7F5EE`), while Dispatcher Board and Courier tasks default to the Evening variant (`#102824` / `#193630`) for low-light workstation comfort. Do these defaults fit how the different roles use the app?
 3. **Primary Action Color:**
    - Confirm whether Primary Teal (`#0B5955`) replaces `blue-600` (`#2563eb`) as the global primary button color across all roles.
 4. **Status Badge Matrix Alignment:**
@@ -195,7 +195,7 @@ Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and c
 
 ---
 
-## 10. Concise Review Checklist for Bhagya
+## 10. Frontend Review Checklist
 
 - [ ] **Visual Identity:** Review Teal (`#0B5955`) & Warm Ivory (`#F7F5EE`) at `http://localhost:3001/design-preview`.
 - [ ] **Prototypes Reference:** Compare against `http://localhost:3001/scratch.html` and `http://localhost:3001/scratch-apple.html`.
@@ -204,13 +204,13 @@ Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and c
 - [ ] **Tracking Sample:** Inspect the tracking card for privacy-safe milestone representation.
 - [ ] **Merchant Orders:** Test order search and status filter buttons; verify that zero-match queries render a clean message with reset button.
 - [ ] **Mobile Responsiveness:** Shrink browser to 375px; verify that sidebar collapses and tables scroll cleanly without page overflow.
-- [ ] **Shell Unification:** Note any required adjustments for your upcoming Dispatcher Board layout.
+- [ ] **Shell Unification:** Note any adjustments needed for shared layouts, including the Dispatcher Board.
 
 ---
 
 ## 11. Files Changed on this Branch
 
-| File Path | Nature of Change | Coordination Implication for M7 |
+| File Path | Nature of Change | Frontend Coordination |
 | :--- | :--- | :--- |
 | `web/src/features/customer-merchant/preview/SwiftSignatureTheme.tsx` | Implements the clean Teal & Ivory UI (booking wizard, orders table, tracking) | Isolated M6 preview; no conflict with M7 |
 | `web/src/features/customer-merchant/preview/swift-signature.css` | Scoped CSS variables and styling for Option 3 | Scoped to `.swift-signature`; does not affect global Tailwind |
@@ -223,4 +223,4 @@ Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and c
 | `web/test-ids.md` | Registers active selectors and documents retired review selectors | Reference for QA (Member 10) and E2E suites |
 | `web/README.md` | Living documentation checkpoint updated | Living repository doc |
 | `web/API.md` | Consumed API contracts aligned | Unchanged HTTP contract baseline |
-| `web/M6-UI-REVIEW-FOR-BHAGYA.md` | Handoff document for Member 7 review | This document |
+| `web/M6-UI-REVIEW.md` | Frontend team review guide | This document |

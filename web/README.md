@@ -163,7 +163,7 @@ Every developer and AI agent contributing to `web/` must adhere to the formal ru
 
 ## 7. Interactive Design Showcases & Component Studios
 
-To facilitate design alignment across team members and tech leads, two standalone interactive showcase files are available in `web/public/` (accessible via Vite dev server or direct browser open):
+The [M6 UI review guide](M6-UI-REVIEW.md) explains how to open the customer and merchant preview and what to review. Two standalone component showcases in `web/public/` can be opened directly or served by Vite:
 
 1. **`web/public/scratch.html` (Option 3 · Swift Signature Showcase)**:
    - Evaluates the Teal & Warm Ivory design theme.

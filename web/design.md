@@ -8,7 +8,7 @@ One unobtrusive **Sample data** label remains because API integration is incompl
 
 This is the final visual direction for review, not completed production booking, authentication or tracking. All backend contracts and M7 screens remain unchanged. Earlier theme-comparison descriptions below are historical design rationale rather than current navigation instructions.
 
-Owner: M6 (Sajini); shared visual decisions require coordination with M7 (Bhagya).
+Owner: M6 (Sajini); shared visual decisions require coordination across the frontend team.
 Status: Proposal phase; evaluates three themes (Option 1: Refined Dark, Option 2: Modern Light, Option 3: Swift Signature Teal & Ivory) via an isolated interactive preview studio (`/design-preview`). Documents visual tokens, component rules, and M7 alignment before full feature implementation.
 
 ---
@@ -126,9 +126,9 @@ All preview components, prototypes, and demo showcases are explicitly annotated 
 
 ---
 
-## 7. Cross-Module Coordination with Member 7 (Bhagya)
+## 7. Cross-Module Frontend Coordination
 
-Before universal theme tokens are applied across shared application shell layouts (`src/app/`), Member 6 (Sajini) and Member 7 (Bhagya) must align on the following:
+Before universal theme tokens are applied across shared application shell layouts (`src/app/`), the frontend team should agree on the following:
 
 1. **Theme Selection:** Review Option 1 (Refined Dark), Option 2 (Modern Light), and Option 3 (Teal & Ivory) to decide on the default identity or provide a user-configurable theme toggle.
 2. **Daylight vs Evening Operations:** If Option 3 is selected, agree whether Member 7's dispatch board will use the evening palette (`#102824` / `#193630`) while customer/merchant screens default to daylight ivory (`#F7F5EE` / `#FFFFFF`).
