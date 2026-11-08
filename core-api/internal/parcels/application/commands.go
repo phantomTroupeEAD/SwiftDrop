@@ -45,3 +45,19 @@ type BookParcelResult struct {
 	StatusHistory domain.StatusHistoryEntry
 }
 
+// TransitionParcelStatusCommand contains all inputs required to execute a validated parcel lifecycle status transition.
+type TransitionParcelStatusCommand struct {
+	ParcelID        string
+	TargetStatus    domain.ParcelStatus
+	ActorID         string
+	ActorRole       string
+	Reason          string
+	ExpectedVersion *int
+	CorrelationID   string
+}
+
+// TransitionParcelStatusResult contains the updated domain aggregate root and resulting audit log record.
+type TransitionParcelStatusResult struct {
+	Parcel        domain.Parcel
+	StatusHistory domain.StatusHistoryEntry
+}
