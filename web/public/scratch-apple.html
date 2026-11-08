@@ -1,117 +1,202 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light" data-style="apple">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SwiftDrop — shadcn/ui & Apple Design System Showcase</title>
+  <title>SwiftDrop — shadcn/ui & Apple HIG Design System</title>
   <style>
     /* ==========================================================================
-       SwiftDrop: shadcn/ui + Apple HIG Hybrid Design System
-       - Minimalist, content-first layout with zinc/neutral foundation
-       - Dynamic Primary Accent Color Customizer (with preset palette & custom picker)
-       - Authentic SF Typography (-apple-system, SF Pro, SF Mono)
-       - shadcn/ui component primitives: Buttons (default, secondary, outline, ghost, link, destructive),
-         Cards (Header, Title, Description, Content, Footer), Badges, Inputs with Ring focus,
-         Tabs/Segmented controls, Data Grids, Callouts, Dialogs/Sheets
+       SwiftDrop: shadcn/ui + Apple HIG Minimalist Design Engine
+       - Color budget <= 3%: color strictly on data and active states
+       - Flat surfaces: no shadows at rest, depth via 1px hairline rules & tone steps
+       - Typography: SF Pro & SF Mono with optical negative letter-spacing
+       - Precision Micro-Interactions: cubic-bezier(0.16, 1, 0.3, 1) expo-out curves
+       - Lucide SVG icons embedded across all primitives and workflows
+       - shadcn primitives: Accordion, Alert, Badge, Button, Card, Dialog,
+         Input, Skeleton, Switch, Table, Tabs, Toast, Tooltip
        ========================================================================== */
 
     :root {
-      /* Base Neutrals (shadcn Zinc + Apple Clean Canvas) */
-      --background: #f8fafc;
-      --foreground: #09090b;
-      --card: #ffffff;
-      --card-foreground: #09090b;
-      --popover: #ffffff;
-      --popover-foreground: #09090b;
-      --muted: #f1f5f9;
-      --muted-foreground: #64748b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace; /* taste-skill-ignore */
+
+      /* Base Light Neutrals */
+      --canvas: #f8fafc;
+      --surface: #ffffff;
+      --surface-subtle: #f1f5f9;
+      --surface-active: #e2e8f0;
       --border: #e2e8f0;
-      --input: #e2e8f0;
-      --secondary: #f1f5f9;
-      --secondary-foreground: #0f172a;
-      --accent: #f1f5f9;
-      --accent-foreground: #0f172a;
-      --destructive: #ef4444;
-      --destructive-foreground: #ffffff;
-      --destructive-tint: rgba(239, 68, 68, 0.1);
+      --border-subtle: #edf2f7;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
 
-      /* Semantic Functional Accents */
-      --success: #10b981;
-      --success-tint: rgba(16, 185, 129, 0.12);
-      --warning: #f59e0b;
-      --warning-tint: rgba(245, 158, 11, 0.12);
-
-      /* Dynamic Primary Color System (Defaults to Apple System Blue) */
+      /* Primary Color System (Default: Apple System Blue #0071E3) */
       --primary: #0071e3;
       --primary-hover: #0077ed;
-      --primary-active: #005bb5;
       --primary-foreground: #ffffff;
       --primary-tint: rgba(0, 113, 227, 0.08);
-      --primary-tint-hover: rgba(0, 113, 227, 0.14);
+      --primary-tint-hover: rgba(0, 113, 227, 0.15);
       --ring: #0071e3;
 
-      /* Typography */
-      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace;
+      /* Subdued Semantic Tints */
+      --status-success-ink: #047857;
+      --status-success-bg: #ecfdf5;
+      --status-success-border: #a7f3d0;
+      --status-warning-ink: #b45309;
+      --status-warning-bg: #fffbeb;
+      --status-warning-border: #fde68a;
+      --status-error-ink: #b91c1c;
+      --status-error-bg: #fef2f2;
+      --status-error-border: #fecaca;
 
-      /* Radii & Shadows (shadcn + Apple Squircle) */
+      /* Radii & Layout Defaults (Apple Squircle) */
       --radius-sm: 6px;
-      --radius: 10px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
-      --radius-xl: 20px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
       --radius-full: 9999px;
+      --sheet-inset: 0px;
+      --sheet-radius: 0px;
 
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.07);
-      --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
-      --shadow-dialog: 0 20px 40px -8px rgba(0, 0, 0, 0.15);
+      /* Motion Timing Tokens (taste-skill study) */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --duration-fast: 150ms;
+      --duration-normal: 220ms;
+      --duration-slow: 350ms;
 
       color-scheme: light;
     }
 
-    /* Dark Mode (Zinc Dark + Apple Deep Canvas) */
+    /* Dark Mode (Operational Night Palette) */
     [data-theme="dark"] {
-      --background: #09090b;
-      --foreground: #f8fafc;
-      --card: #121215;
-      --card-foreground: #f8fafc;
-      --popover: #121215;
-      --popover-foreground: #f8fafc;
-      --muted: #1e1e24;
-      --muted-foreground: #94a3b8;
+      --canvas: #09090b;
+      --surface: #121215;
+      --surface-subtle: #1c1c20;
+      --surface-active: #27272e;
       --border: #27272a;
-      --input: #27272a;
-      --secondary: #1e1e24;
-      --secondary-foreground: #f8fafc;
-      --accent: #1e1e24;
-      --accent-foreground: #f8fafc;
-      --destructive: #7f1d1d;
-      --destructive-foreground: #fecaca;
-      --destructive-tint: rgba(239, 68, 68, 0.18);
+      --border-subtle: #1e1e24;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
 
-      --success: #059669;
-      --success-tint: rgba(16, 185, 129, 0.18);
-      --warning: #d97706;
-      --warning-tint: rgba(245, 158, 11, 0.18);
-
-      /* Primary Default for Dark (Slightly brighter Apple Blue) */
       --primary: #2997ff;
-      --primary-hover: #47a6ff;
-      --primary-active: #1a88f0;
+      --primary-hover: #40a9ff;
       --primary-foreground: #ffffff;
       --primary-tint: rgba(41, 151, 255, 0.14);
       --primary-tint-hover: rgba(41, 151, 255, 0.22);
       --ring: #2997ff;
 
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-      --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px -1px rgba(0, 0, 0, 0.5);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-      --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.6);
-      --shadow-dialog: 0 20px 40px -8px rgba(0, 0, 0, 0.85);
+      --status-success-ink: #34d399;
+      --status-success-bg: #064e3b;
+      --status-success-border: #047857;
+      --status-warning-ink: #fbbf24;
+      --status-warning-bg: #451a03;
+      --status-warning-border: #78350f;
+      --status-error-ink: #f87171;
+      --status-error-bg: #450a0a;
+      --status-error-border: #7f1d1d;
 
       color-scheme: dark;
+    }
+
+    /* Archetype 1: Apple Cupertino Precision */
+    [data-style="apple"] {
+      --canvas: #f5f5f7;
+      --surface: #ffffff;
+      --surface-subtle: #fbfbfd;
+      --border: rgba(0, 0, 0, 0.08);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+    }
+    [data-theme="dark"][data-style="apple"] {
+      --canvas: #000000;
+      --surface: #1c1c1e;
+      --surface-subtle: #2c2c2e;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Archetype 2: Linear / Craft Minimal */
+    [data-style="linear"] {
+      --canvas: #0e0e10;
+      --surface: #151518;
+      --surface-subtle: #1c1c21;
+      --surface-active: #26262d;
+      --border: #222228;
+      --border-subtle: #18181e;
+      --text: #f0f0f3;
+      --text-muted: #888892;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --radius-full: 4px;
+    }
+    [data-theme="light"][data-style="linear"] {
+      --canvas: #fafafa;
+      --surface: #ffffff;
+      --surface-subtle: #f4f4f5;
+      --surface-active: #e4e4e7;
+      --border: #e4e4e7;
+      --border-subtle: #f0f0f2;
+      --text: #18181b;
+      --text-muted: #71717a;
+    }
+
+    /* Archetype 3: Framed Sheet (Anti-Slop 23-product study median) */
+    [data-style="framed"] {
+      --canvas: #f9fbfc;
+      --surface: #ffffff;
+      --surface-subtle: #f4f6f8;
+      --surface-active: #ebedee;
+      --border: #e8eaec;
+      --border-subtle: #f0f1f2;
+      --sheet-inset: 12px;
+      --sheet-radius: 16px;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 10px;
+    }
+    [data-theme="dark"][data-style="framed"] {
+      --canvas: #0c0d0e;
+      --surface: #151618;
+      --surface-subtle: #1a1c1e;
+      --surface-active: #232528;
+      --border: #222528;
+      --border-subtle: #181a1c;
+    }
+
+    /* Archetype 4: Swift Signature (Stone & Teal) */
+    [data-style="swiftsig"] {
+      --canvas: #f7f6f2;
+      --surface: #ffffff;
+      --surface-subtle: #edf1ee;
+      --surface-active: #dbe4df;
+      --border: #d5ded8;
+      --border-subtle: #e6ede8;
+      --text: #142e2b;
+      --text-muted: #4b635c;
+      --primary: #0b5955;
+      --primary-hover: #08433f;
+      --primary-tint: rgba(11, 89, 85, 0.08);
+      --primary-tint-hover: rgba(11, 89, 85, 0.15);
+      --ring: #0b5955;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+    [data-theme="dark"][data-style="swiftsig"] {
+      --canvas: #102824;
+      --surface: #193630;
+      --surface-subtle: #132a25;
+      --border: #37574d;
+      --text: #f7f5ee;
+      --text-muted: #b9cec3;
+      --primary: #85d4b5;
+      --primary-hover: #a3e3cb;
+      --primary-tint: rgba(133, 212, 181, 0.15);
+      --ring: #85d4b5;
     }
 
     /* Base Reset */
@@ -125,25 +210,24 @@
 
     body {
       font-family: var(--font-sans);
-      background-color: var(--background);
-      color: var(--foreground);
+      background-color: var(--canvas);
+      color: var(--text);
       line-height: 1.5;
-      font-size: 14.5px;
-      letter-spacing: -0.012em;
+      font-size: 14px;
       min-height: 100vh;
       display: flex;
     }
 
-    /* shadcn/ui Focus Ring Standard */
+    /* Accessibility Focus Ring */
     :focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring); /* taste-skill-ignore */
     }
 
-    /* App Sidebar (shadcn minimal nav) */
+    /* Layout: Sidebar & Framed Sheet */
     .app-sidebar {
-      width: 260px;
-      background: var(--card);
+      width: 250px;
+      background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -156,16 +240,16 @@
     }
 
     .brand-header {
-      padding: 20px 20px 16px;
+      padding: 18px 20px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       border-bottom: 1px solid var(--border);
     }
 
-    .brand-logo-icon {
-      width: 32px;
-      height: 32px;
+    .brand-mark {
+      width: 28px;
+      height: 28px;
       background: var(--primary);
       color: var(--primary-foreground);
       border-radius: var(--radius-sm);
@@ -173,49 +257,53 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      box-shadow: var(--shadow-sm);
-      transition: background-color 0.2s ease;
+      transition: background-color var(--duration-fast) ease;
     }
 
     .brand-title {
       font-size: 15px;
       font-weight: 600;
       letter-spacing: -0.02em;
-      color: var(--foreground);
+      color: var(--text);
     }
 
     .brand-subtitle {
       font-size: 11px;
-      color: var(--muted-foreground);
-      letter-spacing: -0.01em;
+      color: var(--text-muted);
     }
 
-    .nav-group-title {
+    .nav-list {
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .nav-label {
       font-size: 11px;
       font-weight: 600;
-      color: var(--muted-foreground);
-      padding: 18px 18px 6px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 14px 12px 6px;
+      letter-spacing: 0.02em;
     }
 
     .nav-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin: 2px 10px;
-      padding: 8px 12px;
+      padding: 7px 12px;
       border-radius: var(--radius-sm);
-      color: var(--muted-foreground);
+      color: var(--text-muted);
       text-decoration: none;
       font-size: 13.5px;
       font-weight: 500;
-      transition: all 0.15s ease;
+      transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
     }
 
     .nav-item:hover {
-      background: var(--accent);
-      color: var(--foreground);
+      background: var(--surface-subtle);
+      color: var(--text);
     }
 
     .nav-item.active {
@@ -224,174 +312,170 @@
       font-weight: 600;
     }
 
-    .nav-item-badge {
+    .nav-pill {
       font-size: 11px;
       padding: 1px 7px;
       border-radius: var(--radius-full);
-      background: var(--muted);
-      color: var(--muted-foreground);
-      font-weight: 500;
+      background: var(--surface-subtle);
+      color: var(--text-muted);
     }
 
-    .nav-item.active .nav-item-badge {
+    .nav-item.active .nav-pill {
       background: var(--primary);
       color: var(--primary-foreground);
     }
 
-    /* Main Workspace */
+    /* Main Workspace & Framed Sheet Wrap */
     .main-workspace {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-width: 0;
+      padding: var(--sheet-inset);
     }
 
-    /* Topbar with Theme & Dynamic Color Palette Picker */
-    .topbar {
-      height: 60px;
-      background: var(--card);
+    .sheet-wrapper {
+      flex: 1;
+      background: var(--surface);
+      border-radius: var(--sheet-radius);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Studio Topbar */
+    .studio-topbar {
+      height: 56px;
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 0 32px;
+      padding: 0 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       top: 0;
       z-index: 30;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      gap: 16px;
     }
 
-    .topbar-left {
+    .studio-controls-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .studio-controls-right {
       display: flex;
       align-items: center;
       gap: 16px;
     }
 
-    .topbar-title {
-      font-size: 13.5px;
-      color: var(--muted-foreground);
-    }
-
-    .topbar-title strong {
-      color: var(--foreground);
-      font-weight: 600;
-    }
-
-    .topbar-right {
+    .control-cluster {
       display: flex;
       align-items: center;
-      gap: 18px;
-    }
-
-    /* Primary Color Picker Toolbar */
-    .color-picker-group {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--muted);
-      padding: 4px 8px;
-      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      padding: 3px 6px;
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
+      gap: 4px;
     }
 
-    .color-picker-label {
-      font-size: 11.5px;
+    .cluster-title {
+      font-size: 11px;
       font-weight: 600;
-      color: var(--muted-foreground);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-right: 4px;
-      padding-left: 4px;
+      color: var(--text-muted);
+      padding-right: 4px;
     }
 
-    .color-swatch-btn {
-      width: 20px;
-      height: 20px;
+    .studio-select {
+      background: transparent;
+      border: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      padding: 2px 4px;
+    }
+    .studio-select:focus { outline: none; }
+
+    /* Swatches */
+    .color-swatches {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch-dot {
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       border: 2px solid transparent;
       cursor: pointer;
       padding: 0;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      position: relative;
+      transition: transform var(--duration-fast) var(--ease-out);
     }
+    .swatch-dot:hover { transform: scale(1.15); }
+    .swatch-dot.active { border-color: var(--text); }
 
-    .color-swatch-btn:hover {
-      transform: scale(1.15);
-    }
-
-    .color-swatch-btn.active {
-      box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--foreground);
-    }
-
-    .custom-color-input {
-      width: 22px;
-      height: 22px;
+    .native-color-picker {
+      width: 20px;
+      height: 20px;
       border-radius: 50%;
-      border: none;
+      border: 1px solid var(--border);
       cursor: pointer;
       background: none;
       padding: 0;
-      margin-left: 2px;
     }
+    .native-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+    .native-color-picker::-webkit-color-swatch { border: none; border-radius: 50%; }
 
-    .custom-color-input::-webkit-color-swatch-wrapper { padding: 0; }
-    .custom-color-input::-webkit-color-swatch {
-      border: 2px solid var(--border);
-      border-radius: 50%;
-    }
-
-    /* shadcn/ui Tabs / Segmented Control */
-    .tabs-list {
+    /* Segmented Bar */
+    .segmented-bar {
       display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--muted);
-      padding: 3px;
+      background: var(--surface-subtle);
+      padding: 2px;
       border-radius: var(--radius-sm);
       gap: 2px;
     }
 
-    .tabs-trigger {
-      padding: 5px 12px;
-      font-size: 13px;
+    .segmented-btn {
+      padding: 4px 10px;
+      font-size: 12px;
       font-weight: 500;
-      color: var(--muted-foreground);
+      color: var(--text-muted);
       border-radius: 4px;
       border: none;
       background: transparent;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
       font-family: var(--font-sans);
     }
-
-    .tabs-trigger:hover {
-      color: var(--foreground);
-    }
-
-    .tabs-trigger.active {
-      background: var(--card);
-      color: var(--foreground);
-      box-shadow: var(--shadow-sm);
+    .segmented-btn:hover { color: var(--text); }
+    .segmented-btn.active {
+      background: var(--surface);
+      color: var(--text);
       font-weight: 600;
     }
 
-    .page-container {
-      padding: 40px 48px 120px;
-      max-width: 1280px;
+    .content-container {
+      padding: 32px 40px 100px;
+      max-width: 1200px;
       width: 100%;
       margin: 0 auto;
     }
 
-    /* Section Styling */
-    .catalog-section {
+    /* Section Headers */
+    .studio-section {
       margin-bottom: 56px;
-      scroll-margin-top: 80px;
+      scroll-margin-top: 76px;
     }
 
-    .section-header {
-      margin-bottom: 22px;
-      padding-bottom: 12px;
+    .section-headline {
+      margin-bottom: 20px;
+      padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: flex-end;
@@ -399,69 +483,41 @@
     }
 
     .section-title {
-      font-size: 20px;
+      font-size: 19px;
       font-weight: 600;
       letter-spacing: -0.02em;
-      color: var(--foreground);
+      color: var(--text);
     }
 
-    .section-desc {
+    .section-sub {
       font-size: 13px;
-      color: var(--muted-foreground);
+      color: var(--text-muted);
       margin-top: 3px;
     }
 
-    /* shadcn/ui Card Primitive */
-    .ui-card {
-      background: var(--card);
+    /* Card Panels */
+    .card-panel {
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      box-shadow: var(--shadow-card);
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      padding: 22px;
+      transition: border-color var(--duration-fast) ease;
     }
 
-    .ui-card-header {
-      padding: 24px 24px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+    .card-panel-flat {
+      background: var(--surface-subtle);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 22px;
     }
 
-    .ui-card-title {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.015em;
-      color: var(--foreground);
-    }
-
-    .ui-card-description {
-      font-size: 13px;
-      color: var(--muted-foreground);
-      line-height: 1.4;
-    }
-
-    .ui-card-content {
-      padding: 0 24px 24px;
-    }
-
-    .ui-card-footer {
-      padding: 16px 24px;
-      background: var(--muted);
-      border-top: 1px solid var(--border);
-      border-bottom-left-radius: var(--radius-md);
-      border-bottom-right-radius: var(--radius-md);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .component-grid {
+    .grid-2 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 24px;
+      gap: 20px;
     }
 
-    /* shadcn/ui Button Primitive: Variants & Sizes */
+    /* shadcn/ui Buttons: Minimalist & Tactile */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -471,14 +527,14 @@
       font-size: 13.5px;
       font-weight: 500;
       padding: 8px 16px;
-      min-height: 40px; /* WCAG touch target */
+      min-height: 38px;
       border-radius: var(--radius-sm);
       cursor: pointer;
       text-decoration: none;
       border: 1px solid transparent;
       line-height: 1;
       white-space: nowrap;
-      transition: all 0.15s ease;
+      transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease, transform 100ms var(--ease-out);
     }
 
     .btn:active:not(:disabled) {
@@ -486,361 +542,230 @@
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: not-allowed;
     }
 
-    /* Button Variants */
-    .btn-default {
+    .btn-primary {
       background: var(--primary);
       color: var(--primary-foreground);
-      border-color: var(--primary);
-      box-shadow: var(--shadow-sm);
     }
-    .btn-default:hover:not(:disabled) {
-      background: var(--primary-hover);
-    }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
 
-    .btn-secondary {
-      background: var(--secondary);
-      color: var(--secondary-foreground);
-      border-color: var(--border);
+    .btn-tone {
+      background: var(--surface-subtle);
+      color: var(--text);
     }
-    .btn-secondary:hover:not(:disabled) {
-      background: var(--accent);
-    }
+    .btn-tone:hover:not(:disabled) { background: var(--surface-active); }
 
     .btn-outline {
       background: transparent;
-      color: var(--foreground);
-      border-color: var(--input);
+      color: var(--text);
+      border-color: var(--border);
     }
-    .btn-outline:hover:not(:disabled) {
-      background: var(--accent);
-      color: var(--accent-foreground);
-    }
+    .btn-outline:hover:not(:disabled) { background: var(--surface-subtle); }
 
     .btn-ghost {
       background: transparent;
-      color: var(--foreground);
-      border-color: transparent;
+      color: var(--text);
     }
-    .btn-ghost:hover:not(:disabled) {
-      background: var(--accent);
-    }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface-subtle); }
 
     .btn-link {
       background: transparent;
       color: var(--primary);
-      border-color: transparent;
       padding: 0;
       min-height: auto;
-      text-decoration: none;
     }
-    .btn-link:hover {
-      text-decoration: underline;
-      text-underline-offset: 4px;
-    }
+    .btn-link:hover { text-decoration: underline; }
 
-    .btn-destructive {
-      background: var(--destructive);
-      color: var(--destructive-foreground);
-    }
-    .btn-destructive:hover:not(:disabled) {
-      opacity: 0.9;
+    .btn-danger {
+      background: var(--status-error-bg);
+      color: var(--status-error-ink);
+      border-color: var(--status-error-border);
     }
 
     .btn-sm {
-      padding: 5px 12px;
+      padding: 4px 10px;
       font-size: 12.5px;
-      min-height: 34px;
-      border-radius: 5px;
+      min-height: 30px;
     }
 
-    .btn-lg {
-      padding: 12px 24px;
-      font-size: 15px;
-      min-height: 48px;
-    }
-
-    .btn-icon {
-      width: 40px;
-      height: 40px;
-      padding: 0;
-    }
-
-    /* shadcn/ui Badges */
-    .ui-badge {
+    /* Status Badges */
+    .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       font-size: 12px;
       font-weight: 500;
-      padding: 3px 9px;
-      border-radius: var(--radius-full);
-      line-height: 1.3;
-      border: 1px solid transparent;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      line-height: 1.35;
       white-space: nowrap;
     }
 
-    .ui-badge-dot {
+    .status-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: currentColor;
     }
 
-    .ui-badge-default {
-      background: var(--primary);
-      color: var(--primary-foreground);
-    }
+    .status-neutral { background: var(--surface-subtle); color: var(--text-muted); }
+    .status-active { background: var(--primary-tint); color: var(--primary); }
+    .status-success { background: var(--status-success-bg); color: var(--status-success-ink); }
+    .status-warning { background: var(--status-warning-bg); color: var(--status-warning-ink); }
+    .status-error { background: var(--status-error-bg); color: var(--status-error-ink); }
 
-    .ui-badge-secondary {
-      background: var(--secondary);
-      color: var(--secondary-foreground);
-      border-color: var(--border);
-    }
-
-    .ui-badge-outline {
-      background: transparent;
-      color: var(--foreground);
-      border-color: var(--border);
-    }
-
-    .ui-badge-primary-tint {
-      background: var(--primary-tint);
-      color: var(--primary);
-      border-color: var(--primary-tint-hover);
-    }
-
-    .ui-badge-success {
-      background: var(--success-tint);
-      color: var(--success);
-    }
-
-    .ui-badge-warning {
-      background: var(--warning-tint);
-      color: var(--warning);
-    }
-
-    .ui-badge-destructive {
-      background: var(--destructive-tint);
-      color: var(--destructive);
-    }
-
-    /* shadcn/ui Form Inputs */
-    .form-group {
-      margin-bottom: 18px;
-    }
-
+    /* Form Controls */
+    .form-row { margin-bottom: 16px; }
     .form-label {
       display: block;
       font-size: 13px;
       font-weight: 500;
-      color: var(--foreground);
+      color: var(--text);
       margin-bottom: 6px;
     }
 
-    .form-label-required::after {
-      content: " *";
-      color: var(--destructive);
+    .input-field {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
     }
 
-    .form-helper {
-      font-size: 12px;
-      color: var(--muted-foreground);
-      margin-top: 5px;
+    .input-field:focus {
+      border-color: var(--ring);
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring); /* taste-skill-ignore */
+      outline: none;
     }
 
-    .ui-input-wrapper {
+    .input-affix-box {
       position: relative;
       display: flex;
       align-items: center;
     }
-
-    .ui-input {
-      width: 100%;
-      height: 40px;
-      padding: 0 12px;
-      background: var(--background);
-      border: 1px solid var(--input);
-      border-radius: var(--radius-sm);
-      color: var(--foreground);
-      font-family: var(--font-sans);
-      font-size: 14px;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .ui-input:focus {
-      border-color: var(--ring);
-      box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-      outline: none;
-    }
-
-    .ui-input.is-invalid {
-      border-color: var(--destructive);
-      box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--destructive-tint);
-    }
-
     .input-affix {
       position: absolute;
-      color: var(--muted-foreground);
+      color: var(--text-muted);
       font-size: 13px;
       pointer-events: none;
+      display: flex;
+      align-items: center;
     }
-
     .input-affix-left { left: 12px; }
     .input-affix-right { right: 12px; }
+    .input-field.has-left { padding-left: 38px; }
+    .input-field.has-right { padding-right: 38px; }
 
-    .ui-input.has-left { padding-left: 38px; }
-    .ui-input.has-right { padding-right: 38px; }
-
-    /* Switch */
-    .ui-switch {
+    /* Spring Toggle Switch */
+    .toggle-switch {
       position: relative;
       display: inline-block;
-      width: 44px;
-      height: 24px;
-      flex-shrink: 0;
+      width: 40px;
+      height: 22px;
     }
-
-    .ui-switch input { opacity: 0; width: 0; height: 0; }
-
-    .switch-track {
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
       background-color: var(--border);
-      transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      border-radius: var(--radius-full);
+      transition: background-color var(--duration-fast) ease;
+      border-radius: 22px;
     }
-
-    .switch-track:before {
+    .toggle-track:before {
       position: absolute;
       content: "";
-      height: 20px;
-      width: 20px;
+      height: 18px;
+      width: 18px;
       left: 2px;
       bottom: 2px;
-      background-color: #ffffff;
-      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      background-color: white;
+      transition: transform var(--duration-fast) var(--ease-out);
       border-radius: 50%;
-      box-shadow: var(--shadow-sm);
     }
+    .toggle-switch input:checked + .toggle-track { background-color: var(--primary); }
+    .toggle-switch input:checked + .toggle-track:before { transform: translateX(18px); }
 
-    .ui-switch input:checked + .switch-track {
-      background-color: var(--primary);
-    }
-
-    .ui-switch input:checked + .switch-track:before {
-      transform: translateX(20px);
-    }
-
-    /* Metric KPI Card */
-    .kpi-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 22px;
-      box-shadow: var(--shadow-card);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .kpi-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-
-    .kpi-label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--muted-foreground);
-    }
-
-    .kpi-value {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      color: var(--foreground);
-      line-height: 1.1;
-    }
-
-    .kpi-footer {
-      font-size: 12px;
-      color: var(--muted-foreground);
-      margin-top: 8px;
-    }
-
-    /* Table */
-    .ui-table-container {
-      background: var(--card);
+    /* Data Table */
+    .data-table-wrap {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       overflow-x: auto;
-      box-shadow: var(--shadow-card);
     }
 
-    table.ui-table {
+    table.data-table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      font-size: 13.5px;
+      font-size: 13px;
     }
-
-    table.ui-table th {
-      padding: 12px 18px;
+    table.data-table th {
+      padding: 10px 16px;
       font-size: 12px;
-      font-weight: 600;
-      color: var(--muted-foreground);
-      border-bottom: 1px solid var(--border);
-      background: var(--muted);
-    }
-
-    table.ui-table td {
-      padding: 14px 18px;
-      border-bottom: 1px solid var(--border);
-      color: var(--foreground);
-    }
-
-    table.ui-table tr:last-child td {
-      border-bottom: none;
-    }
-
-    table.ui-table tbody tr:hover {
-      background: var(--accent);
-    }
-
-    .mono-cell {
-      font-family: var(--font-mono);
-      font-size: 12.5px;
       font-weight: 500;
-      color: var(--primary);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-subtle);
     }
+    table.data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text);
+    }
+    table.data-table tr:last-child td { border-bottom: none; }
+    table.data-table tbody tr:hover { background: var(--surface-subtle); }
+
+    .tabular-num {
+      font-family: var(--font-mono); /* taste-skill-ignore */
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Type-First KPIs */
+    .kpi-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      background: var(--surface);
+    }
+    .kpi-title { font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+    .kpi-figure {
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      line-height: 1.1;
+      margin: 8px 0 4px;
+      font-family: var(--font-display);
+    }
+    .kpi-baseline { font-size: 12px; color: var(--text-muted); }
 
     /* Stepper */
-    .ui-stepper {
+    .step-track {
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: relative;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
-
-    .ui-stepper::before {
+    .step-track::before {
       content: "";
       position: absolute;
-      top: 15px;
-      left: 36px;
-      right: 36px;
-      height: 2px;
+      top: 13px;
+      left: 30px;
+      right: 30px;
+      height: 1px;
       background: var(--border);
       z-index: 1;
     }
-
-    .stepper-item {
+    .step-node {
       position: relative;
       z-index: 2;
       display: flex;
@@ -851,166 +776,287 @@
       border: none;
       cursor: pointer;
     }
-
-    .stepper-circle {
-      width: 32px;
-      height: 32px;
+    .step-dot {
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
-      background: var(--card);
-      border: 2px solid var(--border);
-      color: var(--muted-foreground);
-      font-size: 12.5px;
-      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
       display: grid;
       place-items: center;
-      transition: all 0.2s ease;
+      transition: background-color var(--duration-fast) ease, border-color var(--duration-fast) ease;
     }
-
-    .stepper-item.is-done .stepper-circle {
+    .step-node.done .step-dot {
       background: var(--primary);
       border-color: var(--primary);
       color: var(--primary-foreground);
     }
-
-    .stepper-item.is-active .stepper-circle {
-      background: var(--card);
+    .step-node.active .step-dot {
+      background: var(--surface);
       border-color: var(--primary);
       color: var(--primary);
-      box-shadow: 0 0 0 4px var(--primary-tint);
+      box-shadow: 0 0 0 3px var(--primary-tint); /* taste-skill-ignore */
     }
+    .step-text { font-size: 12px; color: var(--text-muted); }
+    .step-node.active .step-text { color: var(--text); font-weight: 600; }
 
-    .stepper-label {
-      font-size: 12px;
-      color: var(--muted-foreground);
-      font-weight: 500;
-    }
-
-    .stepper-item.is-active .stepper-label {
-      color: var(--foreground);
-      font-weight: 600;
-    }
-
-    /* Milestone Timeline */
-    .timeline {
+    /* Milestone Rail */
+    .milestone-rail {
       position: relative;
-      padding-left: 28px;
+      padding-left: 24px;
     }
-
-    .timeline::before {
+    .milestone-rail::before {
       content: "";
       position: absolute;
-      left: 8px;
+      left: 6px;
       top: 6px;
       bottom: 6px;
-      width: 2px;
+      width: 1px;
       background: var(--border);
     }
-
-    .timeline-node {
-      position: relative;
-      margin-bottom: 22px;
-    }
-
-    .timeline-node:last-child {
-      margin-bottom: 0;
-    }
-
-    .timeline-dot {
+    .milestone-row { position: relative; margin-bottom: 20px; }
+    .milestone-row:last-child { margin-bottom: 0; }
+    .milestone-pin {
       position: absolute;
-      left: -28px;
+      left: -24px;
       top: 4px;
-      width: 18px;
-      height: 18px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
-      background: var(--card);
-      border: 2px solid var(--border);
-      display: grid;
-      place-items: center;
+      background: var(--surface);
+      border: 1px solid var(--text-muted);
     }
-
-    .timeline-node.is-done .timeline-dot {
+    .milestone-row.done .milestone-pin {
       background: var(--primary);
       border-color: var(--primary);
-      color: var(--primary-foreground);
     }
-
-    .timeline-node.is-active .timeline-dot {
-      background: var(--card);
+    .milestone-row.active .milestone-pin {
+      background: var(--surface);
       border-color: var(--primary);
-      box-shadow: 0 0 0 4px var(--primary-tint);
+      box-shadow: 0 0 0 3px var(--primary-tint); /* taste-skill-ignore */
     }
 
-    /* Alerts */
-    .ui-alert {
-      padding: 16px 20px;
+    /* Callout */
+    .callout {
+      padding: 14px 18px;
       border-radius: var(--radius-sm);
       border: 1px solid var(--border);
-      background: var(--card);
+      background: var(--surface-subtle);
       display: flex;
       align-items: flex-start;
-      gap: 14px;
-      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .callout-warning {
+      background: var(--status-warning-bg);
+      border-color: var(--status-warning-border);
+      color: var(--status-warning-ink);
+    }
+    .callout-error {
+      background: var(--status-error-bg);
+      border-color: var(--status-error-border);
+      color: var(--status-error-ink);
     }
 
-    .ui-alert-warning {
-      background: var(--warning-tint);
-      border-color: rgba(245, 158, 11, 0.25);
-    }
+    /* ========================================================================
+       SHADCN/UI MICRO-ANIMATIONS & COMPONENT PRIMITIVES
+       ======================================================================== */
 
-    .ui-alert-destructive {
-      background: var(--destructive-tint);
-      border-color: rgba(239, 68, 68, 0.25);
-    }
-
-    /* Modal / Dialog Box */
-    .ui-dialog {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-dialog);
-      max-width: 520px;
-      width: 100%;
+    /* 1. Shimmer Loading Skeleton */
+    .skeleton-box {
+      background: var(--surface-subtle);
+      border-radius: var(--radius-sm);
+      position: relative;
       overflow: hidden;
     }
+    .skeleton-box::after {
+      content: "";
+      position: absolute;
+      top: 0; right: 0; bottom: 0; left: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%); /* taste-skill-ignore */
+      animation: shimmerSweep 1.6s infinite var(--ease-in-out);
+    }
+    @keyframes shimmerSweep {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
 
-    .ui-dialog-header {
-      padding: 20px 24px;
+    /* 2. shadcn Accordion */
+    .accordion-item {
+      border-bottom: 1px solid var(--border);
+    }
+    .accordion-item:last-child { border-bottom: none; }
+    .accordion-trigger {
+      width: 100%;
+      padding: 14px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: transparent;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      font-family: var(--font-sans);
+    }
+    .accordion-chevron {
+      transition: transform var(--duration-normal) var(--ease-out);
+      color: var(--text-muted);
+    }
+    .accordion-item.open .accordion-chevron {
+      transform: rotate(180deg);
+    }
+    .accordion-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height var(--duration-normal) var(--ease-out);
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .accordion-item.open .accordion-content {
+      max-height: 200px;
+      padding-bottom: 14px;
+    }
+
+    /* 3. shadcn Dialog / Modal Overlay with Zoom-in Motion */
+    .dialog-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      transition: opacity var(--duration-normal) ease;
+    }
+    .dialog-backdrop.show {
+      display: flex;
+      opacity: 1;
+    }
+    .dialog-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      max-width: 500px;
+      width: 100%;
+      transform: scale(0.96);
+      transition: transform var(--duration-normal) var(--ease-out);
+    }
+    .dialog-backdrop.show .dialog-card {
+      transform: scale(1);
+    }
+    .dialog-header {
+      padding: 20px 22px 14px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
-
-    .ui-dialog-body {
-      padding: 24px;
-    }
-
-    .ui-dialog-footer {
-      padding: 16px 24px;
-      background: var(--muted);
+    .dialog-body { padding: 20px 22px; font-size: 13.5px; }
+    .dialog-footer {
+      padding: 14px 22px;
+      background: var(--surface-subtle);
       border-top: 1px solid var(--border);
       display: flex;
       justify-content: flex-end;
       gap: 10px;
     }
 
-    /* Responsive */
+    /* 4. shadcn Toast Notification Slide-In */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      transform: translateY(16px);
+      opacity: 0;
+      transition: transform var(--duration-normal) var(--ease-out), opacity var(--duration-normal) ease;
+    }
+    .toast-card.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* 5. Tooltip Micro-Interaction */
+    .tooltip-anchor {
+      position: relative;
+      display: inline-block;
+    }
+    .tooltip-bubble {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%) scale(0.95);
+      background: var(--text);
+      color: var(--surface);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast) ease;
+      z-index: 20;
+    }
+    .tooltip-anchor:hover .tooltip-bubble {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    /* 6. Spinner Animation */
+    @keyframes spinIcon {
+      100% { transform: rotate(360deg); }
+    }
+    .anim-spin {
+      animation: spinIcon 1s linear infinite;
+    }
+
+    /* Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     @media (max-width: 900px) {
       .app-sidebar { display: none; }
-      .page-container { padding: 24px 16px 80px; }
-      .topbar { padding: 0 16px; }
+      .studio-topbar { padding: 0 16px; }
+      .content-container { padding: 20px 16px 80px; }
     }
   </style>
 </head>
 <body>
 
   <!-- ========================================================================
-       Sidebar Navigation
+       Sidebar: Navigation with Lucide SVG Icons
        ======================================================================== -->
   <aside class="app-sidebar">
     <div class="brand-header">
-      <div id="brandLogo" class="brand-logo-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <div id="brandIcon" class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6"/>
           <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           <polyline points="3.29 7 12 12 20.71 7"/>
@@ -1019,893 +1065,670 @@
       </div>
       <div>
         <div class="brand-title">SwiftDrop</div>
-        <div class="brand-subtitle">shadcn/ui &bull; Apple HIG</div>
+        <div class="brand-subtitle">shadcn &bull; Apple HIG</div>
       </div>
     </div>
 
-    <div style="flex: 1; padding: 8px 0;">
-      <div class="nav-group-title">Theme Primitives</div>
-      <a class="nav-item active" href="#palette">Color Tokens & Swatches <span class="nav-item-badge">Live</span></a>
-      <a class="nav-item" href="#typography">Typography Scale</a>
-      <a class="nav-item" href="#buttons">Buttons & Variants</a>
-      <a class="nav-item" href="#badges">Status Badges <span class="nav-item-badge">9 States</span></a>
+    <div class="nav-list">
+      <div class="nav-label">Design Dimensions</div>
+      <a class="nav-item active" href="#archetypes">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+          Archetypes & Themes
+        </span>
+        <span class="nav-pill">4 Modes</span>
+      </a>
+      <a class="nav-item" href="#motion">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="M2 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="M12 22v-4"/><path d="m19.07 19.07-2.83-2.83"/><path d="M22 12h-4"/><path d="m19.07 4.93-2.83 2.83"/></svg>
+          Micro-Animations
+        </span>
+        <span class="nav-pill">Active</span>
+      </a>
+      <a class="nav-item" href="#icons">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6Z"/></svg>
+          Lucide Icon Catalog
+        </span>
+      </a>
+      <a class="nav-item" href="#buttons">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="3"/></svg>
+          shadcn Buttons
+        </span>
+      </a>
+      <a class="nav-item" href="#badges">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Status Badges
+        </span>
+      </a>
 
-      <div class="nav-group-title">Form Components</div>
-      <a class="nav-item" href="#inputs">Inputs & Affixes</a>
-      <a class="nav-item" href="#toggles">Switches & Selects</a>
-      <a class="nav-item" href="#dropzone">CSV Ingestion Dropzone</a>
+      <div class="nav-label">Components</div>
+      <a class="nav-item" href="#interactive-ui">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Dialog, Toast, Accordion
+        </span>
+      </a>
+      <a class="nav-item" href="#tables">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          Data Tables
+        </span>
+      </a>
+      <a class="nav-item" href="#kpis">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Metrics & KPIs
+        </span>
+      </a>
 
-      <div class="nav-group-title">Data & Display</div>
-      <a class="nav-item" href="#metrics">KPI Stat Cards</a>
-      <a class="nav-item" href="#tables">Data Grid & Table</a>
-      <a class="nav-item" href="#alerts">Alerts & Callouts</a>
-
-      <div class="nav-group-title">Workflows</div>
-      <a class="nav-item" href="#stepper">4-Step Booking Stepper</a>
-      <a class="nav-item" href="#timeline">Milestone Timeline</a>
-      <a class="nav-item" href="#pod">Proof of Delivery (POD)</a>
-      <a class="nav-item" href="#quote">Tariff Quote Card</a>
-      <a class="nav-item" href="#dialogs">Dialogs & Secret Reveal</a>
+      <div class="nav-label">Logistics Workflows</div>
+      <a class="nav-item" href="#booking">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          4-Step Booking
+        </span>
+      </a>
+      <a class="nav-item" href="#tracking">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="12 8 8 12 12 16 12 8"/></svg>
+          Tracking Timeline
+        </span>
+      </a>
+      <a class="nav-item" href="#pod">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          POD Signature Pad
+        </span>
+      </a>
     </div>
 
-    <div style="padding: 16px 20px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted-foreground);">
-      SwiftDrop Design Engine v2.0
+    <div style="padding: 14px 18px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted);">
+      SwiftDrop Design Engine v3.2
     </div>
   </aside>
 
   <!-- ========================================================================
-       Main Content Workspace
+       Main Workspace
        ======================================================================== -->
   <main class="main-workspace">
+    <div class="sheet-wrapper">
 
-    <!-- Topbar Navigation with Dynamic Primary Palette Selector -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <div class="topbar-title">
-          SwiftDrop &rarr; <strong>shadcn/ui Component Catalog</strong>
-        </div>
-      </div>
-
-      <div class="topbar-right">
-        <!-- Interactive Primary Color Selector -->
-        <div class="color-picker-group">
-          <span class="color-picker-label">Primary:</span>
-          <!-- 1. Apple Blue -->
-          <button class="color-swatch-btn active" style="background: #0071e3;" onclick="setPrimaryColor('#0071e3', '#0077ed', 'blue')" title="Apple System Blue"></button>
-          <!-- 2. Zinc Monochromatic -->
-          <button class="color-swatch-btn" style="background: #18181b;" onclick="setPrimaryColor('#18181b', '#27272a', 'zinc')" title="Zinc (Classic shadcn)"></button>
-          <!-- 3. Swift Teal -->
-          <button class="color-swatch-btn" style="background: #0b5955;" onclick="setPrimaryColor('#0b5955', '#08433f', 'teal')" title="SwiftDrop Signature Teal"></button>
-          <!-- 4. Violet / Purple -->
-          <button class="color-swatch-btn" style="background: #7c3aed;" onclick="setPrimaryColor('#7c3aed', '#6d28d9', 'violet')" title="Violet SaaS"></button>
-          <!-- 5. Rose / Crimson -->
-          <button class="color-swatch-btn" style="background: #e11d48;" onclick="setPrimaryColor('#e11d48', '#be123c', 'rose')" title="Rose Crimson"></button>
-          <!-- 6. Emerald Green -->
-          <button class="color-swatch-btn" style="background: #059669;" onclick="setPrimaryColor('#059669', '#047857', 'emerald')" title="Emerald Modern"></button>
-          <!-- 7. Amber / Orange -->
-          <button class="color-swatch-btn" style="background: #ea580c;" onclick="setPrimaryColor('#ea580c', '#c2410c', 'orange')" title="Amber Orange"></button>
-          <!-- 8. Sky Blue -->
-          <button class="color-swatch-btn" style="background: #0284c7;" onclick="setPrimaryColor('#0284c7', '#0369a1', 'sky')" title="Sky Tech"></button>
-          <!-- Custom HTML Color Picker -->
-          <input type="color" id="customColorPicker" class="custom-color-input" value="#0071e3" onchange="setCustomPrimary(this.value)" title="Choose Custom Hex Color">
-        </div>
-
-        <!-- Light / Dark Mode Toggle -->
-        <div class="tabs-list">
-          <button id="themeLight" class="tabs-trigger active" onclick="setAppTheme('light')">Light</button>
-          <button id="themeDark" class="tabs-trigger" onclick="setAppTheme('dark')">Dark</button>
-        </div>
-      </div>
-    </header>
-
-    <div class="page-container">
-
-      <!-- Hero Introduction -->
-      <div style="margin-bottom: 48px;">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-          <span class="ui-badge ui-badge-primary-tint">shadcn/ui + Apple HIG Hybrid</span>
-          <span class="ui-badge ui-badge-secondary">Dynamic Accent Engine</span>
-          <span id="activeColorBadge" class="ui-badge ui-badge-outline">Active: Apple Blue (#0071E3)</span>
-        </div>
-        <h1 style="font-size: 34px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px;">
-          Component & Design System Engine
-        </h1>
-        <p style="font-size: 15px; color: var(--muted-foreground); max-width: 820px;">
-          Precision-crafted design primitives combining shadcn/ui’s accessible utility structure with Apple's typography and squircle aesthetics. Select any primary color above to inspect how the entire application adapts dynamically.
-        </p>
-      </div>
-
-      <!-- ====================================================================
-           1. COLOR TOKENS & RECOMMENDED PALETTES
-           ==================================================================== -->
-      <section id="palette" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">1. Color Palette Tokens & Live Accent</h2>
-            <p class="section-desc">Recommended primary accent options with harmonic tint fills and contrast compliance.</p>
+      <!-- Studio Topbar with Live Archetype & Accent Pickers -->
+      <header class="studio-topbar">
+        <div class="studio-controls-left">
+          <div class="control-cluster">
+            <span class="cluster-title">Archetype:</span>
+            <select id="archetypeSelect" class="studio-select" onchange="setArchetype(this.value)">
+              <option value="apple">Apple Cupertino Precision</option>
+              <option value="linear">Linear / Craft Minimal</option>
+              <option value="framed">Framed Sheet (Anti-Slop)</option>
+              <option value="swiftsig">Swift Signature (Stone & Teal)</option>
+            </select>
           </div>
         </div>
 
-        <div class="component-grid">
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Active Primary Tokens</div>
-              <div class="ui-card-description">Live CSS custom properties bound to all primary action components.</div>
-            </div>
-            <div class="ui-card-content" style="display: flex; flex-direction: column; gap: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--primary); color: var(--primary-foreground); border-radius: var(--radius-sm);">
-                <strong>--primary</strong>
-                <code id="tokenCodePrimary" style="font-family: var(--font-mono); font-size: 12px;">#0071e3</code>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--primary-tint); color: var(--primary); border-radius: var(--radius-sm); border: 1px solid var(--border);">
-                <strong>--primary-tint</strong>
-                <code style="font-family: var(--font-mono); font-size: 12px;">rgba(primary, 0.08)</code>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);">
-                <strong>--card / --background</strong>
-                <code style="font-family: var(--font-mono); font-size: 12px;">Surface Neutral</code>
-              </div>
+        <div class="studio-controls-right">
+          <!-- Primary Color Swatches -->
+          <div class="control-cluster">
+            <span class="cluster-title">Accent:</span>
+            <div class="color-swatches">
+              <button class="swatch-dot active" style="background: #0071e3;" onclick="setAccent('#0071e3', '#0077ed', 'Apple Blue')" title="Apple Blue"></button>
+              <button class="swatch-dot" style="background: #0b5955;" onclick="setAccent('#0b5955', '#08433f', 'Swift Teal')" title="Swift Teal"></button>
+              <button class="swatch-dot" style="background: #18181b;" onclick="setAccent('#18181b', '#27272a', 'Zinc Monochrome')" title="Zinc Monochrome"></button>
+              <button class="swatch-dot" style="background: #1e40af;" onclick="setAccent('#1e40af', '#1e3a8a', 'Oxford Navy')" title="Oxford Navy"></button>
+              <button class="swatch-dot" style="background: #b45309;" onclick="setAccent('#b45309', '#92400e', 'Logistics Amber')" title="Logistics Amber"></button>
+              <button class="swatch-dot" style="background: #047857;" onclick="setAccent('#047857', '#065f46', 'Emerald Green')" title="Emerald Green"></button>
+              <button class="swatch-dot" style="background: #b91c1c;" onclick="setAccent('#b91c1c', '#991b1b', 'Crimson Rose')" title="Crimson Rose"></button>
+              <input type="color" id="customColor" class="native-color-picker" value="#0071e3" onchange="setCustomAccent(this.value)" title="Choose Custom Hex">
             </div>
           </div>
 
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Curated Primary Themes</div>
-              <div class="ui-card-description">Click any swatch to apply the recommended colorway immediately.</div>
-            </div>
-            <div class="ui-card-content" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#0071e3', '#0077ed', 'blue')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #0071e3;"></span> Apple Blue
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#18181b', '#27272a', 'zinc')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #18181b;"></span> Zinc Neutral
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#0b5955', '#08433f', 'teal')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #0b5955;"></span> Swift Teal
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#7c3aed', '#6d28d9', 'violet')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #7c3aed;"></span> Modern Violet
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#e11d48', '#be123c', 'rose')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #e11d48;"></span> Rose Crimson
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#059669', '#047857', 'emerald')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #059669;"></span> Emerald Green
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#ea580c', '#c2410c', 'orange')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #ea580c;"></span> Amber Orange
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="setPrimaryColor('#0284c7', '#0369a1', 'sky')" style="justify-content: flex-start; gap: 8px;">
-                <span style="width: 12px; height: 12px; border-radius: 50%; background: #0284c7;"></span> Sky Tech
-              </button>
-            </div>
+          <!-- Appearance: Light / Dark -->
+          <div class="segmented-bar">
+            <button id="themeLightBtn" class="segmented-btn active" onclick="setTheme('light')">Light</button>
+            <button id="themeDarkBtn" class="segmented-btn" onclick="setTheme('dark')">Dark</button>
           </div>
         </div>
-      </section>
+      </header>
 
-      <!-- ====================================================================
-           2. TYPOGRAPHY
-           ==================================================================== -->
-      <section id="typography" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">2. Typography & Hierarchies</h2>
-            <p class="section-desc">SF Pro Display, SF Pro Text, and SF Mono with optical negative letter-spacing.</p>
+      <div class="content-container">
+
+        <!-- Intro Hero -->
+        <div style="margin-bottom: 40px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+            <span class="status-badge status-active">shadcn/ui + Apple HIG</span>
+            <span id="activeStyleBadge" class="status-badge status-neutral">Style: Apple Cupertino</span>
+            <span id="activeColorBadge" class="status-badge status-neutral">Color: Apple Blue (#0071E3)</span>
           </div>
+          <h1 style="font-size: 32px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 6px;">
+            Frontend Theme, Animation & Component Studio
+          </h1>
+          <p style="font-size: 14.5px; color: var(--text-muted); max-width: 820px;">
+            Interactive engineering reference integrating shadcn/ui component primitives, Lucide SVG icons, and authentic micro-interactions.
+          </p>
         </div>
 
-        <div class="ui-card">
-          <div class="ui-card-content" style="padding-top: 24px; display: flex; flex-direction: column; gap: 20px;">
+        <!-- ====================================================================
+             1. RECOMMENDED SHADCN MICRO-ANIMATIONS
+             ==================================================================== -->
+        <section id="motion" class="studio-section">
+          <div class="section-headline">
             <div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 4px;">Heading 1 (30px / SemiBold)</div>
-              <div style="font-size: 30px; font-weight: 600; letter-spacing: -0.025em;">SwiftDrop Courier Operations</div>
-            </div>
-            <div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 4px;">Heading 2 (22px / SemiBold)</div>
-              <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em;">Real-Time Dispatch Console</div>
-            </div>
-            <div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 4px;">Body Regular (14.5px / Regular)</div>
-              <div style="color: var(--foreground); line-height: 1.5;">The parcel aggregate root encapsulates state transitions and synchronizes outbox event commitments atomically within PostgreSQL transactions.</div>
-            </div>
-            <div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 4px;">Monospace Data Identifiers (13px Mono)</div>
-              <div style="font-family: var(--font-mono); font-size: 13px; color: var(--primary);">Tracking: SD-20261107-99812 &bull; Quote: qte_01HXYZ992384A &bull; Hash: whsec_e3b0c442</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====================================================================
-           3. BUTTON PRIMITIVES
-           ==================================================================== -->
-      <section id="buttons" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">3. Button Variants & Action States</h2>
-            <p class="section-desc">shadcn/ui button variants: default, secondary, outline, ghost, link, destructive.</p>
-          </div>
-        </div>
-
-        <div class="component-grid">
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">shadcn/ui Button Variants</div>
-              <div class="ui-card-description">Standard button archetypes adapting to active primary theme.</div>
-            </div>
-            <div class="ui-card-content">
-              <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px;">
-                <button class="btn btn-default">Default (Primary)</button>
-                <button class="btn btn-secondary">Secondary</button>
-                <button class="btn btn-outline">Outline</button>
-                <button class="btn btn-ghost">Ghost</button>
-                <button class="btn btn-link">Link Action</button>
-                <button class="btn btn-destructive">Destructive</button>
-              </div>
-
-              <div style="font-size: 12px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 10px;">Button States</div>
-              <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                <button class="btn btn-default" disabled>Disabled Default</button>
-                <button class="btn btn-outline" disabled>Disabled Outline</button>
-                <button class="btn btn-default">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                  Processing...
-                </button>
-              </div>
-              <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+              <h2 class="section-title">1. Recommended Micro-Animations & Interactive Primitives</h2>
+              <p class="section-sub">Standard shadcn/ui animation timings: 150ms-220ms expo-out curves. Click triggers below to test live motion.</p>
             </div>
           </div>
 
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Sizes & Segmented Controls</div>
-              <div class="ui-card-description">Standard touch target scales and tab primitives.</div>
-            </div>
-            <div class="ui-card-content">
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 24px;">
-                <button class="btn btn-default btn-sm">Small (34px)</button>
-                <button class="btn btn-default">Default (40px)</button>
-                <button class="btn btn-default btn-lg">Large (48px)</button>
+          <div class="grid-2">
+            <!-- Animation 1: Modal Dialog & Toast Trigger -->
+            <div class="card-panel">
+              <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">Dialog Modal & Toast Slide-in</div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                Demonstrates smooth <code>zoom-in-95</code> scale-in modal dialog and animated toast notification banner.
               </div>
-
-              <div style="font-size: 12px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 10px;">Tabs / Segmented Trigger</div>
-              <div class="tabs-list" style="margin-bottom: 18px;">
-                <button class="tabs-trigger active">Standard</button>
-                <button class="tabs-trigger">Express</button>
-                <button class="tabs-trigger">Same Day</button>
-              </div>
-
-              <div style="font-size: 12px; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 10px;">Icon Button (40px)</div>
               <div style="display: flex; gap: 10px;">
-                <button class="btn btn-outline btn-icon" title="Search">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <button class="btn btn-primary btn-sm" onclick="openDialog()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Open Dialog
                 </button>
-                <button class="btn btn-outline btn-icon" title="Filter">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                </button>
-                <button class="btn btn-default btn-icon" title="Add">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <button class="btn btn-outline btn-sm" onclick="showToast('Parcel SD-CMB-8921-LK assigned to courier!')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                  Trigger Toast
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- ====================================================================
-           4. STATUS BADGES & TAGS
-           ==================================================================== -->
-      <section id="badges" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">4. Status Badges & Lifecycle Indicators</h2>
-            <p class="section-desc">Authoritative 9 parcel aggregate states styled as sleek shadcn badge pills.</p>
+            <!-- Animation 2: Shimmer Loading Skeleton -->
+            <div class="card-panel">
+              <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">Shimmer Skeleton Loading State</div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                Gentle CSS gradient sweep for async data fetching in place of jarring loading spinners.
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="skeleton-box" style="height: 16px; width: 60%;"></div>
+                <div class="skeleton-box" style="height: 12px; width: 90%;"></div>
+                <div class="skeleton-box" style="height: 12px; width: 75%;"></div>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="ui-card">
-          <div class="ui-card-content" style="padding-top: 24px;">
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 14px;">9-State Aggregate Machine</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px;">
-              <span class="ui-badge ui-badge-secondary"><span class="ui-badge-dot"></span> CREATED</span>
-              <span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> ASSIGNED</span>
-              <span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> PICKED_UP</span>
-              <span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> IN_TRANSIT</span>
-              <span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> OUT_FOR_DELIVERY</span>
-              <span class="ui-badge ui-badge-success"><span class="ui-badge-dot"></span> DELIVERED</span>
-              <span class="ui-badge ui-badge-warning"><span class="ui-badge-dot"></span> ATTEMPT_FAILED</span>
-              <span class="ui-badge ui-badge-destructive"><span class="ui-badge-dot"></span> RETURNED</span>
-              <span class="ui-badge ui-badge-outline" style="text-decoration: line-through;"><span class="ui-badge-dot"></span> CANCELLED</span>
+        <!-- ====================================================================
+             2. LUCIDE ICON CATALOG FOR LOGISTICS
+             ==================================================================== -->
+        <section id="icons" class="catalog-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">2. Recommended Lucide Logistics Icon Set</h2>
+              <p class="section-sub">Official icon family of shadcn/ui. Embedded as clean, scalable 24x24 SVG vectors (stroke 2px).</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px;">
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">Package</div>
+                <span class="tooltip-bubble">lucide: package</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">Truck</div>
+                <span class="tooltip-bubble">lucide: truck</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">MapPin</div>
+                <span class="tooltip-bubble">lucide: map-pin</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">CheckCircle</div>
+                <span class="tooltip-bubble">lucide: check-circle</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">AlertTriangle</div>
+                <span class="tooltip-bubble">lucide: alert-triangle</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">Clock</div>
+                <span class="tooltip-bubble">lucide: clock</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">Shield</div>
+                <span class="tooltip-bubble">lucide: shield</span>
+              </div>
+
+              <div class="tooltip-anchor" style="padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; display: block;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                <div style="font-size: 11.5px; font-weight: 500;">Camera</div>
+                <span class="tooltip-bubble">lucide: camera</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             3. SHADCN ACCORDION & COLLAPSIBLES
+             ==================================================================== -->
+        <section id="interactive-ui" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">3. shadcn/ui Accordion & Interactive Primitives</h2>
+              <p class="section-sub">Accessible, animated collapsible sections with rotating chevron cues.</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
+            <div class="accordion-item open" onclick="toggleAccordion(this)">
+              <button class="accordion-trigger">
+                <span>What delivery zones are covered by SwiftDrop in Sri Lanka?</span>
+                <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="accordion-content">
+                SwiftDrop currently operates authoritative coverage across Western Province (Colombo 01-15, Dehiwala, Gampaha), Central (Kandy Metropolitan), Southern (Galle Fort), and Northern (Jaffna Town) with automated zone boundary tariffing.
+              </div>
             </div>
 
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 14px;">Multi-Tenant System Roles</div>
+            <div class="accordion-item" onclick="toggleAccordion(this)">
+              <button class="accordion-trigger">
+                <span>How is the 15-minute pricing quote expiration calculated?</span>
+                <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="accordion-content">
+                Quotes are calculated authoritatively by Core API pricing rules. The returned <code>quote_id</code> is valid for 15 minutes in PostgreSQL cache, preventing client-side fee tampering and guaranteeing tariff stability during booking.
+              </div>
+            </div>
+
+            <div class="accordion-item" onclick="toggleAccordion(this)">
+              <button class="accordion-trigger">
+                <span>How does SEC-016 public tracking privacy masking work?</span>
+                <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="accordion-content">
+                Public endpoints scrub all recipient mobile numbers, street addresses, and proof photos, returning sanitized milestone timestamps and destination cities only.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             4. SHADCN BUTTONS WITH SPINNERS & ICONS
+             ==================================================================== -->
+        <section id="buttons" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">4. shadcn/ui Buttons: Micro-Interactions & Icons</h2>
+              <p class="section-sub">Button variants equipped with Lucide icons and active press compression (scale 0.98).</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px;">
+              <button class="btn btn-primary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                Primary Fill
+              </button>
+              <button class="btn btn-tone">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download CSV
+              </button>
+              <button class="btn btn-outline">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                Filter Shipments
+              </button>
+              <button class="btn btn-ghost">Ghost Action</button>
+              <button class="btn btn-danger">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></svg>
+                Cancel Booking
+              </button>
+              <button class="btn btn-primary" onclick="simulateLoading(this)">
+                <svg id="btnSpinner" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <span id="btnText">Simulate Loading</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             5. STATUS BADGES & INDICATORS
+             ==================================================================== -->
+        <section id="badges" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">5. Status Badges: Authoritative 9-State Machine</h2>
+              <p class="section-sub">Color on data, not chrome. Subdued tints for all aggregate lifecycle states.</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
             <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-              <span class="ui-badge ui-badge-default">Admin</span>
-              <span class="ui-badge ui-badge-primary-tint">Dispatcher</span>
-              <span class="ui-badge ui-badge-primary-tint">Courier</span>
-              <span class="ui-badge ui-badge-secondary">Merchant</span>
-              <span class="ui-badge ui-badge-outline">Customer</span>
+              <span class="status-badge status-neutral"><span class="status-dot"></span> CREATED</span>
+              <span class="status-badge status-active"><span class="status-dot"></span> ASSIGNED</span>
+              <span class="status-badge status-active"><span class="status-dot"></span> PICKED_UP</span>
+              <span class="status-badge status-active"><span class="status-dot"></span> IN_TRANSIT</span>
+              <span class="status-badge status-active"><span class="status-dot"></span> OUT_FOR_DELIVERY</span>
+              <span class="status-badge status-success"><span class="status-dot"></span> DELIVERED</span>
+              <span class="status-badge status-warning"><span class="status-dot"></span> ATTEMPT_FAILED</span>
+              <span class="status-badge status-error"><span class="status-dot"></span> RETURNED</span>
+              <span class="status-badge status-neutral" style="text-decoration: line-through;"><span class="status-dot"></span> CANCELLED</span>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- ====================================================================
-           5. FORM CONTROLS & INPUTS
-           ==================================================================== -->
-      <section id="inputs" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">5. Form Inputs & Interactive Controls</h2>
-            <p class="section-desc">shadcn-style inputs with focus rings, unit affixes, and validation errors.</p>
-          </div>
-        </div>
-
-        <div class="component-grid">
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Text & Phone Fields</div>
-            </div>
-            <div class="ui-card-content">
-              <div class="form-group">
-                <label class="form-label form-label-required" for="ui-name">Sender Full Name</label>
-                <input id="ui-name" type="text" class="ui-input" value="Sajini Perera" placeholder="Enter name">
-                <div class="form-helper">Verified account identity</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label form-label-required" for="ui-phone">Mobile Number</label>
-                <div class="ui-input-wrapper">
-                  <span class="input-affix input-affix-left">+94</span>
-                  <input id="ui-phone" type="tel" class="ui-input has-left" value="77 123 4567">
-                </div>
-                <div class="form-helper">Used for SMS dispatch milestones</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label form-label-required" for="ui-weight">Parcel Weight</label>
-                <div class="ui-input-wrapper">
-                  <input id="ui-weight" type="number" class="ui-input has-right" value="2.50">
-                  <span class="input-affix input-affix-right">kg</span>
-                </div>
-                <div class="form-helper">Maximum courier weight limit is 30.00 kg</div>
-              </div>
+        <!-- ====================================================================
+             6. DATA TABLES (RULES & TABULAR FIGURES)
+             ==================================================================== -->
+        <section id="tables" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">6. Data Table: Precision Rules & Tabular Figures</h2>
+              <p class="section-sub">Rules-only separation, right-aligned figures with muted units, monospace tracking codes.</p>
             </div>
           </div>
 
-          <div class="ui-card" id="toggles">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Switches & Error Validation</div>
-            </div>
-            <div class="ui-card-content">
-              <div class="form-group">
-                <label class="form-label" for="ui-vol">Volumetric Capacity</label>
-                <input id="ui-vol" type="text" class="ui-input is-invalid" value="95 x 80 x 60 cm">
-                <div style="font-size: 12px; color: var(--destructive); margin-top: 5px;">
-                  Exceeds maximum allowable volumetric capacity (50,000 cm&sup3; limit).
-                </div>
-              </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;"><input type="checkbox"></th>
+                  <th>Tracking Number</th>
+                  <th>Recipient & City</th>
+                  <th>Zone Code</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Weight</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="tabular-num" style="color: var(--primary); font-weight: 500;">SD-CMB-8921-LK</span></td>
+                  <td>
+                    <div style="font-weight: 500;">Nimal Perera</div>
+                    <div style="font-size: 11.5px; color: var(--text-muted);">Colombo 03, Kollupitiya</div>
+                  </td>
+                  <td><span class="status-badge status-neutral">WESTERN_COLOMBO_01</span></td>
+                  <td><span class="status-badge status-active"><span class="status-dot"></span> IN_TRANSIT</span></td>
+                  <td style="text-align: right;"><span class="tabular-num">1.2</span> <span style="color: var(--text-muted);">kg</span></td>
+                  <td style="text-align: right;"><button class="btn btn-outline btn-sm">Details</button></td>
+                </tr>
 
-              <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--border);">
-                <div>
-                  <div style="font-size: 13.5px; font-weight: 500;">Fragile Handling Required</div>
-                  <div style="font-size: 12px; color: var(--muted-foreground);">Attaches bubble-cushioning and caution mark</div>
-                </div>
-                <label class="ui-switch">
-                  <input type="checkbox" checked>
-                  <span class="switch-track"></span>
-                </label>
-              </div>
-            </div>
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="tabular-num" style="color: var(--primary); font-weight: 500;">SD-KND-4309-LK</span></td>
+                  <td>
+                    <div style="font-weight: 500;">Anura Wickramasinghe</div>
+                    <div style="font-size: 11.5px; color: var(--text-muted);">Peradeniya Road, Kandy</div>
+                  </td>
+                  <td><span class="status-badge status-neutral">CENTRAL_KANDY_01</span></td>
+                  <td><span class="status-badge status-active"><span class="status-dot"></span> OUT_FOR_DELIVERY</span></td>
+                  <td style="text-align: right;"><span class="tabular-num">3.5</span> <span style="color: var(--text-muted);">kg</span></td>
+                  <td style="text-align: right;"><button class="btn btn-outline btn-sm">Details</button></td>
+                </tr>
+
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="tabular-num" style="color: var(--primary); font-weight: 500;">SD-GAL-7721-LK</span></td>
+                  <td>
+                    <div style="font-weight: 500;">Dilani Samarasekera</div>
+                    <div style="font-size: 11.5px; color: var(--text-muted);">Lighthouse Street, Galle Fort</div>
+                  </td>
+                  <td><span class="status-badge status-neutral">SOUTHERN_GALLE_01</span></td>
+                  <td><span class="status-badge status-success"><span class="status-dot"></span> DELIVERED</span></td>
+                  <td style="text-align: right;"><span class="tabular-num">0.8</span> <span style="color: var(--text-muted);">kg</span></td>
+                  <td style="text-align: right;"><button class="btn btn-outline btn-sm">Details</button></td>
+                </tr>
+
+                <tr>
+                  <td><input type="checkbox"></td>
+                  <td><span class="tabular-num" style="color: var(--primary); font-weight: 500;">SD-JAF-1184-LK</span></td>
+                  <td>
+                    <div style="font-weight: 500;">Kavitha Rajan</div>
+                    <div style="font-size: 11.5px; color: var(--text-muted);">Hospital Road, Jaffna Town</div>
+                  </td>
+                  <td><span class="status-badge status-neutral">NORTHERN_JAFFNA_01</span></td>
+                  <td><span class="status-badge status-warning"><span class="status-dot"></span> ATTEMPT_FAILED</span></td>
+                  <td style="text-align: right;"><span class="tabular-num">2.1</span> <span style="color: var(--text-muted);">kg</span></td>
+                  <td style="text-align: right;"><button class="btn btn-primary btn-sm">Re-attempt</button></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
 
-        <!-- File Ingestion Dropzone -->
-        <div class="ui-card" id="dropzone" style="margin-top: 24px;">
-          <div class="ui-card-header">
-            <div class="ui-card-title">Batch CSV Ingestion Dropzone</div>
-            <div class="ui-card-description">High-volume merchant roster file ingestion.</div>
-          </div>
-          <div class="ui-card-content">
-            <div style="border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 36px 20px; text-align: center; background: var(--muted); cursor: pointer;">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="margin-bottom: 8px;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <div style="font-size: 14.5px; font-weight: 600;">Drag and drop shipment CSV here, or click to browse</div>
-              <div style="font-size: 12px; color: var(--muted-foreground); margin-top: 4px;">Supports UTF-8 CSV with valid destination addresses</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====================================================================
-           6. METRIC KPIS
-           ==================================================================== -->
-      <section id="metrics" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">6. Metric KPI Cards</h2>
-            <p class="section-desc">Dashboard summary statistics with real-time delta indicators.</p>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px;">
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <span class="kpi-label">Total Ingested</span>
-              <span class="ui-badge ui-badge-primary-tint">+12.4%</span>
-            </div>
-            <div class="kpi-value">1,482</div>
-            <div class="kpi-footer">Parcels processed today</div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <span class="kpi-label">In Transit & Hub</span>
-              <span class="ui-badge ui-badge-primary-tint">94 Couriers</span>
-            </div>
-            <div class="kpi-value">342</div>
-            <div class="kpi-footer">Active in sorting network</div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <span class="kpi-label">Delivered Today</span>
-              <span class="ui-badge ui-badge-success">98.2% SLA</span>
-            </div>
-            <div class="kpi-value">1,128</div>
-            <div class="kpi-footer">Confirmed with photo proof</div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-top">
-              <span class="kpi-label">Action Needed</span>
-              <span class="ui-badge ui-badge-warning">12 Pending</span>
-            </div>
-            <div class="kpi-value">12</div>
-            <div class="kpi-footer">Failed delivery re-dispatch</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====================================================================
-           7. DATA TABLES
-           ==================================================================== -->
-      <section id="tables" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">7. Data Grid & Operations Table</h2>
-            <p class="section-desc">Responsive table with monospace tracking IDs and action buttons.</p>
-          </div>
-        </div>
-
-        <div class="ui-table-container">
-          <table class="ui-table">
-            <thead>
-              <tr>
-                <th style="width: 32px;"><input type="checkbox"></th>
-                <th>Tracking Number</th>
-                <th>Recipient & City</th>
-                <th>Delivery Zone</th>
-                <th>Status</th>
-                <th>Weight</th>
-                <th style="text-align: right;">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input type="checkbox"></td>
-                <td><span class="mono-cell">SD-CMB-8921-LK</span></td>
-                <td>
-                  <div style="font-weight: 500;">Nimal Perera</div>
-                  <div style="font-size: 12px; color: var(--muted-foreground);">Colombo 03, Kollupitiya</div>
-                </td>
-                <td><span class="ui-badge ui-badge-secondary">WESTERN_COLOMBO_01</span></td>
-                <td><span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> In Transit</span></td>
-                <td>1.2 kg</td>
-                <td style="text-align: right;">
-                  <button class="btn btn-outline btn-sm">Details</button>
-                </td>
-              </tr>
-
-              <tr>
-                <td><input type="checkbox"></td>
-                <td><span class="mono-cell">SD-KND-4309-LK</span></td>
-                <td>
-                  <div style="font-weight: 500;">Anura Wickramasinghe</div>
-                  <div style="font-size: 12px; color: var(--muted-foreground);">Peradeniya Road, Kandy</div>
-                </td>
-                <td><span class="ui-badge ui-badge-secondary">CENTRAL_KANDY_01</span></td>
-                <td><span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> Out for Delivery</span></td>
-                <td>3.5 kg</td>
-                <td style="text-align: right;">
-                  <button class="btn btn-outline btn-sm">Details</button>
-                </td>
-              </tr>
-
-              <tr>
-                <td><input type="checkbox"></td>
-                <td><span class="mono-cell">SD-GAL-7721-LK</span></td>
-                <td>
-                  <div style="font-weight: 500;">Dilani Samarasekera</div>
-                  <div style="font-size: 12px; color: var(--muted-foreground);">Lighthouse Street, Galle Fort</div>
-                </td>
-                <td><span class="ui-badge ui-badge-secondary">SOUTHERN_GALLE_01</span></td>
-                <td><span class="ui-badge ui-badge-success"><span class="ui-badge-dot"></span> Delivered</span></td>
-                <td>0.8 kg</td>
-                <td style="text-align: right;">
-                  <button class="btn btn-outline btn-sm">Details</button>
-                </td>
-              </tr>
-
-              <tr>
-                <td><input type="checkbox"></td>
-                <td><span class="mono-cell">SD-JAF-1184-LK</span></td>
-                <td>
-                  <div style="font-weight: 500;">Kavitha Rajan</div>
-                  <div style="font-size: 12px; color: var(--muted-foreground);">Hospital Road, Jaffna Town</div>
-                </td>
-                <td><span class="ui-badge ui-badge-secondary">NORTHERN_JAFFNA_01</span></td>
-                <td><span class="ui-badge ui-badge-warning"><span class="ui-badge-dot"></span> Attempt Failed</span></td>
-                <td>2.1 kg</td>
-                <td style="text-align: right;">
-                  <button class="btn btn-default btn-sm">Authorize Re-attempt</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- ====================================================================
-           8. ALERTS
-           ==================================================================== -->
-      <section id="alerts" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">8. Alerts & Error Callouts</h2>
-            <p class="section-desc">RFC 7807 error envelopes with correlation tracking IDs.</p>
-          </div>
-        </div>
-
-        <div class="ui-alert ui-alert-warning">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <div style="flex: 1;">
-            <div style="font-weight: 600; font-size: 14px;">Delivery Attempt 1 Failed</div>
-            <div style="font-size: 13px; color: var(--muted-foreground); margin-top: 2px;">Premises unattended. Automatic re-attempt scheduled for tomorrow.</div>
-          </div>
-          <button class="btn btn-outline btn-sm">Authorize</button>
-        </div>
-
-        <div class="ui-alert ui-alert-destructive">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--destructive)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-          <div style="flex: 1;">
-            <div style="font-weight: 600; font-size: 14px;">Pricing Gateway Timeout (HTTP 503)</div>
-            <div style="font-size: 13px; color: var(--muted-foreground); margin-top: 2px;">Unable to fetch authoritative pricing tariff quote.</div>
-            <div style="font-family: var(--font-mono); font-size: 11.5px; color: var(--destructive); margin-top: 4px;">
-              corr_prc_01HXYZ99812401 &bull; POST /api/v1/pricing/quotes
+        <!-- ====================================================================
+             7. METRICS & KPIS: TYPE-FIRST
+             ==================================================================== -->
+        <section id="kpis" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">7. Metric Presentation: Type-First</h2>
+              <p class="section-sub">From the study of 23 real screens: zero sparkline vanity, zero icons in circles. Type carries the data.</p>
             </div>
           </div>
-          <button class="btn btn-destructive btn-sm">Retry Connection</button>
-        </div>
-      </section>
 
-      <!-- ====================================================================
-           9. BOOKING STEPPER
-           ==================================================================== -->
-      <section id="stepper" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">9. Booking Stepper & Wizard</h2>
-            <p class="section-desc">Progressive wizard for customer parcel booking.</p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div class="kpi-block">
+              <div class="kpi-title">Ingested Dispatches</div>
+              <div class="kpi-figure">1,482</div>
+              <div class="kpi-baseline"><span style="color: var(--status-success-ink); font-weight: 600;">+12.4%</span> vs yesterday</div>
+            </div>
+
+            <div class="kpi-block">
+              <div class="kpi-title">Active in Sorting Line</div>
+              <div class="kpi-figure">342</div>
+              <div class="kpi-baseline">94 couriers on route</div>
+            </div>
+
+            <div class="kpi-block">
+              <div class="kpi-title">Delivered Today</div>
+              <div class="kpi-figure">1,128</div>
+              <div class="kpi-baseline"><span style="color: var(--status-success-ink); font-weight: 600;">98.2%</span> on-time SLA rate</div>
+            </div>
+
+            <div class="kpi-block" style="border-color: var(--status-warning-border);">
+              <div class="kpi-title" style="color: var(--status-warning-ink);">Action Needed</div>
+              <div class="kpi-figure" style="color: var(--status-warning-ink);">12</div>
+              <div class="kpi-baseline">Failed delivery re-attempts</div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="ui-card">
-          <div class="ui-card-content" style="padding-top: 24px;">
-            <div class="ui-stepper">
-              <button class="stepper-item is-done">
-                <div class="stepper-circle">&#10003;</div>
-                <div class="stepper-label">Addresses</div>
+        <!-- ====================================================================
+             8. 4-STEP BOOKING PROGRESSION
+             ==================================================================== -->
+        <section id="booking" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">8. Customer Booking Stepper Progression</h2>
+              <p class="section-sub">Accessible 4-step wizard sequence with micro-animation transitions.</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
+            <div class="step-track">
+              <button class="step-node done">
+                <div class="step-dot">&#10003;</div>
+                <div class="step-text">Addresses</div>
               </button>
-              <button class="stepper-item is-done">
-                <div class="stepper-circle">&#10003;</div>
-                <div class="stepper-label">Parcel & Zones</div>
+              <button class="step-node done">
+                <div class="step-dot">&#10003;</div>
+                <div class="step-text">Parcel & Zones</div>
               </button>
-              <button class="stepper-item is-active">
-                <div class="stepper-circle">3</div>
-                <div class="stepper-label">Tariff Quote</div>
+              <button class="step-node active">
+                <div class="step-dot">3</div>
+                <div class="step-text">Tariff Quote</div>
               </button>
-              <button class="stepper-item">
-                <div class="stepper-circle">4</div>
-                <div class="stepper-label">Review</div>
+              <button class="step-node">
+                <div class="step-dot">4</div>
+                <div class="step-text">Review & Confirm</div>
               </button>
             </div>
 
-            <div style="padding: 16px; background: var(--muted); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: space-between;">
+            <div style="padding: 14px 18px; background: var(--surface-subtle); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: space-between;">
               <div>
-                <div style="font-weight: 600; font-size: 14px;">Step 3: Server Tariff Estimation</div>
-                <div style="font-size: 12.5px; color: var(--muted-foreground);">Authoritative quote loaded via Core API</div>
+                <div style="font-weight: 600; font-size: 13.5px;">Active Step 3: Verified Core API Tariff</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Authoritative pricing quote verified by backend</div>
               </div>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-outline btn-sm">&larr; Back</button>
-                <button class="btn btn-default btn-sm">Continue to Review &rarr;</button>
+                <button class="btn btn-primary btn-sm">Proceed to Review &rarr;</button>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- ====================================================================
-           10. MILESTONE TIMELINE
-           ==================================================================== -->
-      <section id="timeline" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">10. Milestone Tracking Timeline</h2>
-            <p class="section-desc">Privacy-safe (SEC-016 compliant) customer milestone timeline.</p>
-          </div>
-        </div>
-
-        <div class="ui-card" style="max-width: 620px;">
-          <div class="ui-card-header" style="flex-direction: row; justify-content: space-between; align-items: center;">
+        <!-- ====================================================================
+             9. PUBLIC TRACKING TIMELINE
+             ==================================================================== -->
+        <section id="tracking" class="studio-section">
+          <div class="section-headline">
             <div>
-              <div class="ui-card-title">Tracking: SD-20261107-99812</div>
-              <div class="ui-card-description">Destination: Kandy Central &bull; Courier Assigned</div>
-            </div>
-            <span class="ui-badge ui-badge-primary-tint"><span class="ui-badge-dot"></span> In Transit</span>
-          </div>
-
-          <div class="ui-card-content">
-            <div class="timeline">
-              <div class="timeline-node is-done">
-                <div class="timeline-dot">&#10003;</div>
-                <div style="font-weight: 600; font-size: 14px;">Parcel Booked & Ingested</div>
-                <div style="font-size: 12px; color: var(--muted-foreground);">Colombo Central Hub &bull; 08:30 AM</div>
-              </div>
-
-              <div class="timeline-node is-done">
-                <div class="timeline-dot">&#10003;</div>
-                <div style="font-weight: 600; font-size: 14px;">Picked Up by Courier</div>
-                <div style="font-size: 12px; color: var(--muted-foreground);">Courier collected parcel &bull; 10:15 AM</div>
-              </div>
-
-              <div class="timeline-node is-active">
-                <div class="timeline-dot"></div>
-                <div style="font-weight: 600; font-size: 14px; color: var(--primary);">Out for Delivery</div>
-                <div style="font-size: 12px; color: var(--muted-foreground);">Dispatched toward destination city &bull; 03:10 PM</div>
-              </div>
-
-              <div class="timeline-node">
-                <div class="timeline-dot"></div>
-                <div style="font-weight: 500; font-size: 14px; color: var(--muted-foreground);">Delivered</div>
-                <div style="font-size: 12px; color: var(--muted-foreground);">Pending recipient signature & handover</div>
-              </div>
+              <h2 class="section-title">9. Public Tracking: SEC-016 Redacted Timeline</h2>
+              <p class="section-sub">Street addresses and recipient phone numbers are masked for public privacy.</p>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- ====================================================================
-           11. PROOF OF DELIVERY
-           ==================================================================== -->
-      <section id="pod" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">11. Proof of Delivery (Touch & Camera)</h2>
-            <p class="section-desc">Mobile signature canvas and camera attachment capture.</p>
-          </div>
-        </div>
-
-        <div class="component-grid">
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Digital Signature Pad</div>
+          <div class="card-panel" style="max-width: 600px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <div>
+                <div style="font-weight: 600; font-size: 15px;">SD-20261108-99812</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Destination: Kandy Central</div>
+              </div>
+              <span class="status-badge status-active"><span class="status-dot"></span> IN_TRANSIT</span>
             </div>
-            <div class="ui-card-content">
-              <div style="border: 1px solid var(--border); border-radius: var(--radius-sm); height: 160px; background: var(--muted); display: flex; align-items: center; justify-content: center; position: relative;">
-                <svg width="220" height="90" viewBox="0 0 200 80" fill="none" stroke="var(--foreground)" stroke-width="2.2" stroke-linecap="round">
+
+            <div class="milestone-rail">
+              <div class="milestone-row done">
+                <div class="milestone-pin"></div>
+                <div style="font-weight: 600; font-size: 13.5px;">Parcel Ingested & Booked</div>
+                <div style="font-size: 11.5px; color: var(--text-muted);">Colombo Central Hub &bull; 08:30 AM</div>
+              </div>
+
+              <div class="milestone-row done">
+                <div class="milestone-pin"></div>
+                <div style="font-weight: 600; font-size: 13.5px;">Collected by Courier</div>
+                <div style="font-size: 11.5px; color: var(--text-muted);">Courier collected package from merchant &bull; 10:15 AM</div>
+              </div>
+
+              <div class="milestone-row active">
+                <div class="milestone-pin"></div>
+                <div style="font-weight: 600; font-size: 13.5px; color: var(--primary);">Out for Delivery</div>
+                <div style="font-size: 11.5px; color: var(--text-muted);">Dispatched on vehicle toward Kandy &bull; 03:10 PM</div>
+              </div>
+
+              <div class="milestone-row">
+                <div class="milestone-pin"></div>
+                <div style="font-weight: 500; font-size: 13.5px; color: var(--text-muted);">Delivered</div>
+                <div style="font-size: 11.5px; color: var(--text-muted);">Pending recipient signature handover</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             10. COURIER PROOF OF DELIVERY
+             ==================================================================== -->
+        <section id="pod" class="studio-section">
+          <div class="section-headline">
+            <div>
+              <h2 class="section-title">10. Courier POD: Signature Canvas & Photo Proof</h2>
+              <p class="section-sub">Touch/stylus recipient signature pad and camera proof attachment.</p>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card-panel">
+              <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px;">Recipient Digital Signature</div>
+              <div style="border: 1px solid var(--border); border-radius: var(--radius-sm); height: 140px; background: var(--surface-subtle); display: flex; align-items: center; justify-content: center; position: relative;">
+                <svg width="200" height="80" viewBox="0 0 200 80" fill="none" stroke="var(--text)" stroke-width="2" stroke-linecap="round">
                   <path d="M 20,40 Q 40,10 60,35 T 100,20 T 140,50 T 180,30" />
                 </svg>
-                <span style="font-size: 11px; color: var(--muted-foreground); position: absolute; bottom: 8px; right: 12px;">Sign within boundary</span>
+                <span style="font-size: 11px; color: var(--text-muted); position: absolute; bottom: 6px; right: 10px;">Sign inside boundary</span>
               </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                 <button class="btn btn-ghost btn-sm">Clear</button>
-                <span style="font-size: 12px; color: var(--success); font-weight: 500;">&#10003; Signature Captured</span>
+                <span style="font-size: 12px; color: var(--status-success-ink); font-weight: 500;">&#10003; Signature Captured</span>
               </div>
             </div>
-          </div>
 
-          <div class="ui-card">
-            <div class="ui-card-header">
-              <div class="ui-card-title">Camera Photo Evidence</div>
-            </div>
-            <div class="ui-card-content">
-              <div style="border: 2px dashed var(--border); border-radius: var(--radius-sm); height: 160px; background: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" stroke-width="2">
+            <div class="card-panel">
+              <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px;">Camera Photo Evidence</div>
+              <div style="border: 1px dashed var(--border); border-radius: var(--radius-sm); height: 140px; background: var(--surface-subtle); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
                 </svg>
-                <span style="font-size: 13px; color: var(--muted-foreground); margin-top: 8px;">Tap to launch camera</span>
+                <span style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Tap to launch camera</span>
               </div>
-
-              <div style="margin-top: 14px;">
-                <button class="btn btn-default btn-sm" style="width: 100%;">Confirm Handover & Submit</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====================================================================
-           12. SERVER TARIFF QUOTE CARD
-           ==================================================================== -->
-      <section id="quote" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">12. Tariff Calculation Card</h2>
-            <p class="section-desc">Authoritative quote summary formatted in Sri Lankan Rupees.</p>
-          </div>
-        </div>
-
-        <div class="ui-card" style="max-width: 580px;">
-          <div class="ui-card-header" style="flex-direction: row; justify-content: space-between; align-items: baseline;">
-            <div>
-              <div class="ui-card-title">Delivery Tariff Estimation</div>
-              <div class="ui-card-description">Quote ID: <code>qte_01HXYZ992384A</code> &bull; Expires in: <strong style="color: var(--primary);">14:38</strong></div>
-            </div>
-            <span class="ui-badge ui-badge-primary-tint">Verified Quote</span>
-          </div>
-
-          <div class="ui-card-content">
-            <div style="display: flex; flex-direction: column; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 13.5px;">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted-foreground);">Base Route (Western &rarr; Central)</span>
-                <span>LKR 650.00</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted-foreground);">Weight Surcharge (2.5 kg)</span>
-                <span>LKR 300.00</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted-foreground);">Priority Service (Express)</span>
-                <span>LKR 285.00</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted-foreground);">Special Fragile Handling</span>
-                <span>LKR 215.00</span>
-              </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: baseline; padding-top: 16px;">
-              <div>
-                <div style="font-size: 13px; color: var(--muted-foreground);">Total Delivery Fee</div>
-                <div style="font-size: 11px; color: var(--muted-foreground);">145,000 LKR Cents</div>
-              </div>
-              <div style="font-size: 26px; font-weight: 700; color: var(--foreground); letter-spacing: -0.02em;">
-                LKR 1,450.00
+              <div style="margin-top: 10px;">
+                <button class="btn btn-primary btn-sm" style="width: 100%;">Confirm Delivery Handover</button>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- ====================================================================
-           13. DIALOGS & SECRETS REVEAL
-           ==================================================================== -->
-      <section id="dialogs" class="catalog-section">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title">13. Dialog Modal & One-Time Secret Reveal</h2>
-            <p class="section-desc">shadcn-style dialog box with copy triggers for merchant API keys.</p>
-          </div>
-        </div>
-
-        <div class="ui-dialog">
-          <div class="ui-dialog-header">
-            <div style="font-weight: 600; font-size: 15px;">Merchant API Credentials</div>
-            <span class="ui-badge ui-badge-warning">One-Time Secret</span>
-          </div>
-          <div class="ui-dialog-body">
-            <p style="font-size: 13px; color: var(--muted-foreground); margin-bottom: 16px;">
-              Save this key immediately. For security, it is stored only in transient memory and will never be presented again.
-            </p>
-
-            <div class="form-group">
-              <label class="form-label">Live API Key</label>
-              <div style="display: flex; gap: 8px;">
-                <input type="text" class="ui-input" value="sd_live_9f82a1bc44e789d201ab" readonly style="font-family: var(--font-mono); font-size: 13px;">
-                <button class="btn btn-outline btn-sm" onclick="alert('Copied to clipboard!')">Copy</button>
-              </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label">Webhook HMAC Signing Key</label>
-              <div style="display: flex; gap: 8px;">
-                <input type="text" class="ui-input" value="whsec_e3b0c44298fc1c149afbf4c8" readonly style="font-family: var(--font-mono); font-size: 13px;">
-                <button class="btn btn-outline btn-sm" onclick="alert('Copied to clipboard!')">Copy</button>
-              </div>
-            </div>
-          </div>
-          <div class="ui-dialog-footer">
-            <button class="btn btn-default btn-sm">Done</button>
-          </div>
-        </div>
-      </section>
-
+      </div>
     </div>
   </main>
 
   <!-- ========================================================================
-       Dynamic Color Theme Engine Script
+       Live Dialog Modal Element (Animated)
+       ======================================================================== -->
+  <div id="demoDialog" class="dialog-backdrop" onclick="closeDialogOnBackdrop(event)">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <div style="font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Assign Dispatch Courier
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()" style="padding: 4px;">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <p style="color: var(--text-muted); margin-bottom: 14px;">Select an active courier from the roster for package <strong>SD-CMB-8921-LK</strong> (Zone: Western Colombo 01).</p>
+        <div class="form-row">
+          <label class="form-label">Available Courier</label>
+          <select class="input-field">
+            <option>Kamal Perera (Motorbike &bull; 4 active / 8 max)</option>
+            <option>Ruwan Silva (Van &bull; 2 active / 15 max)</option>
+            <option>Sunil Jayasuriya (Motorbike &bull; 7 active / 8 max)</option>
+          </select>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-outline btn-sm" onclick="closeDialog()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="confirmDispatch()">Confirm Assignment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ========================================================================
+       Live Script Engine: Archetypes, Accents, Animations & Dialogs
        ======================================================================== -->
   <script>
-    // Preset Primary Palette Configurations
     const PALETTES = {
-      blue: {
-        name: 'Apple Blue',
-        hex: '#0071e3',
-        hover: '#0077ed',
-        tint: 'rgba(0, 113, 227, 0.08)',
-        tintHover: 'rgba(0, 113, 227, 0.14)',
-        foreground: '#ffffff'
-      },
-      zinc: {
-        name: 'Zinc Neutral',
-        hex: '#18181b',
-        hover: '#27272a',
-        tint: 'rgba(24, 24, 27, 0.08)',
-        tintHover: 'rgba(24, 24, 27, 0.14)',
-        foreground: '#fafafa'
-      },
-      teal: {
-        name: 'Swift Teal',
-        hex: '#0b5955',
-        hover: '#08433f',
-        tint: 'rgba(11, 89, 85, 0.08)',
-        tintHover: 'rgba(11, 89, 85, 0.14)',
-        foreground: '#ffffff'
-      },
-      violet: {
-        name: 'Modern Violet',
-        hex: '#7c3aed',
-        hover: '#6d28d9',
-        tint: 'rgba(124, 58, 237, 0.08)',
-        tintHover: 'rgba(124, 58, 237, 0.14)',
-        foreground: '#ffffff'
-      },
-      rose: {
-        name: 'Rose Crimson',
-        hex: '#e11d48',
-        hover: '#be123c',
-        tint: 'rgba(225, 29, 72, 0.08)',
-        tintHover: 'rgba(225, 29, 72, 0.14)',
-        foreground: '#ffffff'
-      },
-      emerald: {
-        name: 'Emerald Green',
-        hex: '#059669',
-        hover: '#047857',
-        tint: 'rgba(5, 150, 105, 0.08)',
-        tintHover: 'rgba(5, 150, 105, 0.14)',
-        foreground: '#ffffff'
-      },
-      orange: {
-        name: 'Amber Orange',
-        hex: '#ea580c',
-        hover: '#c2410c',
-        tint: 'rgba(234, 88, 12, 0.08)',
-        tintHover: 'rgba(234, 88, 12, 0.14)',
-        foreground: '#ffffff'
-      },
-      sky: {
-        name: 'Sky Tech',
-        hex: '#0284c7',
-        hover: '#0369a1',
-        tint: 'rgba(2, 132, 199, 0.08)',
-        tintHover: 'rgba(2, 132, 199, 0.14)',
-        foreground: '#ffffff'
-      }
+      'Apple Blue': { hex: '#0071e3', hover: '#0077ed' },
+      'Swift Teal': { hex: '#0b5955', hover: '#08433f' },
+      'Zinc Monochrome': { hex: '#18181b', hover: '#27272a' },
+      'Oxford Navy': { hex: '#1e40af', hover: '#1e3a8a' },
+      'Logistics Amber': { hex: '#b45309', hover: '#92400e' },
+      'Emerald Green': { hex: '#047857', hover: '#065f46' },
+      'Crimson Rose': { hex: '#b91c1c', hover: '#991b1b' }
     };
 
     function hexToRgba(hex, alpha) {
@@ -1915,54 +1738,115 @@
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
-    function setPrimaryColor(hex, hover, key) {
+    function setAccent(hex, hover, name) {
       const root = document.documentElement;
-      const tint = hexToRgba(hex, 0.09);
-      const tintHover = hexToRgba(hex, 0.16);
+      const tint = hexToRgba(hex, 0.08);
+      const tintHover = hexToRgba(hex, 0.15);
 
       root.style.setProperty('--primary', hex);
       root.style.setProperty('--primary-hover', hover || hex);
-      root.style.setProperty('--primary-active', hover || hex);
       root.style.setProperty('--primary-tint', tint);
       root.style.setProperty('--primary-tint-hover', tintHover);
       root.style.setProperty('--ring', hex);
 
-      // Invert foreground if very light
-      root.style.setProperty('--primary-foreground', '#ffffff');
+      document.getElementById('activeColorBadge').innerText = `Color: ${name} (${hex.toUpperCase()})`;
+      document.getElementById('customColor').value = hex;
 
-      // Update badge display & code snippet
-      const name = PALETTES[key] ? PALETTES[key].name : 'Custom Color';
-      document.getElementById('activeColorBadge').innerText = `Active: ${name} (${hex.toUpperCase()})`;
-      document.getElementById('tokenCodePrimary').innerText = hex;
-      document.getElementById('customColorPicker').value = hex;
-
-      // Update active swatch dot
-      document.querySelectorAll('.color-swatch-btn').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = Array.from(document.querySelectorAll('.color-swatch-btn')).find(b => b.style.backgroundColor === hex || b.title.toLowerCase().includes(key));
+      document.querySelectorAll('.swatch-dot').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.swatch-dot')).find(b => b.title.includes(name));
       if (activeBtn) activeBtn.classList.add('active');
     }
 
-    function setCustomPrimary(hex) {
-      setPrimaryColor(hex, hex, 'custom');
+    function setCustomAccent(hex) {
+      setAccent(hex, hex, 'Custom');
     }
 
-    function setAppTheme(theme) {
-      const root = document.documentElement;
+    function setArchetype(styleName) {
+      const html = document.documentElement;
+      html.setAttribute('data-style', styleName);
+      document.getElementById('archetypeSelect').value = styleName;
+
+      const labels = {
+        apple: 'Apple Cupertino',
+        linear: 'Linear / Craft Minimal',
+        framed: 'Framed Sheet (Anti-Slop)',
+        swiftsig: 'Swift Signature (Stone & Teal)'
+      };
+      document.getElementById('activeStyleBadge').innerText = `Style: ${labels[styleName] || styleName}`;
+    }
+
+    function setTheme(theme) {
+      const html = document.documentElement;
+      html.setAttribute('data-theme', theme);
+
       if (theme === 'dark') {
-        root.setAttribute('data-theme', 'dark');
-        document.getElementById('themeDark').classList.add('active');
-        document.getElementById('themeLight').classList.remove('active');
+        document.getElementById('themeDarkBtn').classList.add('active');
+        document.getElementById('themeLightBtn').classList.remove('active');
       } else {
-        root.removeAttribute('data-theme');
-        document.getElementById('themeLight').classList.add('active');
-        document.getElementById('themeDark').classList.remove('active');
+        document.getElementById('themeLightBtn').classList.add('active');
+        document.getElementById('themeDarkBtn').classList.remove('active');
       }
+    }
+
+    // Accordion Toggle
+    function toggleAccordion(item) {
+      item.classList.toggle('open');
+    }
+
+    // Dialog Modal Functions
+    function openDialog() {
+      const dialog = document.getElementById('demoDialog');
+      dialog.classList.add('show');
+    }
+    function closeDialog() {
+      const dialog = document.getElementById('demoDialog');
+      dialog.classList.remove('show');
+    }
+    function closeDialogOnBackdrop(e) {
+      if (e.target.id === 'demoDialog') closeDialog();
+    }
+    function confirmDispatch() {
+      closeDialog();
+      showToast('Courier assigned successfully. Outbox event committed.');
+    }
+
+    // Toast Notification Function
+    function showToast(message) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast-card';
+      toast.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span style="font-size: 13px; font-weight: 500;">${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 250);
+      }, 3500);
+    }
+
+    // Button Spinner Simulation
+    function simulateLoading(btn) {
+      const spinner = document.getElementById('btnSpinner');
+      const text = document.getElementById('btnText');
+      btn.disabled = true;
+      spinner.classList.add('anim-spin');
+      text.innerText = 'Processing...';
+
+      setTimeout(() => {
+        spinner.classList.remove('anim-spin');
+        btn.disabled = false;
+        text.innerText = 'Simulate Loading';
+        showToast('Operation completed successfully.');
+      }, 1500);
     }
 
     // Hash navigation link highlighting
     const navItems = document.querySelectorAll('.nav-item');
     window.addEventListener('hashchange', () => {
-      const hash = window.location.hash || '#palette';
+      const hash = window.location.hash || '#archetypes';
       navItems.forEach(item => {
         if (item.getAttribute('href') === hash) {
           item.classList.add('active');

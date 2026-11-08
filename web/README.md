@@ -161,7 +161,25 @@ Every developer and AI agent contributing to `web/` must adhere to the formal ru
 
 ---
 
-## 7. Development & Verification Commands
+## 7. Interactive Design Showcases & Component Studios
+
+To facilitate design alignment across team members and tech leads, two standalone interactive showcase files are available in `web/public/` (accessible via Vite dev server or direct browser open):
+
+1. **`web/public/scratch.html` (Option 3 · Swift Signature Showcase)**:
+   - Evaluates the Teal & Warm Ivory design theme.
+   - Comprehensive component catalog with 4-step booking progression, courier POD signature capture, live pricing countdown, and transit milestone tracking.
+
+2. **`web/public/scratch-apple.html` (Apple Cupertino & Shadcn/UI Interactive Studio)**:
+   - **4 Design Archetypes:** Apple Cupertino (`data-style="apple"`), Linear/Craft (`data-style="linear"`), Framed Sheet (`data-style="framed"`), and Swift Signature (`data-style="swiftsig"`).
+   - **Dynamic Accent Color Picker:** 7 calibrated operational accent colors (Apple Blue, Swift Teal, Zinc Slate, Oxford Navy, Amber, Emerald, Crimson) plus arbitrary native hex picker with live CSS custom property updates.
+   - **Shadcn/UI Component Primitives:** Accordion with rotating chevrons, Dialog modal with zoom-in backdrop, Toast notification banner with auto-dismiss, Tooltips, Spring toggle switches, Shimmer skeleton loaders, Tabs, and tactile buttons with active press feedback (`scale(0.98)`).
+   - **Recommended Micro-Animations:** Apple-standard cubic bezier easing (`cubic-bezier(0.16, 1, 0.3, 1)`), 150ms–220ms durations, zero sluggish ease-in animations.
+   - **Embedded Lucide SVG Icons:** High-precision SVG iconography across navigation, actions, form inputs, status chips, and a dedicated 20-icon logistics catalog.
+   - **Taste-Skill Anti-Slop Compliant:** Strictly enforces `color-on-data <= 3%`, zero resting card shadows, zero purple/violet gradients, and verified via `taste-skill/scripts/lint.mjs --app` (`0 FAIL, 0 WARN`).
+
+---
+
+## 8. Development & Verification Commands
 
 ```bash
 # Navigate to web frontend workspace
@@ -197,7 +215,7 @@ npm run preview
 
 ---
 
-## 8. Living Documentation Maintenance Policy
+## 9. Living Documentation Maintenance Policy
 - **Member 6** synchronously updates this document and [`web/API.md`](./API.md) whenever new customer or merchant routes, workflows, or views are introduced.
 - **Member 7** synchronously updates this document and [`web/API.md`](./API.md) whenever new dispatcher boards, courier mobile workflows, or admin views are added.
 - **Zero Drift:** Any change affecting routing, shared API contracts, or role guards must be documented here synchronously with code modifications.
