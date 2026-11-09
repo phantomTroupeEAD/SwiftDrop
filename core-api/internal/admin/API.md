@@ -5,9 +5,19 @@
 
 ## Conventions
 
-- **Auth:** admin routes need `Authorization: Bearer <access JWT>` with role `ADMIN`. No token or an invalid token is `401`; any other role is `403`. These two responses come from Member 1's identity middleware (codes `AUTH_UNAUTHORIZED`, `AUTH_MALFORMED_HEADER`, `AUTH_INVALID_TOKEN`, `AUTH_TOKEN_EXPIRED`, `AUTH_FORBIDDEN`).
+- **Auth:** admin routes need `Authorization: Bearer <access JWT>` with role `ADMIN`. The one exception is the delivery report, which also admits `DISPATCHER`. No token or an invalid token is `401`; any other role is `403`. These two responses come from Member 1's identity middleware (codes `AUTH_UNAUTHORIZED`, `AUTH_MALFORMED_HEADER`, `AUTH_INVALID_TOKEN`, `AUTH_TOKEN_EXPIRED`, `AUTH_FORBIDDEN`).
 - **Request bodies:** `Content-Type: application/json`, at most 1 MB, exactly one JSON object. Unknown fields are refused with `400 BAD_REQUEST`.
 - **Success envelope:** `{"data": ...}`. Admin responses send `Cache-Control: no-store`.
+- **Paged lists** (`GET /api/v1/admin/zones`, `GET /api/v1/admin/audit-logs`; `docs/contracts/api-conventions.md` §2.2). Query: `?page=` (whole number from 1, default 1) and `?per_page=` (1 to 100, default 20). A value outside that range, or not a whole number, is `422 VALIDATION_FAILED`. The old `?limit=` is gone and is ignored. The answer carries a `meta` object next to `data`:
+
+  ```json
+  {
+    "data": [ { "...": "..." } ],
+    "meta": { "page": 2, "per_page": 10, "total_items": 45, "total_pages": 5 }
+  }
+  ```
+
+  A page past the end returns `"data": []` with the real `total_items`. `total_pages` is `0` when there are no items.
 - **Error envelope** (`docs/contracts/api-conventions.md` §2.3):
 
   ```json
@@ -92,7 +102,12 @@ Successful responses send `Cache-Control: public, max-age=300`. Error responses 
 
 ### `GET /api/v1/admin/zones`
 
-All zones, enabled and disabled, ordered by `id`.
+All zones, enabled and disabled, ordered by `id`, one page at a time.
+
+| Query | Type | Rules |
+| :-- | :-- | :-- |
+| `page` | integer | optional, from 1, default 1 |
+| `per_page` | integer | optional, 1 to 100, default 20 |
 
 **200:**
 
@@ -108,9 +123,12 @@ All zones, enabled and disabled, ordered by `id`.
       "enabled": true,
       "version": 3
     }
-  ]
+  ],
+  "meta": { "page": 1, "per_page": 20, "total_items": 1, "total_pages": 1 }
 }
 ```
+
+**Errors:** `422 VALIDATION_FAILED` (bad `page` or `per_page`).
 
 ### `GET /api/v1/admin/zones/{id}`
 
@@ -246,11 +264,12 @@ Replaces the value of one allowlisted setting and writes a `SETTING_CHANGED` aud
 
 ### `GET /api/v1/admin/audit-logs`
 
-The latest audit rows, newest first. Rows from every module that writes `audit_logs` are included.
+Audit rows, newest first, one page at a time. Rows from every module that writes `audit_logs` are included.
 
 | Query | Type | Rules |
 | :-- | :-- | :-- |
-| `limit` | integer | optional, 1 to 100, default 50 |
+| `page` | integer | optional, from 1, default 1 |
+| `per_page` | integer | optional, 1 to 100, default 20 |
 
 **200:**
 
@@ -270,20 +289,76 @@ The latest audit rows, newest first. Rows from every module that writes `audit_l
       "request_id": "0193b2f4-7a1c-7d2e-9f10-3c4d5e6f7a8b",
       "created_at": "2026-11-09T10:15:00Z"
     }
-  ]
+  ],
+  "meta": { "page": 1, "per_page": 20, "total_items": 1, "total_pages": 1 }
 }
 ```
 
 `previous_state` and `new_state` hold the full zone or `{"value": ...}` for settings; the example is shortened. `actor_id`, `previous_state`, `new_state`, `reason` and `request_id` may be `null`. The client IP and user agent are stored but not returned.
 
-**Errors:** `422 VALIDATION_FAILED` (bad `limit`).
+**Errors:** `422 VALIDATION_FAILED` (bad `page` or `per_page`).
 
 ---
 
-## 5. Not implemented
+## 5. Delivery report (ADMIN and DISPATCHER)
 
-These appear in the SRS or earlier drafts but are not served by this module yet:
+### `GET /api/v1/admin/reports/deliveries`
 
-- `GET /api/v1/admin/reports/deliveries` (needs Members 2 and 3 read interfaces).
-- Merchant approval routes (`/api/v1/admin/merchants/*`, needs Member 4's admin facade).
+Deliveries per day over a period (SRS FR-ADM-008). **Role: `ADMIN` or `DISPATCHER`**; any other role is `403`. Read only, so it writes no audit row.
+
+| Query | Type | Rules |
+| :-- | :-- | :-- |
+| `from` | date | required, `YYYY-MM-DD`, a Sri Lanka day |
+| `to` | date | required, `YYYY-MM-DD`, not before `from` |
+
+The period may not be longer than the `reports.max_range_days` setting (default 92 days, also used if the setting cannot be read). A longer period is `422 VALIDATION_FAILED`.
+
+The numbers are read through a Go interface (`application.ReportReader`) that Members 2 and 3 will implement; this module never runs SQL on their tables. Until they do, a stand-in answers with empty days and says so in `source`.
+
+**200:**
+
+```json
+{
+  "data": {
+    "from": "2026-10-01",
+    "to": "2026-10-03",
+    "days": [],
+    "delivered": 0,
+    "failed": 0,
+    "success_rate": null,
+    "source": "stand-in: no parcel data until Members 2 and 3 connect"
+  }
+}
+```
+
+| Field | Meaning |
+| :-- | :-- |
+| `days` | one row per day: `date`, `delivered`, `failed`, `returned` |
+| `delivered`, `failed` | totals for the period |
+| `success_rate` | `delivered / (delivered + failed)`, or `null` when there were no attempts |
+| `source` | where the numbers came from; shows the stand-in text until real data is connected |
+
+**Errors:** `401`, `403`, `422 VALIDATION_FAILED` (missing or bad date, `to` before `from`, period too long).
+
+---
+
+## 6. Merchant approval (hosted by Member 4, ADMIN only)
+
+These three endpoints are **not** in this module. Member 4's merchants module (`internal/merchants/transport/http.go`) serves them, enforces `ADMIN` and writes their audit rows. Mounting the same paths here would make Core API fail at startup (duplicate route), so they are listed for completeness only. Request and response formats are in `internal/merchants/API.md`.
+
+| Method and path | What it does |
+| :-- | :-- |
+| `GET /api/v1/admin/merchants` | Merchant list, `?status=&page=&per_page=` |
+| `GET /api/v1/admin/merchants/{merchant_id}` | One merchant |
+| `POST /api/v1/admin/merchants/{merchant_id}/{action}` | `approve`, `reject`, `suspend`, `reinstate` or `disable`; body needs `expected_version` and, for some actions, a `reason` |
+
+`cmd/api/wiring_admin_test.go` checks that all three exist next to the admin routes and answer `401` without a token and `403` for any role except `ADMIN`.
+
+Error codes on these routes are Member 4's (for example `MERCHANT_VERSION_CONFLICT`, `MERCHANT_INVALID_TRANSITION`) and are not changed by this module.
+
+---
+
+## 7. Not implemented
+
 - Zone surcharges: fees are Member 2's pricing rules, so zones have no money fields.
+- Real delivery numbers in the report: waiting for Members 2 and 3 to publish a read interface.

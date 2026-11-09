@@ -18,8 +18,18 @@ import (
 	"github.com/swiftdrop/core-api/internal/platform/middleware"
 )
 
-// RoleAdmin is the only role allowed on /api/v1/admin/* routes.
-const RoleAdmin = "ADMIN"
+// RoleAdmin is the role allowed on every /api/v1/admin/* route. RoleDispatcher may
+// also read the delivery report (SRS 6.2, FR-ADM-008).
+const (
+	RoleAdmin      = "ADMIN"
+	RoleDispatcher = "DISPATCHER"
+)
+
+// Paging rules (api-conventions 2.2): page starts at 1, per_page is 1 to 100, default 20.
+const (
+	defaultPerPage = 20
+	maxPerPage     = 100
+)
 
 // maxBodyBytes caps admin request bodies (mass assignment and size, Doc 7 T-15).
 const maxBodyBytes = 1 << 20
@@ -41,12 +51,22 @@ type Handlers struct {
 	Svc  *application.Service
 	Auth Auth
 	Log  *slog.Logger
+	// Reports reads delivery numbers from Members 2 and 3 through a Go interface.
+	// Nil means the stand-in (NoDeliveryData), which says so in the report's "source".
+	Reports      application.ReportReader
+	ReportSource string
 }
 
-// Register mounts every admin route behind Require(ADMIN). There is no admin route
-// without the guard (Doc 7 B-01). Only GET /api/v1/zones is public (Doc 1 R-18).
+// Register mounts every admin route behind Require(ADMIN), except the delivery report
+// which also admits DISPATCHER. There is no admin route without the guard (Doc 7 B-01).
+// Only GET /api/v1/zones is public (Doc 1 R-18).
+//
+// The merchant approval routes (GET /api/v1/admin/merchants, GET .../{id},
+// POST .../{id}/{action}) are NOT mounted here: Member 4's merchants module already
+// serves them, and registering the same patterns twice makes the router panic.
 func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/zones", h.publicZones)
+	mux.Handle("GET /api/v1/admin/reports/deliveries", h.Auth.Require(RoleAdmin, RoleDispatcher)(http.HandlerFunc(h.deliveryReport)))
 	admin := h.Auth.Require(RoleAdmin)
 	routes := map[string]http.HandlerFunc{
 		"GET /api/v1/admin/zones":               h.listZones,
@@ -155,8 +175,41 @@ func withRequestIDHeader(r *http.Request, id string) *http.Request {
 	return c
 }
 
+// pageParams reads ?page= and ?per_page= (api-conventions 2.2). Missing values use the
+// defaults; a value that is not a whole number in range is a 422 VALIDATION_FAILED.
+func pageParams(r *http.Request) (page, perPage int, err error) {
+	page, perPage = 1, defaultPerPage
+	q := r.URL.Query()
+	if v := q.Get("page"); v != "" {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n < 1 {
+			return 0, 0, fmt.Errorf("%w: page must be a whole number from 1", application.ErrValidation)
+		}
+		page = n
+	}
+	if v := q.Get("per_page"); v != "" {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n < 1 || n > maxPerPage {
+			return 0, 0, fmt.Errorf("%w: per_page must be 1 to %d", application.ErrValidation, maxPerPage)
+		}
+		perPage = n
+	}
+	return page, perPage, nil
+}
+
+// replyPage writes {"data": [...], "meta": {page, per_page, total_items, total_pages}}.
+func replyPage[T any](w http.ResponseWriter, data []T, page, perPage, total int) {
+	w.Header().Set("Cache-Control", "no-store")
+	_ = httpx.WriteJSON(w, http.StatusOK, httpx.NewPaginatedResponse(data, page, perPage, total))
+}
+
 func (h *Handlers) listZones(w http.ResponseWriter, r *http.Request) {
-	zs, err := h.Svc.Store.ListZones(r.Context())
+	page, perPage, err := pageParams(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	zs, total, err := h.Svc.Store.ListZones(r.Context(), (page-1)*perPage, perPage)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -165,7 +218,7 @@ func (h *Handlers) listZones(w http.ResponseWriter, r *http.Request) {
 	for _, z := range zs {
 		out = append(out, application.View(z))
 	}
-	reply(w, http.StatusOK, out)
+	replyPage(w, out, page, perPage, total)
 }
 
 func (h *Handlers) getZone(w http.ResponseWriter, r *http.Request) {
@@ -244,21 +297,33 @@ func (h *Handlers) updateSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
-	limit := 50
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 100 {
-			h.fail(w, r, fmt.Errorf("%w: limit must be 1 to 100", application.ErrValidation))
-			return
-		}
-		limit = n
-	}
-	rows, err := h.Svc.Store.ListAudit(r.Context(), limit)
+	page, perPage, err := pageParams(r)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	reply(w, http.StatusOK, rows)
+	rows, total, err := h.Svc.Store.ListAudit(r.Context(), (page-1)*perPage, perPage)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	replyPage(w, rows, page, perPage, total)
+}
+
+// deliveryReport serves GET /api/v1/admin/reports/deliveries?from=&to= for ADMIN and
+// DISPATCHER. Numbers come through the ReportReader interface, never from SQL here.
+func (h *Handlers) deliveryReport(w http.ResponseWriter, r *http.Request) {
+	reader, source := h.Reports, h.ReportSource
+	if reader == nil {
+		reader, source = application.NoDeliveryData{}, application.NoDeliveryDataSource
+	}
+	q := r.URL.Query()
+	rep, err := h.Svc.DeliveryReport(r.Context(), reader, source, q.Get("from"), q.Get("to"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	reply(w, http.StatusOK, rep)
 }
 
 var postalCodePattern = regexp.MustCompile(`^[0-9]{5}$`)

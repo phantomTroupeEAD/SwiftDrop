@@ -246,28 +246,34 @@ func jsonOrNil(m map[string]any) any {
 	return string(b)
 }
 
-func (s *Store) ListZones(ctx context.Context) ([]*domain.Zone, error) {
-	z, err := s.listZones(ctx)
-	return z, mapPG(err)
+func (s *Store) ListZones(ctx context.Context, offset, limit int) ([]*domain.Zone, int, error) {
+	z, total, err := s.listZones(ctx, offset, limit)
+	return z, total, mapPG(err)
 }
 
-func (s *Store) listZones(ctx context.Context) ([]*domain.Zone, error) {
+func (s *Store) listZones(ctx context.Context, offset, limit int) ([]*domain.Zone, int, error) {
+	var total int
+	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM delivery_zones").Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	// The page is cut in a subquery first, so only its zones are joined to their prefixes.
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+zoneCols+`, COALESCE(array_agg(p.prefix ORDER BY p.prefix) FILTER (WHERE p.prefix IS NOT NULL), '{}')
-		FROM delivery_zones z LEFT JOIN zone_postal_codes p ON p.zone_id = z.id GROUP BY z.id ORDER BY z.id`)
+		FROM (SELECT * FROM delivery_zones ORDER BY id LIMIT $1 OFFSET $2) z
+		LEFT JOIN zone_postal_codes p ON p.zone_id = z.id GROUP BY z.id, z.code, z.name, z.description, z.enabled, z.version ORDER BY z.id`, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []*domain.Zone
+	out := []*domain.Zone{}
 	for rows.Next() {
 		var r zoneRow
 		var ps []string
 		if err := rows.Scan(&r.id, &r.code, &r.name, &r.description, &r.enabled, &r.version, pq.Array(&ps)); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, restore(r, ps))
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (s *Store) ListPublicZones(ctx context.Context) ([]application.PublicZone, error) {
@@ -323,11 +329,15 @@ func (s *Store) ListSettings(ctx context.Context) ([]application.Setting, error)
 	return out, mapPG(rows.Err())
 }
 
-func (s *Store) ListAudit(ctx context.Context, limit int) ([]application.AuditRow, error) {
+func (s *Store) ListAudit(ctx context.Context, offset, limit int) ([]application.AuditRow, int, error) {
+	var total int
+	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_logs").Scan(&total); err != nil {
+		return nil, 0, mapPG(err)
+	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT id::text, actor_id::text, actor_role, action, target_type, target_id, previous_state, new_state,
-		reason, request_id, created_at FROM audit_logs ORDER BY created_at DESC, id LIMIT $1`, limit)
+		reason, request_id, created_at FROM audit_logs ORDER BY created_at DESC, id LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
-		return nil, mapPG(err)
+		return nil, 0, mapPG(err)
 	}
 	defer rows.Close()
 	out := []application.AuditRow{}
@@ -336,13 +346,13 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]application.AuditRo
 		var actorID, reason, requestID sql.NullString
 		var before, after []byte
 		if err := rows.Scan(&a.ID, &actorID, &a.ActorRole, &a.Action, &a.TargetType, &a.TargetID, &before, &after, &reason, &requestID, &a.CreatedAt); err != nil {
-			return nil, mapPG(err)
+			return nil, 0, mapPG(err)
 		}
 		a.ActorID, a.Reason, a.RequestID = strPtr(actorID), strPtr(reason), strPtr(requestID)
 		a.Before, a.After = before, after
 		out = append(out, a)
 	}
-	return out, mapPG(rows.Err())
+	return out, total, mapPG(rows.Err())
 }
 
 func strPtr(n sql.NullString) *string {

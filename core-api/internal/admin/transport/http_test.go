@@ -53,6 +53,11 @@ type stubStore struct {
 	lookup    application.PublicZone
 	lookupErr error
 	gotActor  application.Actor
+
+	// paging: the total the store reports, and the offset and limit it was asked for
+	total               int
+	gotOffset, gotLimit int
+	settings            []application.Setting
 }
 
 func (s *stubStore) InTx(ctx context.Context, fn func(application.Tx) error) error {
@@ -61,7 +66,10 @@ func (s *stubStore) InTx(ctx context.Context, fn func(application.Tx) error) err
 	}
 	return fn(&stubTx{s: s})
 }
-func (s *stubStore) ListZones(context.Context) ([]*domain.Zone, error) { return nil, s.listErr }
+func (s *stubStore) ListZones(_ context.Context, offset, limit int) ([]*domain.Zone, int, error) {
+	s.gotOffset, s.gotLimit = offset, limit
+	return nil, s.total, s.listErr
+}
 func (s *stubStore) GetZone(context.Context, string) (*domain.Zone, error) {
 	return nil, application.ErrNotFound
 }
@@ -71,9 +79,12 @@ func (s *stubStore) ListPublicZones(context.Context) ([]application.PublicZone, 
 func (s *stubStore) ZoneForPostalCode(context.Context, string) (application.PublicZone, error) {
 	return s.lookup, s.lookupErr
 }
-func (s *stubStore) ListSettings(context.Context) ([]application.Setting, error) { return nil, nil }
-func (s *stubStore) ListAudit(context.Context, int) ([]application.AuditRow, error) {
-	return nil, nil
+func (s *stubStore) ListSettings(context.Context) ([]application.Setting, error) {
+	return s.settings, nil
+}
+func (s *stubStore) ListAudit(_ context.Context, offset, limit int) ([]application.AuditRow, int, error) {
+	s.gotOffset, s.gotLimit = offset, limit
+	return nil, s.total, s.listErr
 }
 
 type stubTx struct{ s *stubStore }
@@ -256,16 +267,92 @@ func TestUnexpectedErrorLeaksNothing(t *testing.T) {
 	}
 }
 
-func TestAuditLogLimit(t *testing.T) {
-	mux := newMux(&stubStore{})
-	for _, q := range []string{"0", "101", "abc"} {
-		rec := do(t, mux, "GET", "/api/v1/admin/audit-logs?limit="+q, "ADMIN", "")
-		if rec.Code != http.StatusUnprocessableEntity {
-			t.Errorf("limit=%s: got %d", q, rec.Code)
+type pageBody struct {
+	Data []json.RawMessage `json:"data"`
+	Meta map[string]int    `json:"meta"`
+}
+
+// api-conventions 2.2: ?page=&per_page= in, {data, meta{page, per_page, total_items, total_pages}} out.
+// Both lists page the same way, so every case runs against both routes.
+func TestPagedListsReturnMeta(t *testing.T) {
+	for _, path := range []string{"/api/v1/admin/zones", "/api/v1/admin/audit-logs"} {
+		t.Run(path, func(t *testing.T) {
+			st := &stubStore{total: 45}
+			rec := do(t, newMux(st), "GET", path+"?page=2&per_page=10", "ADMIN", "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+			}
+			var b pageBody
+			if err := json.Unmarshal(rec.Body.Bytes(), &b); err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]int{"page": 2, "per_page": 10, "total_items": 45, "total_pages": 5}
+			for k, v := range want {
+				if b.Meta[k] != v {
+					t.Errorf("meta %s = %d, want %d (meta %v)", k, b.Meta[k], v, b.Meta)
+				}
+			}
+			if b.Data == nil || len(b.Data) != 0 {
+				t.Errorf("data must be an empty array, not null: %s", rec.Body.String())
+			}
+			if st.gotOffset != 10 || st.gotLimit != 10 {
+				t.Errorf("store asked for offset %d limit %d, want 10 and 10", st.gotOffset, st.gotLimit)
+			}
+			if rec.Header().Get("Cache-Control") != "no-store" {
+				t.Error("admin lists must not be cached")
+			}
+		})
+	}
+}
+
+func TestPagedListsDefaults(t *testing.T) {
+	for _, path := range []string{"/api/v1/admin/zones", "/api/v1/admin/audit-logs"} {
+		st := &stubStore{total: 0}
+		rec := do(t, newMux(st), "GET", path, "ADMIN", "")
+		var b pageBody
+		if err := json.Unmarshal(rec.Body.Bytes(), &b); err != nil {
+			t.Fatal(err)
+		}
+		if b.Meta["page"] != 1 || b.Meta["per_page"] != 20 || b.Meta["total_items"] != 0 || b.Meta["total_pages"] != 0 {
+			t.Errorf("%s defaults: %v", path, b.Meta)
+		}
+		if st.gotOffset != 0 || st.gotLimit != 20 {
+			t.Errorf("%s: store asked for offset %d limit %d", path, st.gotOffset, st.gotLimit)
 		}
 	}
-	if rec := do(t, mux, "GET", "/api/v1/admin/audit-logs?limit=10", "ADMIN", ""); rec.Code != http.StatusOK {
-		t.Fatalf("limit=10: got %d", rec.Code)
+}
+
+func TestPagedListsRejectBadPaging(t *testing.T) {
+	for _, path := range []string{"/api/v1/admin/zones", "/api/v1/admin/audit-logs"} {
+		for _, q := range []string{"page=0", "page=-1", "page=abc", "per_page=0", "per_page=101", "per_page=x", "per_page=1.5"} {
+			rec := do(t, newMux(&stubStore{}), "GET", path+"?"+q, "ADMIN", "")
+			if rec.Code != http.StatusUnprocessableEntity || errorCode(t, rec).Error.Code != "VALIDATION_FAILED" {
+				t.Errorf("%s?%s: got %d %s", path, q, rec.Code, rec.Body.String())
+			}
+		}
+		if rec := do(t, newMux(&stubStore{}), "GET", path+"?per_page=100", "ADMIN", ""); rec.Code != http.StatusOK {
+			t.Errorf("%s?per_page=100 must pass: %d", path, rec.Code)
+		}
+	}
+}
+
+// The old ?limit= is gone: it is ignored, not an error, and the default page size applies.
+func TestOldLimitParameterIsIgnored(t *testing.T) {
+	st := &stubStore{}
+	if rec := do(t, newMux(st), "GET", "/api/v1/admin/audit-logs?limit=5", "ADMIN", ""); rec.Code != http.StatusOK {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if st.gotLimit != 20 {
+		t.Fatalf("limit=5 must not change the page size, store got %d", st.gotLimit)
+	}
+}
+
+func TestPagedStoreFailureIsMapped(t *testing.T) {
+	for _, path := range []string{"/api/v1/admin/zones", "/api/v1/admin/audit-logs"} {
+		rec := do(t, newMux(&stubStore{listErr: application.ErrUnavailable}), "GET", path, "ADMIN", "")
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: got %d", path, rec.Code)
+		}
 	}
 }
 

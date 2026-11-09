@@ -35,6 +35,10 @@ func registerAdminModule(mux *http.ServeMux, db *sql.DB, sec *identitytransport.
 		Svc:  &application.Service{Store: &infrastructure.Store{DB: db, LockTimeout: adminLockTimeout}},
 		Auth: identityAuthAdapter{sec: sec},
 		Log:  slog.Default(),
+		// Members 2 and 3 have not published a read interface for delivery numbers yet.
+		// The stand-in returns empty days and says so in the report's "source" field.
+		Reports:      application.NoDeliveryData{},
+		ReportSource: application.NoDeliveryDataSource,
 	}
 	h.Register(mux)
 	return nil

@@ -21,7 +21,7 @@ Zones carry **no money**. Fees, including any per-zone charge, belong to Member 
 
 ## 2. Business invariants
 
-1. **Admin only.** Every `/api/v1/admin/*` route needs a valid JWT with role `ADMIN`. A missing or invalid token is `401`; any other role is `403`. Only `GET /api/v1/zones` is public, and it shows `id`, `code` and `name` only.
+1. **Admin only.** Every `/api/v1/admin/*` route needs a valid JWT with role `ADMIN`; the one exception is the delivery report, which also admits `DISPATCHER`. A missing or invalid token is `401`; any other role is `403`. Only `GET /api/v1/zones` is public, and it shows `id`, `code` and `name` only.
 2. **No overlapping prefixes.** A prefix (3 to 5 digits) belongs to one zone. A prefix that starts another zone's prefix, or is started by it (`001` and `00100`), is refused with `409 ZONE_POSTAL_CODE_CONFLICT`. The check runs inside the write transaction under a PostgreSQL advisory lock (`pg_advisory_xact_lock(7700001)`), so concurrent writers cannot both pass it. The `zone_postal_codes` primary key is the last safety net.
 3. **Optimistic concurrency.** Zone and setting writes must send the current `version`. A stale version is `409 CONCURRENT_MODIFICATION`. One `PATCH` raises the version by exactly one, however many fields it changes. A `PATCH` that changes nothing writes nothing and adds no audit row.
 4. **Change and audit commit together.** The zone or setting write and its `audit_logs` row share one transaction. If the audit insert fails, the change is rolled back.
@@ -94,8 +94,8 @@ Other modules may write `audit_logs` rows in their own transactions. The columns
 | Application | `application/zones_test.go`, `settings_rules_test.go` | lock taken, audit row per change, rollback when the audit write fails, version and reason rules, settings allowlist |
 | Infrastructure | `infrastructure/redact_test.go` | secrets never reach audit snapshots |
 | Infrastructure (integration) | `infrastructure/postgres_integration_test.go` | 20-way overlapping prefix race (1 wins), 10-way stale version race (1 wins), audit rollback, append-only trigger, settings round trip, public lookup |
-| Transport | `transport/http_test.go` | 401/403 on every admin route, public fields only, error mapping, no leak of SQL text, input limits |
-| Wiring | `cmd/api/wiring_admin_test.go` | adapter keeps the 401/403 contract with real identity JWTs |
+| Transport | `transport/http_test.go`, `transport/reports_test.go` | 401/403 on every admin route, paging (`page`, `per_page`, `meta`, bad values 422), public fields only, error mapping, no leak of SQL text, input limits; report roles (ADMIN and DISPATCHER pass, others 403), date and range validation, stand-in label |
+| Wiring | `cmd/api/wiring_admin_test.go` | adapter keeps the 401/403 contract with real identity JWTs, admits ADMIN and DISPATCHER for the report; admin and Member 4 mount on one router without a duplicate-route panic, and the 3 merchant routes answer 401/403 |
 
 Integration tests run only with `INTEGRATION=1`:
 
@@ -114,9 +114,10 @@ They apply only the migrations this module needs (identity's `users` table and t
 | :-- | :-- |
 | Zones, postal prefixes, public lookup | Done |
 | System settings (allowlist) | Done |
-| Audit trail (write and read latest) | Done. No filters or paging beyond `limit` yet |
-| Delivery report (`GET /api/v1/admin/reports/deliveries`, SRS) | Not started. Needs read interfaces from Members 2 and 3 |
-| Merchant approval routes | Not in this module. Needs Member 4's admin facade |
+| Audit trail (write and read) | Done. Paged with `page` and `per_page`; no filters yet |
+| Zone list paging | Done (`page`, `per_page`, `meta`) |
+| Delivery report (`GET /api/v1/admin/reports/deliveries`, ADMIN and DISPATCHER) | Endpoint done. Numbers come from a stand-in until Members 2 and 3 implement `application.ReportReader`; `source` says so |
+| Merchant approval routes (A-11 to A-13) | Served by Member 4's module at the same paths (list, one, action). Not mounted here: a second registration would make Core API panic at startup. Covered by a wiring test |
 | Metrics (`admin_changes_total`, `admin_conflicts_total`) | Not started. Core API has no metrics package yet |
 | Demo zone seed data | Not included. Admins create zones through the API |
 
@@ -132,4 +133,5 @@ They apply only the migrations this module needs (identity's `users` table and t
 | :-- | :-- | :-- |
 | 2026-10-21 | Module baseline created | Architecture setup |
 | 2026-10-25 | Contract draft (surcharges, `/system-settings`) | Post-submission alignment |
+| 2026-11-09 | Zone and audit lists use `page`/`per_page` with `meta` (api-conventions 2.2) instead of `limit`. Added `GET /api/v1/admin/reports/deliveries` (ADMIN, DISPATCHER) behind a `ReportReader` interface with a labelled stand-in. Merchant approval routes left to Member 4's module (duplicate paths) | Member 7 |
 | 2026-11-09 | Implemented zones, postal prefixes, settings and audit trail, ported from the Member 7 draft (`docs/drafts/member-07-dispatcher-admin-web-gateway/doc8-local`) onto `database/sql` and the Core API platform. Removed surcharges (pricing owns fees) and the unimplemented report contract | Member 7 |

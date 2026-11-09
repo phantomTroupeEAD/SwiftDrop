@@ -35,13 +35,15 @@ type Tx interface {
 
 type Store interface {
 	InTx(ctx context.Context, fn func(Tx) error) error
-	ListZones(ctx context.Context) ([]*domain.Zone, error)
+	// ListZones returns one page (offset, limit) ordered by id, and the total zone count.
+	ListZones(ctx context.Context, offset, limit int) ([]*domain.Zone, int, error)
 	GetZone(ctx context.Context, id string) (*domain.Zone, error)
 	ListPublicZones(ctx context.Context) ([]PublicZone, error)
 	// ZoneForPostalCode returns the enabled zone with the longest matching prefix.
 	ZoneForPostalCode(ctx context.Context, postalCode string) (PublicZone, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
-	ListAudit(ctx context.Context, limit int) ([]AuditRow, error)
+	// ListAudit returns one page (offset, limit), newest first, and the total row count.
+	ListAudit(ctx context.Context, offset, limit int) ([]AuditRow, int, error)
 }
 
 type Setting struct {

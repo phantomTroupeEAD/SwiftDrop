@@ -29,9 +29,10 @@ func (m memState) clone() memState {
 }
 
 type memStore struct {
-	state     memState
-	auditErr  error
-	lockCalls int
+	state       memState
+	auditErr    error
+	settingsErr error
+	lockCalls   int
 }
 
 func newMemStore() *memStore {
@@ -60,7 +61,9 @@ func restoreView(v ZoneView) *domain.Zone {
 	return domain.Restore(id, code, v.Name, v.Description, ps, v.Enabled, v.Version)
 }
 
-func (s *memStore) ListZones(context.Context) ([]*domain.Zone, error) { return nil, nil }
+func (s *memStore) ListZones(context.Context, int, int) ([]*domain.Zone, int, error) {
+	return nil, 0, nil
+}
 func (s *memStore) GetZone(_ context.Context, id string) (*domain.Zone, error) {
 	v, ok := s.state.zones[id]
 	if !ok {
@@ -72,8 +75,16 @@ func (s *memStore) ListPublicZones(context.Context) ([]PublicZone, error) { retu
 func (s *memStore) ZoneForPostalCode(context.Context, string) (PublicZone, error) {
 	return PublicZone{}, ErrZoneNotFound
 }
-func (s *memStore) ListSettings(context.Context) ([]Setting, error)    { return nil, nil }
-func (s *memStore) ListAudit(context.Context, int) ([]AuditRow, error) { return nil, nil }
+func (s *memStore) ListSettings(context.Context) ([]Setting, error) {
+	out := make([]Setting, 0, len(s.state.settings))
+	for _, v := range s.state.settings {
+		out = append(out, v)
+	}
+	return out, s.settingsErr
+}
+func (s *memStore) ListAudit(context.Context, int, int) ([]AuditRow, int, error) {
+	return nil, 0, nil
+}
 
 type memTx struct {
 	s  *memStore

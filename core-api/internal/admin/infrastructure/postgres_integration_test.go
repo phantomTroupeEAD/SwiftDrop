@@ -200,7 +200,7 @@ func TestAuditLogsAreAppendOnly(t *testing.T) {
 		ID: "ZONE_T_APPEND_" + run, Code: "T-APP-" + run, Name: "Append", PostalPrefixes: []string{"95500"}}); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := svc.Store.ListAudit(context.Background(), 1)
+	rows, _, err := svc.Store.ListAudit(context.Background(), 0, 1)
 	if err != nil || len(rows) != 1 || rows[0].Action != "ZONE_CREATED" {
 		t.Fatalf("latest audit row: %+v %v", rows, err)
 	}
@@ -281,7 +281,7 @@ func TestPublicZonesAndPostalLookup(t *testing.T) {
 	if !seen[on.ID] || seen[off.ID] {
 		t.Fatalf("public list must hold enabled zones only: %+v", list)
 	}
-	all, err := svc.Store.ListZones(ctx)
+	all, _, err := svc.Store.ListZones(ctx, 0, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,5 +289,74 @@ func TestPublicZonesAndPostalLookup(t *testing.T) {
 		if x.ID().String() == on.ID && (len(x.Prefixes()) != 1 || x.Prefixes()[0].String() != "445") {
 			t.Fatalf("ListZones prefixes: %+v", application.View(x))
 		}
+	}
+}
+
+// Paging on a real database: pages are disjoint, ordered by id, cover every zone once,
+// carry each zone's own prefixes, and the total counts all rows.
+func TestZonePagingAndAuditPaging(t *testing.T) {
+	svc, _ := setup(t)
+	run := time.Now().Format("150405")
+	ctx := context.Background()
+	const n = 5
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("ZONE_T_PAGE_%s_%d", run, i)
+		if _, err := svc.CreateZone(ctx, adminActor, application.CreateZoneInput{
+			ID: id, Code: fmt.Sprintf("T-PG-%s-%d", run, i), Name: "Page", PostalPrefixes: []string{fmt.Sprintf("5%d%s", i, run[:2])}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, total, err := svc.Store.ListZones(ctx, 0, 1)
+	if err != nil || total < n {
+		t.Fatalf("total %d err %v, want at least %d", total, err, n)
+	}
+	seen := map[string]bool{}
+	prev := ""
+	for off := 0; off < total; off += 2 {
+		page, tot, err := svc.Store.ListZones(ctx, off, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tot != total {
+			t.Fatalf("total changed between pages: %d vs %d", tot, total)
+		}
+		if len(page) > 2 {
+			t.Fatalf("page of %d zones, limit was 2", len(page))
+		}
+		for _, z := range page {
+			id := z.ID().String()
+			if seen[id] {
+				t.Fatalf("zone %s on two pages", id)
+			}
+			if id <= prev {
+				t.Fatalf("zones not ordered by id: %s after %s", id, prev)
+			}
+			seen[id], prev = true, id
+			if len(z.Prefixes()) == 0 {
+				t.Fatalf("zone %s lost its prefixes on a page", id)
+			}
+		}
+	}
+	if len(seen) != total {
+		t.Fatalf("pages covered %d zones, total says %d", len(seen), total)
+	}
+	if past, tot, err := svc.Store.ListZones(ctx, total+10, 5); err != nil || len(past) != 0 || tot != total {
+		t.Fatalf("page past the end: %d zones, total %d, err %v", len(past), tot, err)
+	}
+
+	// Each create wrote one audit row, newest first.
+	first, auditTotal, err := svc.Store.ListAudit(ctx, 0, 3)
+	if err != nil || len(first) != 3 || auditTotal < n {
+		t.Fatalf("audit page 1: %d rows, total %d, err %v", len(first), auditTotal, err)
+	}
+	second, _, err := svc.Store.ListAudit(ctx, 3, 3)
+	if err != nil || len(second) == 0 {
+		t.Fatalf("audit page 2: %d rows, err %v", len(second), err)
+	}
+	if first[0].ID == second[0].ID {
+		t.Fatal("audit pages overlap")
+	}
+	if first[len(first)-1].CreatedAt.Before(second[0].CreatedAt) {
+		t.Fatal("audit rows are not newest first across pages")
 	}
 }
