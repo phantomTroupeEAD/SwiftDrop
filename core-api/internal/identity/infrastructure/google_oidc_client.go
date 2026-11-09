@@ -121,14 +121,14 @@ func (c *GoogleOIDCClient) resolveMockToken(token string) (*application.OIDCClai
 		email = clean
 		parts := strings.Split(clean, "@")
 		sub = "google_sub_" + parts[0]
-		name = strings.Title(parts[0]) + " OAuth"
-		givenName = strings.Title(parts[0])
+		name = capitalize(parts[0]) + " OAuth"
+		givenName = capitalize(parts[0])
 		familyName = "OAuth"
 	} else if clean != "" {
 		email = clean + "@gmail.com"
 		sub = "google_sub_" + clean
-		name = strings.Title(clean) + " User"
-		givenName = strings.Title(clean)
+		name = capitalize(clean) + " User"
+		givenName = capitalize(clean)
 		familyName = "User"
 	}
 
@@ -141,4 +141,11 @@ func (c *GoogleOIDCClient) resolveMockToken(token string) (*application.OIDCClai
 		FamilyName:    familyName,
 		Picture:       "https://lh3.googleusercontent.com/a/mock-avatar",
 	}, nil
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

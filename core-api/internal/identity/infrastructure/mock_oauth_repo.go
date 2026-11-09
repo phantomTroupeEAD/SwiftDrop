@@ -28,7 +28,7 @@ func makeLinkKey(provider, subject string) string {
 }
 
 // SaveLink stores or updates an OAuth link.
-func (r *MockOAuthRepository) SaveLink(ctx context.Context, identity *domain.OAuthIdentity) error {
+func (r *MockOAuthRepository) SaveLink(_ context.Context, identity *domain.OAuthIdentity) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -53,7 +53,7 @@ func (r *MockOAuthRepository) SaveLink(ctx context.Context, identity *domain.OAu
 }
 
 // FindByProviderSubject finds an identity link by provider and provider subject ID.
-func (r *MockOAuthRepository) FindByProviderSubject(ctx context.Context, provider, subject string) (*domain.OAuthIdentity, error) {
+func (r *MockOAuthRepository) FindByProviderSubject(_ context.Context, provider, subject string) (*domain.OAuthIdentity, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -67,7 +67,7 @@ func (r *MockOAuthRepository) FindByProviderSubject(ctx context.Context, provide
 }
 
 // FindByUserID retrieves all OAuth links associated with a user.
-func (r *MockOAuthRepository) FindByUserID(ctx context.Context, userID string) ([]*domain.OAuthIdentity, error) {
+func (r *MockOAuthRepository) FindByUserID(_ context.Context, userID string) ([]*domain.OAuthIdentity, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
