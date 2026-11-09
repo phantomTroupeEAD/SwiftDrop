@@ -74,6 +74,7 @@ issues:
       linters:
         - gosec
         - errcheck
+        - revive
     - path: (wiring\.go|jwt_token_provider\.go)
       text: "G101"
       linters:

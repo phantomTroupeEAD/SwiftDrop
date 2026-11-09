@@ -228,7 +228,7 @@ func (m *Manager) OpenConsumerChannel(prefetch int) (*amqp.Channel, error) {
 }
 
 // CheckHealth returns nil if connection is active, or an error if disconnected.
-func (m *Manager) CheckHealth(ctx context.Context) error {
+func (m *Manager) CheckHealth(_ context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
