@@ -94,6 +94,7 @@ func inCatalog(t string) bool {
 
 // ---------------- Applications and merchant lookup ----------------
 
+//nolint:revive // ApplicationInput is the canonical type name used across merchant contracts
 type ApplicationInput struct {
 	BusinessName, ContactEmail, ContactPhone string
 	Address                                  domain.Address

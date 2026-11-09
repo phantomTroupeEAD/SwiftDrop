@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	// PostgreSQL driver registration for integration tests.
 	_ "github.com/lib/pq"
 	"github.com/swiftdrop/core-api/migrations"
 )

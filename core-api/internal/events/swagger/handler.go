@@ -67,7 +67,7 @@ func handleSwaggerIndex(w http.ResponseWriter, r *http.Request) {
             <li>
                 <strong>%s API</strong>
                 <a class="btn" href="/swagger/%s/">Explore UI &rarr;</a>
-            </li>`, strings.Title(name), name)
+            </li>`, toTitle(name), name)
 	}
 
 	fmt.Fprintf(w, `
@@ -127,7 +127,14 @@ func handleSwaggerUI(w http.ResponseWriter, r *http.Request) {
     };
     </script>
 </body>
-</html>`, strings.Title(name), name)
+</html>`, toTitle(name), name)
+}
+
+func toTitle(s string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func handleSwaggerSpec(w http.ResponseWriter, r *http.Request) {
