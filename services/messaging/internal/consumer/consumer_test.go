@@ -237,6 +237,53 @@ func TestNotificationHandler_MilestoneAndIdempotency(t *testing.T) {
 	}
 }
 
+func TestNotificationHandler_MissingRecipientEmail(t *testing.T) {
+	repo := newMockDeliveryRepo()
+	idemp := idempotency.NewMemoryStore()
+	handler := NewNotificationHandler(repo, idemp, nil)
+
+	payloadWithoutEmail := map[string]interface{}{
+		"parcel_id": "0192e2b3-7c8a-7890-a123-000000000002",
+		"notify": map[string]interface{}{
+			"recipient_name": "No Email Person",
+		},
+	}
+	pBytes, _ := json.Marshal(payloadWithoutEmail)
+
+	env := &relay.OutboxEnvelope{
+		EventID:          "0192e2b3-7c8a-7890-a123-000000000099",
+		EventType:        "parcel.delivered.v1",
+		AggregateID:      "0192e2b3-7c8a-7890-a123-000000000002",
+		AggregateVersion: 2,
+		Payload:          pBytes,
+	}
+
+	ctx := context.Background()
+	if err := handler(ctx, amqp.Delivery{}, env); err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+
+	if len(repo.notifications) != 1 {
+		t.Fatalf("expected 1 notification row, got %d", len(repo.notifications))
+	}
+	notif := repo.notifications[0]
+	if notif.Status != "FAILED" {
+		t.Errorf("expected status FAILED, got %s", notif.Status)
+	}
+	if notif.LastError != "NO_RECIPIENT" {
+		t.Errorf("expected last_error NO_RECIPIENT, got %s", notif.LastError)
+	}
+	if notif.Recipient != "-" {
+		t.Errorf("expected recipient '-', got %s", notif.Recipient)
+	}
+
+	// Verify idempotency was marked
+	seen, err := idemp.Seen(ctx, "notifier", env.EventID)
+	if err != nil || !seen {
+		t.Errorf("expected event to be marked seen in idempotency, err=%v seen=%v", err, seen)
+	}
+}
+
 func TestWebhookFanoutHandler_StripsNotifyAndFansOut(t *testing.T) {
 	repo := newMockDeliveryRepo()
 	idemp := idempotency.NewMemoryStore()

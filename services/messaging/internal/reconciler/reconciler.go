@@ -156,7 +156,7 @@ func (r *Reconciler) ResetExpiredLeases(ctx context.Context) (int64, int64, erro
 	// Notification deliveries
 	notifQuery := `
 		UPDATE notification_deliveries
-		SET status = 'PENDING', lease_expires_at = NULL, updated_at = $1
+		SET status = 'PENDING', lease_expires_at = NULL
 		WHERE status = 'IN_PROGRESS' AND lease_expires_at < $1
 	`
 	resNotif, err := r.db.ExecContext(ctx, notifQuery, now)
@@ -168,7 +168,7 @@ func (r *Reconciler) ResetExpiredLeases(ctx context.Context) (int64, int64, erro
 	// Webhook deliveries
 	hookQuery := `
 		UPDATE webhook_deliveries
-		SET status = 'PENDING', lease_expires_at = NULL, updated_at = $1
+		SET status = 'PENDING', lease_expires_at = NULL
 		WHERE status = 'IN_PROGRESS' AND lease_expires_at < $1
 	`
 	resHook, err := r.db.ExecContext(ctx, hookQuery, now)
@@ -295,7 +295,7 @@ func (r *Reconciler) RunRetention(ctx context.Context, batchLimit int) (*Retenti
 		q := `
 			WITH doomed AS (
 				SELECT id FROM notification_deliveries
-				WHERE status IN ('SUCCESS', 'FAILED') AND updated_at < $1
+				WHERE status IN ('SUCCESS', 'FAILED') AND COALESCE(delivered_at, created_at) < $1
 				LIMIT $2
 			)
 			DELETE FROM notification_deliveries
@@ -317,7 +317,7 @@ func (r *Reconciler) RunRetention(ctx context.Context, batchLimit int) (*Retenti
 		q := `
 			WITH doomed AS (
 				SELECT id FROM webhook_deliveries
-				WHERE status IN ('SUCCESS', 'FAILED') AND updated_at < $1
+				WHERE status IN ('SUCCESS', 'FAILED') AND COALESCE(delivered_at, created_at) < $1
 				LIMIT $2
 			)
 			DELETE FROM webhook_deliveries
@@ -338,14 +338,14 @@ func (r *Reconciler) RunRetention(ctx context.Context, batchLimit int) (*Retenti
 	deletedEvents, err := r.batchDelete(ctx, batchLimit, func(ctx context.Context, tx *sql.Tx, limit int) (int64, error) {
 		q := `
 			WITH doomed AS (
-				SELECT event_id, consumer_group FROM processed_events
+				SELECT event_id, consumer_name FROM processed_events
 				WHERE processed_at < $1
 				LIMIT $2
 			)
 			DELETE FROM processed_events p
 			WHERE EXISTS (
 				SELECT 1 FROM doomed d 
-				WHERE d.event_id = p.event_id AND d.consumer_group = p.consumer_group
+				WHERE d.event_id = p.event_id AND d.consumer_name = p.consumer_name
 			)
 		`
 		res, err := tx.ExecContext(ctx, q, eventsCutoff, limit)
