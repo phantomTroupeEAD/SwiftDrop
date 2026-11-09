@@ -71,9 +71,13 @@ func TestHealthEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /swagger/events/ returns 404 when SWAGGER_ENABLED=false with APP_ENV=production", func(t *testing.T) {
+		prevAppEnv := os.Getenv("APP_ENV")
 		_ = os.Setenv("APP_ENV", "production")
 		_ = os.Setenv("SWAGGER_ENABLED", "false")
-		defer os.Unsetenv("SWAGGER_ENABLED")
+		defer func() {
+			_ = os.Setenv("APP_ENV", prevAppEnv)
+			_ = os.Unsetenv("SWAGGER_ENABLED")
+		}()
 
 		container := BuildAppContainer()
 		req := httptest.NewRequest(http.MethodGet, "/swagger/events/", nil)

@@ -31,7 +31,8 @@ var known = []struct {
 	{apperr.ErrReasonRequired, mapping{422, "REASON_REQUIRED", "Give a reason for this change"}},
 	{apperr.ErrConcurrentConflict, mapping{409, "CONCURRENT_MODIFICATION", "Someone else changed this. Reload and try again"}},
 	{apperr.ErrPrefixConflict, mapping{409, "ZONE_POSTAL_CODE_CONFLICT", "A postal prefix is already used by another zone"}},
-	{apperr.ErrZoneCodeTaken, mapping{409, "ZONE_CODE_ALREADY_EXISTS", "This zone code is already used"}},
+	{apperr.ErrZoneCodeTaken, mapping{409, "ZONE_CODE_ALREADY_EXISTS", "This zone id or code is already used"}},
+	{apperr.ErrZoneNotFound, mapping{404, "ZONE_NOT_FOUND", "No delivery zone covers this postal code"}},
 	{apperr.ErrBadRequest, mapping{400, "BAD_REQUEST", "The request body is not valid JSON for this action"}},
 	{apperr.ErrBusy, mapping{503, "TRY_AGAIN", "Another change is in progress. Try again"}},
 	{apperr.ErrUnavailable, mapping{503, "SERVICE_UNAVAILABLE", "The service is not available right now. Try again shortly"}},
@@ -69,13 +70,24 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			break
 		}
 	}
+	id := CorrelationID(r)
+	if m.status >= 500 { // includes 503: the cause is needed in the log
+		slog.Error("admin request failed", "correlation_id", id, "err", err)
+	}
+	writeBody(w, id, m)
+}
+
+// WriteCode sends the standard envelope with a code owned by another module (for
+// example Member 4's MERCHANT_VERSION_CONFLICT), passed through unchanged.
+func WriteCode(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	writeBody(w, CorrelationID(r), mapping{status, code, message})
+}
+
+func writeBody(w http.ResponseWriter, id string, m mapping) {
 	var body errorBody
 	body.Error.Code, body.Error.Message = m.code, m.message
-	body.Error.CorrelationID = CorrelationID(r)
+	body.Error.CorrelationID = id
 	body.Error.Timestamp = time.Now().UTC().Format(time.RFC3339)
-	if m.status >= 500 { // includes 503: the cause is needed in the log
-		slog.Error("admin request failed", "correlation_id", body.Error.CorrelationID, "err", err)
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Request-ID", body.Error.CorrelationID)
 	w.WriteHeader(m.status)

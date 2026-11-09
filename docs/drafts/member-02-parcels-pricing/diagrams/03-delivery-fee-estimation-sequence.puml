@@ -1,0 +1,68 @@
+title SwiftDrop - 03 Delivery Fee Estimation Sequence Diagram
+
+actor Customer as "Customer / Client"
+participant Handler as "Pricing HTTP Handler\n(transport)"
+participant UseCase as "Pricing Application Use Case\n(application)"
+participant Engine as "Pricing Domain Engine\n(domain)"
+participant Repo as "Pricing Repository\n(infrastructure)"
+database DB as "PostgreSQL Database\n(pricing_rules / quotes)"
+
+Customer -> Handler: POST /api/v1/pricing/quotes\nBody: {pickup_zone_id, dropoff_zone_id, weight_kg, dimensions}
+activate Handler
+
+Handler -> Handler: Validate request syntax & required fields
+alt Invalid request structure
+    Handler --> Customer: 400 Bad Request (PRICING_INVALID_INPUT)
+else Valid syntax
+    Handler -> UseCase: Execute(CalculateQuoteCommand)
+    activate UseCase
+
+    UseCase -> Engine: ValidateRouteAndLimits(pickup, dropoff, weight, dims)
+    activate Engine
+    alt Route unsupported or weight > 30kg
+        Engine --> UseCase: ErrZoneOrLimitExceeded
+        UseCase --> Handler: ErrZoneOrLimitExceeded
+        Handler --> Customer: 422 Unprocessable Entity (DELIVERY_ZONE_UNSUPPORTED / PARCEL_LIMITS_EXCEEDED)
+    else Route & Limits valid
+        Engine -> Engine: DetermineChargeableWeight(weight_kg, dims)\n[Apply 1kg Option A threshold & 6000 divisor]
+        Engine -> Engine: AssignWeightBand(chargeable_weight)
+        Engine --> UseCase: WeightCalculationResult(band_id, chargeable_kg)
+        deactivate Engine
+
+        UseCase -> Repo: GetActiveTariff(pickup_zone, dropoff_zone, band_id)
+        activate Repo
+        Repo -> DB: SELECT fee_cents, version FROM pricing_rules WHERE ...
+        activate DB
+        DB --> Repo: Active tariff record
+        deactivate DB
+
+        alt No active tariff found
+            Repo --> UseCase: ErrTariffNotFound
+            UseCase --> Handler: ErrTariffNotFound
+            Handler --> Customer: 422 Unprocessable Entity (PRICING_UNAVAILABLE)
+        else Tariff found
+            Repo --> UseCase: PricingRuleRecord(fee_cents, version)
+            deactivate Repo
+
+            UseCase -> Engine: CalculateFee(tariff, breakdown)
+            activate Engine
+            Engine --> UseCase: CalculatedFeeSnapshot(fee_cents in LKR, version)
+            deactivate Engine
+
+            UseCase -> Repo: SaveQuote(quoteEntity with 15m TTL)
+            activate Repo
+            Repo -> DB: INSERT INTO pricing_quotes (id, rule_id, fee_cents, expires_at)
+            activate DB
+            DB --> Repo: Quote persisted (quote_id UUID)
+            deactivate DB
+            Repo --> UseCase: QuoteCreated(quote_id)
+            deactivate Repo
+
+            UseCase --> Handler: QuoteResponseDTO(quote_id, fee_cents, breakdown, expires_at)
+            deactivate UseCase
+
+            Handler --> Customer: 201 Created {quote_id, fee_cents, currency: "LKR", expires_at}
+        end
+    end
+end
+deactivate Handler

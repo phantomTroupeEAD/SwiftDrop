@@ -1,0 +1,156 @@
+"""Core API parcels client tool for retrieving authenticated shipments with IDOR defense."""
+
+import json
+from typing import Any, Dict, List, Optional
+import httpx
+
+from src.core.config import get_settings
+from src.domain.errors import AuthException, UpstreamServiceException
+from src.domain.tools import ActiveParcelsInput
+from src.tools.registry import register_tool
+
+
+def sanitize_parcel_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip sensitive PII (recipient phone, recipient street address) from parcel record."""
+    recipient = item.get("recipient") or {}
+    recipient_city = (
+        recipient.get("city")
+        if isinstance(recipient, dict)
+        else item.get("recipient_city", "Unknown")
+    )
+
+    return {
+        "id": item.get("id"),
+        "tracking_number": item.get("tracking_number"),
+        "status": item.get("status"),
+        "recipient_city": recipient_city,
+        "service_type": item.get("service_type"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+
+@register_tool(
+    name="list_active_parcels",
+    description="Retrieve a list of active shipments belonging to the authenticated customer or merchant.",
+    input_schema=ActiveParcelsInput,
+    is_read_only=True,
+    aliases=["get_my_active_parcels"],
+)
+async def parcels_tool(
+    input_data: ActiveParcelsInput,
+    context: Optional[Dict[str, Any]] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> Dict[str, Any]:
+    """Query Member 2 Core API parcels endpoint strictly forwarding authenticated user credentials."""
+    context = context or {}
+    settings = get_settings()
+
+    # 1. Check for Merchant API Key (e.g. sd_live_...)
+    raw_api_key = (
+        context.get("x-api-key")
+        or context.get("X-API-Key")
+        or context.get("api_key")
+        or settings.swiftdrop_api_key.get_secret_value()
+    )
+    api_key = raw_api_key.strip() if isinstance(raw_api_key, str) else ""
+
+    # 2. Check for Customer JWT Bearer token
+    raw_auth = (
+        context.get("authorization")
+        or context.get("Authorization")
+        or context.get("customer_jwt")
+        or context.get("authorization_token")
+    )
+    auth_header = raw_auth.strip() if isinstance(raw_auth, str) else ""
+
+    if not auth_header and not api_key:
+        env_token = settings.swiftdrop_auth_token.get_secret_value().strip()
+        if env_token:
+            auth_header = env_token
+
+    if not auth_header and not api_key:
+        raise AuthException(
+            "Authentication required: Authentication token required to retrieve customer shipments. "
+            "Please configure SWIFTDROP_API_KEY (or SWIFTDROP_AUTH_TOKEN) in environment or provide authorization."
+        )
+
+    target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/parcels"
+
+    headers: Dict[str, str] = {
+        "Accept": "application/json",
+    }
+    if api_key:
+        headers["X-API-Key"] = api_key
+    elif auth_header:
+        if not auth_header.lower().startswith("bearer "):
+            headers["Authorization"] = f"Bearer {auth_header}"
+        else:
+            headers["Authorization"] = auth_header
+
+    params: Dict[str, Any] = {"limit": input_data.limit}
+    if input_data.status:
+        status_val = input_data.status.value
+        params["status"] = status_val
+        params["status_filter"] = status_val
+
+    timeouts = httpx.Timeout(connect=2.0, read=5.0, write=5.0, pool=5.0)
+    close_client = False
+    if client is None:
+        client = httpx.AsyncClient(timeout=timeouts)
+        close_client = True
+
+    try:
+        response = await client.get(target_url, headers=headers, params=params)
+
+        if response.status_code in (401, 403):
+            raise AuthException("Unauthorized or expired session credentials")
+
+        if response.status_code >= 400:
+            raise UpstreamServiceException(
+                "Core API Parcels",
+                f"Received HTTP {response.status_code} from parcels service: {response.text}",
+            )
+
+        try:
+            raw_parcels = response.json()
+        except (json.JSONDecodeError, ValueError) as json_err:
+            raise UpstreamServiceException(
+                "Core API Parcels",
+                f"Malformed non-JSON response received: {json_err}",
+            )
+
+        # Handle list response directly or envelope {"parcels": [...], "items": [...]}
+        items: List[Dict[str, Any]] = []
+        if isinstance(raw_parcels, list):
+            items = raw_parcels
+        elif isinstance(raw_parcels, dict):
+            items = raw_parcels.get("parcels") or raw_parcels.get("items") or []
+
+        sanitized_items = [sanitize_parcel_item(p) for p in items if isinstance(p, dict)]
+
+        return {
+            "count": len(sanitized_items),
+            "parcels": sanitized_items,
+            "grounded": True,
+        }
+
+    except (httpx.TimeoutException, httpx.RequestError) as exc:
+        if close_client and settings.is_mock_mode:
+            return {
+                "count": 0,
+                "parcels": [],
+                "grounded": False,
+            }
+        if isinstance(exc, httpx.TimeoutException):
+            raise UpstreamServiceException(
+                "Core API Parcels",
+                f"Parcels request timed out: {exc}",
+            )
+        raise UpstreamServiceException(
+            "Core API Parcels",
+            f"Network error communicating with parcels service: {exc}",
+        )
+    finally:
+        if close_client:
+            await client.aclose()

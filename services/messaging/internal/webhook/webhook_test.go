@@ -245,7 +245,7 @@ func TestSafeClient_OutcomeMatrix(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("HTTP_%d", tc.statusCode), func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				_, _ = w.Write([]byte(`{"test":"outcome"}`))
 			}))

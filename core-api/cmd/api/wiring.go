@@ -15,6 +15,7 @@ import (
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	"github.com/swiftdrop/core-api/internal/identity/transport"
+	"github.com/swiftdrop/core-api/internal/platform/config"
 	"github.com/swiftdrop/core-api/migrations"
 )
 
@@ -203,6 +204,18 @@ func BuildAppContainer() *AppContainer {
 
 	// 8. Register Member 08 Events & Messaging Operations & Swagger UI
 	registerEventsModules(mux, dbConn, security)
+
+	// 9. Register Member 04 Merchant Integration Operations
+	if dbConn != nil {
+		if err := registerMerchantsModule(mux, dbConn, tokenProvider); err != nil {
+			if config.IsProduction() {
+				log.Fatalf("[FATAL] Failed to initialize Member 04 Merchant Integration: %v", err)
+			}
+			log.Printf("[NOTICE] Member 04 Merchant Integration not fully active in local mode: %v\n", err)
+		}
+	} else {
+		log.Println("[NOTICE] Member 04 Merchant Integration not fully active: PostgreSQL connection (*sql.DB) is required")
+	}
 
 	return &AppContainer{
 		Mux:         mux,

@@ -2,429 +2,227 @@
 
 **Project:** SwiftDrop — Parcel Delivery & Courier Management System  
 **Module:** Tracking API & Real-Time Updates  
-**Module Owner:** Member 5  
-**Version:** 0.1 — Initial Draft  
-**Status:** Draft for team review  
-**Primary Technology:** Go, REST/JSON, Server-Sent Events (SSE), PostgreSQL  
-**Related Documents:** Documents 1 and 2, SwiftDrop SRS, Engineering Standards & Best Practices, Team Work Division
+**Module Owner:** Member 5 (Senuji)  
+**Version:** 1.0.0 — Post-Audit Harmonized  
+**Status:** Approved & Ratified  
+**Primary Technology:** Go 1.22+, Chi Router v5, PostgreSQL (pgx/v5), Redis Pub/Sub (go-redis/v9), RabbitMQ (amqp091-go)  
+**Target Codepath:** `services/tracking/` (Port `:8081`)  
+**Related Documents:** Documents 1 & 2, `docs/contracts/api-conventions.md`, `docs/contracts/event-contracts.md`, `docs/architecture/domain-boundaries.md`, Member 9 Agreements (A1, A2, D6, D8)
 
 ---
 
-## 1. Purpose
+## 1. Architectural Purpose & Principles
 
-This document defines the proposed internal architecture of the Tracking API, including its components, package structure, dependency rules, persistence strategy, event handling, and scaling considerations.
+This document specifies the internal software architecture of the standalone Tracking API microservice.
 
-The Tracking API is a separately deployable, read-oriented service. It provides privacy-safe parcel tracking information and live updates without owning parcel creation or status transitions.
-
-The architecture follows separation of concerns and Clean/Hexagonal Architecture principles, as recommended by the team's Engineering Standards.
-
-## 2. Architectural Goals
-
-The design aims to:
-
-1. Keep HTTP handling separate from tracking business logic.
-2. Read current tracking data from the authoritative PostgreSQL database.
-3. Expose only approved public fields.
-4. Enforce authorization for private tracking history.
-5. Support live updates through SSE.
-6. Allow independent deployment and scaling.
-7. Make components easy to test without requiring every external dependency.
-8. Keep database and event-infrastructure details isolated from the core application logic.
-9. Handle connection loss, dependency failures, and duplicate events safely.
-
-## 3. High-Level Architecture
-
-The service is organized into an HTTP layer, an application layer, a tracking domain/model layer, and infrastructure adapters.
-
-The HTTP layer receives requests. The application layer coordinates use cases. The domain/model layer defines tracking-specific rules and data structures. Infrastructure adapters implement database access and integration with the agreed event mechanism.
-
-### 3.1 Component diagram
-
-```mermaid
-flowchart TB
-    Client[Customer Frontend]
-    Gateway[API Gateway]
-
-    subgraph TrackingAPI["Tracking API — Go Service"]
-        HTTP[HTTP Handlers]
-        App[Application Use Cases]
-        Domain[Tracking Models and Rules]
-        RepoPort[Tracking Repository Interface]
-        DBAdapter[PostgreSQL Repository Adapter]
-        Auth[Authorization Adapter]
-        SSE[SSE Connection Manager]
-        EventAdapter[Event Consumer / Adapter]
-    end
-
-    DB[(PostgreSQL)]
-    Broker[(Agreed Event Mechanism)]
-    Fanout[(Optional Redis Pub/Sub)]
-
-    Client --> Gateway
-    Gateway --> HTTP
-    HTTP --> App
-    App --> Domain
-    App --> RepoPort
-    RepoPort --> DBAdapter
-    DBAdapter --> DB
-    HTTP --> Auth
-    App --> SSE
-    EventAdapter --> SSE
-    Broker --> EventAdapter
-    SSE -. "Optional cross-replica fan-out" .-> Fanout
-    Fanout -. "Optional update delivery" .-> SSE
-```
-
-**Diagram notes:**
-
-- PostgreSQL is the authoritative source of parcel and status-history data.
-- The repository interface separates application logic from database implementation.
-- The event adapter and SSE connection manager support live update delivery.
-- Redis is optional and must not become the authoritative status store.
-- The exact broker-to-consumer and cross-replica arrangement remains subject to team agreement.
-
-## 4. Component Responsibilities
-
-| Component | Responsibility |
-|---|---|
-| HTTP handlers | Parse requests, validate transport-level input, invoke use cases, and return HTTP responses. |
-| Application use cases | Coordinate tracking lookup, history retrieval, authorization checks, and current-state retrieval. |
-| Tracking models and rules | Represent tracking information and enforce tracking-specific response rules. |
-| Repository interface | Define the data-reading operations required by application use cases. |
-| PostgreSQL repository adapter | Execute queries against the approved shared schema and map results into application models. |
-| Authorization adapter | Integrate with the agreed authentication and authorization mechanism for protected requests. |
-| SSE connection manager | Manage active streams, send approved events, and handle disconnected clients. |
-| Event adapter | Receive updates through the agreed event mechanism, validate them, and pass relevant notifications to the application/SSE layer. |
-| Configuration | Load validated environment-based configuration without embedding secrets in source code. |
-| Observability | Provide structured logs, health endpoints, and metrics for operational monitoring. |
-
-The final component boundaries may be refined during implementation, but HTTP handlers should not contain database query logic or parcel lifecycle rules.
-
-## 5. Proposed Go Package Structure
-
-The following structure is a proposed starting point. It should be aligned with the actual repository conventions before files are created.
-
-```text
-tracking-api/
-├── cmd/
-│   └── tracking-api/
-│       └── main.go
-├── internal/
-│   ├── config/
-│   │   └── config.go
-│   ├── tracking/
-│   │   ├── model.go
-│   │   ├── service.go
-│   │   └── errors.go
-│   ├── application/
-│   │   ├── get_public_tracking.go
-│   │   ├── get_tracking_history.go
-│   │   └── tracking_updates.go
-│   ├── ports/
-│   │   ├── tracking_repository.go
-│   │   └── event_source.go
-│   ├── adapters/
-│   │   ├── http/
-│   │   │   ├── handlers.go
-│   │   │   ├── routes.go
-│   │   │   ├── dto.go
-│   │   │   └── sse.go
-│   │   ├── postgres/
-│   │   │   └── tracking_repository.go
-│   │   └── events/
-│   │       └── consumer.go
-│   └── observability/
-│       ├── health.go
-│       └── metrics.go
-├── migrations/
-├── tests/
-├── Dockerfile
-├── go.mod
-├── go.sum
-└── README.md
-```
-
-### 5.1 Package responsibilities
-
-- `cmd/tracking-api`: Application entry point and dependency wiring.
-- `internal/config`: Configuration loading and validation.
-- `internal/tracking`: Tracking-specific models, rules, and domain errors.
-- `internal/application`: Use cases that coordinate reads and update delivery.
-- `internal/ports`: Interfaces defining the dependencies required by application logic.
-- `internal/adapters/http`: REST endpoints, request/response DTOs, and SSE transport.
-- `internal/adapters/postgres`: Database queries and row-to-model mapping.
-- `internal/adapters/events`: Integration with the agreed event-delivery mechanism.
-- `internal/observability`: Health checks and metrics.
-- `tests`: Integration and end-to-end test support, where appropriate.
-- `migrations`: Only tracking-owned migrations, if the team approves any tracking-specific tables. The shared parcel schema must not be duplicated.
-
-The exact package boundaries can be simplified if the initial implementation is small. Avoid creating unnecessary abstractions that add complexity without improving testability or separation of concerns.
-
-## 6. Dependency Direction
-
-The architecture should follow these rules:
-
-1. HTTP handlers may depend on application use cases.
-2. Application use cases may depend on domain models and repository/event interfaces.
-3. Infrastructure adapters implement interfaces defined by the application's required contracts.
-4. Domain models must not import HTTP frameworks, database drivers, or RabbitMQ/Redis clients.
-5. Database queries must remain inside the PostgreSQL adapter.
-6. Authentication and authorization checks must not exist only in frontend code.
-7. The SSE transport must not become the owner of parcel business rules.
-8. The entry point is responsible for constructing and connecting dependencies.
-
-### 6.1 Dependency diagram
+The Tracking API is designed around **Clean Architecture / Ports & Adapters (Hexagonal)** principles:
+- **Core Independence:** Core tracking models and use cases have zero dependencies on HTTP frameworks, SQL drivers, or message broker libraries.
+- **Port Interfaces:** External drivers (HTTP server, PostgreSQL, Redis, RabbitMQ) communicate with application logic solely through Go interfaces defined in the domain/application layer.
+- **Read-Only Persistence:** Complete physical separation from database mutations via PostgreSQL role `swiftdrop_tracking_ro`.
+- **Horizontal Scalability:** High-concurrency SSE connections fan out cleanly across multiple stateless Kubernetes pods (HPA 2 to 4) using an internal Redis Pub/Sub bus.
 
 ```mermaid
 flowchart TD
-    Main[Application Entry Point]
-    HTTP[HTTP and SSE Adapters]
-    App[Application Use Cases]
-    Domain[Tracking Models and Rules]
-    Ports[Repository and Event Interfaces]
-    Infra[PostgreSQL and Event Adapters]
+    subgraph DrivingAdapters ["Driving Adapters (Input)"]
+        HTTPHandler["HTTP REST Handlers<br/>(GET /api/v1/tracking/...)"]
+        SSEHandler["SSE Stream Handler<br/>(text/event-stream)"]
+        RabbitConsumer["RabbitMQ Consumer<br/>(q.tracking.updates)"]
+        RedisSubscriber["Redis Pub/Sub Subscriber<br/>(tracking:updates)"]
+    end
 
-    Main --> HTTP
-    Main --> Infra
-    HTTP --> App
-    App --> Domain
-    App --> Ports
-    Infra -. "Implements interfaces" .-> Ports
+    subgraph ApplicationCore ["Application Core (Domain & Ports)"]
+        TrackingService["Tracking Application Service<br/>(GetPublicTracking, StreamTracking)"]
+        EventHub["In-Memory Event Hub<br/>(Subscriber Registry & Fan-Out)"]
+        RepoPort["<< interface >><br/>TrackingRepository"]
+    end
+
+    subgraph DrivenAdapters ["Driven Adapters (Output)"]
+        PostgresRepo["PostgreSQL Adapter<br/>(swiftdrop_tracking_ro)"]
+        RedisPublisher["Redis Publisher<br/>(tracking:updates)"]
+    end
+
+    HTTPHandler --> TrackingService
+    SSEHandler --> TrackingService
+    SSEHandler --> EventHub
+    RabbitConsumer --> RedisPublisher
+    RedisSubscriber --> EventHub
+    TrackingService --> RepoPort
+    RepoPort -.-> PostgresRepo
+    TrackingService --> EventHub
 ```
-
-The purpose of this dependency direction is to make business behavior testable without requiring a live database, broker, or HTTP server for every unit test.
-
-## 7. Application Use Cases
-
-### 7.1 Public tracking lookup
-
-The public tracking use case:
-
-1. Receives a validated tracking identifier.
-2. Reads the current parcel and status information through the repository interface.
-3. Handles an unknown parcel without exposing internal details.
-4. Maps the result to a public tracking response DTO.
-5. Returns only the approved public fields.
-
-The use case must not return raw database records directly.
-
-### 7.2 Authenticated tracking history
-
-The history use case:
-
-1. Receives the authenticated caller's identity and requested parcel reference.
-2. Verifies that the caller is permitted to access that parcel.
-3. Reads the permitted history from the repository.
-4. Orders records using the agreed timestamp and tie-breaking rules.
-5. Returns the history through an explicit response DTO.
-
-The actual ownership query and authentication claims depend on the approved database and authentication contracts.
-
-### 7.3 Live update delivery
-
-The live-update flow:
-
-1. Establishes an SSE connection for a valid tracking identifier.
-2. Retrieves and sends the initial authoritative status.
-3. Registers the connection with the SSE manager.
-4. Receives relevant status-change notifications through the agreed event mechanism.
-5. Reconciles notifications against authoritative data when required.
-6. Sends approved tracking events to the appropriate active clients.
-7. Removes disconnected clients and releases associated resources.
-
-The event notification indicates that tracking information may have changed. It is not itself the authoritative status record.
-
-## 8. Persistence Architecture
-
-### 8.1 Read-only database access
-
-The Tracking API should use a dedicated database role with read-only permissions over the approved parcel/status data it needs.
-
-The repository adapter must:
-
-- Use the approved table and column names from Member 2's schema.
-- Use parameterized SQL queries.
-- Select only the fields required for the use case.
-- Avoid modifying parcel records or status history.
-- Avoid creating a competing parcel/status schema.
-- Return safe application errors rather than exposing raw database errors.
-- Respect configured connection-pool limits.
-
-The exact database username, schema, table names, indexes, and connection-pool values remain pending confirmation.
-
-### 8.2 Data consistency
-
-PostgreSQL remains the authoritative data store.
-
-The application must not rely on an unapproved tracking projection or stale cache for the current status. If caching is introduced later, its freshness and invalidation rules must be explicitly agreed and tested.
-
-For the initial implementation, the recommended approach is to read current status from PostgreSQL rather than introduce a separate status cache.
-
-### 8.3 Transaction boundaries
-
-The Tracking API is primarily read-only and should not create business transactions that mutate parcel status.
-
-Status changes and their history records are committed by the relevant core domain modules. The Tracking API reads committed state and delivers the result.
-
-The exact query transaction/isolation strategy can be selected during implementation based on the approved schema and consistency requirements.
-
-## 9. Event Integration and SSE Design
-
-### 9.1 Event adapter
-
-The event adapter isolates the application from the specific broker or delivery mechanism. It should validate incoming event payloads and convert them into the internal representation required by the tracking application.
-
-The final exchange, queue, routing key, event version, and payload must be confirmed with Member 8 before implementation is treated as final.
-
-### 9.2 SSE connection manager
-
-The SSE manager should:
-
-- Track active connections by the agreed parcel/tracking identifier.
-- Send only approved response fields.
-- Support initial status delivery.
-- Send periodic heartbeat comments.
-- Remove disconnected clients and release resources.
-- Apply bounded buffering or backpressure behavior so slow clients do not consume unbounded memory.
-- Support graceful shutdown of active streams.
-- Coordinate with the selected cross-replica fan-out mechanism if required.
-
-The heartbeat interval, stream limits, and retry behavior are configurable operational decisions, not hard-coded business rules.
-
-### 9.3 Multi-replica behavior
-
-If multiple Tracking API replicas are running, a status notification received by one replica must reach relevant clients connected to other replicas.
-
-The team must choose an explicit design, such as:
-
-- A broker topology that independently delivers updates to each required replica; or
-- A shared fan-out mechanism such as Redis Pub/Sub.
-
-A shared work queue must not be assumed to broadcast every message to every replica. The chosen design must be documented and tested.
-
-Redis is optional and is not the source of truth for parcel status.
-
-## 10. Error Handling
-
-The application should translate internal failures into safe, consistent errors.
-
-| Failure | Proposed handling |
-|---|---|
-| Invalid tracking identifier | Return a validation error. |
-| Unknown parcel | Return a safe not-found/unavailable response. |
-| Unauthenticated protected request | Return HTTP 401. |
-| Authenticated but unauthorized request | Return HTTP 403 or the agreed safe response. |
-| Database unavailable | Return an appropriate service error, normally HTTP 503. |
-| Rate limit exceeded | Return HTTP 429 where the gateway/API contract specifies it. |
-| Invalid event payload | Reject or safely ignore the event and record a sanitized diagnostic. |
-| SSE client disconnect | Release connection resources and allow reconnection. |
-| Broker unavailable | Use the agreed recovery mechanism and reconcile from authoritative state; do not fabricate status updates. |
-
-The final status codes and response body must follow the shared API error contract.
-
-## 11. Design Patterns and Justification
-
-### 11.1 Repository pattern
-
-The repository interface isolates SQL and database-driver details from the application use cases.
-
-**Benefit:** Application tests can use a fake repository, and the approved schema can evolve without spreading SQL through HTTP handlers.
-
-### 11.2 Dependency injection
-
-Dependencies such as repositories, event sources, and configuration are passed into application components rather than constructed inside business logic.
-
-**Benefit:** The service is easier to test and configure.
-
-### 11.3 Adapter pattern
-
-HTTP, PostgreSQL, authentication, and event-system integrations are implemented as adapters around application-facing interfaces.
-
-**Benefit:** Infrastructure changes remain localized.
-
-### 11.4 Explicit DTO mapping
-
-REST and SSE responses are mapped to dedicated data-transfer objects instead of serializing database rows directly.
-
-**Benefit:** Public data minimization and API compatibility are easier to enforce.
-
-These patterns are proposed implementation choices consistent with the team's separation-of-concerns guidance.
-
-## 12. Alternatives Considered
-
-| Alternative | Decision | Reason |
-|---|---|---|
-| Put tracking endpoints inside the Core API | Not selected by the current architecture baseline | A separate Tracking API can scale independently from core business operations. |
-| Read parcel/status data from PostgreSQL | Selected | PostgreSQL is the authoritative data store. |
-| Maintain a separate tracking database or projection | Not proposed initially | It adds consistency, synchronization, and operational complexity. |
-| Use REST polling only | Fallback option | SSE is required by the current tracking requirements, with fallback after interruption. |
-| Use SSE for browser updates | Proposed primary approach | Supports server-to-browser status updates over HTTP. |
-| Use Redis for every deployment | Not required by default | Redis is only needed if the selected multi-replica fan-out design requires it. |
-| Embed SQL inside HTTP handlers | Not selected | It couples transport handling to persistence and makes testing harder. |
-
-The final event and fan-out choices must be confirmed with the responsible team members.
-
-## 13. Scaling and Performance
-
-The service should support read-heavy workloads and long-lived SSE connections without compromising the Core API.
-
-Recommended considerations:
-
-- Scale the Tracking API independently from the Core API.
-- Configure bounded PostgreSQL connection pools.
-- Avoid expensive unbounded history queries.
-- Add indexes only after reviewing the approved schema and expected query patterns.
-- Paginate history if the API contract permits large result sets.
-- Apply public request rate limits and concurrent SSE connection limits.
-- Use bounded buffers and cleanup for disconnected streams.
-- Measure active SSE connections, request latency, database latency, errors, and event-delivery delay.
-- Use the selected fan-out design when clients can be connected to different replicas.
-- Avoid caching authoritative status until freshness and invalidation are explicitly defined.
-- Validate resource and scaling settings through repeatable load tests.
-
-Exact replica counts, CPU thresholds, connection limits, and performance targets belong in the deployment/operations documentation after agreement with Member 9.
-
-## 14. Testing Strategy for the Architecture
-
-The design should support:
-
-- **Unit tests:** Application use cases with fake repository and event interfaces.
-- **Repository integration tests:** Queries against a test PostgreSQL database using the approved schema.
-- **HTTP tests:** Request validation, response DTOs, and error handling.
-- **Authorization tests:** Private history access and parcel ownership.
-- **SSE tests:** Initial status, heartbeat, event delivery, disconnection, and reconnect behavior.
-- **Event tests:** Invalid payloads, duplicate notifications, and out-of-order events.
-- **Fan-out tests:** Cross-replica delivery if a shared fan-out design is selected.
-- **End-to-end tests:** Frontend-to-gateway-to-Tracking API tracking flow.
-
-The exact fixtures and test environment will be specified in Document 6.
-
-## 15. Unresolved Decisions
-
-| Item | Status | Required action |
-|---|---|---|
-| Database tables and columns | Pending | Member 2 provides the approved schema. |
-| Authentication interface | Pending | Confirm with Member 1. |
-| RabbitMQ exchange, queue, routing key, and payload | Pending | Confirm with Member 8. |
-| Redis or alternative fan-out topology | Pending | Agree with Members 8 and 9. |
-| Final HTTP routes and gateway behavior | Pending | Confirm with Members 6, 7, and 9. |
-| Database role and pool size | Pending | Coordinate with Members 2 and 9. |
-| Package names and actual repository structure | Proposed | Align with the existing repository. |
-| Performance and scaling limits | Pending | Validate through testing with Member 9. |
-
-## 16. Definition of Done
-
-The architecture specification is ready for approval when:
-
-- Component responsibilities and dependency direction are clear.
-- The Go package structure aligns with the repository conventions.
-- Database access remains read-only and follows the approved schema.
-- The SSE and event integration design is agreed.
-- The chosen multi-replica fan-out mechanism is documented if required.
-- Security, error handling, observability, and testing responsibilities are defined.
-- Unresolved decisions have owners and follow-up actions.
-- The implementation remains consistent with Documents 1 and 2 and the approved project requirements.
 
 ---
 
-**End of Document 3 — Initial Draft**
+## 2. Multi-Replica Horizontal Scaling & Fan-Out Design (CR-M05-01 Resolved)
+
+### 2.1 The Distributed SSE Problem
+
+In production, the Tracking API runs behind Traefik as a horizontally autoscaling Kubernetes Deployment (2 to 4 pods).
+When a browser opens an SSE stream for parcel `SD-20261025-A8F3K2`, Traefik load-balances the TCP connection to a specific pod (e.g. **Pod A**).
+
+When Member 8's Worker commits a status change, it publishes a domain event to RabbitMQ topic exchange `swiftdrop.events.topic`. The queue `q.tracking.updates` receives the message. If the queue distributes messages across multiple pods via round-robin, the message might be consumed by **Pod B**. Since the client is connected to **Pod A**, a naive single-queue architecture would fail to deliver the update to the client.
+
+### 2.2 Ratified Solution: Two-Tier Ingestion & Internal Fan-Out
+
+To resolve Member 8's change request (**CR-M05-01**) and guarantee 100% delivery across all pods:
+
+1. **RabbitMQ Ingestion:** Member 5's service runs a RabbitMQ consumer worker bound to queue `q.tracking.updates`. (Note: **Member 8 has no connection to Redis**; Member 8 publishes only to RabbitMQ).
+2. **Internal Redis Fan-Out:** The `tracking-api` pod that pulls a message from `q.tracking.updates` immediately republishes the compact payload to Redis channel **`tracking:updates`**.
+3. **Cluster-Wide Broadcast:** Every running `tracking-api` pod runs a background Redis subscriber listening to channel `tracking:updates`.
+4. **Local Channel Delivery:** Each pod inspects its internal memory map (`EventHub`). If it has any active SSE client channels registered for that `tracking_number`, it writes the event to those channels.
+
+```mermaid
+sequenceDiagram
+    participant M8 as M8 Outbox Worker
+    participant RMQ as RabbitMQ (q.tracking.updates)
+    participant PodB as Tracking Pod B (Consumer)
+    participant Redis as Redis Pub/Sub (tracking:updates)
+    participant PodA as Tracking Pod A (Holds Client SSE)
+    participant Client as Browser (Connected to Pod A)
+
+    M8->>RMQ: Publish parcel.delivered.v1
+    RMQ->>PodB: Deliver event from q.tracking.updates
+    Note over PodB: Pod B consumes RabbitMQ event
+    PodB->>Redis: Publish JSON to tracking:updates
+    Redis-->>PodA: Broadcast message to Pod A
+    Redis-->>PodB: Broadcast message to Pod B
+    Note over PodA: Pod A checks local EventHub
+    PodA->>Client: event: status_update\ndata: {...}
+```
+
+---
+
+## 3. Package Structure & Layout (`services/tracking/`)
+
+In strict accordance with Agreement A1 and the SwiftDrop repository standard (`AGENTS.md` §4), the service lives inside `services/tracking/`.
+
+> **Important Schema Rule:** Member 5 owns **zero database migrations**. All migrations are executed centrally by Member 9 and Member 2 in `core-api/migrations/`. Therefore, `services/tracking/` contains **no `migrations/` folder**.
+
+```text
+services/tracking/
+├── cmd/
+│   └── tracking/
+│       └── main.go                 # Dependency injection, wiring & graceful shutdown
+├── internal/
+│   ├── config/
+│   │   └── config.go               # Validated env loading (PORT, DATABASE_URL, REDIS_URL)
+│   ├── domain/
+│   │   ├── tracking.go             # Parcel, Milestone, and TrackingStatus entities
+│   │   └── errors.go               # Domain sentinel errors (ErrNotFound, ErrUnauthorized)
+│   ├── service/
+│   │   ├── tracking_service.go     # Application orchestrator (GetPublic, GetAuthenticated)
+│   │   └── dto.go                  # Snake_case response DTOs with {data} envelope
+│   ├── ports/
+│   │   └── repository.go           # TrackingRepository interface contract
+│   ├── repository/
+│   │   └── postgres.go             # Read-only SQL adapter (swiftdrop_tracking_ro)
+│   ├── events/
+│   │   ├── hub.go                  # Thread-safe in-memory SSE client registry
+│   │   ├── rabbit_consumer.go      # RabbitMQ subscriber for q.tracking.updates
+│   │   └── redis_pubsub.go         # Redis publisher & subscriber for tracking:updates
+│   └── handler/
+│       ├── rest.go                 # REST endpoints (public lookup & auth history)
+│       ├── sse.go                  # SSE streaming handler with 15s keepalive
+│       ├── health.go               # Liveness & readiness probes (/health/live, /health/ready)
+│       └── middleware.go           # JWT RS256 validation, CORS & request logging
+├── Dockerfile                      # Multi-stage non-root container (USER 10001:10001)
+├── go.mod                          # Go 1.22+ module definition
+├── go.sum                          # Checksums
+└── README.md                       # Service documentation & run instructions
+```
+
+---
+
+## 4. Component Deep-Dive & Design Decisions
+
+### 4.1 In-Memory `EventHub` Concurrency Model
+
+The `EventHub` manages local SSE client connections using a thread-safe mutex and bounded Go channels:
+
+```go
+type EventHub struct {
+    mu          sync.RWMutex
+    subscribers map[string][]chan TrackingUpdateEvent // key: tracking_number
+    logger      *slog.Logger
+}
+```
+
+#### Buffer Capacity & Slow-Client Policy (Audit Fix)
+- **Buffer Size = 32 Slots:** In the initial draft, client channels were allocated with a buffer of 5 slots. High burst volumes could cause channel saturation. The buffer capacity is now standardized at **32 slots** (`make(chan TrackingUpdateEvent, 32)`).
+- **Non-Blocking Drop with Warning:** The `broadcast()` function sends to channels inside a non-blocking `select`:
+  ```go
+  select {
+  case ch <- event:
+  default:
+      h.logger.Warn("Dropped tracking update for slow client channel", "trackingNumber", event.TrackingNumber)
+  }
+  ```
+  If a slow client network connection causes the 32-slot buffer to fill completely, the event is dropped for that specific client rather than blocking the hub or causing goroutine leaks. The client will catch up via its next REST refresh or reconnection.
+
+### 4.2 Authenticated SSE Bearer Token Design Gap Resolution
+
+Browser-native `EventSource` does not support custom HTTP request headers (such as `Authorization: Bearer <token>`). To resolve this architectural design gap:
+
+1. **Public Stream Is Unauthenticated:** `GET /api/v1/tracking/public/{trackingNumber}/stream` requires **no credentials**. It streams sanitized status updates that satisfy SEC-009.
+2. **Authenticated Streaming Options:** For customer/merchant portals requiring private stream data:
+   - **Recommended Primary Approach:** The frontend uses standard public SSE streaming for real-time visual milestone progress. Detailed confidential history is queried via authenticated REST `GET /api/v1/tracking/{trackingNumber}` with Bearer token.
+   - **Alternative Streaming Approach:** If authenticated SSE is specifically required, the client passes a short-lived query token (`GET /api/v1/tracking/{trackingNumber}/stream?token=<jwt>`), which middleware validates before upgrading to SSE.
+
+---
+
+## 5. Persistence Adapter Design (`swiftdrop_tracking_ro`)
+
+### 5.1 Connection Pool Settings (Agreement D8)
+
+The PostgreSQL adapter uses `database/sql` with `pgx/v5` driver, configured strictly within Member 9's connection pool budget:
+
+```go
+db.SetMaxOpenConns(5)                  // Agreement D8: strictly 5 connections per pod
+db.SetMaxIdleConns(2)
+db.SetConnMaxLifetime(15 * time.Minute)
+db.SetConnMaxIdleTime(5 * time.Minute)
+```
+
+### 5.2 Query Isolation & Statement Timeouts
+
+Every query executes with an explicit 3-second context timeout (`context.WithTimeout(ctx, 3*time.Second)`):
+
+```sql
+SET statement_timeout = '3000ms';
+```
+
+Queries are read-only and use parameterized inputs to eliminate SQL injection risks.
+
+---
+
+## 6. Observability & Health Probes Architecture (Agreement A2)
+
+The Tracking API implements three standard operational endpoints:
+
+1. **Liveness Probe (`GET /health/live`):** Returns HTTP 200 `{"status":"UP"}` as long as the HTTP server process is running. Used by Kubernetes to detect process deadlocks.
+2. **Readiness Probe (`GET /health/ready`):** Pings PostgreSQL (`db.PingContext(ctx)`) and Redis. If PostgreSQL is unreachable, returns HTTP 503 `{"status":"DOWN","reason":"database unreachable"}`. Kubernetes immediately pulls the pod from the Traefik service endpoints, preventing failed user requests.
+3. **Metrics Endpoint (`GET /metrics`):** Exposes Prometheus metrics:
+   - `swiftdrop_tracking_active_sse_connections` (Gauge)
+   - `swiftdrop_tracking_http_requests_total{code, endpoint}` (Counter)
+   - `swiftdrop_tracking_http_duration_seconds{endpoint}` (Histogram)
+   - `swiftdrop_tracking_events_ingested_total` (Counter)
+
+---
+
+## 7. Ratified Architecture Decisions Summary
+
+| Architecture Item | Decision / Resolution |
+|---|---|
+| **Root Codepath** | Standardized to `services/tracking/` (Agreement A1). |
+| **Port Allocation** | Internal port `:8081` (`PORT=8081`). |
+| **DB Role** | `swiftdrop_tracking_ro` with read-only `SELECT` grants (Agreement D6). |
+| **DB Pool Size** | Max 5 open connections per pod (Agreement D8). |
+| **Queue Binding** | Consumes `q.tracking.updates` on RabbitMQ `swiftdrop.events.topic` (CR-M05-01). |
+| **Fan-Out Bus** | Redis Pub/Sub channel `tracking:updates` (M8 has no Redis dependency). |
+| **Channel Buffer** | Increased to **32 slots** with non-blocking slow client warning. |
+| **SSE Heartbeat** | Emits `:keepalive\n\n` comment frame every **15 seconds** (Agreement A2). |
+| **Migrations** | Zero migrations owned by M5; `migrations/` folder omitted. |
+| **Health Probes** | `/health/live`, `/health/ready`, `/metrics` (Agreement A2). |
+
+---
+*End of Document 3 — Internal Architecture & Design Specification (v1.0.0)*

@@ -128,7 +128,10 @@ func (s *SMTPSender) Send(ctx context.Context, toEmail, subject, textBody, htmlB
 		if !hasStartTLS {
 			return "", ErrSTARTTLSRequired
 		}
-		if err := client.StartTLS(&tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12}); err != nil {
+		if err := client.StartTLS(&tls.Config{
+			ServerName: s.cfg.SMTPHost,
+			MinVersion: tls.VersionTLS12,
+		}); err != nil {
 			return "", fmt.Errorf("starttls negotiation failed: %w", err)
 		}
 

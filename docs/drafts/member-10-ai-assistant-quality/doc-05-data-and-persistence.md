@@ -21,42 +21,35 @@ This document defines the data models, persistence boundaries, caching strategie
 
 | Service Tier | PostgreSQL Access Level | Tables Owned | Justification |
 | :--- | :--- | :--- | :--- |
-| **AI Assistant (`services/ai-assistant/`)** | **NONE (Zero DB Access)** | **None** | Strictly prohibited from opening PostgreSQL connections. Decoupled from database migrations and connection pool limits. |
-| **Core Monolith (`core-api/internal/admin`)** | Authoritative Persistence | `system_policies`, `system_configurations` | Admin module stores authoritative policy versions on behalf of the company and AI assistant. |
+| **AI Assistant (`services/ai-assistant/`)** | **NONE (Zero DB Access)** | **None** | Strictly prohibited from opening PostgreSQL connections. Decoupled from database migrations and connection pool limits (`AGENTS.md`). |
+| **Core Monolith (`core-api/internal/admin`)** | Authoritative Persistence | `system_settings` (Member 7) | Core API stores operational parameters (max weight, COD limits, fuel surcharges). |
 
 ---
 
-### A.2 Core API Schema Specification for Company Policies
+### A.2 Policy Grounding Architecture (Pure Stateless Knowledge Base)
 
-Although the AI Assistant does not own PostgreSQL tables, it requires Member 1 / Member 7 to provide the following migration in `core-api/migrations/` to store dynamic company rules:
+The AI Assistant owns **zero database tables** and does not require relational schema migrations for policy documents:
 
-#### Table: `system_policies`
-```sql
-CREATE TABLE IF NOT EXISTS system_policies (
-    id VARCHAR(36) PRIMARY KEY,
-    version VARCHAR(20) NOT NULL UNIQUE,
-    markdown_content TEXT NOT NULL,
-    operating_hours VARCHAR(100) NOT NULL DEFAULT 'Monday - Saturday 08:00 - 18:00',
-    same_day_cutoff VARCHAR(10) NOT NULL DEFAULT '14:00',
-    max_delivery_attempts INT NOT NULL DEFAULT 3,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_by VARCHAR(36) REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+1. **Version-Controlled Policy Knowledge (`company_policies.md`):**
+   - The authoritative qualitative policy guidelines (prohibited items, packaging regulations, claims workflows, liability caps) reside in `services/ai-assistant/knowledge/company_policies.md`.
+   - The `PolicyContextHydrator` loads this static file into memory at service startup.
 
--- Index for instant retrieval of active policy
-CREATE INDEX idx_system_policies_active ON system_policies(is_active) WHERE is_active = TRUE;
-```
+2. **Live Dynamic Settings Overrides:**
+   - Operational numbers and limits change dynamically during business operations. The assistant queries Core API's approved endpoint:
+     `GET /api/v1/admin/settings` (cached in-memory with a 5-minute TTL).
+   - **Dynamic Precedence Invariant:**
+     > *Whenever quantitative thresholds, rates, or limits in `GET /api/v1/admin/settings` conflict with text in `company_policies.md`, the live API data takes absolute precedence.*
 
-#### Data Dictionary:
-- `id`: Unique **UUIDv7** identifier (time-ordered, millisecond-prefixed). Unlike random UUIDv4, UUIDv7 prevents PostgreSQL B-tree index fragmentation and page splits by ensuring chronological sequential inserts.
-- `version`: Human-readable version tag (e.g., `"v1.4"`).
-- `markdown_content`: Full markdown document containing prohibited items, packing rules, and service guidelines.
-- `operating_hours`: Human-readable operating schedule.
-- `same_day_cutoff`: 24-hour cutoff time for same-day dispatch.
-- `max_delivery_attempts`: Maximum delivery tries before parcel is marked `RETURNED` (default: 3).
-- `is_active`: Boolean flag indicating the currently active policy (only one row is `TRUE`).
+3. **In-Memory Injection Schema:**
+   The hydrator synthesizes the base policy and live overrides into the LLM system prompt:
+   ```text
+   [AUTHORITATIVE ACTIVE OVERRIDES - HIGHEST PRECEDENCE]
+   - Live Max Weight Limit: {max_parcel_weight_kg} kg
+   - Live COD Limit: LKR {max_cod_amount_cents / 100}
+
+   [BASE COMPANY POLICIES - GENERAL GUIDELINES]
+   {company_policies_markdown}
+   ```
 
 ---
 
@@ -257,22 +250,48 @@ To prevent tests from conflicting with each other during concurrent or repeated 
 
 ---
 
-### B.3 Ephemeral Webhook Test Receiver (Port 9999)
+### B.3 Multi-Tenant Mock Webhook Receiver & Visual HTML Dashboard (`mock-webhook:9999`)
 
-To test Scenario 2 (Merchant API $\to$ RabbitMQ $\to$ Webhook dispatch) without deploying an external cloud webhook endpoint:
-1. The Pytest fixture spins up an embedded lightweight Python HTTP server (`http://localhost:9999/webhook`) during test execution.
-2. The merchant test account sets its webhook URL to `http://localhost:9999/webhook`.
-3. When the Event Worker dispatches the event, the mock receiver records:
-   - Request headers (including `X-SwiftDrop-Signature`).
-   - Request JSON body.
-   - Arrival timestamp.
-4. Pytest asserts that the event was received within 3 seconds and verifies the cryptographic HMAC signature against the merchant's secret key.
-5. The mock server shuts down cleanly when the test finishes.
+To verify Scenario 2 (Merchant API $\to$ RabbitMQ $\to$ Webhook dispatch) with verifiable **Multi-Tenant Isolation (SEC-004 / SEC-005)** and produce visual grading evidence for the live demo rubric:
+
+1. **Standalone Container Architecture:**
+   - Deployed as a dedicated service `mock-webhook:9999` in `docker-compose.yml`.
+   - Solves container networking: Event Worker connects directly to `http://mock-webhook:9999/webhooks/...`.
+   - Satisfies SSRF guardrails in dev/test via environment flags: `WEBHOOK_ALLOW_INSECURE_HTTP=true` and `WEBHOOK_ALLOWED_HOSTS=mock-webhook,localhost`.
+
+2. **Multi-Tenant Provisioning:**
+   - **Merchant Alpha (Apex Retail):** Endpoint `POST /webhooks/merchant-alpha`, signing secret `whsec_alpha_test_secret_32_bytes_len!`.
+   - **Merchant Beta (Zenith Logistics):** Endpoint `POST /webhooks/merchant-beta`, signing secret `whsec_beta_test_secret_32_bytes_leng!`.
+   - **Chaos Merchant (Failure / DLQ Simulation):** Endpoint `POST /webhooks/merchant-chaos`. Always returns HTTP 500 to verify retries and routing to `swiftdrop.dlq`.
+
+3. **In-Memory Event Store Schema (RAM Only):**
+   ```python
+   class CapturedWebhookEvent(BaseModel):
+       event_id: str
+       tenant_id: str
+       target_endpoint: str
+       event_type: str  # e.g., "parcel.booked.v1"
+       delivery_attempt: int
+       headers: Dict[str, str]
+       payload: Dict[str, Any]
+       hmac_signature_received: str
+       hmac_signature_computed: str
+       hmac_valid: bool
+       received_at: datetime
+   ```
+
+4. **Live Visual HTML Dashboard (`http://localhost:9999/dashboard`):**
+   - Serves an interactive, real-time UI rendered in browser.
+   - Shows tenant tabs: Merchant Alpha feed, Merchant Beta feed, and DLQ Retry log.
+   - Displays a green badge: `[TENANT ISOLATION VERIFIED: 0 CROSS-TALK]` confirming Merchant Beta received zero events when Merchant Alpha booked an order.
+   - Provides expandable raw JSON CloudEvent and header inspectors.
+   - Allows Playwright E2E tests to take a full-page screenshot (`test-results/artifacts/webhook-dashboard.png`) as live proof for evaluators.
 
 ---
 
 ## 2. Review Checklist for Team Meeting 2
 
-- [ ] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` includes the test accounts in Section B.1 with matching passwords.
-- [ ] **Member 2 & 7 (Pricing/Admin):** Confirm the zone IDs (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`) in the `delivery_zones` table.
-- [ ] **Member 7 & 1 (Admin/Core API):** Confirm that the `system_policies` table schema in Section A.2 will be included in the Core API database migrations.
+- [x] **Member 1 (Auth):** Confirm that `seeds/dev_seed.sql` includes the test accounts in Section B.1 with matching passwords.
+- [x] **Member 2 & 7 (Pricing/Admin):** Confirm the zone IDs (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`) in the `delivery_zones` table.
+- [x] **Member 7 & 1 (Admin/Core API):** Operational system configurations are queried dynamically via `GET /api/v1/admin/settings` to override static policy text.
+- [x] **Member 8 & 9 (Events/DevOps):** Standalone `mock-webhook:9999` container integrated in `docker-compose.yml` with dev SSRF bypass flags.

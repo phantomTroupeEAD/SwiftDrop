@@ -115,14 +115,14 @@ type mockAcknowledger struct {
 	nacked []uint64
 }
 
-func (m *mockAcknowledger) Ack(tag uint64, multiple bool) error {
+func (m *mockAcknowledger) Ack(tag uint64, _ bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.acked = append(m.acked, tag)
 	return nil
 }
 
-func (m *mockAcknowledger) Nack(tag uint64, multiple bool, requeue bool) error {
+func (m *mockAcknowledger) Nack(tag uint64, _ bool, _ bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.nacked = append(m.nacked, tag)
@@ -135,7 +135,7 @@ func (m *mockAcknowledger) Reject(tag uint64, requeue bool) error {
 
 func TestConsumerRunner_MalformedMessageRoutesToDLQ(t *testing.T) {
 	ack := &mockAcknowledger{}
-	runner := NewRunner("test-consumer", func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	runner := NewRunner("test-consumer", func(_ context.Context, _ amqp.Delivery, _ *relay.OutboxEnvelope) error {
 		return nil
 	}, nil)
 
@@ -158,7 +158,7 @@ func TestConsumerRunner_MalformedMessageRoutesToDLQ(t *testing.T) {
 
 func TestConsumerRunner_PanicRecovery(t *testing.T) {
 	ack := &mockAcknowledger{}
-	runner := NewRunner("test-panic", func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	runner := NewRunner("test-panic", func(_ context.Context, _ amqp.Delivery, _ *relay.OutboxEnvelope) error {
 		panic("unexpected runtime panic")
 	}, nil)
 

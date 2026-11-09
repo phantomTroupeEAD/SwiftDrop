@@ -4,7 +4,7 @@
 > - **Member 9:** DevOps, Kubernetes Manifests, Helm Charts, CI/CD, Observability & Database Coordinator  
 > - **Member 7:** API Gateway & Edge Routing Policies (`deploy/gateway/`)  
 > - **Member 8:** Outbox Reconciliation CronJob & Event Worker Deployment  
-> **Target Environment:** K3s Lightweight Kubernetes on single-node VPS / Cloud Provider | Local Docker Compose
+> **Target Environment:** K3s Lightweight Kubernetes on a single-node VPS (at least 8 GB RAM; provider open, see ADR-002 §2) | Local Docker Compose
 
 ---
 
@@ -18,11 +18,11 @@ SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 │   └── Traefik Ingress Controller (Ports: :80 HTTP, :443 HTTPS, :8090 Dashboard)
 ├── Stateless Workloads (Deployments):
 │   ├── core-api (Go Modular Monolith: :8080)
-│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA, replicas 2-5)
+│   ├── tracking-api (Go SSE Service: :8081 — Autoscaled via HPA, replicas 1-2 today; final range open, C8)
 │   ├── ai-assistant (FastAPI Service: :8000 — Zero DB access)
 │   ├── web (React/TS Unified SPA + Nginx: :3000)
 │   ├── outbox-relay (Go Transactional Outbox Publisher daemon — Singleton replicas: 1)
-│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA, replicas 1-5)
+│   └── event-worker (Go RabbitMQ Consumer worker — Autoscaled via KEDA, replicas 1-3)
 ├── Database Release Migration (Job):
 │   └── core-api-migrate-job (One-shot Job per release, backoffLimit: 0)
 ├── Scheduled Batch Workloads (CronJob):
@@ -47,6 +47,9 @@ deploy/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
 │       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
 └── kubernetes/                          # Kubernetes resource manifests (Member 9)
+    │                                    # Target layout (A8). Today the files are still flat:
+    │                                    # postgres-statefulset.yml, rabbitmq-statefulset.yml,
+    │                                    # cronjob-reconciliation.yml, autoscaling/*.yml (moved in one M9 PR)
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
     ├── postgres/                        # PostgreSQL 16 StatefulSet, Service, PVC
     ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet, Service, PVC
@@ -107,15 +110,19 @@ To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (O
    - Scheduled periodic job (`*/10 * * * *`) configured with `concurrencyPolicy: Forbid` to prevent concurrent overlapping executions.
 
 To capture full bonus marks for **SRS §15.3** while preventing Out-Of-Memory (OOM) crashes on a single-node VPS, autoscalers are configured with **Micro-Scaling demonstration envelopes**:
-- **Tracking API (HPA):** Scales from `2` &rarr; `5` replicas when CPU utilization exceeds 70%.
-- **Event Worker (KEDA):** Scales from `1` &rarr; `5` replicas when the `q.notifications.worker` or `q.webhooks.dispatcher` queue backlog exceeds 10 messages.
+- **Tracking API (HPA):** Scales from `1` &rarr; `2` replicas when CPU utilization exceeds 50% (`autoscaling/hpa-tracking.yml`). The final range is open item C8 (Member 5); the DB budget below allows at most 4 pods, and more than 1 pod needs Redis.
+- **Event Worker (KEDA):** Scales from `1` &rarr; `3` replicas when the `q.notifications.worker` or `q.webhooks.dispatcher` queue backlog exceeds 10 messages (`autoscaling/keda-event-worker.yml`).
 - **Outbox Relay:** Strictly a singleton (`replicas: 1`) to eliminate row lock contention.
 
 ---
 
 ## 6. Database Governance & Connection Pooling Budget
 
-PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling). Connection budgets are strictly enforced per pod ConfigMap:
+PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling), set by `args: ["-c", "max_connections=150"]` in `postgres-statefulset.yml`.
+
+Each workload logs in with its own role (D6). `postgres-secrets` holds one key per role, and the manifest maps that key into the `DATABASE_URL` env var the service reads: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL`, `RELAY_DATABASE_URL`, `WORKER_DATABASE_URL`, `RECONCILER_DATABASE_URL`. The migrate Job uses `postgres-migrator-secrets`.
+
+Connection budgets are strictly enforced per pod ConfigMap:
 - `core-api`: 12 conns/pod $\times$ 4 replicas = 48
 - `tracking-api`: 5 conns/pod $\times$ 4 replicas = 20
 - `outbox-relay`: 5 conns
@@ -128,6 +135,7 @@ PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling). Connec
 
 ## 7. Local & Cluster Deployment Commands
 
+### 7.1 Using GNU Make (Linux / macOS / Git Bash)
 ```bash
 # 1. Start unified local Docker Compose stack
 make up
@@ -138,7 +146,54 @@ make migrate-up
 # 3. Seed demonstration data (refuses in production)
 make seed
 
-# 4. Run automated test suites
+# 4. Check status and follow logs
+make ps
+make logs
+
+# 5. Run automated test suites
 make test
 make test-e2e
+
+# 6. Stop containers / reset volumes
+make down
+make reset
 ```
+
+### 7.2 Native Windows PowerShell (No Make installation required)
+```powershell
+# 1. Start stack
+.\scripts\make.ps1 up
+
+# 2. Run migrations
+.\scripts\make.ps1 migrate-up
+
+# 3. Seed demo accounts
+.\scripts\make.ps1 seed
+
+# 4. Check status & logs
+.\scripts\make.ps1 ps
+.\scripts\make.ps1 logs
+
+# 5. Stop stack
+.\scripts\make.ps1 down
+```
+
+---
+
+## 8. Service Port & Health Probe Inventory
+
+| Container Name | Internal Port | Host Port | Health Check / Probe | Purpose |
+| :--- | :---: | :---: | :--- | :--- |
+| `swiftdrop-traefik` | 80, 8090 | `80`, `127.0.0.1:8090` | Traefik `/ping` | Edge ingress gateway & reverse proxy |
+| `swiftdrop-postgres` | 5432 | `5432` | `pg_isready -U swiftdrop -d swiftdrop_db` | Authoritative PostgreSQL 16 store |
+| `swiftdrop-rabbitmq` | 5672, 15672 | `5672`, `15672` | `rabbitmq-diagnostics -q ping` | AMQP 0-9-1 broker & management UI |
+| `swiftdrop-redis` | 6379 | `6379` | `redis-cli ping` | Ephemeral cache & SSE pub/sub fan-out |
+| `swiftdrop-minio` | 9000, 9001 | `9000`, `9001` | S3 API endpoint | Local S3 object store for proof-of-delivery |
+| `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
+| `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
+| `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
+| `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
+| `swiftdrop-event-worker` | 8083 | `8083` | `GET /health/live`, `/metrics` | Asynchronous consumer worker (KEDA scaled) |
+| `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
+| `swiftdrop-web` | 3000 | `3000` | `GET /healthz` | React/TypeScript SPA served by Nginx |
+

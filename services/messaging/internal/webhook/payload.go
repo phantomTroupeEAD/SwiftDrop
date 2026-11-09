@@ -8,7 +8,7 @@ import (
 
 // WebhookBody represents the structured JSON payload sent to a merchant's HTTP endpoint.
 //
-//nolint:revive // WebhookBody represents the structured merchant payload
+//nolint:revive // WebhookBody is canonical across public API and event documentation
 type WebhookBody struct {
 	EventID        string                 `json:"event_id"`
 	EventType      string                 `json:"event_type"`

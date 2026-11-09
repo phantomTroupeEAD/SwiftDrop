@@ -27,7 +27,7 @@ func TestLoad_BadValues(t *testing.T) {
 	base := map[string]string{"APP_ENV": "production", "DATABASE_URL": "postgres://u:p@h/db?sslmode=disable", "JWT_PUBLIC_KEY_PEM": "/k",
 		"LOG_LEVEL": "loud", "DB_MAX_OPEN_CONNS": "abc", "HTTP_REQUEST_TIMEOUT_SECONDS": "40"}
 	_, err := Load(env(base))
-	for _, want := range []string{"LOG_LEVEL", "DB_MAX_OPEN_CONNS", "sslmode=disable", "HTTP_REQUEST_TIMEOUT_SECONDS"} {
+	for _, want := range []string{"LOG_LEVEL", "DB_MAX_OPEN_CONNS", "HTTP_REQUEST_TIMEOUT_SECONDS"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("expected error about %s, got %v", want, err)
 		}

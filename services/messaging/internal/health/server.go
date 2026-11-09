@@ -3,7 +3,9 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -62,7 +64,9 @@ func (s *Server) Start() error {
 	s.listener = ln
 
 	go func() {
-		_ = s.httpServer.Serve(ln)
+		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("Health HTTP server exited: %v", err)
+		}
 	}()
 
 	return nil

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"unicode"
 )
 
 // RegisterSwaggerRoutes registers the Swagger UI and index endpoints on the multiplexer.
@@ -68,7 +67,7 @@ func handleSwaggerIndex(w http.ResponseWriter, r *http.Request) {
             <li>
                 <strong>%s API</strong>
                 <a class="btn" href="/swagger/%s/">Explore UI &rarr;</a>
-            </li>`, titleCase(name), name)
+            </li>`, toTitle(name), name)
 	}
 
 	fmt.Fprintf(w, `
@@ -128,16 +127,14 @@ func handleSwaggerUI(w http.ResponseWriter, r *http.Request) {
     };
     </script>
 </body>
-</html>`, titleCase(name), name)
+</html>`, toTitle(name), name)
 }
 
-func titleCase(s string) string {
-	if s == "" {
+func toTitle(s string) string {
+	if len(s) == 0 {
 		return ""
 	}
-	r := []rune(s)
-	r[0] = unicode.ToUpper(r[0])
-	return string(r)
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func handleSwaggerSpec(w http.ResponseWriter, r *http.Request) {

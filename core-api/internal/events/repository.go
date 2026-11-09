@@ -78,7 +78,7 @@ func (w *PostgresOutboxWriter) Write(ctx context.Context, tx *sql.Tx, envelopes 
 		)
 	}
 
-	//nolint:gosec // valuePlaceholders contains only parameterized $n tokens, not unsanitized user input
+	//nolint:gosec // G201: dynamic value placeholders for batch insert with parameterized args
 	query := fmt.Sprintf(`
 		INSERT INTO outbox_events (
 			id, producer, occurred_at, correlation_id,

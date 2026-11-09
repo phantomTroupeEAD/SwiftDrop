@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -74,7 +75,7 @@ func main() {
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("[fake-receiver] Server error: %v", err)
 	}
 }

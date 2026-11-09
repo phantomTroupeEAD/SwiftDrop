@@ -31,31 +31,31 @@ type mockEventsRepo struct {
 	attemptsErr    error
 }
 
-func (m *mockEventsRepo) ListOutbox(ctx context.Context, filter application.OutboxFilter, cursor httpx.Cursor, limit int) ([]application.OutboxItem, *httpx.Cursor, error) {
+func (m *mockEventsRepo) ListOutbox(_ context.Context, _ application.OutboxFilter, _ httpx.Cursor, _ int) ([]application.OutboxItem, *httpx.Cursor, error) {
 	return m.outboxItems, nil, nil
 }
 
-func (m *mockEventsRepo) GetOutboxStats(ctx context.Context) (*application.OutboxStats, error) {
+func (m *mockEventsRepo) GetOutboxStats(_ context.Context) (*application.OutboxStats, error) {
 	return &m.outboxStats, nil
 }
 
-func (m *mockEventsRepo) RetryOutbox(ctx context.Context, id string) error {
+func (m *mockEventsRepo) RetryOutbox(_ context.Context, _ string) error {
 	return m.retryOutboxErr
 }
 
-func (m *mockEventsRepo) ListDeliveries(ctx context.Context, filter application.DeliveryFilter, cursor httpx.Cursor, limit int) ([]application.UnifiedDeliveryItem, *httpx.Cursor, error) {
+func (m *mockEventsRepo) ListDeliveries(_ context.Context, _ application.DeliveryFilter, _ httpx.Cursor, _ int) ([]application.UnifiedDeliveryItem, *httpx.Cursor, error) {
 	return m.deliveries, nil, nil
 }
 
-func (m *mockEventsRepo) RetryWebhookDelivery(ctx context.Context, id string) error {
+func (m *mockEventsRepo) RetryWebhookDelivery(_ context.Context, _ string) error {
 	return m.retryDelivErr
 }
 
-func (m *mockEventsRepo) ListMerchantWebhookDeliveries(ctx context.Context, merchantID string, cursor httpx.Cursor, limit int) ([]application.MerchantDeliveryItem, *httpx.Cursor, error) {
+func (m *mockEventsRepo) ListMerchantWebhookDeliveries(_ context.Context, _ string, _ httpx.Cursor, _ int) ([]application.MerchantDeliveryItem, *httpx.Cursor, error) {
 	return m.merchantDelivs, nil, nil
 }
 
-func (m *mockEventsRepo) ListMerchantWebhookAttempts(ctx context.Context, merchantID, deliveryID string) ([]application.WebhookAttemptItem, error) {
+func (m *mockEventsRepo) ListMerchantWebhookAttempts(_ context.Context, _, _ string) ([]application.WebhookAttemptItem, error) {
 	if m.attemptsErr != nil {
 		return nil, m.attemptsErr
 	}
@@ -192,7 +192,7 @@ func TestTenantResolver_Validation(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		rec := httptest.NewRecorder()
 
-		handler := resolver(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := resolver(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 
@@ -215,7 +215,7 @@ func TestTenantResolver_Validation(t *testing.T) {
 		req = req.WithContext(ctx)
 		rec := httptest.NewRecorder()
 
-		handler := resolver(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := resolver(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 
