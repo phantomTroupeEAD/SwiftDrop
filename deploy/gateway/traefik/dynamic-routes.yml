@@ -13,7 +13,7 @@ http:
         - "cors-middleware"
         - "tracking-ratelimit"
 
-    # 2. AI Assistant Service
+    # 2. AI Assistant REST API & Chat Streaming
     ai-router:
       rule: "PathPrefix(`/api/v1/ai`)"
       entryPoints:
@@ -22,7 +22,16 @@ http:
       middlewares:
         - "cors-middleware"
 
-    # 3. Core API (Modular Monolith)
+    # 3. FastMCP Remote SSE Gateway (:8002)
+    ai-mcp-router:
+      rule: "PathPrefix(`/mcp`)"
+      entryPoints:
+        - "web"
+      service: "ai-mcp-service"
+      middlewares:
+        - "cors-middleware"
+
+    # 4. Core API (Modular Monolith)
     core-api-router:
       rule: "PathPrefix(`/api/v1`)"
       entryPoints:
@@ -54,6 +63,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://ai-assistant:8000"
+
+    ai-mcp-service:
+      loadBalancer:
+        servers:
+          - url: "http://ai-assistant:8002"
 
     frontend-service:
       loadBalancer:

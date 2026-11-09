@@ -182,6 +182,9 @@ If a module or service exposes any HTTP/REST endpoints, it MUST maintain a co-lo
    - Field-level definitions and data types.
 4. **Error Responses:**
    - Concrete JSON error envelopes for semantic validation errors (`400`/`422`), unauthorized access (`401`/`403`), missing resources (`404`), and state conflicts (`409`).
+5. **Interactive Swagger Annotations (`swag`):**
+   - Every HTTP handler function in `core-api` must include standard `swag` docstring annotations (`@Summary`, `@Tags`, `@Router`, `@Success`, `@Failure`, etc.) adhering to `docs/contracts/swagger-guide.md`.
+   - Whenever endpoints are added or updated, run `make swagger` to synchronously regenerate `core-api/docs/swagger.json`.
 
 ### 6.3 Zero-Drift Enforcement Policy
 - **Synchronous Updates Required:** No task is complete if code is added, updated, or refactored without updating the module's `README.md` and `API.md` in the exact same change.
@@ -220,6 +223,7 @@ If a module or service exposes any HTTP/REST endpoints, it MUST maintain a co-lo
 
 ### Go Backend
 - All Go files must be formatted with `gofmt` and pass `golangci-lint`.
+- Annotate all HTTP handler functions with standard `swag` docstrings and regenerate `core-api/docs/swagger.json` via `make swagger`.
 - Handle errors explicitly; wrap errors with context (`fmt.Errorf("failed to fetch parcel: %w", err)`).
 - **Never use `panic`** for ordinary runtime or request errors.
 - Pass `context.Context` to all database, HTTP, and broker calls, honoring timeouts and cancellation.

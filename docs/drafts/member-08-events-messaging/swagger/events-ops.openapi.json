@@ -1,0 +1,515 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SwiftDrop Events & Messaging Operations API",
+    "description": "Authoritative administrative and merchant operations API for transactional outbox monitoring and webhook delivery tracking.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development gateway"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/admin/events/outbox": {
+      "get": {
+        "summary": "List outbox events",
+        "description": "Retrieves a paginated list of outbox events with optional status and type filters.",
+        "tags": ["Admin Events"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["PENDING", "PUBLISHED", "FAILED"]
+            }
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of outbox records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedOutbox"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/api/v1/admin/events/outbox/stats": {
+      "get": {
+        "summary": "Get outbox statistics",
+        "description": "Returns counts partitioned by outbox status and the age of the oldest pending event.",
+        "tags": ["Admin Events"],
+        "responses": {
+          "200": {
+            "description": "Outbox status summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxStatsResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/events/outbox/{id}/retry": {
+      "post": {
+        "summary": "Retry failed outbox event",
+        "description": "Resets a FAILED outbox event back to PENDING with attempt_count=0.",
+        "tags": ["Admin Events"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Outbox event reset successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionSuccess"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/admin/events/deliveries": {
+      "get": {
+        "summary": "List delivery logs",
+        "description": "Returns a unified, paginated log of email notifications and webhook deliveries.",
+        "tags": ["Admin Events"],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["notification", "webhook"]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["PENDING", "IN_PROGRESS", "SUCCESS", "FAILED"]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated delivery items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedDeliveries"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/api/v1/admin/events/webhook-deliveries/{id}/retry": {
+      "post": {
+        "summary": "Retry failed webhook delivery",
+        "description": "Resets a FAILED webhook delivery row back to PENDING.",
+        "tags": ["Admin Events"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook delivery reset successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionSuccess"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/merchant/webhook-deliveries": {
+      "get": {
+        "summary": "List merchant webhook deliveries",
+        "description": "Lists delivery records for webhook endpoints owned by the authenticated merchant.",
+        "tags": ["Merchant Webhooks"],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated merchant deliveries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedMerchantDeliveries"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/api/v1/merchant/webhook-deliveries/{id}/attempts": {
+      "get": {
+        "summary": "List webhook delivery attempts",
+        "description": "Returns the ordered attempt history for a delivery belonging to the authenticated merchant.",
+        "tags": ["Merchant Webhooks"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of attempt records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryAttemptsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "OutboxEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "example": "parcel.booked.v1" },
+          "aggregate_type": { "type": "string", "example": "PARCEL" },
+          "aggregate_id": { "type": "string", "format": "uuid" },
+          "aggregate_version": { "type": "integer", "example": 1 },
+          "status": { "type": "string", "enum": ["PENDING", "PUBLISHED", "FAILED"] },
+          "attempt_count": { "type": "integer", "example": 0 },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaginatedOutbox": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/OutboxEvent" }
+          },
+          "meta": { "$ref": "#/components/schemas/PageMeta" }
+        }
+      },
+      "OutboxStats": {
+        "type": "object",
+        "properties": {
+          "pending_count": { "type": "integer", "example": 3 },
+          "published_count": { "type": "integer", "example": 150 },
+          "failed_count": { "type": "integer", "example": 0 },
+          "oldest_pending_age_seconds": { "type": "number", "example": 12.5 }
+        }
+      },
+      "OutboxStatsResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "$ref": "#/components/schemas/OutboxStats" }
+        }
+      },
+      "UnifiedDelivery": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "enum": ["notification", "webhook"] },
+          "endpoint_or_recipient": { "type": "string", "example": "k***@example.lk" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "example": "parcel.delivered.v1" },
+          "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "SUCCESS", "FAILED"] },
+          "attempt_count": { "type": "integer", "example": 1 },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaginatedDeliveries": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/UnifiedDelivery" }
+          },
+          "meta": { "$ref": "#/components/schemas/PageMeta" }
+        }
+      },
+      "MerchantDelivery": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "endpoint_id": { "type": "string", "format": "uuid" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "example": "parcel.delivered.v1" },
+          "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "SUCCESS", "FAILED"] },
+          "attempt_count": { "type": "integer", "example": 1 },
+          "response_status_code": { "type": "integer", "example": 200 },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaginatedMerchantDeliveries": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MerchantDelivery" }
+          },
+          "meta": { "$ref": "#/components/schemas/PageMeta" }
+        }
+      },
+      "WebhookAttempt": {
+        "type": "object",
+        "properties": {
+          "attempt_no": { "type": "integer", "example": 1 },
+          "started_at": { "type": "string", "format": "date-time" },
+          "response_status_code": { "type": "integer", "example": 200 },
+          "response_body_snippet": { "type": "string", "example": "{\"status\":\"ok\"}" },
+          "error_class": { "type": "string", "nullable": true },
+          "error_message": { "type": "string", "nullable": true }
+        }
+      },
+      "DeliveryAttemptsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WebhookAttempt" }
+          }
+        }
+      },
+      "ActionSuccess": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string", "example": "outbox event reset to PENDING" },
+              "id": { "type": "string", "format": "uuid" }
+            }
+          }
+        }
+      },
+      "PageMeta": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "example": 25 },
+          "has_more": { "type": "boolean", "example": false },
+          "next_cursor": { "type": "string", "nullable": true }
+        }
+      },
+      "ErrorDetails": {
+        "type": "object",
+        "properties": {
+          "field": { "type": "string" },
+          "issue": { "type": "string" }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": ["code", "message", "correlation_id", "timestamp"],
+        "properties": {
+          "code": { "type": "string", "example": "OUTBOX_EVENT_NOT_FOUND" },
+          "message": { "type": "string", "example": "outbox event not found" },
+          "correlation_id": { "type": "string", "example": "0192e4a1-0000-7abc-8def-0123456789ab" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "details": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ErrorDetails" }
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "$ref": "#/components/schemas/ErrorBody" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid input format or parameter",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid Bearer JWT",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient role or tenant authorization",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "State conflict or non-retryable status",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "Semantic query or pagination constraint violation",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    }
+  }
+}
+

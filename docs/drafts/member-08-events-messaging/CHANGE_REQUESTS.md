@@ -15,6 +15,7 @@ All internal Member 08 files, migrations (`000008`, `000009`) and reference code
 | ID | Recipient | Subject | Status |
 | :--- | :--- | :--- | :--- |
 | CR-M01-01 | M1 | `X-Request-ID` sanitising, actor-neutral envelopes | Proposed |
+| CR-M01-02 | M1 | Regenerate seed password hashes with StandardPasswordHasher | Proposed |
 | CR-M02-01 | M2 | `notify` block, `merchant_id`, `recipient_email` | Proposed (M2 `doc-04` has no email field today) |
 | CR-M02-02 | M2 | Optional `RABBITMQ_URL` in Core API | Proposed |
 | CR-M03-01 | M3 | `OutboxWriter` signature, UUID IDs, `correlation_id`, exchange name | Proposed |
@@ -58,6 +59,14 @@ All internal Member 08 files, migrations (`000008`, `000009`) and reference code
   2. In Core API middleware, validate it against `^[a-zA-Z0-9_\-]{1,128}$`, generate a fresh UUIDv7 if missing or invalid, and put it in `context.Context`.
   3. Aggregate use cases pass this value into `EventEnvelope.CorrelationID` when calling `OutboxWriter.Write`.
   4. Envelopes stay actor-neutral: `actor_id` / `actor_role` may appear in the payload for audit, never raw JWTs.
+
+---
+
+### CR-M01-02: Regenerate Seed User Password Hashes with StandardPasswordHasher
+- **Recipient Domain:** Member 01 (Identity, Access & Security)
+- **Affected Documentation & Code:** `core-api/migrations/20261021000002_seed_mock_users.up.sql`
+- **Current State:** Seeded password hashes in migration `20261021000002` were placeholder values rather than outputs of `StandardPasswordHasher` (iterative 10,000-round salted SHA-256). Consequently, HTTP authentication against PostgreSQL fails with `AUTH_INVALID_CREDENTIALS`.
+- **Requested Action:** Member 01 must update migration `20261021000002_seed_mock_users.up.sql` with real hashes generated via `StandardPasswordHasher.HashPassword(...)` for all 5 canonical seeded accounts (`admin@swiftdrop.local` with `AdminPassword123!`, etc.).
 
 ---
 
@@ -253,3 +262,195 @@ All internal Member 08 files, migrations (`000008`, `000009`) and reference code
 | :--- | :--- |
 | 2.0 | First submission of CR-M01 to CR-M10 and DEC-01 to DEC-03. |
 | 2.1 | Fixed folder paths; aligned CR-M04-01 to M4's real view (`url`, `enabled`, `updated_at`); role ownership moved to M9 bootstrap (D6); recorded items already agreed with M9; added CR-AUTH-01/02, DEC-04, event-name decision (`delivery_failed`), `Write` vs `WriteEvent`/`Append`, and exchange name alignment; corrected CR-M02-02 and CR-M03-02 to quote what the drafts actually contain. |
+
+
+---
+
+## 5. Team Announcements & Checkpoints
+
+### Checkpoint 1 Announcement: Events Library & OutboxWriter Ready for Consumption
+- **Date:** 2026-11-01
+- **Author:** Member 08 (Event-Driven Backend & Messaging)
+- **Recipients:** Members 02 (Parcels & Pricing), 03 (Dispatch & Delivery), 04 (Merchants), Technical Lead
+
+#### 1. Available Package & Import Paths
+All team members can now import the transactional outbox interfaces and envelope definitions:
+- Production interface & envelopes: `github.com/swiftdrop/core-api/internal/events`
+- Testing mock writer: `github.com/swiftdrop/core-api/internal/events/eventstest`
+
+#### 2. Key Interfaces & Constructors
+- **Interface:** `events.OutboxWriter`
+  ```go
+  type OutboxWriter interface {
+      Write(ctx context.Context, tx *sql.Tx, envelopes ...AnyEnvelope) error
+  }
+  ```
+- **Envelope Constructor:**
+  ```go
+  env, err := events.NewEnvelope(
+      events.ParcelBookedV1,    // Event type constant from events/catalog.go
+      "parcel",                // Aggregate type: parcel, courier, merchant, or dispatch
+      parcel.ID().String(),    // Aggregate ID (valid UUID)
+      parcel.Version(),         // Aggregate version (>= 1)
+      correlationID,            // Request tracing ID from context (X-Request-ID)
+      "core-api.parcels",       // Producer identifier
+      payload,                  // Strongly-typed domain payload struct
+  )
+  ```
+- **Production Postgres Writer:** `events.NewPostgresOutboxWriter()`
+- **Unit Testing Mock Writer:** `eventstest.NewInMemoryWriter()` (enforces exact same invariants without Postgres).
+
+#### 3. Canonical Event Catalog Constants (`events/catalog.go`)
+- Parcels: `ParcelBookedV1`, `ParcelAssignedV1`, `ParcelPickedUpV1`, `ParcelInTransitV1`, `ParcelOutForDeliveryV1`, `ParcelDeliveredV1`, `ParcelDeliveryFailedV1`, `ParcelReturnedV1`, `ParcelCancelledV1`
+- Couriers: `CourierUnassignedV1`
+- Merchants: `MerchantStatusChangedV1`, `MerchantApprovedV1`
+
+#### 4. Critical Calling Rules (Architecture §4.3)
+1. **Pass active `*sql.Tx`:** Always pass the active transaction committing the domain aggregate change.
+2. **Correlation ID propagation:** Extract the incoming request ID from `platform/middleware.CorrelationID(ctx)` or the HTTP `X-Request-ID` header.
+3. **Self-contained payloads:** Include `merchant_id` and the `notify` block (`recipient_name`, `recipient_email`) inside the payload for milestone events so the downstream worker avoids cross-boundary database queries.
+
+
+---
+
+### Checkpoint 1B Announcement: Core API Platform Packages Ready for Consumption
+- **Date:** 2026-11-01
+- **Author:** Member 08 (Event-Driven Backend & Messaging / Core API Foundation)
+- **Recipients:** All Core API Developers (Members 01 through 04, 07, 10), Technical Lead
+
+#### 1. Available Packages & Capabilities
+All domain modules can now import standard platform helpers:
+- `github.com/swiftdrop/core-api/internal/platform/config`: Fail-fast environment variable parsing (`String`, `Int`, `Bool`, `Duration`, `Require`, `AppEnv`). Never logs values.
+- `github.com/swiftdrop/core-api/internal/platform/db`: Connection pool options with budget formula, `Querier` interface, and `WithTx(ctx, db, fn)` for automatic rollback on error or panic.
+- `github.com/swiftdrop/core-api/internal/platform/middleware`: `RequestID` (`X-Request-ID` $\to$ context), `CorrelationID(ctx)`, `Recover`, `AccessLog`, and `BodyLimit`.
+- `github.com/swiftdrop/core-api/internal/platform/httpx`: Canonical JSON response envelopes (`WriteJSON`, `WriteData`), canonical error responses (`WriteError`), strict request decoding (`DecodeJSON`), and cursor pagination (`EncodeCursor`, `DecodeCursor`).
+
+#### 2. Key Developer Guidelines
+1. **Correlation Tracing:** Pass `platform/middleware.CorrelationID(ctx)` to `EventEnvelope.CorrelationID` and when logging cross-cutting operations.
+2. **API Responses:** Use `platform/httpx.WriteData` for single-resource responses and `platform/httpx.WriteError` for standard error envelopes (`api-conventions.md` §2).
+3. **Transactions:** Use `platform/db.WithTx` for business operations that need transactional commits and automatic rollback on error or panic.
+
+---
+
+### Shared-File Edits Log (Phases 1 & 1B)
+
+In compliance with `AGENTS.md` and `AI_HANDOFF_PLAN.md` §2.1, all shared-file edits are minimal, additive, and documented here:
+
+1. **`core-api/cmd/api/main.go`**:
+   - **Edit:** Wrapped `container.Mux` with `wrapGlobalMiddleware(container.Mux)` inside HTTP server instantiation.
+   - **Purpose:** Applies global `RequestID`, `Recover`, `AccessLog`, and `BodyLimit` without altering any existing routes or handler behaviors.
+2. **`core-api/cmd/api/wiring_events.go`** (New helper):
+   - **Edit:** Added helper function `wrapGlobalMiddleware(http.Handler) http.Handler` instantiating platform middleware pipeline with structured JSON logger.
+3. **`.golangci.yml`**:
+   - **Edit:** Added `depguard` rules `platform_isolation` (forbids `internal/platform` from importing domain modules) and `core_api_no_broker` (forbids Core API from importing RabbitMQ AMQP directly).
+
+---
+
+### Checkpoint 2 Announcement: RabbitMQ Topology, Outbox Relay & Fixture Emitter Ready
+- **Date:** 2026-11-01
+- **Author:** Member 08 (Event-Driven Backend & Messaging)
+- **Recipients:** Member 05 (Tracking API), Member 09 (DevOps/K8s), Member 10 (AI Assistant), Technical Lead
+
+#### 1. RabbitMQ Topology & Queue Names
+All exchanges and queues are declared with durable settings:
+- **Primary Topic Exchange:** `swiftdrop.events.topic` (Topic, Durable)
+- **Dead-Letter Exchange (DLX):** `swiftdrop.dlq.exchange` (Fanout, Durable)
+- **Dead-Letter Queue (DLQ):** `swiftdrop.dlq` (`x-message-ttl: 2592000000` = 30 days)
+- **Queues Declared:**
+  - `q.tracking.updates` (bound with `parcel.#`, `courier.#`) $\to$ Dedicated for Member 05 Tracking API
+  - `q.notifications.worker` (bound with `parcel.#`) $\to$ Consumed by Member 08 Notification Worker
+  - `q.webhooks.dispatcher` (bound with `parcel.#`, `courier.#`, `merchant.#`) $\to$ Consumed by Member 08 Webhook Dispatcher
+  - All worker queues configured with `x-dead-letter-exchange: swiftdrop.dlq.exchange`.
+
+#### 2. Message Envelope & AMQP Headers
+Published AMQP messages use `delivery_mode=2` (Persistent) and `content_type=application/json`:
+- **AMQP Headers:**
+  - `event_id`: UUIDv7 string matching the outbox event ID
+  - `correlation_id`: Correlation ID passed from the initiating HTTP request
+- **Message ID:** `event_id`
+- **Routing Key:** exact `event_type` (e.g. `parcel.booked.v1`, `parcel.delivered.v1`)
+- **JSON Payload Envelope Structure:**
+```json
+{
+  "event_id": "0192e2b3-7c8a-7890-a123-000000000001",
+  "event_type": "parcel.booked.v1",
+  "aggregate_type": "PARCEL",
+  "aggregate_id": "0192e2b3-7c8a-7890-a123-000000000010",
+  "aggregate_version": 1,
+  "schema_version": "1.0.0",
+  "occurred_at": "2026-11-01T10:00:00Z",
+  "correlation_id": "0192e2b3-7c8a-7890-a123-000000000099",
+  "producer": "core-api",
+  "payload": {
+    "parcel_id": "0192e2b3-7c8a-7890-a123-000000000010",
+    "tracking_number": "SD-20261101-0001",
+    "merchant_id": "0192e2b3-7c8a-7890-a123-000000000042",
+    "status": "BOOKED",
+    "notify": {
+      "recipient_name": "Kasun Perera",
+      "recipient_email": "kasun.perera@example.lk"
+    }
+  }
+}
+```
+
+#### 3. Local Development Infrastructure
+A complete local stack is available via Docker Compose in `services/messaging/docker-compose.dev.yml`:
+- PostgreSQL 16 on port `5432` (`swiftdrop_db`)
+- RabbitMQ 3.12 Management on ports `5672` (AMQP) & `15672` (Management UI)
+- Mailpit on ports `1025` (SMTP) & `8025` (Web UI)
+Run with: `docker compose -f services/messaging/docker-compose.dev.yml up -d`
+
+#### 4. Development Event Fixture Emitter (`devemit`)
+For Member 05 (Tracking API) and local testing without running Member 02/03 booking flows:
+```bash
+cd services/messaging
+go run ./cmd/devemit --type parcel.booked.v1 --count 5
+```
+Options:
+- `--type <event_type>`: Fixture type (e.g. `parcel.booked.v1`, `parcel.out_for_delivery.v1`, `parcel.delivered.v1`)
+- `--count <N>`: Number of events to stage into `outbox_events`
+- `--merchant-id <UUID>`: Override merchant ID in payload
+- `--email <email>`: Override recipient email for notification testing
+When the Outbox Relay (`cmd/relay`) is running, staged rows are immediately published to RabbitMQ.
+
+
+---
+
+## 4. Shared-File Edits Log (Phase 8B Quality Gates & Alignment)
+
+In compliance with `AGENTS.md` and Phase 8B instructions, all shared-file edits are strictly additive, non-breaking, and formally documented below:
+
+### 1. `core-api/cmd/api/main.go`
+- **Before:** Direct call to `srv.ListenAndServe()` without OS signal trapping or server connection draining; `WriteTimeout` was 15 seconds.
+- **After:** Configured `&http.Server` with `ReadHeaderTimeout: 5s`, `ReadTimeout: 15s`, `WriteTimeout: 30s`, `IdleTimeout: 60s`. Added signal listener on `SIGINT` and `SIGTERM` triggering `srv.Shutdown(ctx)` with a 20-second drain window, followed by `container.DB.Close()`.
+- **Note for Member 1:** The startup banner prints seeded accounts and passwords. This was preserved verbatim to avoid breaking local developer ergonomics, but Member 1 should gate password printing to `APP_ENV=local` in production builds.
+
+### 2. `core-api/cmd/api/wiring.go` & `wiring_events.go`
+- **Before:** Contained only legacy `/api/v1/health` endpoint.
+- **After:** Added standard Kubernetes readiness and liveness probes:
+  - `GET /health/live`: Always returns 200 OK `{"status":"ok"}`.
+  - `GET /health/ready`: Probes PostgreSQL connection with a 1-second timeout. Returns 200 OK `{"status":"ok","database":"connected"}` if reachable. If unreachable, returns 503 `{"status":"degraded","database":"down"}` (in `APP_ENV=local` on mock fallback, returns 200 OK `{"status":"ok","database":"mock"}`).
+  - Wired Member 08 events and Swagger UI routes via isolated `wiring_events.go`.
+
+### 3. `core-api/internal/identity/transport/middleware.go`
+- **Before:** Contained `GetPrincipal(ctx)` but had unexported `principalContextKey`, preventing other modules from injecting mock principals in unit tests without generating signed JWTs.
+- **After:** Added standard `WithPrincipal(ctx context.Context, p *application.Principal) context.Context` helper. No existing middleware behavior or authentication checks were modified.
+
+### 4. `.golangci.yml`
+- **Before:** Contained `domain_purity` and `application_purity` rules.
+- **After:** Added:
+  - `core_api_no_broker`: Denies `github.com/rabbitmq/amqp091-go` inside `core-api/**` ("Core API must not publish to the broker; use the outbox").
+  - `platform_isolation`: Denies domain module imports inside `core-api/internal/platform/**`.
+
+### 5. `scripts/verify.ps1` & `scripts/verify.sh`
+- **Before:** Only checked and ran tests for `core-api`.
+- **After:** Extended to run `gofmt`, `golangci-lint`, and `go test` for `services/messaging` in parallel, maintaining identical Layer 3 quality gate enforcement.
+
+### 6. `.github/workflows/ci.yml`
+- **Before:** Contained jobs for secret scanning and `core-api` verification.
+- **After:** Added `messaging-checks` job executing Go 1.22 setup, `gofmt` verification, `go vet`, `golangci-lint`, and `go test -race ./...` for `services/messaging`.
+
+### 7. `core-api/migrations/20261021000002_seed_mock_users.down.sql`
+- **Before:** Missing pairing file for `20261021000002_seed_mock_users.up.sql`.
+- **After:** Added idempotent `DELETE` statements removing seeded mock users and role associations.

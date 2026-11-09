@@ -1,0 +1,112 @@
+openapi: 3.1.0
+info:
+  title: SwiftDrop Outbound Webhook Delivery Specification
+  description: >
+    Authoritative OpenAPI 3.1 contract for webhook events dispatched by the SwiftDrop Event Worker
+    to merchant-registered HTTP/HTTPS endpoints.
+    
+    ### Security & Signature Verification
+    Every HTTP POST request includes the `X-SwiftDrop-Signature` header computed using HMAC-SHA256:
+    ```
+    signed_payload = "{X-SwiftDrop-Timestamp}.{raw_request_body}"
+    signature = hmac_sha256(secret_key, signed_payload)
+    header = "t={timestamp},v1={hex_signature}"
+    ```
+    
+    ### Response Expectations & Retries
+    - Return `200 OK` or `204 No Content` within 5.0 seconds.
+    - Return `410 Gone` if the endpoint is permanently deprecated (this immediately halts retries).
+    - Status codes `408`, `429`, `5xx`, and connection timeouts are retried up to 5 times
+      on a schedule of `0s, 30s, 2m, 10m, 30m` with ±20% jitter.
+  version: 1.0.0
+
+webhooks:
+  parcel.event:
+    post:
+      summary: Receive SwiftDrop Parcel Event Notification
+      description: Dispatched in real time as parcels progress through milestone states.
+      parameters:
+        - name: Content-Type
+          in: header
+          required: true
+          schema:
+            type: string
+            example: application/json; charset=utf-8
+        - name: User-Agent
+          in: header
+          required: true
+          schema:
+            type: string
+            example: SwiftDrop-Webhook-Delivery/1.0
+        - name: X-SwiftDrop-Delivery-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique delivery task ID for merchant deduplication and idempotency.
+        - name: X-SwiftDrop-Event-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Canonical domain event identifier.
+        - name: X-SwiftDrop-Timestamp
+          in: header
+          required: true
+          schema:
+            type: string
+            example: "1729512000"
+          description: Unix timestamp in seconds when the request was signed.
+        - name: X-SwiftDrop-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+            example: "t=1729512000,v1=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+          description: HMAC-SHA256 signature in hex format.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event_id
+                - event_type
+                - aggregate_id
+                - status
+                - occurred_at
+                - data
+              properties:
+                event_id:
+                  type: string
+                  format: uuid
+                event_type:
+                  type: string
+                  example: parcel.delivered.v1
+                aggregate_id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  example: DELIVERED
+                occurred_at:
+                  type: string
+                  format: date-time
+                data:
+                  type: object
+                  description: Sanitized event payload (PII, customer notify block, courier phone, and private notes stripped).
+      responses:
+        '200':
+          description: Event successfully acknowledged.
+        '204':
+          description: Event successfully acknowledged with no response body.
+        '410':
+          description: Endpoint permanently removed; cancels all remaining retries.
+        '429':
+          description: Rate limited; will be retried with exponential backoff.
+        '500':
+          description: Transient error; will be retried with exponential backoff.
+

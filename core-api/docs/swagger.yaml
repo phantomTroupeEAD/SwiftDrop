@@ -1,0 +1,888 @@
+basePath: /
+definitions:
+  github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail:
+    properties:
+      field:
+        type: string
+      issue:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelopeBody'
+    type: object
+  github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelopeBody:
+    properties:
+      code:
+        type: string
+      correlation_id:
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail'
+        type: array
+      message:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.ApplicationInput:
+    properties:
+      address:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address'
+      businessName:
+        type: string
+      contactEmail:
+        type: string
+      contactPhone:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest:
+    properties:
+      dropoff:
+        additionalProperties: {}
+        type: object
+      merchant_reference:
+        type: string
+      parcel:
+        properties:
+          weight_kg:
+            type: number
+        type: object
+      pickup:
+        additionalProperties: {}
+        type: object
+      service_level:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_domain.Address:
+    properties:
+      city:
+        type: string
+      country:
+        type: string
+      line1:
+        type: string
+      line2:
+        type: string
+      postal_code:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.CursorMeta:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      next_cursor:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope:
+    properties:
+      data:
+        items: {}
+        type: array
+      meta:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorMeta'
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope:
+    properties:
+      data: {}
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.ErrorDetail:
+    properties:
+      field:
+        type: string
+      issue:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelopeBody'
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelopeBody:
+    properties:
+      code:
+        type: string
+      correlation_id:
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorDetail'
+        type: array
+      message:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelopeBody'
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.PageMeta:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope:
+    properties:
+      data:
+        items: {}
+        type: array
+      meta:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PageMeta'
+    type: object
+  internal_identity_transport.ErrorDetail:
+    properties:
+      field:
+        type: string
+      issue:
+        type: string
+    type: object
+  internal_identity_transport.ErrorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/internal_identity_transport.ErrorEnvelopeBody'
+    type: object
+  internal_identity_transport.ErrorEnvelopeBody:
+    properties:
+      code:
+        type: string
+      correlation_id:
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/internal_identity_transport.ErrorDetail'
+        type: array
+      message:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  internal_identity_transport.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  internal_identity_transport.SingleDataEnvelope:
+    properties:
+      data: {}
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: SwiftDrop Engineering Team
+    url: https://github.com/swiftdrop
+  description: Authoritative REST API Modular Monolith for SwiftDrop Courier & Parcel
+    Delivery Management System.
+  license:
+    name: Proprietary / Academic Use Only
+  termsOfService: https://swiftdrop.local/terms
+  title: SwiftDrop Core API
+  version: "1.0"
+paths:
+  /api/v1/admin/dashboard:
+    get:
+      description: Test dashboard endpoint for authenticated Administrators.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Admin dashboard status
+      tags:
+      - admin
+  /api/v1/admin/events/deliveries:
+    get:
+      description: Admin listing of outbound webhook deliveries across all merchants.
+      parameters:
+      - description: Delivery kind filter
+        in: query
+        name: kind
+        type: string
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      - description: Limit (1-100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin role required
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List all webhook deliveries (Admin)
+      tags:
+      - events
+  /api/v1/admin/events/outbox:
+    get:
+      description: Queries committed outbox integration events with cursor pagination
+        and status filters.
+      parameters:
+      - description: Filter by event status (PENDING, PUBLISHED, FAILED)
+        in: query
+        name: status
+        type: string
+      - description: Filter by event type
+        in: query
+        name: event_type
+        type: string
+      - description: RFC-3339 from timestamp
+        in: query
+        name: from
+        type: string
+      - description: RFC-3339 to timestamp
+        in: query
+        name: to
+        type: string
+      - description: Max items per page (1-100, default 25)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor for pagination
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin role required
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List transactional outbox events
+      tags:
+      - events
+  /api/v1/admin/events/outbox/{id}/retry:
+    post:
+      description: Resets a failed outbox event status back to PENDING for re-processing.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Event not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "409":
+          description: Event is not in FAILED state
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retry a failed outbox event
+      tags:
+      - events
+  /api/v1/admin/events/outbox/stats:
+    get:
+      description: Returns counts of outbox events by status (pending, published,
+        failed).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin role required
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get outbox queue statistics
+      tags:
+      - events
+  /api/v1/admin/events/webhook-deliveries/{id}/retry:
+    post:
+      description: Resets a failed webhook delivery to PENDING to trigger retry.
+      parameters:
+      - description: Delivery UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Delivery not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "409":
+          description: Delivery not in FAILED state
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retry failed webhook delivery
+      tags:
+      - events
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Validates credentials and returns access token and HttpOnly refresh
+        token cookie.
+      parameters:
+      - description: User credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.SingleDataEnvelope'
+        "400":
+          description: Malformed JSON or validation error
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Invalid email or password
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Account has been suspended
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "500":
+          description: Authentication failed due to internal error
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Authenticate user and issue JWT
+      tags:
+      - identity
+  /api/v1/auth/me:
+    get:
+      description: Returns user profile and tenant details for the authenticated bearer
+        token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.SingleDataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated user profile
+      tags:
+      - identity
+  /api/v1/courier/dashboard:
+    get:
+      description: Test dashboard endpoint for authenticated Couriers and Admins.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Courier dashboard status
+      tags:
+      - admin
+  /api/v1/health:
+    get:
+      description: Returns general operational status and storage engine info.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: System health status
+      tags:
+      - system
+  /api/v1/merchant/orders:
+    get:
+      description: Returns orders submitted by the authenticated merchant tenant.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List merchant parcel delivery orders
+      tags:
+      - merchants
+    post:
+      consumes:
+      - application/json
+      description: Creates an order using API Key or JWT authentication. Requires
+        Idempotency-Key.
+      parameters:
+      - description: UUID v4 Idempotency Key
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Order details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Validation error or missing idempotency key
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized or missing credentials
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new parcel delivery order
+      tags:
+      - merchants
+  /api/v1/merchant/portal:
+    get:
+      description: Test portal endpoint for authenticated Merchants and Admins with
+        active tenant.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Merchant portal status
+      tags:
+      - admin
+  /api/v1/merchant/webhook-deliveries:
+    get:
+      description: Returns webhook delivery history for the authenticated merchant
+        tenant.
+      parameters:
+      - description: Limit (1-100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List merchant webhook deliveries
+      tags:
+      - events
+  /api/v1/merchant/webhook-deliveries/{id}/attempts:
+    get:
+      description: Returns attempt details (response codes, latency) for a specific
+        delivery.
+      parameters:
+      - description: Delivery UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Delivery not found or not owned by merchant
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List attempts for a webhook delivery
+      tags:
+      - events
+  /api/v1/merchants/applications:
+    post:
+      consumes:
+      - application/json
+      description: Submits a merchant profile for review and tenant onboarding.
+      parameters:
+      - description: Merchant Application
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ApplicationInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Malformed JSON
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: Merchant already exists
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Submit a new merchant onboarding application
+      tags:
+      - merchants
+  /api/v1/merchants/me:
+    get:
+      description: Returns the profile of the merchant tenant tied to the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: Merchant not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current merchant profile
+      tags:
+      - merchants
+  /api/v1/merchants/me/api-keys:
+    get:
+      description: Returns all API credentials for the authenticated merchant tenant.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active merchant API keys
+      tags:
+      - merchants
+    post:
+      consumes:
+      - application/json
+      description: Generates an API credential with scoped permissions. Key secret
+        is returned once only.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Malformed JSON
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Generate a new merchant API key
+      tags:
+      - merchants
+  /api/v1/merchants/me/api-keys/{key_id}:
+    delete:
+      description: Immediately invalidates the specified API key credential.
+      parameters:
+      - description: API Key ID
+        in: path
+        name: key_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: API key not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke an active merchant API key
+      tags:
+      - merchants
+  /api/v1/merchants/me/webhooks:
+    get:
+      description: Returns all registered webhook subscriptions for the authenticated
+        merchant.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List registered webhooks
+      tags:
+      - merchants
+    post:
+      consumes:
+      - application/json
+      description: Configures a webhook endpoint to receive domain notification events.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Malformed JSON or user-supplied secret forbidden
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Register a new webhook subscription
+      tags:
+      - merchants
+  /api/v1/merchants/me/webhooks/{webhook_id}:
+    delete:
+      description: Removes an existing webhook subscription by its ID.
+      parameters:
+      - description: Webhook ID
+        in: path
+        name: webhook_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: Webhook not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a webhook subscription
+      tags:
+      - merchants
+  /api/v1/merchants/webhook-event-types:
+    get:
+      description: Returns the catalog of event types merchants can subscribe to.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List supported webhook event types
+      tags:
+      - merchants
+  /health/live:
+    get:
+      description: Probes whether the Core API service process is alive.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Kubernetes liveness probe
+      tags:
+      - system
+  /health/ready:
+    get:
+      description: Probes whether the Core API service is ready to accept traffic
+        (verifies database connectivity).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Database unreachable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Kubernetes readiness probe
+      tags:
+      - system
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token (e.g. 'Bearer eyJhbGci...').
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

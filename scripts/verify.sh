@@ -20,7 +20,7 @@ else
 fi
 
 # 2. Go Code Formatting Check
-if [ -d "core-api" ] || [ -f "go.mod" ]; then
+if [ -d "core-api" ] || [ -d "services/messaging" ] || [ -f "go.mod" ]; then
     echo "[2/4] Verifying Go formatting (gofmt)..."
     GO_UNFORMATTED=$(gofmt -l $(find . -name "*.go" -not -path "*/vendor/*" -not -path "*/docs/*" 2>/dev/null) 2>/dev/null || true)
     if [ -n "$GO_UNFORMATTED" ]; then
@@ -37,28 +37,52 @@ fi
 
 # 3. Linter Execution (golangci-lint)
 if command -v golangci-lint >/dev/null 2>&1; then
-    echo "[3/4] Running golangci-lint with architecture depguard..."
+    echo "[3/4] Running golangci-lint..."
     if [ -d "core-api" ]; then
+        echo "  Linting core-api..."
         (cd core-api && golangci-lint run ./...) || FAILED=1
-    elif [ -f "go.mod" ]; then
-        golangci-lint run ./... || FAILED=1
     fi
-    echo "  [PASS] Linting checks passed."
+    if [ -d "services/messaging" ]; then
+        echo "  Linting services/messaging..."
+        (cd services/messaging && golangci-lint run ./...) || FAILED=1
+    fi
+    if [ $FAILED -eq 0 ]; then
+        echo "  [PASS] Linting checks passed."
+    fi
 else
     echo "[3/4] Notice: golangci-lint not installed locally. (Will run in CI)."
 fi
 
 # 4. Unit & Integration Tests Execution
-if command -v go >/dev/null 2>&1 && ([ -f "core-api/go.mod" ] || [ -f "go.mod" ]); then
+if command -v go >/dev/null 2>&1; then
     echo "[4/4] Running Go test suites..."
     if [ -f "core-api/go.mod" ]; then
+        echo "  Running core-api tests..."
         (cd core-api && go test -v -race ./...) || FAILED=1
-    elif [ -f "go.mod" ]; then
+    fi
+    if [ -f "services/messaging/go.mod" ]; then
+        echo "  Running services/messaging tests..."
+        (cd services/messaging && go test -v -race ./...) || FAILED=1
+    fi
+    if [ ! -f "core-api/go.mod" ] && [ ! -f "services/messaging/go.mod" ] && [ -f "go.mod" ]; then
         go test -v -race ./... || FAILED=1
     fi
-    echo "  [PASS] All tests passed."
+    if [ $FAILED -eq 0 ]; then
+        echo "  [PASS] All tests passed."
+    fi
+
+    # 5. Swagger Specification Verification
+    if [ -f "core-api/docs/swagger.json" ]; then
+        echo "  Verifying core-api Swagger specification..."
+        if python3 -c "import json, sys; d = json.load(open('core-api/docs/swagger.json')); sys.exit(0 if ('swagger' in d or 'openapi' in d) else 1)" 2>/dev/null; then
+            echo "  [PASS] Unified Swagger specification is valid JSON."
+        else
+            echo "  [ERROR] core-api/docs/swagger.json is invalid JSON or missing root spec keys."
+            FAILED=1
+        fi
+    fi
 else
-    echo "[4/4] Skipping Go test execution (go.mod not yet created)."
+    echo "[4/4] Skipping Go test execution (go not installed)."
 fi
 
 echo "================================================="

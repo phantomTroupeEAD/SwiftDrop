@@ -40,12 +40,41 @@ linters-settings:
           - pkg: "**/internal/**/transport/**"
             desc: "Application layer must not import transport DTOs."
 
+      platform_isolation:
+        files:
+          - "**/internal/platform/**.go"
+        deny:
+          - pkg: "**/internal/identity/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/parcels/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/pricing/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/dispatch/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/delivery/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/merchants/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/admin/**"
+            desc: "Platform packages must not depend on domain modules."
+          - pkg: "**/internal/events/**"
+            desc: "Platform packages must not depend on domain modules."
+
+      core_api_no_broker:
+        files:
+          - "**/core-api/**/*.go"
+        deny:
+          - pkg: "github.com/rabbitmq/amqp091-go"
+            desc: "Core API must not publish to the broker; use the outbox."
+
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
         - gosec
         - errcheck
+        - revive
     - path: (wiring\.go|jwt_token_provider\.go)
       text: "G101"
       linters:
