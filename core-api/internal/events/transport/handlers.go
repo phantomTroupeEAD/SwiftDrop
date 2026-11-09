@@ -20,7 +20,22 @@ func NewHandler(service *application.EventsService) *Handler {
 	return &Handler{service: service}
 }
 
-// HandleListOutbox handles GET /api/v1/admin/events/outbox
+// HandleListOutbox godoc
+// @Summary      List transactional outbox events
+// @Description  Queries committed outbox integration events with cursor pagination and status filters.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        status query string false "Filter by event status (PENDING, PUBLISHED, FAILED)"
+// @Param        event_type query string false "Filter by event type"
+// @Param        from query string false "RFC-3339 from timestamp"
+// @Param        to query string false "RFC-3339 to timestamp"
+// @Param        limit query int false "Max items per page (1-100, default 25)"
+// @Param        cursor query string false "Opaque cursor for pagination"
+// @Success      200 {object} httpx.CursorPaginatedEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin role required"
+// @Router       /api/v1/admin/events/outbox [get]
 func (h *Handler) HandleListOutbox(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -85,7 +100,16 @@ func (h *Handler) HandleListOutbox(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteCursorPaginated(w, http.StatusOK, items, meta)
 }
 
-// HandleGetOutboxStats handles GET /api/v1/admin/events/outbox/stats
+// HandleGetOutboxStats godoc
+// @Summary      Get outbox queue statistics
+// @Description  Returns counts of outbox events by status (pending, published, failed).
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin role required"
+// @Router       /api/v1/admin/events/outbox/stats [get]
 func (h *Handler) HandleGetOutboxStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.service.GetOutboxStats(r.Context())
 	if err != nil {
@@ -95,7 +119,18 @@ func (h *Handler) HandleGetOutboxStats(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, stats)
 }
 
-// HandleRetryOutbox handles POST /api/v1/admin/events/outbox/{id}/retry
+// HandleRetryOutbox godoc
+// @Summary      Retry a failed outbox event
+// @Description  Resets a failed outbox event status back to PENDING for re-processing.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Event UUID"
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      404 {object} httpx.ErrorEnvelope "Event not found"
+// @Failure      409 {object} httpx.ErrorEnvelope "Event is not in FAILED state"
+// @Router       /api/v1/admin/events/outbox/{id}/retry [post]
 func (h *Handler) HandleRetryOutbox(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !uuidRegex.MatchString(id) {
@@ -123,7 +158,20 @@ func (h *Handler) HandleRetryOutbox(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleListDeliveries handles GET /api/v1/admin/events/deliveries
+// HandleListDeliveries godoc
+// @Summary      List all webhook deliveries (Admin)
+// @Description  Admin listing of outbound webhook deliveries across all merchants.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        kind query string false "Delivery kind filter"
+// @Param        status query string false "Status filter"
+// @Param        limit query int false "Limit (1-100)"
+// @Param        cursor query string false "Opaque cursor"
+// @Success      200 {object} httpx.CursorPaginatedEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin role required"
+// @Router       /api/v1/admin/events/deliveries [get]
 func (h *Handler) HandleListDeliveries(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -170,7 +218,18 @@ func (h *Handler) HandleListDeliveries(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteCursorPaginated(w, http.StatusOK, items, meta)
 }
 
-// HandleRetryWebhookDelivery handles POST /api/v1/admin/events/webhook-deliveries/{id}/retry
+// HandleRetryWebhookDelivery godoc
+// @Summary      Retry failed webhook delivery
+// @Description  Resets a failed webhook delivery to PENDING to trigger retry.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Delivery UUID"
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      404 {object} httpx.ErrorEnvelope "Delivery not found"
+// @Failure      409 {object} httpx.ErrorEnvelope "Delivery not in FAILED state"
+// @Router       /api/v1/admin/events/webhook-deliveries/{id}/retry [post]
 func (h *Handler) HandleRetryWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !uuidRegex.MatchString(id) {
@@ -198,7 +257,18 @@ func (h *Handler) HandleRetryWebhookDelivery(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// HandleListMerchantWebhookDeliveries handles GET /api/v1/merchant/webhook-deliveries
+// HandleListMerchantWebhookDeliveries godoc
+// @Summary      List merchant webhook deliveries
+// @Description  Returns webhook delivery history for the authenticated merchant tenant.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        limit query int false "Limit (1-100)"
+// @Param        cursor query string false "Opaque cursor"
+// @Success      200 {object} httpx.CursorPaginatedEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden"
+// @Router       /api/v1/merchant/webhook-deliveries [get]
 func (h *Handler) HandleListMerchantWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	merchantID, ok := GetMerchantID(r.Context())
 	if !ok || merchantID == "" {
@@ -245,7 +315,17 @@ func (h *Handler) HandleListMerchantWebhookDeliveries(w http.ResponseWriter, r *
 	_ = httpx.WriteCursorPaginated(w, http.StatusOK, items, meta)
 }
 
-// HandleListMerchantWebhookAttempts handles GET /api/v1/merchant/webhook-deliveries/{id}/attempts
+// HandleListMerchantWebhookAttempts godoc
+// @Summary      List attempts for a webhook delivery
+// @Description  Returns attempt details (response codes, latency) for a specific delivery.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Delivery UUID"
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      404 {object} httpx.ErrorEnvelope "Delivery not found or not owned by merchant"
+// @Router       /api/v1/merchant/webhook-deliveries/{id}/attempts [get]
 func (h *Handler) HandleListMerchantWebhookAttempts(w http.ResponseWriter, r *http.Request) {
 	merchantID, ok := GetMerchantID(r.Context())
 	if !ok || merchantID == "" {

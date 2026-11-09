@@ -6,7 +6,7 @@
 
 COMPOSE_FILE := deploy/docker-compose.yml
 
-.PHONY: help up down restart ps logs migrate-up seed test test-e2e reset clean
+.PHONY: help up down restart ps logs migrate-up seed test test-e2e reset clean swagger
 
 help:
 	@echo "SwiftDrop Development & Orchestration Commands"
@@ -19,6 +19,7 @@ help:
 	@echo "make migrate-up  - Run database migrations via one-shot container"
 	@echo "make seed        - Execute mock accounts & test data seed"
 	@echo "make test        - Run Go unit & race tests in core-api"
+	@echo "make swagger     - Regenerate unified Swagger/OpenAPI docs in core-api"
 	@echo "make test-e2e    - Run Python Playwright end-to-end smoke tests"
 	@echo "make reset       - Stop containers and purge all database/message volumes"
 
@@ -45,6 +46,10 @@ seed:
 
 test:
 	cd core-api && go test -v -race ./...
+
+swagger:
+	cd core-api && go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
+	cp core-api/docs/swagger.json core-api/internal/events/swagger/swagger.json
 
 test-e2e:
 	pytest tests/e2e/ -v
