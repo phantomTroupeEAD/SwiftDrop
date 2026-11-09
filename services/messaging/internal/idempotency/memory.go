@@ -22,14 +22,14 @@ func (m *MemoryStore) key(consumerName, eventID string) string {
 }
 
 // Seen checks if consumer and eventID combination has been recorded.
-func (m *MemoryStore) Seen(ctx context.Context, consumerName, eventID string) (bool, error) {
+func (m *MemoryStore) Seen(_ context.Context, consumerName, eventID string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.seen[m.key(consumerName, eventID)], nil
 }
 
 // MarkDone records consumer and eventID combination as processed.
-func (m *MemoryStore) MarkDone(ctx context.Context, tx *sql.Tx, consumerName, eventID string) error {
+func (m *MemoryStore) MarkDone(_ context.Context, _ *sql.Tx, consumerName, eventID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.seen[m.key(consumerName, eventID)] = true

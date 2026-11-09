@@ -134,7 +134,7 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 	sc.httpClient = &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			// Rule: NEVER follow HTTP redirects
 			return http.ErrUseLastResponse
 		},

@@ -30,7 +30,7 @@ func NewNotificationHandler(repo delivery.Repository, idemp idempotency.Store, l
 		logger = slog.Default()
 	}
 
-	return func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	return func(ctx context.Context, _ amqp.Delivery, env *relay.OutboxEnvelope) error {
 		// 1. Check if event is a customer milestone (Decision D21)
 		if !SupportedNotificationMilestones[env.EventType] {
 			metrics.NotificationsSkippedTotal.Inc()
@@ -111,7 +111,7 @@ func NewWebhookFanoutHandler(repo delivery.Repository, idemp idempotency.Store, 
 		logger = slog.Default()
 	}
 
-	return func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	return func(ctx context.Context, _ amqp.Delivery, env *relay.OutboxEnvelope) error {
 		// 1. Extract merchant_id from payload (Decision D10)
 		var payloadMap map[string]interface{}
 		if err := json.Unmarshal(env.Payload, &payloadMap); err != nil {
