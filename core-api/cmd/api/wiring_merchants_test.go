@@ -103,4 +103,3 @@ func TestRegisterMerchantsModule_Validation(t *testing.T) {
 		}
 	})
 }
-
