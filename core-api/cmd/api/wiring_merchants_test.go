@@ -13,11 +13,11 @@ import (
 
 type mockTokenProvider struct{}
 
-func (mockTokenProvider) GenerateAccessToken(principal identityapp.Principal) (string, error) {
+func (mockTokenProvider) GenerateAccessToken(_ identityapp.Principal) (string, error) {
 	return "mock.token", nil
 }
 
-func (mockTokenProvider) ValidateAccessToken(tokenString string) (*identityapp.Principal, error) {
+func (mockTokenProvider) ValidateAccessToken(_ string) (*identityapp.Principal, error) {
 	return &identityapp.Principal{UserID: "usr_123"}, nil
 }
 
