@@ -100,4 +100,3 @@ type GoogleLoginResult struct {
 	IsNewUser     bool
 	RequiresPhone bool
 }
-

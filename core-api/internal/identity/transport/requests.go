@@ -47,9 +47,7 @@ type UpdateUserStatusRequest struct {
 	Status domain.UserStatus `json:"status"`
 }
 
-
 // GoogleLoginRequest defines the JSON payload for Sign-In with Google.
 type GoogleLoginRequest struct {
 	IDToken string `json:"id_token"`
 }
-

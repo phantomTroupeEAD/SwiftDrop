@@ -183,4 +183,3 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		Data: toUserDTO(updatedUser),
 	})
 }
-

@@ -100,4 +100,3 @@ type OIDCClaims struct {
 type OIDCClient interface {
 	VerifyIDToken(ctx context.Context, idToken string) (*OIDCClaims, error)
 }
-

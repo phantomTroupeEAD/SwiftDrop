@@ -58,7 +58,6 @@ type GoogleLoginDataDTO struct {
 	RequiresPhone bool    `json:"requires_phone"`
 }
 
-
 // RegisterDataDTO is the response body returned after successful account creation.
 type RegisterDataDTO struct {
 	User      UserDTO `json:"user"`

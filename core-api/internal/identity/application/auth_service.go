@@ -62,7 +62,6 @@ func (s *AuthService) WithOAuth(oauthRepo OAuthRepository, oidcClient OIDCClient
 	return s
 }
 
-
 // ─────────────────────────────────────────────
 // Registration Use Cases
 // ─────────────────────────────────────────────
@@ -572,7 +571,6 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 		RequiresPhone: user.RequiresPhone(),
 	}, nil
 }
-
 
 // ─────────────────────────────────────────────
 // Private helpers

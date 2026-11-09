@@ -163,4 +163,3 @@ func (s *UserService) UpdateUserStatus(ctx context.Context, actor Principal, tar
 
 	return nil
 }
-

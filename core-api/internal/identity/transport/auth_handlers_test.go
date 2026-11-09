@@ -263,10 +263,10 @@ func TestAuthHandler_Login(t *testing.T) {
 
 		var res struct {
 			Data struct {
-				AccessToken string              `json:"access_token"`
-				TokenType   string              `json:"token_type"`
-				ExpiresIn   int                 `json:"expires_in"`
-				User        transport.UserDTO   `json:"user"`
+				AccessToken string            `json:"access_token"`
+				TokenType   string            `json:"token_type"`
+				ExpiresIn   int               `json:"expires_in"`
+				User        transport.UserDTO `json:"user"`
 			} `json:"data"`
 		}
 
@@ -372,7 +372,6 @@ func TestSecurityMiddleware_RequireRole(t *testing.T) {
 		}
 	})
 }
-
 
 func TestAuthHandler_Refresh_and_Logout(t *testing.T) {
 	mux, _, _ := setupTestRouter()
@@ -548,4 +547,3 @@ func TestGoogleLogin(t *testing.T) {
 		}
 	})
 }
-

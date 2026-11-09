@@ -22,9 +22,9 @@ func (s *DevEmailSender) SendOTPEmail(_ context.Context, recipientEmail, code st
 	log.Println("╔══════════════════════════════════════════════════════╗")
 	log.Println("║            SwiftDrop — DEV EMAIL (OTP)              ║")
 	log.Println("╠══════════════════════════════════════════════════════╣")
-	log.Printf( "║  To:        %-40s ║\n", recipientEmail)
-	log.Printf( "║  Code:      %-40s ║\n", code)
-	log.Printf( "║  Sent at:   %-40s ║\n", time.Now().UTC().Format(time.RFC3339))
+	log.Printf("║  To:        %-40s ║\n", recipientEmail)
+	log.Printf("║  Code:      %-40s ║\n", code)
+	log.Printf("║  Sent at:   %-40s ║\n", time.Now().UTC().Format(time.RFC3339))
 	log.Println("║  Expires:   10 minutes                               ║")
 	log.Println("╚══════════════════════════════════════════════════════╝")
 	fmt.Println() // blank line for readability

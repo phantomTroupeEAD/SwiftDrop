@@ -10,15 +10,15 @@ import (
 
 // MockOAuthRepository is a thread-safe in-memory store for federated OAuth identity links.
 type MockOAuthRepository struct {
-	mu           sync.RWMutex
-	linksByKey   map[string]*domain.OAuthIdentity // key: "PROVIDER:SUBJECT"
+	mu            sync.RWMutex
+	linksByKey    map[string]*domain.OAuthIdentity   // key: "PROVIDER:SUBJECT"
 	linksByUserID map[string][]*domain.OAuthIdentity // key: UserID
 }
 
 // NewMockOAuthRepository creates an empty in-memory OAuth repository.
 func NewMockOAuthRepository() *MockOAuthRepository {
 	return &MockOAuthRepository{
-		linksByKey:   make(map[string]*domain.OAuthIdentity),
+		linksByKey:    make(map[string]*domain.OAuthIdentity),
 		linksByUserID: make(map[string][]*domain.OAuthIdentity),
 	}
 }

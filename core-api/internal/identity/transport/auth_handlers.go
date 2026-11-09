@@ -242,7 +242,6 @@ func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // Refresh handles POST /api/v1/auth/refresh (ADR-003: Single-Use Token Rotation)
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var rawToken string

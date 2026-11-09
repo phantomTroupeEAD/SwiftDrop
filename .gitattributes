@@ -1,0 +1,5 @@
+# Ensure all Go source files use canonical LF line endings across all platforms (required for gofmt)
+*.go text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.json text eol=lf

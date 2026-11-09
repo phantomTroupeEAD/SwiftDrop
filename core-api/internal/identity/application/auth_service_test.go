@@ -303,7 +303,6 @@ func TestAuthService_Register(t *testing.T) {
 	})
 }
 
-
 func TestAuthService_RefreshSession_and_Logout(t *testing.T) {
 	ctx := context.Background()
 	svc := buildAuthService(t)
@@ -477,4 +476,3 @@ func TestAuthService_LoginWithGoogle(t *testing.T) {
 		}
 	})
 }
-
