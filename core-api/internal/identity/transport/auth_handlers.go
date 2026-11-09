@@ -138,7 +138,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Login & Session Rotation Handlers
 // ─────────────────────────────────────────────────────
 
-// Login handles POST /api/v1/auth/login
+// Login godoc
+// @Summary      Authenticate user and issue JWT
+// @Description  Validates credentials and returns access token and HttpOnly refresh token cookie.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body LoginRequest true "User credentials"
+// @Success      200 {object} SingleDataEnvelope
+// @Failure      400 {object} ErrorEnvelope "Malformed JSON or validation error"
+// @Failure      401 {object} ErrorEnvelope "Invalid email or password"
+// @Failure      403 {object} ErrorEnvelope "Account has been suspended"
+// @Failure      500 {object} ErrorEnvelope "Authentication failed due to internal error"
+// @Router       /api/v1/auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -337,7 +349,15 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // Profile Handlers
 // ─────────────────────────────────────────────────────
 
-// GetMe handles GET /api/v1/auth/me (Protected by AuthMiddleware)
+// GetMe godoc
+// @Summary      Get authenticated user profile
+// @Description  Returns user profile and tenant details for the authenticated bearer token.
+// @Tags         identity
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} SingleDataEnvelope
+// @Failure      401 {object} ErrorEnvelope "Unauthorized"
+// @Router       /api/v1/auth/me [get]
 func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	principal, ok := GetPrincipal(r.Context())
 	if !ok || principal == nil {

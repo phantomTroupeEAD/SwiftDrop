@@ -4,7 +4,7 @@
 > **Primary Lead / Owner:** Member 10 — Cross-Workflow Quality Coordination & AI Assistant  
 > **Collaborating Domain Owners:** Members 1 through 9 (All Domain Owners)  
 > **Evaluation Rubric:** **15 Marks** for End-to-End Integration, Live Demo, and Automated Acceptance  
-> **Test Framework:** Playwright (Python / `pytest-playwright`), Docker Compose, GitHub Actions  
+> **Test Framework:** Playwright for TypeScript (`@playwright/test`), Node.js, Docker Compose, GitHub Actions  
 > **Test Artifact Port:** `mock-webhook:9999` (Visual Webhook Dashboard)
 
 ---
@@ -138,33 +138,35 @@ flowchart TD
   ```
   tests/e2e/
   ├── fixtures/
-  │   ├── auth_fixtures.py        # Pre-authenticated context helpers (Customer, Dispatcher, Courier)
-  │   ├── test_data.py            # Stable seed credentials, postal codes, and dimensions
-  │   └── gateway_client.py       # REST API helper for pre-seeding test data
+  │   ├── authFixtures.ts         # Pre-authenticated context helpers (Customer, Dispatcher, Courier)
+  │   ├── testData.ts             # Stable seed credentials, postal codes, and dimensions
+  │   └── gatewayClient.ts        # REST API helper for pre-seeding test data
   ├── helpers/
-  │   ├── selectors.py            # Central repository of data-testid selectors
-  │   ├── sse_listener.py         # Async SSE stream listener for real-time tracking tests
-  │   └── evidence.py             # Automatic screenshot and trace bundler
+  │   ├── selectors.ts            # Central repository of data-testid selectors
+  │   ├── sseListener.ts          # Async SSE stream listener for real-time tracking tests
+  │   └── evidence.ts             # Automatic screenshot and trace bundler
   ├── flows/
-  │   ├── test_flow_1_booking.py  # Customer fee estimation and booking wizard
-  │   ├── test_flow_2_dispatch.py # Dispatcher assignment and fleet management
-  │   ├── test_flow_3_courier.py  # Courier mobile PWA pickup and POD submission
-  │   ├── test_flow_4_tracking.py # Public SSE tracking and AI assistant lookup
-  │   └── test_flow_security.py   # IDOR, tenant boundary, and rate-limiting tests
-  ├── mock-webhook/               # Standalone test artifact container
-  │   ├── app.py                  # FastAPI webhook receiver & SSE dashboard
-  │   ├── templates/
+  │   ├── flow1-booking.spec.ts   # Customer fee estimation and booking wizard
+  │   ├── flow2-dispatch.spec.ts  # Dispatcher assignment and fleet management
+  │   ├── flow3-courier.spec.ts   # Courier mobile PWA pickup and POD submission
+  │   ├── flow4-tracking.spec.ts  # Public SSE tracking and AI assistant lookup
+  │   └── flow-security.spec.ts   # IDOR, tenant boundary, and rate-limiting tests
+  ├── mock-webhook/               # Standalone test artifact container (:9999)
+  │   ├── package.json            # Node/TS dependencies
+  │   ├── src/
+  │   │   ├── server.ts           # Webhook receiver & SSE dashboard
+  │   │   └── server.test.ts      # HMAC & tenant isolation unit tests
+  │   ├── public/
   │   │   └── dashboard.html      # Visual multi-tenant dashboard
-  │   ├── Dockerfile              # Lightweight container image
-  │   └── requirements.txt        # fastapi, uvicorn, jinja2
+  │   └── Dockerfile              # Lightweight container image
   ├── artifacts/                  # Generated video recordings, traces, and screenshots
-  ├── conftest.py                 # Pytest fixtures and browser lifecycle
-  ├── pytest.ini                  # Pytest configuration
-  ├── requirements.txt            # pytest-playwright, httpx, sseclient-py
+  ├── package.json                # @playwright/test, typescript, eventsource
+  ├── playwright.config.ts        # Playwright runner configuration (traces, video, multi-project)
+  ├── tsconfig.json               # TypeScript configuration
   └── README.md                   # Execution and debugging manual
   ```
-- [ ] **1.2 Install Playwright Browsers:** Scripted command to install headless Chromium and Firefox.
-- [ ] **1.3 Multi-Actor Fixtures (`conftest.py`):** Provide `customer_page`, `dispatcher_page`, `courier_page` fixtures.
+- [ ] **1.2 Install Playwright Browsers:** Scripted command to install headless Chromium and mobile viewports.
+- [ ] **1.3 Multi-Actor Fixtures (`fixtures/authFixtures.ts`):** Provide `customerPage`, `dispatcherPage`, `courierPage` fixtures.
 
 ---
 
@@ -243,7 +245,7 @@ flowchart TD
   - Save video files to `tests/e2e/artifacts/videos/`.
   - Save trace files to `tests/e2e/artifacts/traces/` (viewable via `playwright show-trace`).
 - [ ] **6.2 Automated HTML Summary Report:**
-  - Pytest HTML report generator outputting full test run results with embedded failure screenshots.
+  - Playwright HTML report generator outputting full test run results with embedded failure screenshots, traces, and video recordings.
 - [ ] **6.3 GitHub Actions CI Workflow (`.github/workflows/e2e.yml`):**
   - Spins up Docker Compose environment.
   - Waits for healthchecks on Core API, Tracking API, and Mock Webhook.

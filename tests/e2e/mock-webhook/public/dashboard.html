@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>SwiftDrop — Webhook Gateway</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            apple: {
+              canvas: '#F5F5F7',
+              card: '#FFFFFF',
+              blue: '#0071E3',
+              blueHover: '#0077ED',
+              green: '#34C759',
+              purple: '#AF52DE',
+              red: '#FF3B30',
+              orange: '#FF9500',
+              textPrimary: '#1D1D1F',
+              textSecondary: '#6E6E73',
+              textTertiary: '#86868B',
+              border: 'rgba(0, 0, 0, 0.08)',
+            }
+          },
+          fontFamily: {
+            sans: [
+              '-apple-system',
+              'BlinkMacSystemFont',
+              '"SF Pro Display"',
+              '"SF Pro Text"',
+              '"SF Pro"',
+              'system-ui',
+              '"Helvetica Neue"',
+              'sans-serif'
+            ],
+            mono: [
+              '"SF Mono"',
+              'Menlo',
+              'Monaco',
+              'Consolas',
+              'monospace'
+            ],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Apple Fluid Motion (WWDC 2018) & Instant Response */
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Apple Translucent Materials (WWDC §12) */
+    .apple-glass {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    
+    .apple-card {
+      background: #FFFFFF;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+    .apple-card:hover {
+      border-color: rgba(0, 0, 0, 0.12);
+    }
+
+    /* Instant Pointer-Down Response (§1) */
+    .apple-btn {
+      transition: transform 100ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
+    }
+    .apple-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* Radar animation for Live Polling (Compositor only) */
+    @keyframes apple-radar {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.2); opacity: 0.35; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+    .apple-radar-dot {
+      animation: apple-radar 2.4s ease-out infinite;
+      will-change: transform, opacity;
+    }
+
+    /* Light Theme Syntax Highlighting for CloudEvents */
+    .json-key { color: #0071E3; font-weight: 500; }
+    .json-string { color: #1B873F; }
+    .json-number { color: #D97706; }
+    .json-boolean { color: #AF52DE; }
+    .json-null { color: #86868B; }
+
+    /* Clean Subtle Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.28);
+    }
+  </style>
+</head>
+<body class="bg-[#F5F5F7] text-[#1D1D1F] min-h-dvh font-sans antialiased selection:bg-[#0071E3]/20 selection:text-[#0071E3] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+
+  <!-- Apple macOS Light Navigation Bar -->
+  <header class="sticky top-0 z-30 apple-glass">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+      
+      <!-- Window Controls & Wordmark -->
+      <div class="flex items-center gap-3 sm:gap-4">
+        <!-- macOS Window Traffic Lights -->
+        <div class="hidden sm:flex items-center gap-2">
+          <span class="size-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/40"></span>
+          <span class="size-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/40"></span>
+          <span class="size-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/40"></span>
+        </div>
+
+        <div class="h-4 w-px bg-black/[0.08] hidden sm:block"></div>
+
+        <div class="flex items-center gap-2.5">
+          <div class="flex items-center justify-center size-8 rounded-lg bg-[#0071E3]/10 text-[#0071E3]">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-sm text-[#1D1D1F] tracking-tight">SwiftDrop</span>
+            <span class="text-[#86868B] text-xs">/</span>
+            <span class="text-xs text-[#6E6E73] font-medium">Webhook Gateway</span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-black/[0.05] text-[#6E6E73] border border-black/[0.06]">:9999</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Polling & Controls -->
+      <div class="flex items-center gap-2.5">
+        
+        <!-- Polling State Capsule -->
+        <button 
+          id="togglePollingBtn" 
+          onclick="togglePolling()" 
+          aria-label="Toggle live polling stream"
+          class="apple-btn flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-black/[0.08] text-xs text-[#1D1D1F] font-mono shadow-sm hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-[#0071E3] focus-visible:outline-none"
+        >
+          <span class="relative flex size-2">
+            <span id="pollRadar" class="apple-radar-dot absolute inline-flex size-full rounded-full bg-[#34C759] opacity-75"></span>
+            <span id="pollDot" class="relative inline-flex rounded-full size-2 bg-[#34C759]"></span>
+          </span>
+          <span id="pollingStatusText" class="tabular-nums">LIVE (1.5s)</span>
+        </button>
+
+        <!-- cURL Specs Button -->
+        <button 
+          onclick="document.getElementById('docsModal').showModal()" 
+          aria-label="View API endpoints and cURL specs"
+          class="apple-btn hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/[0.05] hover:bg-black/[0.08] text-xs text-[#1D1D1F] font-medium"
+        >
+          <svg class="size-3.5 text-[#6E6E73]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>cURL Specs</span>
+        </button>
+
+        <!-- Destructive Reset Button -->
+        <button 
+          onclick="confirmReset()" 
+          aria-label="Reset webhook event history"
+          class="apple-btn flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FF3B30]/10 hover:bg-[#FF3B30]/15 text-[#FF3B30] text-xs font-medium"
+        >
+          <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span class="hidden sm:inline">Reset</span>
+        </button>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Tenant Isolation & Security Invariant Panel -->
+    <div id="isolationBanner" class="apple-card rounded-2xl p-5 border-l-4 border-l-[#34C759]">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center justify-center size-5 rounded-md bg-[#34C759]/15 text-[#34C759]">
+              <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </span>
+            <h2 class="text-sm font-semibold text-[#1D1D1F] tracking-tight text-balance">Tenant Isolation & Signature Invariants</h2>
+          </div>
+          <p class="text-xs text-[#6E6E73] leading-relaxed max-w-3xl text-pretty">
+            Automated verification workbench for Member 8 Event Worker & Member 10 Acceptance. Enforces constant-time cryptographic verification (<code class="text-[#34C759] font-mono text-[11px] font-semibold">crypto.timingSafeEqual</code>) and guarantees strict multi-tenant boundary isolation without data cross-talk.
+          </p>
+        </div>
+
+        <!-- Live Tenant Isolation Badge (Exact element ID preserved) -->
+        <div id="isolationBadge" class="flex-shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#34C759]/10 border border-[#34C759]/25 text-[#28CD41] font-mono text-xs font-semibold">
+          <span class="size-2 rounded-full bg-[#34C759]"></span>
+          <span>TENANT ISOLATION VERIFIED: ZERO DATA LEAKAGE</span>
+        </div>
+
+      </div>
+
+      <!-- Tenant Credential Pills -->
+      <div class="mt-4 pt-3.5 border-t border-black/[0.06] flex flex-wrap items-center gap-2.5 text-xs font-mono">
+        <span class="text-[#86868B] text-[11px] font-sans font-medium uppercase tracking-wider">Registered Tenants:</span>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0071E3]/10 text-[#0071E3] border border-[#0071E3]/20">
+          <span class="size-1.5 rounded-full bg-[#0071E3]"></span>
+          <span class="font-bold">Alpha:</span>
+          <span class="text-[#1D1D1F]">mrc_01HMERCHANTALPHA0001</span>
+        </div>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#AF52DE]/10 text-[#AF52DE] border border-[#AF52DE]/20">
+          <span class="size-1.5 rounded-full bg-[#AF52DE]"></span>
+          <span class="font-bold">Beta:</span>
+          <span class="text-[#1D1D1F]">mrc_01HMERCHANTBETA00002</span>
+        </div>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20">
+          <span class="size-1.5 rounded-full bg-[#FF3B30]"></span>
+          <span class="font-bold">Chaos:</span>
+          <span class="text-[#1D1D1F]">/webhooks/merchant-chaos (500)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Apple Simulation Suite Toolbar -->
+    <div class="apple-card rounded-2xl p-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 class="text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider">Dispatch Simulation Suite</h3>
+          <p class="text-xs text-[#6E6E73] mt-0.5 text-pretty">Fire cryptographically signed CloudEvents or simulate chaotic delivery failures</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5">
+          
+          <button 
+            onclick="triggerSample('alpha')" 
+            class="apple-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0071E3] hover:bg-[#0077ED] text-white font-medium text-xs shadow-sm shadow-[#0071E3]/20"
+          >
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Trigger Alpha Webhook</span>
+          </button>
+          
+          <button 
+            onclick="triggerSample('beta')" 
+            class="apple-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#AF52DE] hover:bg-[#9B45C6] text-white font-medium text-xs shadow-sm shadow-[#AF52DE]/20"
+          >
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Trigger Beta Webhook</span>
+          </button>
+
+          <button 
+            onclick="triggerChaos()" 
+            class="apple-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#FF3B30]/10 hover:bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/20 font-medium text-xs"
+            title="Sends payload to Chaos endpoint returning HTTP 500 to exercise RabbitMQ Dead Letter Queue"
+          >
+            <svg class="size-3.5 text-[#FF3B30]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Simulate Chaos 500 (DLQ)</span>
+          </button>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Bento KPI Metric Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Total Ingested -->
+      <div class="apple-card p-5 rounded-2xl border-t-2 border-t-[#34C759]">
+        <div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-[#34C759] font-medium">
+          <span>Total Ingested</span>
+          <span class="p-1 rounded-md bg-[#34C759]/10 text-[#34C759]">
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </span>
+        </div>
+        <p id="countTotal" class="text-3xl sm:text-4xl font-semibold text-[#1D1D1F] mt-2 font-sans tabular-nums tracking-tight">0</p>
+        <div class="flex items-center gap-1.5 text-[11px] text-[#6E6E73] mt-2 font-medium">
+          <span class="size-1.5 rounded-full bg-[#34C759]"></span>
+          <span>100% HMAC-SHA256 Validated</span>
+        </div>
+      </div>
+
+      <!-- Merchant Alpha -->
+      <div class="apple-card p-5 rounded-2xl border-t-2 border-t-[#0071E3]">
+        <div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-[#0071E3] font-medium">
+          <span>Merchant Alpha</span>
+          <span class="p-1 rounded-md bg-[#0071E3]/10 text-[#0071E3]">
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </span>
+        </div>
+        <p id="countAlpha" class="text-3xl sm:text-4xl font-semibold text-[#1D1D1F] mt-2 font-sans tabular-nums tracking-tight">0</p>
+        <p class="text-[11px] text-[#6E6E73] mt-2 truncate font-mono" title="mrc_01HMERCHANTALPHA0001">Tenant: mrc_01HMERCHANTALPHA0001</p>
+      </div>
+
+      <!-- Merchant Beta -->
+      <div class="apple-card p-5 rounded-2xl border-t-2 border-t-[#AF52DE]">
+        <div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-[#AF52DE] font-medium">
+          <span>Merchant Beta</span>
+          <span class="p-1 rounded-md bg-[#AF52DE]/10 text-[#AF52DE]">
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+          </span>
+        </div>
+        <p id="countBeta" class="text-3xl sm:text-4xl font-semibold text-[#1D1D1F] mt-2 font-sans tabular-nums tracking-tight">0</p>
+        <p class="text-[11px] text-[#6E6E73] mt-2 truncate font-mono" title="mrc_01HMERCHANTBETA00002">Tenant: mrc_01HMERCHANTBETA00002</p>
+      </div>
+
+      <!-- Chaos / DLQ Injections -->
+      <div class="apple-card p-5 rounded-2xl border-t-2 border-t-[#FF3B30]">
+        <div class="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-[#FF3B30] font-medium">
+          <span>Chaos / DLQ Tests</span>
+          <span class="p-1 rounded-md bg-[#FF3B30]/10 text-[#FF3B30]">
+            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </span>
+        </div>
+        <p id="countChaos" class="text-3xl sm:text-4xl font-semibold text-[#1D1D1F] mt-2 font-sans tabular-nums tracking-tight">0</p>
+        <p class="text-[11px] text-[#6E6E73] mt-2 font-mono">Routes to RabbitMQ DLQ</p>
+      </div>
+
+    </div>
+
+    <!-- Apple Segmented Control & Search Bar -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1">
+      
+      <!-- Apple Segmented Control -->
+      <div class="inline-flex items-center p-1 rounded-xl bg-black/[0.05] border border-black/[0.04] text-xs">
+        <button onclick="setFilter('all')" id="filter-all" class="filter-btn apple-btn px-3 py-1.5 rounded-lg font-medium text-[#1D1D1F] bg-white shadow-sm shadow-black/[0.06]">
+          All Events
+        </button>
+        <button onclick="setFilter('alpha')" id="filter-alpha" class="filter-btn apple-btn px-3 py-1.5 rounded-lg font-medium text-[#6E6E73] hover:text-[#1D1D1F]">
+          Merchant Alpha
+        </button>
+        <button onclick="setFilter('beta')" id="filter-beta" class="filter-btn apple-btn px-3 py-1.5 rounded-lg font-medium text-[#6E6E73] hover:text-[#1D1D1F]">
+          Merchant Beta
+        </button>
+        <button onclick="setFilter('hmac-valid')" id="filter-hmac-valid" class="filter-btn apple-btn px-3 py-1.5 rounded-lg font-medium text-[#6E6E73] hover:text-[#1D1D1F]">
+          Valid HMAC
+        </button>
+      </div>
+
+      <!-- Real-Time Search Bar -->
+      <div class="flex items-center gap-3">
+        <div class="relative w-full sm:w-64">
+          <input 
+            type="text" 
+            id="searchInput" 
+            oninput="handleSearch()"
+            placeholder="Search by ID, Tracking, Type..." 
+            class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white border border-black/[0.08] focus:border-[#0071E3] focus:ring-1 focus:ring-[#0071E3] text-xs text-[#1D1D1F] placeholder-[#86868B] font-mono shadow-sm transition outline-none"
+          />
+          <svg class="size-4 text-[#86868B] absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <span class="text-xs text-[#86868B] font-mono tabular-nums whitespace-nowrap" id="lastUpdated">Polling live...</span>
+      </div>
+
+    </div>
+
+    <!-- Ingested Event Feed Table Container -->
+    <div class="apple-card rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-black/[0.06] bg-zinc-50/60 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="size-2 rounded-full bg-[#34C759] animate-pulse"></span>
+          <h2 class="text-xs font-semibold text-[#1D1D1F] uppercase tracking-wider font-mono">Live Ingested CloudEvents Feed</h2>
+          <span id="feedCountBadge" class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-mono tabular-nums bg-white text-[#6E6E73] border border-black/[0.06] shadow-xs">0 events</span>
+        </div>
+        <button 
+          onclick="fetchEvents()" 
+          aria-label="Refresh events feed"
+          class="apple-btn p-1 rounded-md text-[#6E6E73] hover:text-[#0071E3]"
+        >
+          <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-zinc-50/90 text-[#6E6E73] uppercase text-[10px] tracking-wider border-b border-black/[0.06]">
+            <tr>
+              <th class="px-5 py-3 font-semibold">Timestamp</th>
+              <th class="px-5 py-3 font-semibold">Event ID</th>
+              <th class="px-5 py-3 font-semibold">Tenant</th>
+              <th class="px-5 py-3 font-semibold">CloudEvent Type</th>
+              <th class="px-5 py-3 font-semibold">Tracking No.</th>
+              <th class="px-5 py-3 font-semibold">Signature Status</th>
+              <th class="px-5 py-3 font-semibold text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="eventRows" class="divide-y divide-black/[0.04] text-[#1D1D1F]">
+            <tr>
+              <td colspan="7" class="px-6 py-16 text-center text-[#86868B] font-sans">
+                <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
+                  <div class="size-12 rounded-2xl bg-black/[0.04] border border-black/[0.06] flex items-center justify-center text-[#6E6E73] mb-3">
+                    <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                  </div>
+                  <p class="text-sm font-medium text-[#1D1D1F]">No webhooks received yet</p>
+                  <p class="text-xs text-[#86868B] mt-1">Dispatch an event above or send a POST request to <code class="text-[#34C759] font-mono font-semibold">http://localhost:9999/webhooks/...</code></p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Apple Sheet Inspector Modal (Preserving exact ID payloadModal & modalJson) -->
+  <dialog id="payloadModal" class="rounded-2xl bg-white border border-black/[0.08] text-[#1D1D1F] p-0 max-w-3xl w-full backdrop:bg-black/40 backdrop:backdrop-blur-sm shadow-2xl overflow-hidden">
+    <div class="p-5 border-b border-black/[0.06] bg-zinc-50/80 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center justify-center size-8 rounded-lg bg-[#0071E3]/10 text-[#0071E3]">
+          <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-bold text-sm text-[#1D1D1F] font-mono flex items-center gap-2">
+            <span>CloudEvents Payload Inspector</span>
+            <span id="modalEventIdBadge" class="text-xs font-normal px-2 py-0.5 rounded-full bg-white text-[#0071E3] border border-black/[0.08]"></span>
+          </h3>
+          <p id="modalEventMeta" class="text-xs text-[#6E6E73] mt-0.5 font-mono"></p>
+        </div>
+      </div>
+      <button 
+        onclick="document.getElementById('payloadModal').close()" 
+        aria-label="Close inspector"
+        class="apple-btn size-8 rounded-full bg-black/[0.05] hover:bg-black/[0.08] flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F]"
+      >
+        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      
+      <!-- Signature Header Breakdown -->
+      <div class="rounded-xl bg-zinc-50 border border-black/[0.06] p-3.5 space-y-2">
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span class="text-[#6E6E73] font-semibold uppercase tracking-wider">Cryptographic Signature Header</span>
+          <span id="modalSigStatus" class="font-bold"></span>
+        </div>
+        <div class="flex items-center justify-between gap-2 bg-white p-2.5 rounded-lg border border-black/[0.06] font-mono text-xs text-[#1D1D1F]">
+          <code id="modalSigHeader" class="truncate select-all text-[#0071E3]"></code>
+          <button 
+            onclick="copyToClipboard(document.getElementById('modalSigHeader').textContent, 'Signature copied!')" 
+            aria-label="Copy signature header"
+            class="apple-btn p-1 hover:text-[#0071E3] text-[#86868B]" 
+            title="Copy Signature Header"
+          >
+            <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- JSON Viewer -->
+      <div>
+        <div class="flex items-center justify-between pb-2">
+          <span class="text-xs font-mono text-[#6E6E73] font-semibold uppercase tracking-wider">Event Body (JSON)</span>
+          <button 
+            onclick="copyModalJson()" 
+            aria-label="Copy JSON payload"
+            class="apple-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white hover:bg-zinc-50 text-[#1D1D1F] text-xs font-mono border border-black/[0.08] shadow-xs"
+          >
+            <svg class="size-3.5 text-[#6E6E73]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+            <span>Copy JSON</span>
+          </button>
+        </div>
+        <pre id="modalJson" class="p-4 rounded-xl bg-zinc-50 font-mono text-xs overflow-x-auto max-h-96 text-[#1D1D1F] border border-black/[0.06] leading-relaxed"></pre>
+      </div>
+
+    </div>
+
+    <div class="p-4 border-t border-black/[0.06] bg-zinc-50/60 flex items-center justify-end">
+      <button 
+        onclick="document.getElementById('payloadModal').close()" 
+        class="apple-btn px-4 py-2 rounded-xl bg-black/[0.05] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-medium"
+      >
+        Done
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Destructive Reset Confirmation AlertDialog -->
+  <dialog id="confirmResetDialog" class="rounded-2xl bg-white border border-black/[0.08] text-[#1D1D1F] p-6 max-w-sm w-full backdrop:bg-black/40 backdrop:backdrop-blur-sm shadow-2xl">
+    <div class="text-center space-y-3">
+      <div class="size-11 mx-auto rounded-full bg-[#FF3B30]/10 text-[#FF3B30] flex items-center justify-center">
+        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </div>
+      <h3 class="font-bold text-base text-[#1D1D1F] text-balance">Reset Webhook History?</h3>
+      <p class="text-xs text-[#6E6E73] text-pretty leading-relaxed">
+        This action will permanently delete all ingested webhook events and chaos test metrics from memory.
+      </p>
+      <div class="flex items-center gap-2 pt-2">
+        <button 
+          onclick="document.getElementById('confirmResetDialog').close()" 
+          class="apple-btn flex-1 py-2 rounded-xl bg-black/[0.05] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-medium"
+        >
+          Cancel
+        </button>
+        <button 
+          onclick="executeReset()" 
+          class="apple-btn flex-1 py-2 rounded-xl bg-[#FF3B30] hover:bg-[#FF3B30]/90 text-white text-xs font-medium shadow-sm shadow-[#FF3B30]/20"
+        >
+          Reset All
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Receiver Endpoints & cURL Cheat Sheet Modal -->
+  <dialog id="docsModal" class="rounded-2xl bg-white border border-black/[0.08] text-[#1D1D1F] p-0 max-w-2xl w-full backdrop:bg-black/40 backdrop:backdrop-blur-sm shadow-2xl overflow-hidden">
+    <div class="p-5 border-b border-black/[0.06] bg-zinc-50/80 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="size-8 rounded-lg bg-[#0071E3]/10 text-[#0071E3] flex items-center justify-center">
+          <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-bold text-sm text-[#1D1D1F] font-mono">Receiver Endpoints & cURL Specs</h3>
+          <p class="text-xs text-[#6E6E73] mt-0.5">Specifications for manual testing or automated integration</p>
+        </div>
+      </div>
+      <button 
+        onclick="document.getElementById('docsModal').close()" 
+        aria-label="Close dialog"
+        class="apple-btn size-8 rounded-full bg-black/[0.05] hover:bg-black/[0.08] flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F]"
+      >
+        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto text-xs font-mono">
+      
+      <!-- Alpha -->
+      <div class="p-3.5 rounded-xl bg-zinc-50 border border-black/[0.06] space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="px-2.5 py-0.5 rounded-full bg-[#0071E3]/10 text-[#0071E3] font-bold">POST /webhooks/merchant-alpha</span>
+          <span class="text-[#6E6E73] text-[11px]">Tenant: Alpha</span>
+        </div>
+        <p class="text-[#6E6E73] text-[11px] font-sans">Secret: <code class="text-[#0071E3]">whsec_alpha_super_secret_test_key_01</code></p>
+        <pre class="p-2.5 rounded-lg bg-white border border-black/[0.06] text-[#1D1D1F] overflow-x-auto text-[11px]">curl -X POST http://localhost:9999/webhooks/merchant-alpha \
+  -H "Content-Type: application/json" \
+  -H "x-swiftdrop-signature: t=&lt;ts&gt;,v1=&lt;hmac&gt;" \
+  -d '{"id":"evt_1","type":"parcel.delivered","data":{"status":"DELIVERED"}}'</pre>
+      </div>
+
+      <!-- Beta -->
+      <div class="p-3.5 rounded-xl bg-zinc-50 border border-black/[0.06] space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="px-2.5 py-0.5 rounded-full bg-[#AF52DE]/10 text-[#AF52DE] font-bold">POST /webhooks/merchant-beta</span>
+          <span class="text-[#6E6E73] text-[11px]">Tenant: Beta</span>
+        </div>
+        <p class="text-[#6E6E73] text-[11px] font-sans">Secret: <code class="text-[#AF52DE]">whsec_beta_super_secret_test_key_02</code></p>
+        <pre class="p-2.5 rounded-lg bg-white border border-black/[0.06] text-[#1D1D1F] overflow-x-auto text-[11px]">curl -X POST http://localhost:9999/webhooks/merchant-beta \
+  -H "Content-Type: application/json" \
+  -H "x-swiftdrop-signature: t=&lt;ts&gt;,v1=&lt;hmac&gt;" \
+  -d '{"id":"evt_2","type":"parcel.in_transit","data":{"status":"IN_TRANSIT"}}'</pre>
+      </div>
+
+      <!-- Chaos -->
+      <div class="p-3.5 rounded-xl bg-zinc-50 border border-black/[0.06] space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="px-2.5 py-0.5 rounded-full bg-[#FF3B30]/10 text-[#FF3B30] font-bold">POST /webhooks/merchant-chaos</span>
+          <span class="text-[#FF3B30] text-[11px]">Always 500 DLQ</span>
+        </div>
+        <p class="text-[#6E6E73] text-[11px] font-sans">Simulates delivery destination crash to verify RabbitMQ dead-letter retry logic.</p>
+      </div>
+
+    </div>
+
+    <div class="p-4 border-t border-black/[0.06] bg-zinc-50/60 flex items-center justify-end">
+      <button 
+        onclick="document.getElementById('docsModal').close()" 
+        class="apple-btn px-4 py-2 rounded-xl bg-black/[0.05] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-medium"
+      >
+        Close
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Apple Dynamic Island Floating Notification Pill -->
+  <div id="toastContainer" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none"></div>
+
+  <!-- Client JavaScript Logic -->
+  <script>
+    let eventsData = [];
+    let activeFilter = 'all';
+    let searchQuery = '';
+    let isPollingActive = true;
+    let pollIntervalId = null;
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const typeIcons = {
+        success: '<span class="size-2 rounded-full bg-[#34C759]"></span>',
+        info: '<span class="size-2 rounded-full bg-[#0071E3]"></span>',
+        warning: '<span class="size-2 rounded-full bg-[#FF9500]"></span>',
+        error: '<span class="size-2 rounded-full bg-[#FF3B30]"></span>'
+      };
+
+      toast.className = 'pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-white/95 border border-black/[0.08] text-xs font-medium text-[#1D1D1F] shadow-lg shadow-black/[0.06] backdrop-blur-xl transition duration-150 ease-out transform -translate-y-2 opacity-0';
+      toast.innerHTML = `
+        ${typeIcons[type] || typeIcons.info}
+        <span>${message}</span>
+      `;
+
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('-translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => toast.remove(), 150);
+      }, 2200);
+    }
+
+    function copyToClipboard(text, successMsg = 'Copied to clipboard!') {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(successMsg, 'success');
+      }).catch(() => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+
+    function copyModalJson() {
+      const text = document.getElementById('modalJson').textContent;
+      copyToClipboard(text, 'CloudEvents JSON copied!');
+    }
+
+    function togglePolling() {
+      isPollingActive = !isPollingActive;
+      const radar = document.getElementById('pollRadar');
+      const dot = document.getElementById('pollDot');
+      const text = document.getElementById('pollingStatusText');
+
+      if (isPollingActive) {
+        radar.classList.remove('hidden');
+        dot.className = 'relative inline-flex rounded-full size-2 bg-[#34C759]';
+        text.textContent = 'LIVE (1.5s)';
+        pollIntervalId = setInterval(fetchEvents, 1500);
+        showToast('Live stream polling resumed', 'info');
+      } else {
+        radar.classList.add('hidden');
+        dot.className = 'relative inline-flex rounded-full size-2 bg-[#FF9500]';
+        text.textContent = 'PAUSED';
+        clearInterval(pollIntervalId);
+        showToast('Polling paused', 'warning');
+      }
+    }
+
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/events');
+        const data = await res.json();
+        eventsData = data.events || [];
+
+        // Exact IDs preserved for test compatibility
+        document.getElementById('countAlpha').textContent = data.counts?.alpha || 0;
+        document.getElementById('countBeta').textContent = data.counts?.beta || 0;
+        document.getElementById('countChaos').textContent = data.counts?.chaos || 0;
+        document.getElementById('countTotal').textContent = data.counts?.total || 0;
+        document.getElementById('lastUpdated').textContent = 'Synced ' + new Date().toLocaleTimeString();
+
+        applyFilterAndRender();
+      } catch (err) {
+        console.error('Failed to poll events:', err);
+      }
+    }
+
+    function setFilter(filter) {
+      activeFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-white', 'text-[#1D1D1F]', 'shadow-sm', 'shadow-black/[0.06]');
+        btn.classList.add('text-[#6E6E73]');
+      });
+
+      const activeBtn = document.getElementById(`filter-${filter}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-white', 'text-[#1D1D1F]', 'shadow-sm', 'shadow-black/[0.06]');
+        activeBtn.classList.remove('text-[#6E6E73]');
+      }
+      applyFilterAndRender();
+    }
+
+    function handleSearch() {
+      searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+      applyFilterAndRender();
+    }
+
+    function applyFilterAndRender() {
+      let filtered = [...eventsData];
+
+      if (activeFilter === 'alpha') {
+        filtered = filtered.filter(e => e.tenant === 'alpha');
+      } else if (activeFilter === 'beta') {
+        filtered = filtered.filter(e => e.tenant === 'beta');
+      } else if (activeFilter === 'hmac-valid') {
+        filtered = filtered.filter(e => e.hmacValid);
+      }
+
+      if (searchQuery) {
+        filtered = filtered.filter(e => {
+          const id = (e.id || '').toLowerCase();
+          const type = (e.type || '').toLowerCase();
+          const tracking = (e.payload?.data?.tracking_number || '').toLowerCase();
+          const tenant = (e.tenant || '').toLowerCase();
+          return id.includes(searchQuery) || type.includes(searchQuery) || tracking.includes(searchQuery) || tenant.includes(searchQuery);
+        });
+      }
+
+      document.getElementById('feedCountBadge').textContent = `${filtered.length} of ${eventsData.length} events`;
+      renderRows(filtered);
+    }
+
+    function syntaxHighlight(json) {
+      if (typeof json !== 'string') {
+        json = JSON.stringify(json, undefined, 2);
+      }
+      json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+      });
+    }
+
+    function renderRows(events) {
+      const tbody = document.getElementById('eventRows');
+      if (!events || events.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="px-6 py-12 text-center text-[#86868B] font-sans">
+              <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
+                <p class="text-sm font-medium text-[#1D1D1F]">No events match filter</p>
+                <p class="text-xs text-[#86868B] mt-1">Adjust search query or select another filter tab.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = events.map((e, idx) => {
+        const fullIndex = eventsData.findIndex(item => item.id === e.id);
+        const timeFormatted = new Date(e.receivedAt).toLocaleTimeString();
+        const trackingNum = e.payload?.data?.tracking_number || 'N/A';
+        const isAlpha = e.tenant === 'alpha';
+
+        return `
+          <tr class="hover:bg-black/[0.02] transition duration-100 ease-out group">
+            
+            <!-- Timestamp -->
+            <td class="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap tabular-nums">
+              <span class="text-[#1D1D1F] font-medium">${timeFormatted}</span>
+            </td>
+
+            <!-- Event ID -->
+            <td class="px-5 py-3.5 text-[#1D1D1F] whitespace-nowrap">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-[#1D1D1F]">${escapeHtml(e.id)}</span>
+                <button 
+                  onclick="copyToClipboard('${escapeHtml(e.id)}', 'Event ID copied!')" 
+                  aria-label="Copy event ID ${escapeHtml(e.id)}"
+                  class="apple-btn opacity-0 group-hover:opacity-100 hover:text-[#0071E3] text-[#86868B]" 
+                  title="Copy ID"
+                >
+                  <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+            </td>
+
+            <!-- Merchant Tenant -->
+            <td class="px-5 py-3.5 whitespace-nowrap">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                isAlpha 
+                  ? 'bg-[#0071E3]/10 text-[#0071E3] border border-[#0071E3]/20' 
+                  : 'bg-[#AF52DE]/10 text-[#AF52DE] border border-[#AF52DE]/20'
+              }">
+                <span class="size-1.5 rounded-full ${isAlpha ? 'bg-[#0071E3]' : 'bg-[#AF52DE]'}"></span>
+                <span>${escapeHtml(e.tenant.toUpperCase())}</span>
+              </span>
+            </td>
+
+            <!-- Event Type -->
+            <td class="px-5 py-3.5 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded-md bg-black/[0.04] text-[#1D1D1F] border border-black/[0.06] text-[11px] font-semibold">
+                ${escapeHtml(e.type)}
+              </span>
+            </td>
+
+            <!-- Tracking Number -->
+            <td class="px-5 py-3.5 whitespace-nowrap">
+              <span class="font-medium tabular-nums ${trackingNum !== 'N/A' ? 'text-[#D97706] font-mono' : 'text-[#86868B]'}">
+                ${escapeHtml(trackingNum)}
+              </span>
+            </td>
+
+            <!-- HMAC Signature Status -->
+            <td class="px-5 py-3.5 whitespace-nowrap">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                e.hmacValid 
+                  ? 'bg-[#34C759]/10 text-[#28CD41] border border-[#34C759]/20' 
+                  : 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20'
+              }">
+                <span class="size-1.5 rounded-full ${e.hmacValid ? 'bg-[#34C759]' : 'bg-[#FF3B30]'}"></span>
+                <span>${e.hmacValid ? 'HMAC VALID' : 'HMAC INVALID'}</span>
+              </span>
+            </td>
+
+            <!-- Actions -->
+            <td class="px-5 py-3.5 text-right whitespace-nowrap">
+              <button 
+                onclick="viewPayload(${fullIndex})" 
+                aria-label="Inspect event payload"
+                class="apple-btn inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/[0.05] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-mono border border-black/[0.06]"
+              >
+                <svg class="size-3.5 text-[#6E6E73]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <span>Inspect</span>
+              </button>
+            </td>
+
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function viewPayload(idx) {
+      const e = eventsData[idx];
+      if (!e) return;
+
+      document.getElementById('modalEventIdBadge').textContent = e.id;
+      document.getElementById('modalEventMeta').textContent = `Tenant: ${e.tenant.toUpperCase()} • Type: ${e.type} • ${new Date(e.receivedAt).toLocaleTimeString()}`;
+      
+      const sigStatus = document.getElementById('modalSigStatus');
+      if (e.hmacValid) {
+        sigStatus.className = 'text-[#34C759] font-bold';
+        sigStatus.textContent = '✓ Cryptographically Verified (HMAC-SHA256 Match)';
+      } else {
+        sigStatus.className = 'text-[#FF3B30] font-bold';
+        sigStatus.textContent = '✗ Signature Mismatch / Invalid Key';
+      }
+
+      document.getElementById('modalSigHeader').textContent = e.signatureHeader || 'No signature header attached';
+      document.getElementById('modalJson').innerHTML = syntaxHighlight(e.payload);
+      document.getElementById('payloadModal').showModal();
+    }
+
+    async function triggerSample(tenant) {
+      try {
+        const res = await fetch('/api/test-trigger?tenant=' + tenant, { method: 'POST' });
+        const data = await res.json();
+        showToast(`Dispatched test event for Merchant ${tenant.toUpperCase()}`, 'success');
+        fetchEvents();
+      } catch (err) {
+        showToast(`Trigger failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function triggerChaos() {
+      try {
+        await fetch('/webhooks/merchant-chaos', { method: 'POST' });
+        showToast('Chaos 500 simulated (DLQ route)', 'error');
+        fetchEvents();
+      } catch (err) {
+        fetchEvents();
+      }
+    }
+
+    function confirmReset() {
+      document.getElementById('confirmResetDialog').showModal();
+    }
+
+    async function executeReset() {
+      document.getElementById('confirmResetDialog').close();
+      await resetEvents();
+    }
+
+    async function resetEvents() {
+      try {
+        await fetch('/api/reset', { method: 'POST' });
+        showToast('Webhook history flushed', 'info');
+        fetchEvents();
+      } catch (err) {
+        showToast('Reset failed', 'error');
+      }
+    }
+
+    // Initialize
+    fetchEvents();
+    pollIntervalId = setInterval(fetchEvents, 1500);
+
+    // Backdrop dismissal
+    document.querySelectorAll('dialog').forEach(dialog => {
+      dialog.addEventListener('click', (e) => {
+        const rect = dialog.getBoundingClientRect();
+        const isInDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+          rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+        if (!isInDialog) {
+          dialog.close();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

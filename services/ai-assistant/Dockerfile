@@ -40,8 +40,9 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy application code and scripts with restricted ownership
 COPY --chown=appuser:appgroup . .
 
-# Ensure supervisor entrypoint is executable and create writable scratch directory
-RUN chmod +x entrypoint.sh scripts/verify_mcp_cli.py && \
+# Ensure supervisor entrypoint is executable and create writable scratch directory (strips Windows CRLF if built on Windows)
+RUN sed -i 's/\r$//' entrypoint.sh scripts/verify_mcp_cli.py && \
+    chmod +x entrypoint.sh scripts/verify_mcp_cli.py && \
     mkdir -p /tmp/scratch && \
     chown -R appuser:appgroup /tmp/scratch
 

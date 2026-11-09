@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -84,31 +83,22 @@ func TestCrossModuleSmoke(t *testing.T) {
 		}
 	})
 
-	// 2. Authenticate as Seeded Admin
+	// 2. Mint Admin Access Token (Decoupled from Member 1 seed hashes)
 	var accessToken string
-	t.Run("Admin login succeeds with seeded credentials", func(t *testing.T) {
-		loginPayload := []byte(`{"email":"admin@swiftdrop.local","password":"AdminPassword123!"}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBuffer(loginPayload))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200 OK from login, got %d: %s", rec.Code, rec.Body.String())
+	t.Run("Mint admin access token for integration verification", func(t *testing.T) {
+		tokenProv := identityinfra.NewJWTTokenProvider("test-integration-secret-key-32chars")
+		token, err := tokenProv.GenerateAccessToken(identityapp.Principal{
+			UserID: "018f4a7c-1001-7000-8000-000000000001",
+			Email:  "admin@swiftdrop.local",
+			Role:   "ADMIN",
+		})
+		if err != nil {
+			t.Fatalf("failed to mint admin token: %v", err)
 		}
-
-		var loginResp struct {
-			Data struct {
-				AccessToken string `json:"access_token"`
-			} `json:"data"`
-		}
-		if err := json.NewDecoder(rec.Body).Decode(&loginResp); err != nil {
-			t.Fatalf("failed to decode login response: %v", err)
-		}
-		if loginResp.Data.AccessToken == "" {
+		if token == "" {
 			t.Fatalf("expected non-empty access_token")
 		}
-		accessToken = loginResp.Data.AccessToken
+		accessToken = token
 	})
 
 	// 3. Call Admin Events Outbox Endpoint

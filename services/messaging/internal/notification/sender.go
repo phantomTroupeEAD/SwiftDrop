@@ -101,6 +101,7 @@ func (s *SMTPSender) Send(ctx context.Context, toEmail, subject, textBody, htmlB
 	case "tls":
 		tlsConn, dialErr := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
 			ServerName: s.cfg.SMTPHost,
+			MinVersion: tls.VersionTLS12,
 		})
 		if dialErr != nil {
 			return "", fmt.Errorf("tls dial failed: %w", dialErr)
@@ -127,7 +128,10 @@ func (s *SMTPSender) Send(ctx context.Context, toEmail, subject, textBody, htmlB
 		if !hasStartTLS {
 			return "", ErrSTARTTLSRequired
 		}
-		if err := client.StartTLS(&tls.Config{ServerName: s.cfg.SMTPHost}); err != nil {
+		if err := client.StartTLS(&tls.Config{
+			ServerName: s.cfg.SMTPHost,
+			MinVersion: tls.VersionTLS12,
+		}); err != nil {
 			return "", fmt.Errorf("starttls negotiation failed: %w", err)
 		}
 

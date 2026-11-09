@@ -30,7 +30,7 @@ func NewNotificationHandler(repo delivery.Repository, idemp idempotency.Store, l
 		logger = slog.Default()
 	}
 
-	return func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	return func(ctx context.Context, _ amqp.Delivery, env *relay.OutboxEnvelope) error {
 		// 1. Check if event is a customer milestone (Decision D21)
 		if !SupportedNotificationMilestones[env.EventType] {
 			metrics.NotificationsSkippedTotal.Inc()
@@ -71,10 +71,14 @@ func NewNotificationHandler(repo delivery.Repository, idemp idempotency.Store, l
 				Recipient:        "-",
 				Channel:          "EMAIL",
 				TemplateName:     "milestone_notice",
+				Status:           "FAILED",
+				LastError:        "NO_RECIPIENT",
 			}
 			if err := repo.InsertNotification(ctx, task); err != nil {
 				return fmt.Errorf("failed to record no-recipient notification: %w", err)
 			}
+			_ = idemp.MarkDone(ctx, nil, "notifier", env.EventID)
+			metrics.NotificationAttemptsTotal.WithLabelValues("failed").Inc()
 			logger.Warn("event has no recipient email; marked notification as FAILED",
 				"event_id", env.EventID,
 				"event_type", env.EventType,
@@ -111,7 +115,7 @@ func NewWebhookFanoutHandler(repo delivery.Repository, idemp idempotency.Store, 
 		logger = slog.Default()
 	}
 
-	return func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	return func(ctx context.Context, _ amqp.Delivery, env *relay.OutboxEnvelope) error {
 		// 1. Extract merchant_id from payload (Decision D10)
 		var payloadMap map[string]interface{}
 		if err := json.Unmarshal(env.Payload, &payloadMap); err != nil {

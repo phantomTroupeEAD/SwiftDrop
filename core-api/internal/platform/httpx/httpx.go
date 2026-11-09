@@ -25,6 +25,11 @@ type SingleDataEnvelope[T any] struct {
 	Data T `json:"data"`
 }
 
+// DataEnvelope models a standard single-resource JSON envelope {"data": ...} for documentation and non-generic APIs.
+type DataEnvelope struct {
+	Data interface{} `json:"data"`
+}
+
 // ErrorDetail describes a semantic or field-level validation problem.
 type ErrorDetail struct {
 	Field string `json:"field,omitempty"`
@@ -45,6 +50,9 @@ type ErrorEnvelope struct {
 	Error ErrorEnvelopeBody `json:"error"`
 }
 
+// ErrorResponse is an alias for ErrorEnvelope for documentation parity and conventions.
+type ErrorResponse = ErrorEnvelope
+
 // PageMeta models pagination metadata per api-conventions.md §2.2.
 type PageMeta struct {
 	Page       int `json:"page"`
@@ -57,6 +65,12 @@ type PageMeta struct {
 type PaginatedResponse[T any] struct {
 	Data []T      `json:"data"`
 	Meta PageMeta `json:"meta"`
+}
+
+// PaginatedEnvelope models the standard list response wrapper {"data": [...], "meta": {...}} for documentation.
+type PaginatedEnvelope struct {
+	Data []interface{} `json:"data"`
+	Meta PageMeta      `json:"meta"`
 }
 
 // NewPaginatedResponse constructs a canonical PaginatedResponse with computed total_pages.
@@ -102,6 +116,12 @@ type CursorMeta struct {
 type CursorPaginatedResponse[T any] struct {
 	Data []T        `json:"data"`
 	Meta CursorMeta `json:"meta"`
+}
+
+// CursorPaginatedEnvelope models the standard keyset paginated response wrapper for documentation.
+type CursorPaginatedEnvelope struct {
+	Data []interface{} `json:"data"`
+	Meta CursorMeta    `json:"meta"`
 }
 
 // WriteCursorPaginated writes a keyset paginated JSON response.
