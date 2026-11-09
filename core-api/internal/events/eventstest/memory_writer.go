@@ -27,7 +27,7 @@ var _ events.OutboxWriter = (*InMemoryWriter)(nil)
 
 // Write validates and stores envelopes in-memory.
 // In accordance with outbox contracts, tx must not be nil.
-func (m *InMemoryWriter) Write(ctx context.Context, tx *sql.Tx, envelopes ...events.AnyEnvelope) error {
+func (m *InMemoryWriter) Write(_ context.Context, tx *sql.Tx, envelopes ...events.AnyEnvelope) error {
 	if tx == nil {
 		return events.ErrMissingTransaction
 	}
