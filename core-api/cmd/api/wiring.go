@@ -22,7 +22,9 @@ import (
 type AppContainer struct {
 	Mux         *http.ServeMux
 	AuthSvc     *application.AuthService
+	UserSvc     *application.UserService
 	UserRepo    application.UserRepository
+	AuditWriter application.AuditWriter
 	Security    *transport.SecurityMiddleware
 	TokenProv   application.TokenProvider
 	DB          *sql.DB
@@ -44,6 +46,8 @@ func BuildAppContainer() *AppContainer {
 
 	var userRepo application.UserRepository
 	var tokenRepo application.TokenRepository
+	var auditWriter application.AuditWriter
+	var oauthRepo application.OAuthRepository
 	var dbConn *sql.DB
 	storageType := "In-Memory (Mock Role Accounts)"
 
@@ -67,6 +71,9 @@ func BuildAppContainer() *AppContainer {
 			}
 
 			userRepo = infrastructure.NewPostgresUserRepository(db)
+			tokenRepo = infrastructure.NewPostgresTokenRepository(db)
+			auditWriter = infrastructure.NewPostgresAuditWriter(db)
+			oauthRepo = infrastructure.NewPostgresOAuthRepository(db)
 			dbConn = db
 			storageType = "PostgreSQL Database (Authoritative)"
 		} else {
@@ -79,10 +86,42 @@ func BuildAppContainer() *AppContainer {
 	if userRepo == nil {
 		userRepo = infrastructure.NewMockUserRepository(hasher)
 		tokenRepo = infrastructure.NewMockTokenRepository()
+		auditWriter = infrastructure.NewMockAuditWriter()
+		oauthRepo = infrastructure.NewMockOAuthRepository()
 	}
 
 	// 4. Application Services
-	authService := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider)
+	otpRepo := infrastructure.NewMemoryOTPRepository()
+
+	// Email Sender Adapter:
+	// - If SMTP_HOST is configured in environment variables, sends real emails via SMTPEmailSender.
+	// - Otherwise, falls back to DevEmailSender (prints 6-digit OTP to server console for local testing).
+	var emailSender application.EmailSender
+	smtpHost := os.Getenv("SMTP_HOST")
+	if smtpHost != "" {
+		smtpPort := os.Getenv("SMTP_PORT")
+		if smtpPort == "" {
+			smtpPort = "587"
+		}
+		smtpUser := os.Getenv("SMTP_USER")
+		smtpPass := os.Getenv("SMTP_PASS")
+		smtpFrom := os.Getenv("SMTP_FROM")
+		if smtpFrom == "" {
+			smtpFrom = "no-reply@swiftdrop.com"
+		}
+		emailSender = infrastructure.NewSMTPEmailSender(smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom)
+		log.Printf("[INFO] Using production SMTP Email Sender (%s:%s)\n", smtpHost, smtpPort)
+	} else {
+		emailSender = infrastructure.NewDevEmailSender()
+		log.Println("[INFO] Using Dev Email Sender (OTP printed to console). Set SMTP_HOST in .env to send real emails.")
+	}
+
+	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
+	oidcClient := infrastructure.NewGoogleOIDCClient(googleClientID)
+
+	authService := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider).
+		WithOTP(otpRepo, emailSender).
+		WithOAuth(oauthRepo, oidcClient)
 
 	// 5. Transport & Middleware
 	security := transport.NewSecurityMiddleware(tokenProvider)
@@ -92,6 +131,9 @@ func BuildAppContainer() *AppContainer {
 
 	// 6. Register Identity Routes
 	transport.RegisterRoutes(mux, authHandler, security)
+	userService := application.NewUserService(userRepo, auditWriter)
+	adminHandler := transport.NewAdminHandler(userService)
+	transport.RegisterAdminRoutes(mux, adminHandler, security)
 
 	// 7. Role-Protected Test Endpoints for Teammates
 	mux.Handle("GET /api/v1/courier/dashboard", security.Authenticate(
@@ -207,6 +249,8 @@ func BuildAppContainer() *AppContainer {
 	return &AppContainer{
 		Mux:         mux,
 		AuthSvc:     authService,
+		UserSvc:     userService,
+		AuditWriter: auditWriter,
 		UserRepo:    userRepo,
 		Security:    security,
 		TokenProv:   tokenProvider,
@@ -214,3 +258,7 @@ func BuildAppContainer() *AppContainer {
 		StorageType: storageType,
 	}
 }
+
+
+
+

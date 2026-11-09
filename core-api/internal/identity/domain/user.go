@@ -17,11 +17,15 @@ type User struct {
 	ID           string
 	Email        Email
 	PasswordHash string
+	FirstName    string
+	LastName     string
 	DisplayName  string
 	Phone        string
 	Role         Role
 	TenantID     *string
 	Status       UserStatus
+	EmailVerified   bool
+	TermsAcceptedAt *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -94,4 +98,10 @@ func (u *User) PromoteRole(newRole Role) error {
 func (u *User) ChangePassword(newHash string) {
 	u.PasswordHash = newHash
 	u.UpdatedAt = time.Now().UTC()
+}
+
+// RequiresPhone returns true when the account was created via Google OAuth and
+// no phone number has been collected yet.
+func (u *User) RequiresPhone() bool {
+	return u.Phone == ""
 }

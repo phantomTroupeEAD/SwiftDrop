@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { RegisterPage } from '@/features/auth/RegisterPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
@@ -40,6 +41,8 @@ export const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/auth/login" element={<LoginPage />} />
+      <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/register" element={<Navigate to="/auth/register" replace />} />
 
       {/* 5 Distinct Mock Pages for Each Role */}
       <Route
