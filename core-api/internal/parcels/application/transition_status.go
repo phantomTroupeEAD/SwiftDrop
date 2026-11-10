@@ -113,25 +113,8 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 	expectedVersion := parcel.Version
 	now := uc.clock.Now()
 
-	// Resolve actor ID, role, and reason defaults if omitted.
-	actorID := strings.TrimSpace(cmd.ActorID)
-	if actorID == "" {
-		actorID = "SYSTEM"
-	}
-
-	actorRole := strings.TrimSpace(cmd.ActorRole)
-	if actorRole == "" {
-		switch cmd.TargetStatus {
-		case domain.StatusAssigned, domain.StatusOutForDelivery:
-			actorRole = "DISPATCHER"
-		case domain.StatusPickedUp, domain.StatusDelivered, domain.StatusAttemptFailed:
-			actorRole = "COURIER"
-		case domain.StatusCancelled:
-			actorRole = "CUSTOMER"
-		default:
-			actorRole = "SYSTEM"
-		}
-	}
+	// Resolve actor ID, actor type, role, and reason defaults if omitted.
+	actorID, actorType, actorRole := resolveTransitionActor(cmd)
 
 	reason := strings.TrimSpace(cmd.Reason)
 	if reason == "" {
@@ -157,7 +140,7 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 
 	// 4. Execute the domain transition on the aggregate root.
 	// This evaluates lifecycle state machine legality, attempt counters, and terminal states.
-	historyEntry, err := parcel.TransitionTo(cmd.TargetStatus, actorID, actorRole, reason, now)
+	historyEntry, err := parcel.TransitionTo(cmd.TargetStatus, actorID, actorType, actorRole, reason, now)
 	if err != nil {
 		return TransitionParcelStatusResult{}, err
 	}
@@ -191,15 +174,15 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 	}
 
 	payload := ParcelStatusChangedPayload{
-		ParcelID:         parcel.ID,
-		TrackingNumber:   parcel.TrackingNumber.String(),
-		PreviousStatus:   fromStatusStr,
-		NewStatus:        string(historyEntry.ToStatus),
-		ActorID:          historyEntry.ActorID,
-		ActorRole:        historyEntry.ActorRole,
-		Reason:           historyEntry.Reason,
-		DeliveryAttempts: parcel.DeliveryAttempts,
-		OccurredAt:       historyEntry.Timestamp,
+		ParcelID:       parcel.ID,
+		TrackingNumber: parcel.TrackingNumber.String(),
+		PreviousStatus: fromStatusStr,
+		NewStatus:      string(historyEntry.ToStatus),
+		ActorID:        historyEntry.ActorID,
+		ActorRole:      historyEntry.ActorRole,
+		Reason:         historyEntry.Reason,
+		AttemptCount:   parcel.AttemptCount,
+		OccurredAt:     historyEntry.OccurredAt,
 	}
 
 	corrID := strings.TrimSpace(cmd.CorrelationID)
@@ -230,3 +213,36 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 	}, nil
 }
 
+func resolveTransitionActor(cmd TransitionParcelStatusCommand) (*string, domain.ActorType, string) {
+	actorType := cmd.ActorType
+	if actorType == "" {
+		if cmd.ActorID == nil {
+			actorType = domain.ActorTypeSystem
+		} else {
+			actorType = domain.ActorTypeUser
+		}
+	}
+
+	actorRole := strings.TrimSpace(cmd.ActorRole)
+	if actorRole == "" {
+		switch actorType {
+		case domain.ActorTypeSystem:
+			actorRole = "SYSTEM"
+		case domain.ActorTypeMerchantAPI:
+			actorRole = "MERCHANT"
+		default:
+			switch cmd.TargetStatus {
+			case domain.StatusAssigned, domain.StatusOutForDelivery:
+				actorRole = "DISPATCHER"
+			case domain.StatusPickedUp, domain.StatusDelivered, domain.StatusAttemptFailed:
+				actorRole = "COURIER"
+			case domain.StatusCancelled:
+				actorRole = "CUSTOMER"
+			default:
+				actorRole = "SYSTEM"
+			}
+		}
+	}
+
+	return cmd.ActorID, actorType, actorRole
+}

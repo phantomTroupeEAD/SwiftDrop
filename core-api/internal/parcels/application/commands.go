@@ -26,8 +26,9 @@ type DimensionsDTO struct {
 // delivery fees, tariff versions, chargeable weights, or service-level prices.
 type BookParcelCommand struct {
 	QuoteID             string
-	SenderID            string
+	SenderID            *string
 	MerchantID          *string
+	ActorType           domain.ActorType
 	RecipientName       string
 	RecipientPhone      string
 	WeightKg            float64
@@ -49,7 +50,8 @@ type BookParcelResult struct {
 type TransitionParcelStatusCommand struct {
 	ParcelID        string
 	TargetStatus    domain.ParcelStatus
-	ActorID         string
+	ActorID         *string
+	ActorType       domain.ActorType
 	ActorRole       string
 	Reason          string
 	ExpectedVersion *int

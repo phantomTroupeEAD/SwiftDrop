@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -14,6 +15,10 @@ import (
 	"github.com/swiftdrop/core-api/internal/parcels/domain"
 	"github.com/swiftdrop/core-api/internal/platform/db"
 )
+
+func strPtr(s string) *string {
+	return &s
+}
 
 // In-memory SQL driver for standard library *sql.DB and *sql.Tx instantiation.
 var (
@@ -231,7 +236,7 @@ func (m *mockStatusHistoryRepo) Save(ctx context.Context, q db.Querier, entry do
 func validTestBookingCommand() BookParcelCommand {
 	return BookParcelCommand{
 		QuoteID:        "quote-uuid-001",
-		SenderID:       "usr-sender-001",
+		SenderID:       strPtr("usr-sender-001"),
 		MerchantID:     nil,
 		RecipientName:  "Sunil Perera",
 		RecipientPhone: "+94771234567",
@@ -247,7 +252,8 @@ func validTestBookingCommand() BookParcelCommand {
 			StreetLine1:  "45 Galle Road",
 			City:         "Colombo",
 			PostalCode:   "00300",
-			ZoneID:       "ZONE-WESTERN-01",
+			ZoneID:       "ZONE_WESTERN_01",
+			Instructions: " Ring bell at main gate ",
 		},
 		DropoffAddress: AddressDTO{
 			ContactName:  "Sunil Perera",
@@ -255,7 +261,8 @@ func validTestBookingCommand() BookParcelCommand {
 			StreetLine1:  "12 Kandy Road",
 			City:         "Kandy",
 			PostalCode:   "20000",
-			ZoneID:       "ZONE-CENTRAL-01",
+			ZoneID:       "ZONE_CENTRAL_01",
+			Instructions: " Leave at reception ",
 		},
 		ItemDescription:     "Electronic Parts",
 		SpecialInstructions: "Fragile",
@@ -269,8 +276,10 @@ func validTestQuoteSnapshot(now time.Time) AcceptedQuoteSnapshot {
 		QuoteID:            "quote-uuid-001",
 		TariffID:           "tariff-rule-001",
 		TariffVersion:      2,
-		OriginZoneID:       "ZONE-WESTERN-01",
-		DestinationZoneID:  "ZONE-CENTRAL-01",
+		RequesterID:        strPtr("usr-sender-001"),
+		MerchantID:         nil,
+		OriginZoneID:       "ZONE_WESTERN_01",
+		DestinationZoneID:  "ZONE_CENTRAL_01",
 		ChargeableWeightKg: 2.5,
 		ServiceLevel:       "STANDARD",
 		FeeCents:           55000,
@@ -345,11 +354,17 @@ func TestBookParcelUseCase_Success(t *testing.T) {
 	if parcel.Status != domain.StatusCreated {
 		t.Errorf("expected status CREATED, got %s", parcel.Status)
 	}
-	if parcel.DeliveryAttempts != 0 {
-		t.Errorf("expected delivery attempts 0, got %d", parcel.DeliveryAttempts)
+	if parcel.AttemptCount != 0 {
+		t.Errorf("expected attempt count 0, got %d", parcel.AttemptCount)
 	}
 	if parcel.Version != 1 {
 		t.Errorf("expected version 1, got %d", parcel.Version)
+	}
+	if parcel.PickupAddress.Instructions != "Ring bell at main gate" {
+		t.Errorf("expected trimmed pickup instructions, got %q", parcel.PickupAddress.Instructions)
+	}
+	if parcel.DropoffAddress.Instructions != "Leave at reception" {
+		t.Errorf("expected trimmed dropoff instructions, got %q", parcel.DropoffAddress.Instructions)
 	}
 
 	// 2. Verify StatusHistory audit record
@@ -366,8 +381,17 @@ func TestBookParcelUseCase_Success(t *testing.T) {
 	if history.ToStatus != domain.StatusCreated {
 		t.Errorf("expected ToStatus CREATED, got %s", history.ToStatus)
 	}
+	if history.ActorType != domain.ActorTypeUser {
+		t.Errorf("expected ActorType USER, got %s", history.ActorType)
+	}
+	if history.ActorID == nil || *history.ActorID != "usr-sender-001" {
+		t.Errorf("expected ActorID usr-sender-001, got %v", history.ActorID)
+	}
 	if history.ActorRole != "CUSTOMER" {
 		t.Errorf("expected ActorRole CUSTOMER, got %s", history.ActorRole)
+	}
+	if !history.OccurredAt.Equal(now) {
+		t.Errorf("expected OccurredAt %v, got %v", now, history.OccurredAt)
 	}
 
 	// 3. Verify Outbox Event
@@ -498,11 +522,40 @@ func TestBookParcelUseCase_InvalidBookingDetails(t *testing.T) {
 		t.Errorf("expected ErrInvalidQuoteID, got: %v", err)
 	}
 
-	// 2. Missing Sender ID
+	// 2. Non-nil empty Sender ID
 	cmd2 := validTestBookingCommand()
-	cmd2.SenderID = ""
+	cmd2.SenderID = strPtr("")
 	if _, err := uc.Execute(context.Background(), cmd2); !errors.Is(err, domain.ErrInvalidSenderID) {
 		t.Errorf("expected ErrInvalidSenderID, got: %v", err)
+	}
+
+	// 2b. Missing both owners
+	cmd2b := validTestBookingCommand()
+	cmd2b.SenderID = nil
+	cmd2b.MerchantID = nil
+	if _, err := uc.Execute(context.Background(), cmd2b); !errors.Is(err, domain.ErrInvalidOwner) {
+		t.Errorf("expected ErrInvalidOwner, got: %v", err)
+	}
+
+	// 2c. Non-nil whitespace Merchant ID
+	cmd2c := validTestBookingCommand()
+	cmd2c.MerchantID = strPtr("   ")
+	if _, err := uc.Execute(context.Background(), cmd2c); !errors.Is(err, domain.ErrInvalidMerchantID) {
+		t.Errorf("expected ErrInvalidMerchantID, got: %v", err)
+	}
+
+	// 2d. Reject literal SYSTEM as SenderID
+	cmd2d := validTestBookingCommand()
+	cmd2d.SenderID = strPtr("SYSTEM")
+	if _, err := uc.Execute(context.Background(), cmd2d); !errors.Is(err, domain.ErrInvalidActorID) {
+		t.Errorf("expected ErrInvalidActorID for SYSTEM sender id, got: %v", err)
+	}
+
+	// 2e. Reject SYSTEM actor type for booking
+	cmd2e := validTestBookingCommand()
+	cmd2e.ActorType = domain.ActorTypeSystem
+	if _, err := uc.Execute(context.Background(), cmd2e); !errors.Is(err, domain.ErrInvalidActorType) {
+		t.Errorf("expected ErrInvalidActorType for SYSTEM booking, got: %v", err)
 	}
 
 	// 3. Missing Recipient Name
@@ -558,7 +611,7 @@ func TestBookParcelUseCase_QuoteZoneMismatch(t *testing.T) {
 
 	// Command with mismatched pickup zone
 	cmd := validTestBookingCommand()
-	cmd.PickupAddress.ZoneID = "ZONE-SOUTHERN-01" // Quote specifies ZONE-WESTERN-01
+	cmd.PickupAddress.ZoneID = "ZONE_SOUTHERN_01" // Quote specifies ZONE_WESTERN_01
 
 	_, err := uc.Execute(context.Background(), cmd)
 	if err == nil || !errors.Is(err, ErrQuoteZoneMismatch) {
@@ -801,8 +854,12 @@ func TestBookParcelUseCase_MerchantRoleActor(t *testing.T) {
 	database := getTestDB(t)
 	defer database.Close()
 
+	merchantID := "mrc_01HMERCHANT0001"
+	quoteSnapshot := validTestQuoteSnapshot(now)
+	quoteSnapshot.MerchantID = &merchantID
+
 	txManager := NewDBTransactionManager(database)
-	quoteConsumer := &mockQuoteConsumer{quote: validTestQuoteSnapshot(now)}
+	quoteConsumer := &mockQuoteConsumer{quote: quoteSnapshot}
 	parcelRepo := newMockParcelRepo()
 	statusHistoryRepo := newMockStatusHistoryRepo()
 	outboxWriter := eventstest.NewInMemoryWriter()
@@ -812,7 +869,6 @@ func TestBookParcelUseCase_MerchantRoleActor(t *testing.T) {
 	)
 
 	cmd := validTestBookingCommand()
-	merchantID := "mrc_01HMERCHANT0001"
 	cmd.MerchantID = &merchantID
 
 	res, err := uc.Execute(context.Background(), cmd)
@@ -823,9 +879,258 @@ func TestBookParcelUseCase_MerchantRoleActor(t *testing.T) {
 	if res.Parcel.MerchantID == nil || *res.Parcel.MerchantID != merchantID {
 		t.Errorf("expected merchant ID %s, got %v", merchantID, res.Parcel.MerchantID)
 	}
+	if res.StatusHistory.ActorType != domain.ActorTypeUser {
+		t.Errorf("expected actor type USER for merchant portal user, got %s", res.StatusHistory.ActorType)
+	}
+	if res.StatusHistory.ActorID == nil || *res.StatusHistory.ActorID != "usr-sender-001" {
+		t.Errorf("expected actor ID usr-sender-001, got %v", res.StatusHistory.ActorID)
+	}
 	if res.StatusHistory.ActorRole != "MERCHANT" {
 		t.Errorf("expected actor role MERCHANT, got %s", res.StatusHistory.ActorRole)
 	}
+}
+
+func TestBookParcelUseCase_MerchantOnlyAPIBooking(t *testing.T) {
+	now := time.Now().UTC()
+	database := getTestDB(t)
+	defer database.Close()
+
+	merchantID := "mrc_api_001"
+	quoteSnapshot := validTestQuoteSnapshot(now)
+	quoteSnapshot.RequesterID = nil
+	quoteSnapshot.MerchantID = &merchantID
+
+	txManager := NewDBTransactionManager(database)
+	quoteConsumer := &mockQuoteConsumer{quote: quoteSnapshot}
+	parcelRepo := newMockParcelRepo()
+	statusHistoryRepo := newMockStatusHistoryRepo()
+	outboxWriter := eventstest.NewInMemoryWriter()
+
+	uc, _ := NewBookParcelUseCase(
+		txManager, quoteConsumer, parcelRepo, statusHistoryRepo, outboxWriter, nil, nil, fixedClock{now: now},
+	)
+
+	cmd := validTestBookingCommand()
+	cmd.SenderID = nil
+	cmd.MerchantID = strPtr(" " + merchantID + " ")
+
+	res, err := uc.Execute(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("expected merchant-only API booking to succeed, got: %v", err)
+	}
+
+	if res.Parcel.SenderID != nil {
+		t.Errorf("expected nil SenderID (no dummy sender id), got %v", *res.Parcel.SenderID)
+	}
+	if res.Parcel.MerchantID == nil || *res.Parcel.MerchantID != merchantID {
+		t.Errorf("expected trimmed MerchantID %s, got %v", merchantID, res.Parcel.MerchantID)
+	}
+	if res.StatusHistory.ActorType != domain.ActorTypeMerchantAPI {
+		t.Errorf("expected ActorType MERCHANT_API, got %s", res.StatusHistory.ActorType)
+	}
+	if res.StatusHistory.ActorID == nil || *res.StatusHistory.ActorID != merchantID {
+		t.Errorf("expected ActorID %s, got %v", merchantID, res.StatusHistory.ActorID)
+	}
+	if res.StatusHistory.ActorRole != "MERCHANT" {
+		t.Errorf("expected ActorRole MERCHANT, got %s", res.StatusHistory.ActorRole)
+	}
+
+	eventsList := outboxWriter.FindByEventType(events.ParcelBookedV1)
+	if len(eventsList) != 1 {
+		t.Fatalf("expected 1 parcel.booked.v1 event, got %d", len(eventsList))
+	}
+	payloadBytes, err := eventsList[0].SerializePayload()
+	if err != nil {
+		t.Fatalf("failed to serialize payload: %v", err)
+	}
+	var rawMap map[string]any
+	if err := json.Unmarshal(payloadBytes, &rawMap); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	if _, exists := rawMap["sender_id"]; exists {
+		t.Errorf("expected sender_id to be omitted for merchant-only booking, got %v", rawMap["sender_id"])
+	}
+	if rawMap["merchant_id"] != merchantID {
+		t.Errorf("expected merchant_id %s, got %v", merchantID, rawMap["merchant_id"])
+	}
+}
+
+func TestBookParcelUseCase_QuoteOwnershipVerification(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("allowed ownership combinations", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			quoteRequester *string
+			quoteMerchant  *string
+			cmdSender      *string
+			cmdMerchant    *string
+			cmdActorType   domain.ActorType
+			wantActorType  domain.ActorType
+		}{
+			{
+				name:           "merchant API booking with quote from merchant web user",
+				quoteRequester: strPtr("usr-owner-01"),
+				quoteMerchant:  strPtr("mrc-001"),
+				cmdSender:      nil,
+				cmdMerchant:    strPtr("mrc-001"),
+				wantActorType:  domain.ActorTypeMerchantAPI,
+			},
+			{
+				name:           "merchant web user booking with merchant-only quote",
+				quoteRequester: nil,
+				quoteMerchant:  strPtr("mrc-001"),
+				cmdSender:      strPtr("usr-owner-01"),
+				cmdMerchant:    strPtr("mrc-001"),
+				wantActorType:  domain.ActorTypeUser,
+			},
+			{
+				name:           "explicit MERCHANT_API booking with optional sender matching quote",
+				quoteRequester: strPtr("usr-cust-01"),
+				quoteMerchant:  strPtr("mrc-001"),
+				cmdSender:      strPtr("usr-cust-01"),
+				cmdMerchant:    strPtr("mrc-001"),
+				cmdActorType:   domain.ActorTypeMerchantAPI,
+				wantActorType:  domain.ActorTypeMerchantAPI,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				database := getTestDB(t)
+				defer database.Close()
+
+				quote := validTestQuoteSnapshot(now)
+				quote.RequesterID = tc.quoteRequester
+				quote.MerchantID = tc.quoteMerchant
+
+				txManager := NewDBTransactionManager(database)
+				quoteConsumer := &mockQuoteConsumer{quote: quote}
+				parcelRepo := newMockParcelRepo()
+				statusHistoryRepo := newMockStatusHistoryRepo()
+				outboxWriter := eventstest.NewInMemoryWriter()
+
+				uc, _ := NewBookParcelUseCase(
+					txManager, quoteConsumer, parcelRepo, statusHistoryRepo, outboxWriter, nil, nil, fixedClock{now: now},
+				)
+
+				cmd := validTestBookingCommand()
+				cmd.SenderID = tc.cmdSender
+				cmd.MerchantID = tc.cmdMerchant
+				cmd.ActorType = tc.cmdActorType
+
+				res, err := uc.Execute(context.Background(), cmd)
+				if err != nil {
+					t.Fatalf("expected success, got: %v", err)
+				}
+				if res.StatusHistory.ActorType != tc.wantActorType {
+					t.Errorf("expected ActorType %s, got %s", tc.wantActorType, res.StatusHistory.ActorType)
+				}
+			})
+		}
+	})
+
+	t.Run("rejected ownership mismatches roll back transaction", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			quoteRequester *string
+			quoteMerchant  *string
+			cmdSender      *string
+			cmdMerchant    *string
+			cmdActorType   domain.ActorType
+		}{
+			{
+				name:           "customer B cannot use customer A quote",
+				quoteRequester: strPtr("usr-A"),
+				quoteMerchant:  nil,
+				cmdSender:      strPtr("usr-B"),
+				cmdMerchant:    nil,
+			},
+			{
+				name:           "customer cannot use merchant-only quote",
+				quoteRequester: nil,
+				quoteMerchant:  strPtr("mrc-1"),
+				cmdSender:      strPtr("usr-A"),
+				cmdMerchant:    nil,
+			},
+			{
+				name:           "customer-only booking cannot use merchant-scoped quote",
+				quoteRequester: strPtr("usr-A"),
+				quoteMerchant:  strPtr("mrc-1"),
+				cmdSender:      strPtr("usr-A"),
+				cmdMerchant:    nil,
+			},
+			{
+				name:           "merchant B cannot use merchant A quote",
+				quoteRequester: nil,
+				quoteMerchant:  strPtr("mrc-A"),
+				cmdSender:      nil,
+				cmdMerchant:    strPtr("mrc-B"),
+			},
+			{
+				name:           "merchant API cannot claim customer-only quote even with sender id",
+				quoteRequester: strPtr("usr-A"),
+				quoteMerchant:  nil,
+				cmdSender:      strPtr("usr-A"),
+				cmdMerchant:    strPtr("mrc-A"),
+				cmdActorType:   domain.ActorTypeMerchantAPI,
+			},
+			{
+				name:           "merchant user A cannot use merchant quote created by user B",
+				quoteRequester: strPtr("usr-B"),
+				quoteMerchant:  strPtr("mrc-1"),
+				cmdSender:      strPtr("usr-A"),
+				cmdMerchant:    strPtr("mrc-1"),
+			},
+			{
+				name:           "quote missing both owners fails closed",
+				quoteRequester: nil,
+				quoteMerchant:  nil,
+				cmdSender:      strPtr("usr-A"),
+				cmdMerchant:    nil,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				database := getTestDB(t)
+				defer database.Close()
+
+				quote := validTestQuoteSnapshot(now)
+				quote.RequesterID = tc.quoteRequester
+				quote.MerchantID = tc.quoteMerchant
+
+				txManager := NewDBTransactionManager(database)
+				quoteConsumer := &mockQuoteConsumer{quote: quote}
+				parcelRepo := newMockParcelRepo()
+				statusHistoryRepo := newMockStatusHistoryRepo()
+				outboxWriter := eventstest.NewInMemoryWriter()
+
+				uc, _ := NewBookParcelUseCase(
+					txManager, quoteConsumer, parcelRepo, statusHistoryRepo, outboxWriter, nil, nil, fixedClock{now: now},
+				)
+
+				cmd := validTestBookingCommand()
+				cmd.SenderID = tc.cmdSender
+				cmd.MerchantID = tc.cmdMerchant
+				cmd.ActorType = tc.cmdActorType
+
+				_, err := uc.Execute(context.Background(), cmd)
+				if !errors.Is(err, ErrQuoteOwnershipMismatch) {
+					t.Fatalf("expected ErrQuoteOwnershipMismatch, got: %v", err)
+				}
+				if parcelRepo.saveCalled || statusHistoryRepo.saveCalled || outboxWriter.Count() > 0 {
+					t.Error("expected zero parcel/history/outbox persistence on ownership failure")
+				}
+				testTxMu.Lock()
+				rolledBack := lastTxRolledBack
+				testTxMu.Unlock()
+				if !rolledBack {
+					t.Error("expected database transaction rollback on quote ownership mismatch")
+				}
+			})
+		}
+	})
 }
 
 type failingOutboxWriter struct {

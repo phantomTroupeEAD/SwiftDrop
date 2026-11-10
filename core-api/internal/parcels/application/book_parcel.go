@@ -76,12 +76,17 @@ func NewBookParcelUseCase(
 
 // Execute processes a parcel booking command.
 func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand) (BookParcelResult, error) {
-	// 1. Basic command input validation.
+	// 1. Basic command input and ownership validation.
 	if strings.TrimSpace(cmd.QuoteID) == "" {
 		return BookParcelResult{}, domain.ErrInvalidQuoteID
 	}
-	if strings.TrimSpace(cmd.SenderID) == "" {
-		return BookParcelResult{}, domain.ErrInvalidSenderID
+	senderID, merchantID, err := normalizeBookingOwners(cmd.SenderID, cmd.MerchantID)
+	if err != nil {
+		return BookParcelResult{}, err
+	}
+	actorID, actorType, actorRole, err := resolveBookingActor(senderID, merchantID, cmd.ActorType)
+	if err != nil {
+		return BookParcelResult{}, err
 	}
 	if strings.TrimSpace(cmd.RecipientName) == "" || strings.TrimSpace(cmd.RecipientPhone) == "" {
 		return BookParcelResult{}, domain.ErrInvalidRecipient
@@ -102,7 +107,7 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		return BookParcelResult{}, err
 	}
 
-	// 3. Addresses validation.
+	// 3. Addresses validation (including instructions and ZONE_* format).
 	pickupAddr, err := domain.NewAddress(
 		cmd.PickupAddress.ContactName,
 		cmd.PickupAddress.ContactPhone,
@@ -111,6 +116,7 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		cmd.PickupAddress.City,
 		cmd.PickupAddress.PostalCode,
 		cmd.PickupAddress.ZoneID,
+		cmd.PickupAddress.Instructions,
 	)
 	if err != nil {
 		return BookParcelResult{}, fmt.Errorf("pickup address: %w", err)
@@ -124,6 +130,7 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		cmd.DropoffAddress.City,
 		cmd.DropoffAddress.PostalCode,
 		cmd.DropoffAddress.ZoneID,
+		cmd.DropoffAddress.Instructions,
 	)
 	if err != nil {
 		return BookParcelResult{}, fmt.Errorf("dropoff address: %w", err)
@@ -133,7 +140,7 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 	var result BookParcelResult
 
 	// 4. Execute atomic transaction encompassing:
-	//    a) Atomic quote consumption
+	//    a) Atomic quote consumption and ownership verification
 	//    b) Verification of route & weight invariants against the quote
 	//    c) Tracking number allocation with bounded collision retry
 	//    d) Parcel aggregate construction & persistence
@@ -143,6 +150,11 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		// a. Atomic quote consumption
 		quote, err := uc.quoteConsumer.ConsumeQuote(ctx, tx, cmd.QuoteID, now)
 		if err != nil {
+			return err
+		}
+
+		// a2. Verify quote belongs to the requesting customer/merchant context
+		if err := verifyQuoteOwnership(senderID, merchantID, actorType, quote); err != nil {
 			return err
 		}
 
@@ -199,8 +211,8 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		parcel, err := domain.NewParcel(domain.CreateParcelParams{
 			ID:                 parcelID,
 			TrackingNumber:     trackingNumber,
-			SenderID:           cmd.SenderID,
-			MerchantID:         cmd.MerchantID,
+			SenderID:           senderID,
+			MerchantID:         merchantID,
 			RecipientName:      cmd.RecipientName,
 			RecipientPhone:     cmd.RecipientPhone,
 			QuoteID:            quote.QuoteID,
@@ -231,17 +243,13 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 			return fmt.Errorf("failed to generate status history id: %w", err)
 		}
 
-		actorRole := "CUSTOMER"
-		if cmd.MerchantID != nil && strings.TrimSpace(*cmd.MerchantID) != "" {
-			actorRole = "MERCHANT"
-		}
-
 		historyEntry, err := domain.NewStatusHistoryEntry(
 			historyID,
 			parcel.ID,
 			nil, // fromStatus is nil for initial booking creation
 			domain.StatusCreated,
-			cmd.SenderID,
+			actorID,
+			actorType,
 			actorRole,
 			"Initial parcel booking",
 			now,
@@ -314,3 +322,133 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 	return result, nil
 }
 
+func normalizeOptionalID(id *string, invalidErr error) (*string, error) {
+	if id == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*id)
+	if trimmed == "" {
+		return nil, invalidErr
+	}
+	return &trimmed, nil
+}
+
+func normalizeBookingOwners(senderID, merchantID *string) (*string, *string, error) {
+	normSender, err := normalizeOptionalID(senderID, domain.ErrInvalidSenderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	normMerchant, err := normalizeOptionalID(merchantID, domain.ErrInvalidMerchantID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if normSender == nil && normMerchant == nil {
+		return nil, nil, domain.ErrInvalidOwner
+	}
+	return normSender, normMerchant, nil
+}
+
+func resolveBookingActor(senderID, merchantID *string, requestedType domain.ActorType) (*string, domain.ActorType, string, error) {
+	var (
+		actorID   *string
+		actorType domain.ActorType
+		actorRole string
+	)
+
+	if requestedType == "" {
+		if senderID != nil {
+			actorType = domain.ActorTypeUser
+			actorID = senderID
+			actorRole = "CUSTOMER"
+			if merchantID != nil {
+				actorRole = "MERCHANT"
+			}
+		} else {
+			actorType = domain.ActorTypeMerchantAPI
+			actorID = merchantID
+			actorRole = "MERCHANT"
+		}
+	} else {
+		if err := requestedType.Validate(); err != nil {
+			return nil, "", "", err
+		}
+		switch requestedType {
+		case domain.ActorTypeSystem:
+			return nil, "", "", fmt.Errorf("%w: parcel booking cannot use SYSTEM actor type", domain.ErrInvalidActorType)
+		case domain.ActorTypeUser:
+			if senderID == nil {
+				return nil, "", "", fmt.Errorf("%w: USER booking requires sender_id", domain.ErrInvalidSenderID)
+			}
+			actorType = domain.ActorTypeUser
+			actorID = senderID
+			actorRole = "CUSTOMER"
+			if merchantID != nil {
+				actorRole = "MERCHANT"
+			}
+		case domain.ActorTypeMerchantAPI:
+			if merchantID == nil {
+				return nil, "", "", fmt.Errorf("%w: MERCHANT_API booking requires merchant_id", domain.ErrInvalidMerchantID)
+			}
+			actorType = domain.ActorTypeMerchantAPI
+			actorID = merchantID
+			actorRole = "MERCHANT"
+		}
+	}
+
+	if actorID != nil && strings.EqualFold(*actorID, string(domain.ActorTypeSystem)) {
+		return nil, "", "", fmt.Errorf("%w: literal %q is not a valid actor_id", domain.ErrInvalidActorID, *actorID)
+	}
+
+	return actorID, actorType, actorRole, nil
+}
+
+func verifyQuoteOwnership(
+	senderID, merchantID *string,
+	actorType domain.ActorType,
+	quote AcceptedQuoteSnapshot,
+) error {
+	quoteRequester, err := normalizeOptionalID(quote.RequesterID, ErrQuoteOwnershipMismatch)
+	if err != nil {
+		return fmt.Errorf("%w: quote contains blank requester_id", err)
+	}
+	quoteMerchant, err := normalizeOptionalID(quote.MerchantID, ErrQuoteOwnershipMismatch)
+	if err != nil {
+		return fmt.Errorf("%w: quote contains blank merchant_id", err)
+	}
+	if quoteRequester == nil && quoteMerchant == nil {
+		return fmt.Errorf("%w: quote snapshot is missing ownership metadata", ErrQuoteOwnershipMismatch)
+	}
+
+	switch actorType {
+	case domain.ActorTypeMerchantAPI:
+		if merchantID == nil || quoteMerchant == nil || *quoteMerchant != *merchantID {
+			return fmt.Errorf("%w: quote does not belong to requesting merchant", ErrQuoteOwnershipMismatch)
+		}
+		if senderID != nil && quoteRequester != nil && *quoteRequester != *senderID {
+			return fmt.Errorf("%w: quote requester does not match booking sender", ErrQuoteOwnershipMismatch)
+		}
+		return nil
+
+	case domain.ActorTypeUser:
+		if merchantID == nil {
+			if quoteMerchant != nil {
+				return fmt.Errorf("%w: merchant-scoped quote cannot be booked without matching merchant", ErrQuoteOwnershipMismatch)
+			}
+			if senderID == nil || quoteRequester == nil || *quoteRequester != *senderID {
+				return fmt.Errorf("%w: quote does not belong to requesting customer", ErrQuoteOwnershipMismatch)
+			}
+			return nil
+		}
+
+		if quoteMerchant == nil || *quoteMerchant != *merchantID {
+			return fmt.Errorf("%w: quote does not belong to requesting merchant", ErrQuoteOwnershipMismatch)
+		}
+		if quoteRequester != nil && (senderID == nil || *quoteRequester != *senderID) {
+			return fmt.Errorf("%w: quote requester does not match requesting user", ErrQuoteOwnershipMismatch)
+		}
+		return nil
+
+	default:
+		return ErrQuoteOwnershipMismatch
+	}
+}

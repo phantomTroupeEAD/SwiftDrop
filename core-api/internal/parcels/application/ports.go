@@ -15,6 +15,8 @@ type AcceptedQuoteSnapshot struct {
 	QuoteID            string
 	TariffID           string
 	TariffVersion      int
+	RequesterID        *string
+	MerchantID         *string
 	OriginZoneID       string
 	DestinationZoneID  string
 	ChargeableWeightKg float64

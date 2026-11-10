@@ -23,28 +23,34 @@ func createTestParcel(t *testing.T, baseTime time.Time, status domain.ParcelStat
 	fee, _ := domain.NewMoney(55000, domain.CurrencyLKR)
 	weight, _ := domain.NewWeight(2.5, 1.8, 2.5)
 	dims, _ := domain.NewDimensions(30, 20, 15)
-	pickup, _ := domain.NewAddress("Kasun", "+94771234567", "45 Galle Rd", "", "Colombo", "00300", "ZONE-A")
-	dropoff, _ := domain.NewAddress("Sunil", "+94719876543", "12 Kandy Rd", "", "Kandy", "20000", "ZONE-B")
+	pickup, err := domain.NewAddress("Kasun", "+94771234567", "45 Galle Rd", "", "Colombo", "00300", "ZONE_WESTERN_01", "")
+	if err != nil {
+		t.Fatalf("failed to create test pickup address: %v", err)
+	}
+	dropoff, err := domain.NewAddress("Sunil", "+94719876543", "12 Kandy Rd", "", "Kandy", "20000", "ZONE_CENTRAL_01", "")
+	if err != nil {
+		t.Fatalf("failed to create test dropoff address: %v", err)
+	}
 
 	p, err := domain.ReconstituteParcel(domain.ReconstituteParcelParams{
 		ID:                 id,
 		TrackingNumber:     tn,
-		SenderID:           "sender-001",
+		SenderID:           strPtr("sender-001"),
 		RecipientName:      "Sunil",
 		RecipientPhone:     "+94719876543",
 		QuoteID:            "quote-001",
 		PricingRuleID:      "rule-001",
 		PricingRuleVersion: 1,
 		DeliveryFee:        fee,
-		OriginZoneID:       "ZONE-A",
-		DestinationZoneID:  "ZONE-B",
+		OriginZoneID:       "ZONE_WESTERN_01",
+		DestinationZoneID:  "ZONE_CENTRAL_01",
 		ServiceLevel:       domain.ServiceLevelStandard,
 		Weight:             weight,
 		Dimensions:         dims,
 		PickupAddress:      pickup,
 		DropoffAddress:     dropoff,
 		Status:             status,
-		DeliveryAttempts:   attempts,
+		AttemptCount:       attempts,
 		Version:            version,
 		CreatedAt:          baseTime.Add(-1 * time.Hour),
 		UpdatedAt:          baseTime.Add(-1 * time.Hour),
@@ -177,7 +183,8 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			cmd := TransitionParcelStatusCommand{
 				ParcelID:      parcel.ID,
 				TargetStatus:  tc.targetStatus,
-				ActorID:       "usr-test-actor",
+				ActorID:       strPtr("usr-test-actor"),
+				ActorType:     domain.ActorTypeUser,
 				CorrelationID: "corr-12345",
 			}
 
@@ -193,8 +200,8 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if result.Parcel.Version != 2 {
 				t.Errorf("expected parcel version 2, got %d", result.Parcel.Version)
 			}
-			if result.Parcel.DeliveryAttempts != tc.expectedAttempts {
-				t.Errorf("expected attempts %d, got %d", tc.expectedAttempts, result.Parcel.DeliveryAttempts)
+			if result.Parcel.AttemptCount != tc.expectedAttempts {
+				t.Errorf("expected attempts %d, got %d", tc.expectedAttempts, result.Parcel.AttemptCount)
 			}
 
 			// Verify status history entry
@@ -204,8 +211,17 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if result.StatusHistory.FromStatus == nil || *result.StatusHistory.FromStatus != tc.initialStatus {
 				t.Errorf("expected history FromStatus %s, got %v", tc.initialStatus, result.StatusHistory.FromStatus)
 			}
+			if result.StatusHistory.ActorType != domain.ActorTypeUser {
+				t.Errorf("expected ActorType USER, got %s", result.StatusHistory.ActorType)
+			}
+			if result.StatusHistory.ActorID == nil || *result.StatusHistory.ActorID != "usr-test-actor" {
+				t.Errorf("expected ActorID usr-test-actor, got %v", result.StatusHistory.ActorID)
+			}
 			if result.StatusHistory.ActorRole != tc.expectedActorRole {
 				t.Errorf("expected default actor role %s, got %s", tc.expectedActorRole, result.StatusHistory.ActorRole)
+			}
+			if !result.StatusHistory.OccurredAt.Equal(clock.now) {
+				t.Errorf("expected OccurredAt %v, got %v", clock.now, result.StatusHistory.OccurredAt)
 			}
 
 			// Verify persistence in mock repositories
@@ -236,10 +252,17 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 				t.Errorf("expected aggregate version 2, got %d", env.GetAggregateVersion())
 			}
 
-			// Verify serialized payload contains required lifecycle fields
+			// Verify serialized payload contains required lifecycle fields and preserves JSON delivery_attempts key
 			payloadBytes, err := env.SerializePayload()
 			if err != nil {
 				t.Fatalf("failed to serialize outbox payload: %v", err)
+			}
+			var rawMap map[string]any
+			if err := json.Unmarshal(payloadBytes, &rawMap); err != nil {
+				t.Fatalf("failed to parse raw payload map: %v", err)
+			}
+			if rawMap["delivery_attempts"] == nil {
+				t.Errorf("expected backward-compatible JSON key delivery_attempts in payload, got %s", string(payloadBytes))
 			}
 			var parsedPayload ParcelStatusChangedPayload
 			if err := json.Unmarshal(payloadBytes, &parsedPayload); err != nil {
@@ -254,8 +277,11 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if parsedPayload.NewStatus != string(tc.targetStatus) {
 				t.Errorf("payload new_status mismatch: expected %s, got %s", tc.targetStatus, parsedPayload.NewStatus)
 			}
-			if parsedPayload.DeliveryAttempts != tc.expectedAttempts {
-				t.Errorf("payload delivery_attempts mismatch: expected %d, got %d", tc.expectedAttempts, parsedPayload.DeliveryAttempts)
+			if parsedPayload.AttemptCount != tc.expectedAttempts {
+				t.Errorf("payload delivery_attempts mismatch: expected %d, got %d", tc.expectedAttempts, parsedPayload.AttemptCount)
+			}
+			if parsedPayload.ActorID == nil || *parsedPayload.ActorID != "usr-test-actor" {
+				t.Errorf("payload actor_id mismatch: got %v", parsedPayload.ActorID)
 			}
 
 			// Verify transaction committed
@@ -475,8 +501,8 @@ func TestTransitionParcelStatus_ThirdDeliveryAttemptBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected recording 3rd failed attempt to succeed, got: %v", err)
 	}
-	if resFail3.Parcel.DeliveryAttempts != 3 {
-		t.Fatalf("expected delivery attempts to equal 3, got: %d", resFail3.Parcel.DeliveryAttempts)
+	if resFail3.Parcel.AttemptCount != 3 {
+		t.Fatalf("expected attempt count to equal 3, got: %d", resFail3.Parcel.AttemptCount)
 	}
 
 	// Step 3: Attempting a 4th delivery run (ATTEMPT_FAILED -> OUT_FOR_DELIVERY) must FAIL!
@@ -700,7 +726,8 @@ func TestTransitionParcelStatus_ExecuteTx_Integration(t *testing.T) {
 		cmd := TransitionParcelStatusCommand{
 			ParcelID:     parcel.ID,
 			TargetStatus: domain.StatusAssigned,
-			ActorID:      "courier-001",
+			ActorID:      strPtr("courier-001"),
+			ActorType:    domain.ActorTypeUser,
 			ActorRole:    "DISPATCHER",
 			Reason:       "Assigned via Dispatcher Board",
 		}
@@ -771,4 +798,161 @@ func TestTransitionParcelStatus_ValidationErrors(t *testing.T) {
 	if _, err := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, nil, idGen, clock); !errors.Is(err, ErrNilOutboxWriter) {
 		t.Errorf("expected ErrNilOutboxWriter, got: %v", err)
 	}
+}
+
+func TestTransitionParcelStatus_ActorMetadataAndMerchantParcel(t *testing.T) {
+	now := time.Date(2026, 11, 8, 15, 0, 0, 0, time.UTC)
+
+	t.Run("SYSTEM transition uses nil ActorID and omits actor_id in JSON", func(t *testing.T) {
+		db := getTestDB(t)
+		txManager := NewDBTransactionManager(db)
+		parcelRepo := newMockParcelRepo()
+		historyRepo := newMockStatusHistoryRepo()
+		outbox := eventstest.NewInMemoryWriter()
+		uc, _ := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, &mockIDGen{}, fixedClock{now: now})
+
+		parcel := createTestParcel(t, now, domain.StatusAttemptFailed, 3, 2)
+		parcelRepo.parcels[parcel.ID] = parcel
+
+		res, err := uc.Execute(context.Background(), TransitionParcelStatusCommand{
+			ParcelID:     parcel.ID,
+			TargetStatus: domain.StatusReturned,
+			ActorID:      nil,
+			ActorType:    domain.ActorTypeSystem,
+		})
+		if err != nil {
+			t.Fatalf("expected SYSTEM transition with nil ActorID to succeed, got: %v", err)
+		}
+		if res.StatusHistory.ActorID != nil {
+			t.Errorf("expected nil ActorID, got %v", *res.StatusHistory.ActorID)
+		}
+		if res.StatusHistory.ActorType != domain.ActorTypeSystem {
+			t.Errorf("expected ActorType SYSTEM, got %s", res.StatusHistory.ActorType)
+		}
+		if res.StatusHistory.ActorRole != "SYSTEM" {
+			t.Errorf("expected ActorRole SYSTEM, got %s", res.StatusHistory.ActorRole)
+		}
+
+		payloadBytes, err := outbox.Events()[0].SerializePayload()
+		if err != nil {
+			t.Fatalf("serialize failed: %v", err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(payloadBytes, &raw); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+		if _, exists := raw["actor_id"]; exists {
+			t.Errorf("expected actor_id to be omitted for nil SYSTEM actor, got %v", raw["actor_id"])
+		}
+	})
+
+	t.Run("MERCHANT_API transition succeeds with merchant ActorID and default MERCHANT role", func(t *testing.T) {
+		db := getTestDB(t)
+		txManager := NewDBTransactionManager(db)
+		parcelRepo := newMockParcelRepo()
+		historyRepo := newMockStatusHistoryRepo()
+		outbox := eventstest.NewInMemoryWriter()
+		uc, _ := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, &mockIDGen{}, fixedClock{now: now})
+
+		parcel := createTestParcel(t, now, domain.StatusCreated, 0, 1)
+		parcel.SenderID = nil
+		parcel.MerchantID = strPtr("mrc-api-001")
+		parcelRepo.parcels[parcel.ID] = parcel
+
+		res, err := uc.Execute(context.Background(), TransitionParcelStatusCommand{
+			ParcelID:     parcel.ID,
+			TargetStatus: domain.StatusCancelled,
+			ActorID:      strPtr(" mrc-api-001 "),
+			ActorType:    domain.ActorTypeMerchantAPI,
+			Reason:       "Cancelled by merchant integration",
+		})
+		if err != nil {
+			t.Fatalf("expected MERCHANT_API cancellation to succeed, got: %v", err)
+		}
+		if res.Parcel.SenderID != nil {
+			t.Errorf("expected nil SenderID on merchant-only parcel, got %v", res.Parcel.SenderID)
+		}
+		if res.StatusHistory.ActorType != domain.ActorTypeMerchantAPI {
+			t.Errorf("expected ActorType MERCHANT_API, got %s", res.StatusHistory.ActorType)
+		}
+		if res.StatusHistory.ActorID == nil || *res.StatusHistory.ActorID != "mrc-api-001" {
+			t.Errorf("expected trimmed ActorID mrc-api-001, got %v", res.StatusHistory.ActorID)
+		}
+		if res.StatusHistory.ActorRole != "MERCHANT" {
+			t.Errorf("expected ActorRole MERCHANT, got %s", res.StatusHistory.ActorRole)
+		}
+	})
+
+	t.Run("invalid actor metadata is rejected and rolls back transaction", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			actorID   *string
+			actorType domain.ActorType
+			wantErr   error
+		}{
+			{
+				name:      "literal SYSTEM ActorID with SYSTEM ActorType rejected",
+				actorID:   strPtr("SYSTEM"),
+				actorType: domain.ActorTypeSystem,
+				wantErr:   domain.ErrInvalidActorID,
+			},
+			{
+				name:      "literal SYSTEM ActorID with USER ActorType rejected",
+				actorID:   strPtr("SYSTEM"),
+				actorType: domain.ActorTypeUser,
+				wantErr:   domain.ErrInvalidActorID,
+			},
+			{
+				name:      "USER with nil ActorID rejected",
+				actorID:   nil,
+				actorType: domain.ActorTypeUser,
+				wantErr:   domain.ErrInvalidActorID,
+			},
+			{
+				name:      "MERCHANT_API with whitespace ActorID rejected",
+				actorID:   strPtr("   "),
+				actorType: domain.ActorTypeMerchantAPI,
+				wantErr:   domain.ErrInvalidActorID,
+			},
+			{
+				name:      "unsupported ActorType rejected",
+				actorID:   strPtr("bot-1"),
+				actorType: domain.ActorType("BOT"),
+				wantErr:   domain.ErrInvalidActorType,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				db := getTestDB(t)
+				txManager := NewDBTransactionManager(db)
+				parcelRepo := newMockParcelRepo()
+				historyRepo := newMockStatusHistoryRepo()
+				outbox := eventstest.NewInMemoryWriter()
+				uc, _ := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, &mockIDGen{}, fixedClock{now: now})
+
+				parcel := createTestParcel(t, now, domain.StatusCreated, 0, 1)
+				parcelRepo.parcels[parcel.ID] = parcel
+
+				_, err := uc.Execute(context.Background(), TransitionParcelStatusCommand{
+					ParcelID:     parcel.ID,
+					TargetStatus: domain.StatusCancelled,
+					ActorID:      tc.actorID,
+					ActorType:    tc.actorType,
+				})
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("expected error wrapping %v, got: %v", tc.wantErr, err)
+				}
+				if parcelRepo.updateCalled || historyRepo.saveCalled || outbox.Count() > 0 {
+					t.Error("expected no persistence on invalid actor transition")
+				}
+				testTxMu.Lock()
+				rolledBack := lastTxRolledBack
+				testTxMu.Unlock()
+				if !rolledBack {
+					t.Error("expected transaction rollback on actor validation failure")
+				}
+			})
+		}
+	})
 }

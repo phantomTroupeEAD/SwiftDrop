@@ -12,7 +12,7 @@ import (
 type ParcelBookedPayload struct {
 	ParcelID           string    `json:"parcel_id"`
 	TrackingNumber     string    `json:"tracking_number"`
-	SenderID           string    `json:"sender_id"`
+	SenderID           *string   `json:"sender_id,omitempty"`
 	MerchantID         *string   `json:"merchant_id,omitempty"`
 	RecipientName      string    `json:"recipient_name"`
 	RecipientPhone     string    `json:"recipient_phone"`
@@ -33,15 +33,15 @@ type ParcelBookedPayload struct {
 // ParcelStatusChangedPayload represents the integration event payload published
 // to the transactional outbox upon any successful parcel lifecycle state transition.
 type ParcelStatusChangedPayload struct {
-	ParcelID         string    `json:"parcel_id"`
-	TrackingNumber   string    `json:"tracking_number"`
-	PreviousStatus   string    `json:"previous_status"`
-	NewStatus        string    `json:"new_status"`
-	ActorID          string    `json:"actor_id,omitempty"`
-	ActorRole        string    `json:"actor_role,omitempty"`
-	Reason           string    `json:"reason,omitempty"`
-	DeliveryAttempts int       `json:"delivery_attempts"`
-	OccurredAt       time.Time `json:"occurred_at"`
+	ParcelID       string    `json:"parcel_id"`
+	TrackingNumber string    `json:"tracking_number"`
+	PreviousStatus string    `json:"previous_status"`
+	NewStatus      string    `json:"new_status"`
+	ActorID        *string   `json:"actor_id,omitempty"`
+	ActorRole      string    `json:"actor_role,omitempty"`
+	Reason         string    `json:"reason,omitempty"`
+	AttemptCount   int       `json:"delivery_attempts"`
+	OccurredAt     time.Time `json:"occurred_at"`
 }
 
 // EventTypeForStatus maps a target parcel status to its authoritative versioned event type.
