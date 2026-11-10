@@ -40,6 +40,7 @@ SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 ```
 deploy/
 ├── README.md                            # Living deployment documentation (This file)
+├── .env.example                         # Optional Compose overrides → copy to deploy/.env (gitignored)
 ├── docker-compose.yml                   # Unified local development stack (make up)
 ├── gateway/                             # Edge gateway and reverse proxy (Member 7)
 │   ├── README.md                        # Gateway architecture and local Docker run guide
@@ -149,6 +150,16 @@ Connection budgets are strictly enforced per pod ConfigMap:
 ---
 
 ## 7. Local & Cluster Deployment Commands
+
+### 7.0 Where configuration lives
+
+| Running | Config source |
+| :--- | :--- |
+| Full stack (`make up`) | Compose defaults. To override: `cp deploy/.env.example deploy/.env` and edit it. Compose reads `.env` from `deploy/`, **not** the repo root |
+| One service on its own | That service's own template, e.g. `services/ai-assistant/.env.example`, `services/messaging/.env.example` (owned by the service owner) |
+| Kubernetes | ConfigMaps and Secrets only (`deploy/kubernetes/`). Kubernetes never reads `.env` files |
+
+Every Dockerfile that copies its whole folder (`COPY . .`) needs a `.dockerignore` excluding `.env*`, so a developer's local `.env` is never baked into an image.
 
 ### 7.1 Using GNU Make (Linux / macOS / Git Bash)
 ```bash
