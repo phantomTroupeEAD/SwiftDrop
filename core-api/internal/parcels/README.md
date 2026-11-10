@@ -3,7 +3,7 @@
 > **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking  
 > **Primary Owner:** Member 2 — Parcel Management & Pricing  
 > **Clean Architecture Boundary:** Modular Monolith Internal Module  
-> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment — Task 8A Outbox Correlation Complete)
+> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment — Request Idempotency Persistence Integrated)
 
 ---
 
@@ -18,6 +18,7 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 - **Status Audit History:** Appends an immutable, chronological audit trail in `parcel_status_history` for every status change, tracking actor identity, role, and operational reason.
 - **Transactional Outbox Event Emission:** Emits versioned domain events (`parcel.booked.v1`, `parcel.assigned.v1`, `parcel.picked_up.v1`, etc.) within the exact same database transaction as the aggregate state update.
 - **Optimistic Concurrency Control:** Guards all status mutations against lost updates using version-checked SQL updates (`WHERE id = $ AND version = $`).
+- **Caller-Scoped Request Idempotency:** Deduplicates repeated `BookParcelUseCase` executions via `idempotency_keys` (`PRIMARY KEY (key, caller_scope)`, 24-hour TTL, `created_resource_id UUID NULL`). Acquires a transaction-scoped PostgreSQL advisory lock (`pg_advisory_xact_lock`) and resolves replays/conflicts *before* quote consumption, while writing new idempotency snapshots atomically in the booking transaction.
 
 ---
 
@@ -46,8 +47,8 @@ The `parcels` module is the authoritative owner of the **Parcel Aggregate Root**
 ```
 internal/parcels/
 ├── domain/                  # Parcel aggregate root, TrackingNumber, Address, Weight & Dimensions, Status enum, domain errors
-├── application/             # BookParcelUseCase, TransitionParcelStatusUseCase, ParcelLifecycleService, Repository Ports, Outbox payloads
-├── infrastructure/          # PostgresParcelRepository, PostgresStatusHistoryRepository, PostgresQuoteConsumer, CryptoTrackingNumberGenerator
+├── application/             # BookParcelUseCase (with WithIdempotency), TransitionParcelStatusUseCase, ParcelLifecycleService, IdempotencyStore port, Repository Ports, Outbox payloads
+├── infrastructure/          # PostgresParcelRepository, PostgresStatusHistoryRepository, PostgresQuoteConsumer, PostgresIdempotencyRepository, CryptoTrackingNumberGenerator
 └── transport/               # HTTP handlers (/api/v1/parcels/*) and request/response DTOs
 ```
 
@@ -173,14 +174,22 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, parcelID, courierID
 | `ErrCancellationNotAllowed` | Domain | Attempted to cancel parcel when status != CREATED | `409 Conflict` |
 | `ErrMaxDeliveryAttemptsExceeded` | Domain | Attempted 4th delivery run after 3 failures | `409 Conflict` |
 | `ErrTerminalState` | Domain | Attempted to mutate DELIVERED, RETURNED, or CANCELLED parcel | `409 Conflict` |
+| `ErrIdempotencyPayloadMismatch` | Application | Reused idempotency key within 24h with differing request hash/operation | `409 Conflict` |
+| `ErrIdempotencyConflict` | Application | Concurrent/active unexpired idempotency key conflict | `409 Conflict` |
+| `ErrInvalidIdempotencyKey` / `ErrInvalidCallerScope` / `ErrInvalidIdempotencyOperation` / `ErrInvalidRequestHash` | Application | Missing or malformed idempotency metadata (`Idempotency-Key`, `caller_scope`, `operation`, SHA-256 hex `request_hash`) | `400 Bad Request` |
 
 ---
 
 ## 7. Database Ownership & Schema
 - **Canonical Migration Directory:** `core-api/migrations/`
-- **Migration Authoring Ownership:** Member 9 (DevOps / Database Migrations)
+- **Migration Authoring Ownership:** Member 2 authors pricing/parcels/idempotency DDL; Member 9 (DevOps / Database Coordinator) reviews migrations and coordinates DB role grants
+- **Migration Files:**
+  - `20261110000001_create_pricing_tables.{up,down}.sql`: `pricing_rules`, `pricing_quotes`
+  - `20261110000002_create_parcel_tables.{up,down}.sql`: `parcels`, `parcel_status_history`
+  - `20261110000003_create_idempotency_keys.{up,down}.sql`: `idempotency_keys` (`key`, `caller_scope`, `operation`, `request_hash`, `response_status`, `response_body`, `created_resource_id`, `created_at`, `expires_at`; composite `PRIMARY KEY (key, caller_scope)`, index `idx_idempotency_keys_expires_at (expires_at ASC)`)
 - **Primary Aggregate Table:** `parcels`
 - **Audit Table:** `parcel_status_history`
+- **Idempotency Table:** `idempotency_keys` (24-hour TTL; expired keys (`expires_at <= now`) are treated as fresh requests and atomically replaced via `ON CONFLICT (key, caller_scope) DO UPDATE ... WHERE idempotency_keys.expires_at <= ...`)
 
 ---
 
@@ -212,3 +221,4 @@ Every state change commits a versioned event (`schema_version: "1.0.0"`) to `out
 | 2026-11-06 | Task 4: Implemented Parcel Booking Application and Quote Acceptance Integration (`internal/parcels/application`, `internal/parcels/infrastructure`). Added `BookParcelUseCase` orchestrating atomic quote consumption, tracking number generation with bounded retry, parcel creation, initial CREATED status-history logging, and transactional outbox publication (`parcel.booked.v1`) within a single atomic PostgreSQL transaction via `platform/db.WithTx` | Member 2 |
 | 2026-11-08 | Task 5: Implemented Parcel Lifecycle Application & Persistence Integration (`internal/parcels/application`, `internal/parcels/infrastructure`). Added `TransitionParcelStatusUseCase` and `ParcelLifecycleService` port for intra-monolith integration (Member 3 Dispatch & Delivery). Enforced optimistic concurrency control via version condition, audit trail logging in `parcel_status_history`, and atomic transactional outbox publication for all 8 status transition events (`parcel.assigned.v1`, `parcel.picked_up.v1`, `parcel.delivered.v1`, etc.) | Member 2 |
 | 2026-11-10 | Task 8A: Added `StatusHistoryID` (`status_history_id`) to `ParcelStatusChangedPayload` and populated it in `TransitionParcelStatusUseCase.ExecuteTx` with the exact validated UUID persisted to `parcel_status_history.id` in the same `*sql.Tx`, preserving envelope `event_id` and `schema_version` `1.0.0`; enforced non-blank `StatusHistoryEntry.ID` in domain validation. | Member 2 |
+| 2026-11-10 | Implemented idempotency migration (`20261110000003_create_idempotency_keys.{up,down}.sql`), `IdempotencyStore` application port/types, `PostgresIdempotencyRepository` (advisory lock `pg_advisory_xact_lock`, locked lookup, atomic expired-key replacement), `BookParcelUseCase.WithIdempotency` integration before quote consumption, unit tests, and `SetupTestDB` PostgreSQL integration tests. | Member 2 |
