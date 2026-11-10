@@ -50,7 +50,7 @@ func LoadConfig(defaultProbePort int) (*Config, error) {
 		appEnv = "local"
 	}
 
-	dbURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/swiftdrop_db?sslmode=disable")
+	dbURL := getEnv("DATABASE_URL", "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable")
 	if _, err := url.Parse(dbURL); err != nil {
 		return nil, fmt.Errorf("%w: invalid DATABASE_URL: %v", ErrInvalidConfig, err)
 	}
