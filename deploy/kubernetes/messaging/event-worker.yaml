@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-worker
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: event-worker
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: background-worker
+spec:
+  replicas: 1 # Baseline replica; scaled 1-3 via KEDA ScaledObject
+  selector:
+    matchLabels:
+      app: event-worker
+  template:
+    metadata:
+      labels:
+        app: event-worker
+        app.kubernetes.io/name: event-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: swiftdrop-worker-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: event-worker
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/worker"]
+          ports:
+            - containerPort: 8083
+              name: http-probes
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PROBE_PORT
+              value: "8083"
+          envFrom:
+            - configMapRef:
+                name: messaging-config
+            - secretRef:
+                name: event-worker-secrets # Dedicated credentials for swiftdrop_worker role
+            - secretRef:
+                name: rabbitmq-secrets
+            - secretRef:
+                name: integrations-secrets # Encrypt keys & SMTP passwords
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8083
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-worker
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: event-worker
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  type: ClusterIP
+  selector:
+    app: event-worker
+  ports:
+    - name: http-probes
+      port: 8083
+      targetPort: 8083
+

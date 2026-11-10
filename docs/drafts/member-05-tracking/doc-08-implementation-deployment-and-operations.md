@@ -94,15 +94,15 @@ The service loads configuration from environment variables (Agreement A5):
 | Variable Name | Required | Default Value | Description |
 |---|:---:|---|---|
 | `PORT` | No | `8081` | TCP port for the HTTP/SSE server (Agreement A1). |
-| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string for role `swiftdrop_tracking_ro`. |
-| `DATABASE_MAX_OPEN_CONNS` | No | `5` | Maximum database connections per pod (Agreement D8). |
+| `DATABASE_URL` / `TRACKING_DATABASE_URL` | **Yes** | — | PostgreSQL connection string for role `swiftdrop_tracking_ro`. In Kubernetes, sourced from `postgres-secrets` under key `TRACKING_DATABASE_URL` (Agreement A5, D6). Uses `sslmode=disable` in-cluster per Agreement D11. |
+| `DATABASE_MAX_OPEN_CONNS` | No | `5` | Maximum database connections per pod (Agreement D8: 5 conns × max 4 pods = 20 conns max). |
 | `DATABASE_MAX_IDLE_CONNS` | No | `2` | Maximum idle connections per pod. |
-| `DATABASE_STATEMENT_TIMEOUT` | No | `3000ms` | Hard SQL query timeout. |
-| `REDIS_URL` | **Yes** | `redis://redis:6379/0` | Redis connection URL for internal SSE fan-out. |
-| `RABBITMQ_URL` | **Yes** | `amqp://swiftdrop:swiftdrop123@rabbitmq:5672/` | RabbitMQ connection string for `q.tracking.updates`. |
-| `JWT_PUBLIC_KEY_PEM` | **Yes** | — | RSA public key for validating Bearer tokens on protected history endpoints. |
+| `DATABASE_STATEMENT_TIMEOUT` | No | `3000ms` | Hard SQL query timeout (3s). |
+| `REDIS_URL` | **Yes** | `redis://redis:6379/0` | Redis connection URL for multi-replica SSE fan-out on channel `tracking:updates` (mandatory when replicas ≥ 2). |
+| `RABBITMQ_URL` | **Yes** | `amqp://swiftdrop:swiftdrop123@rabbitmq:5672/` | RabbitMQ connection string for `q.tracking.updates` (sourced from `rabbitmq-secrets`). |
+| `JWT_PUBLIC_KEY_PEM` | **Yes** | — | RSA public key for validating Bearer tokens on protected history endpoints (from `jwt-secrets`). |
 | `LOG_LEVEL` | No | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`). |
-| `KEEPALIVE_INTERVAL` | No | `15s` | SSE heartbeat interval (Agreement A2). |
+| `KEEPALIVE_INTERVAL` | No | `15s` | SSE heartbeat interval (Agreement A2, ADR-002 §5.2). |
 
 ---
 
@@ -174,14 +174,35 @@ spec:
     spec:
       containers:
         - name: tracking-api
-          image: swiftdrop/tracking-api:latest
+          image: ghcr.io/phantomtroupeead/swiftdrop/tracking-api:<git-sha>
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
               name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: TRACKING_DATABASE_URL
+            - name: TRACKING_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: TRACKING_DATABASE_URL
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secrets
+                  key: RABBITMQ_URL
+            - name: JWT_PUBLIC_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: JWT_PUBLIC_KEY
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
           envFrom:
-            - secretRef:
-                name: tracking-api-secrets
             - configMapRef:
                 name: tracking-api-config
           resources:
@@ -207,7 +228,14 @@ spec:
             timeoutSeconds: 3
 ```
 
-### 5.2 Horizontal Pod Autoscaler (`deploy/kubernetes/tracking-api/hpa.yaml`)
+### 5.2 Horizontal Pod Autoscaler (`deploy/kubernetes/autoscaling/hpa-tracking.yml` / Conflict C8)
+
+To support dynamic traffic spikes while adhering to PostgreSQL connection limits (**Agreement D8**):
+- **Database Budget Invariant:** The database pool budget for `swiftdrop_tracking_ro` is capped at $5 \text{ connections/pod} \times 4 \text{ pods} = \mathbf{20 \text{ connections}}$. Therefore, `maxReplicas` must not exceed **`4`**.
+- **Redis Multi-Pod Requirement:** For any deployment with $> 1$ replica, an active Redis instance (`redis:6379`) is **mandatory** for Server-Sent Events fan-out on channel `tracking:updates`.
+- **HPA Envelopes:**
+  - **High-Availability Production:** `minReplicas: 2`, `maxReplicas: 4` (70% CPU target).
+  - **Single-Node VPS Demonstration:** `minReplicas: 1`, `maxReplicas: 4` (or `2`), 50%–70% CPU target.
 
 ```yaml
 apiVersion: autoscaling/v2
@@ -215,13 +243,17 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: tracking-api-hpa
   namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: tracking-api
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: autoscaler
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
     name: tracking-api
-  minReplicas: 2
-  maxReplicas: 4
+  minReplicas: 1 # Set to 2 for HA production; 1 for VPS demonstration baseline
+  maxReplicas: 4 # Strictly capped at 4 pods to respect DB budget (5 conns × 4 = 20 max)
   metrics:
     - type: Resource
       resource:
@@ -229,12 +261,19 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 15
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
 ```
 
 ---
@@ -318,7 +357,7 @@ curl -N -i http://localhost:8081/api/v1/tracking/public/SD-20261025-A8F3K2/strea
 
 | Alert / Symptom | Probable Cause | Action Runbook |
 |---|---|---|
-| **`/health/ready` returns 503** | PostgreSQL unreachable or role `swiftdrop_tracking_ro` password mismatch. | 1. Check PostgreSQL pod status (`kubectl get pods -l app=postgres`).<br/>2. Test login with `psql -U swiftdrop_tracking_ro -d swiftdrop_db`.<br/>3. Verify secret `tracking-api-secrets`. |
+| **`/health/ready` returns 503** | PostgreSQL unreachable or role `swiftdrop_tracking_ro` password mismatch. | 1. Check PostgreSQL pod status (`kubectl get pods -l app=postgres`).<br/>2. Test login with `psql -U swiftdrop_tracking_ro -d swiftdrop_db`.<br/>3. Verify secret `postgres-secrets` (key `TRACKING_DATABASE_URL`). |
 | **SSE stream drops after 100s** | Missing keepalive frames or gateway idle timeout. | Verify server is emitting `:keepalive\n\n` every 15s. Ensure Traefik `maxResponseBodyBytes: 0` is set. |
 | **SSE updates not received on client** | RabbitMQ consumer stalled or Redis Pub/Sub disconnected. | 1. Inspect queue `q.tracking.updates` in RabbitMQ Management UI.<br/>2. Verify Redis channel `tracking:updates` using `redis-cli monitor`.<br/>3. Check tracking-api pod logs for `Failed to unmarshal tracking update`. |
 | **High p95 Latency (>200ms)** | Missing database index on `parcels(tracking_number)`. | Execute `EXPLAIN ANALYZE SELECT ... FROM parcels WHERE tracking_number = '...'`. Verify index `idx_parcels_tracking_number` is being used. |
