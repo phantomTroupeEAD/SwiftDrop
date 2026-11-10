@@ -1,5 +1,15 @@
 # SwiftDrop Web Application — Consumed API Specifications & Client Contracts
 
+## Apple-style portal integration checkpoint
+
+The routed portal uses real requests and never substitutes sample quotes, credentials, orders or tracking data. The older design preview and prototype dashboard notes below describe separate pages.
+
+- Booking sends the quote and parcel bodies from §2.2. The client renders the authoritative total and retains an idempotency key for an uncertain submission while that booking page remains open. The proposed pricing module document on `dev` describes a different quote body and response. Verify the deployed contract with Member 2 before calling booking ready.
+- Public tracking uses the two URLs in §2.3. A `status_update` event triggers a REST refresh. EventSource reconnects automatically, and the page refreshes via REST every 30 seconds while it reconnects.
+- Merchant requests follow the handler on `dev`. Application submission sends `business_name`, `contact_email`, `contact_phone` and `address: { line1, city, country }`. `GET /merchants/me` retrieves application status. API key creation sends `label` and `scopes` and displays the returned `api_key` once. Webhook creation sends `url` and `events` from `GET /merchants/webhook-event-types` and displays `signing_secret` once. The portal lists and removes credentials using the matching `/merchants/me/api-keys` and `/merchants/me/webhooks` routes.
+- `GET /merchant/orders` lists tenant orders. CSV import posts individual records to `/merchant/orders` using one idempotency key per record and reuses those keys on retry while the page remains open. The current merchant service uses a booking adapter stub. Verify the real adapter before relying on order creation.
+- The identity router on `dev` exposes login and account lookup. Registration targets the documented contract and needs a backend route. Session refresh, authenticated tracking details, and webhook secret rotation still need coordinated implementation and verification.
+
 Clean UI update (6 November 2026): presentation cleanup introduces no HTTP contract changes. Booking confirmation, order import and tracking lookup remain unconnected and report that outcome on activation. Quote values are fixed sample data; tracking samples do not mirror typed lookup numbers or private booking addresses. No simulated live-connection state is presented as a real service connection.
 
 Theme-preview update (6 November 2026): the Option 3 signature showcase makes no network requests and introduces no API changes. Its sample booking and tracking forms only update a local status message. It is not evidence of backend integration.
@@ -391,4 +401,4 @@ Every interactive form element, trigger button, and status indicator maintains a
 
 This document describes consumed API contracts, not proof that those workflows are integrated. The M6 customer and merchant dashboards currently render prototype data: quotes are calculated locally, booking/receipt actions show alerts, tracking is static, CSV browsing is unwired, and the example key is not an issued one-time credential. These must be replaced with approved service calls before acceptance.
 
-The testability foundation adds DOM selectors and accessible field labels only; it changes no HTTP request, response, authentication or backend contract. See [test-ids.md](test-ids.md) for implemented versus reserved selectors and [design.md](design.md) for the visual baseline. Shared login integration remains a coordinated M6/M7 task.
+The testability foundation adds DOM selectors and accessible field labels only; it changes no HTTP request, response, authentication or backend contract. See [test-ids.md](test-ids.md) for implemented versus reserved selectors and [design.mdx](design.mdx) for the visual baseline. Shared login integration remains a coordinated M6/M7 task.

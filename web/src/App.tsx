@@ -8,13 +8,18 @@ import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
 import { MerchantDashboard } from '@/features/dashboards/MerchantDashboard';
 import { CustomerDashboard } from '@/features/dashboards/CustomerDashboard';
 import { DesignPreviewPage } from '@/features/customer-merchant/preview/DesignPreviewPage';
+import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
+import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
+import { RegisterPage } from '@/features/customer-merchant/portal/RegisterPage';
+import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 
 // Protected Route Guard
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: 'CUSTOMER' | 'MERCHANT' }> = ({ children, role }) => {
+  const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />;
   }
+  if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -31,9 +36,9 @@ const RoleRedirector: React.FC = () => {
     case 'COURIER':
       return <Navigate to="/courier/dashboard" replace />;
     case 'MERCHANT':
-      return <Navigate to="/merchant/dashboard" replace />;
+      return <Navigate to="/portal/merchants/orders" replace />;
     default:
-      return <Navigate to="/customer/dashboard" replace />;
+      return <Navigate to="/portal/book" replace />;
   }
 };
 
@@ -41,6 +46,14 @@ export const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/auth/login" element={<LoginPage />} />
+      <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/track" element={<TrackingPage />} />
+      <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
+      <Route path="/portal/merchants/apply" element={<ProtectedRoute role="CUSTOMER"><MerchantApplication /></ProtectedRoute>} />
+      <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
 
       {/* Visual Foundation & Design Preview (Unauthenticated evaluation studio) */}
       <Route path="/design-preview" element={<DesignPreviewPage />} />

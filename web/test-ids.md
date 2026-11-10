@@ -1,5 +1,21 @@
 # M6 test-ID register
 
+## Apple-style portal routes
+
+| IDs | Purpose |
+| --- | --- |
+| `register-full_name-input`, `register-email-input`, `register-phone-input`, `register-password-input`, `register-submit-btn` | Customer registration fields and submit |
+| `booking-wizard`, `booking-{pickup,dropoff}-{name,phone,address,city,zone}-input` | Booking form and address fields |
+| `booking-{weight,length,width,height,description}-input`, `booking-service-select` | Parcel details |
+| `booking-next-btn`, `booking-back-btn`, `quote-price-cents`, `booking-submit-btn`, `booking-confirmation` | Booking navigation, authoritative quote, submission and result |
+| `tracking-search-input`, `tracking-search-btn`, `tracking-status-badge`, `tracking-timeline` | Public tracking search and results |
+| `merchant-application-{business_name,contact_email,contact_phone,line1,city,country}-input`, `merchant-application-submit-btn`, `merchant-application-status` | Merchant application and status |
+| `merchant-order-search`, `merchant-order-filter`, `merchant-order-table`, `merchant-order-empty`, `merchant-order-reset-btn`, `merchant-retry-btn` | Tenant order list, filtering, empty state, filter reset and load retry |
+| `batch-csv-file-input`, `batch-csv-submit-btn` | CSV selection and order submission or retry |
+| `merchant-key-label-input`, `merchant-key-read-scope`, `merchant-key-create-scope`, `merchant-key-revoke-btn` | API key creation fields and revoke actions |
+| `merchant-webhook-url-input`, `merchant-webhook-event-{eventType}`, `merchant-webhook-delete-btn` | Webhook registration fields and remove actions |
+| `merchant-credential-create-btn`, `merchant-credential-confirm-btn`, `one-time-key-copy-btn`, `merchant-secret-close-btn` | Credential mutations, one-time copy and dismissal |
+
 Owner: Sajini (M6). Update this file whenever a selector is added, renamed or removed.
 
 ## Selector rules

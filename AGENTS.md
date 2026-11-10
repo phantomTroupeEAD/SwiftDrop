@@ -47,6 +47,7 @@ flowchart LR
 
 1. **Inspect Before Editing:**
    - Read this file (`AGENTS.md`) and the relevant domain contract in `docs/architecture/domain-boundaries.md`.
+   - Before designing or implementing a frontend screen, read [`web/design.mdx`](web/design.mdx), select the end user's role preset, and complete the screen brief.
    - Inspect existing tests, interfaces, and current Git changes in the module before writing code.
 2. **Formulate a Plan:**
    - Identify which domain owns the change, what files are affected, and which business invariants must be protected.

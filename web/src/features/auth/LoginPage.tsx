@@ -44,10 +44,10 @@ export const LoginPage: React.FC = () => {
           navigate('/courier/dashboard');
           break;
         case 'MERCHANT':
-          navigate('/merchant/dashboard');
+          navigate('/portal/merchants/orders');
           break;
         default:
-          navigate('/customer/dashboard');
+          navigate('/portal/book');
           break;
       }
     } catch (err: unknown) {
@@ -282,9 +282,12 @@ export const LoginPage: React.FC = () => {
             {/* Register Link */}
             <p className="text-center text-xs text-slate-400">
               Don't have an account?{' '}
-              <a href="#register" className="font-semibold text-blue-400 hover:text-blue-300 transition">
+              <a href="/auth/register" className="font-semibold text-blue-400 hover:text-blue-300 transition">
                 Create an account
               </a>
+            </p>
+            <p className="text-center text-xs">
+              <a href="/track" className="font-semibold text-blue-400 hover:text-blue-300 transition">Track a parcel</a>
             </p>
           </div>
         </div>

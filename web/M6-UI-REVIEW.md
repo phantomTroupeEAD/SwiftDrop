@@ -219,7 +219,7 @@ Before we unify our portal shells in `src/app/layouts/DashboardLayout.tsx` and c
 | `web/src/App.tsx` | Routes `/design-preview` and `/preview/design` mapped to preview | Public preview routes for team evaluation |
 | `web/src/features/dashboards/CustomerDashboard.tsx` | Retains initial testability hooks (`data-testid`, accessible labels) | Unchanged from initial testability baseline |
 | `web/src/features/dashboards/MerchantDashboard.tsx` | Retains initial testability hooks (`data-testid`, accessible labels) | Unchanged from initial testability baseline |
-| `web/design.md` | Documents Option 3 tokens, component rules, and M7 alignment | Shared documentation reference |
+| [`web/design.mdx`](design.mdx) | Defines the Apple-style design system and role presets | Shared documentation reference |
 | `web/test-ids.md` | Registers active selectors and documents retired review selectors | Reference for QA (Member 10) and E2E suites |
 | `web/README.md` | Living documentation checkpoint updated | Living repository doc |
 | `web/API.md` | Consumed API contracts aligned | Unchanged HTTP contract baseline |

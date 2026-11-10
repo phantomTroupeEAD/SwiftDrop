@@ -1,16 +1,29 @@
 # SwiftDrop Unified Web Application (`web/`)
 
+Read the [SwiftDrop UI design system](design.mdx) before building a screen. Start with the end user's role preset and complete the screen brief.
+
+## Member 6 Apple-style frontend
+
+The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
+
+Public tracking and registration use the centered blue profile. Customer booking and merchant applications use the blue customer profile. Merchant orders, API keys, and webhooks use the teal merchant profile. On phones, merchant orders show tracking and status first, with reference and date below.
+
+- **Customer:** Four-step quote and booking flow, server-issued tracking number, and merchant application/status.
+- **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, and webhook registration and removal.
+- **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
+
+Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status and [test-ids.md](test-ids.md) for active selectors.
+
 Clean UI update (6 November 2026): the design-preview routes now render the teal/ivory shipping UI directly. Removed theme-selection chrome, palette specifications, coordination notes, technical banners, reviewer state controls and simulated SSE connectivity. Sidebar navigation, forms, orders filters and the appearance toggle remain. A small **Sample data** label and action-specific feedback preserve honesty about incomplete integration. This change is presentation-only; real APIs and shared M7/auth code are not changed.
 
 Clean UI verification: production build passed; browser checks exercised all four wizard steps and the unconnected confirmation message, orders navigation/search/zero-match result, and page-width checks at 1440px and 375px. No page-level horizontal overflow was observed at those widths. These checks do not establish real API integration or end-to-end authorization.
 
-Theme-preview update (6 November 2026): `/design-preview` defaults to **Option 3 · Swift Signature (Teal & Warm Ivory)**, presenting a refined proposal for M6 customer and merchant portals. Features a 4-step customer booking wizard, merchant orders table with 4 inspectable states (loaded, loading skeleton, empty, error with correlation ID), KPI summary counters, dedicated amber warning treatment, touch controls >= 44px, paired evening variant, and token matrix. Existing Options 1 & 2 remain available for comparison. Demo forms show local feedback only; shared Tailwind tokens, backend contracts, and M7 screens are unchanged. See [`design.md`](design.md) and [`test-ids.md`](test-ids.md).
+Theme-preview update (6 November 2026): `/design-preview` shows the earlier **Swift Signature (Teal & Warm Ivory)** direction with sample customer and merchant flows. See [`design.mdx`](design.mdx) for the Apple-style implementation baseline and [`test-ids.md`](test-ids.md) for selector coverage.
 
 ## Implementation checkpoint — 5 November 2026
 
 The sections below include the target architecture and planned commands. The checked-in app currently implements a login page, five prototype role dashboards, and an isolated design preview studio (`/design-preview`). Actual scripts in `package.json` are `dev`, `build`, and `preview`; lint, unit and E2E scripts/tooling have not been installed. TanStack Query is described below but is not yet a dependency.
 
-M6's visual foundation and starting point are documented in [`design.md`](design.md), which presents two evaluated visual options—Option 1: Refined Dark ("Obsidian Slate & Electric Azure") and Option 2: Modern Light ("Crisp White & Ocean Navy")—alongside comprehensive token reference matrices, component accessibility guidelines, and an M7 coordination protocol. An isolated visual preview studio is live at `/design-preview` (`src/features/customer-merchant/preview/`), providing interactive side-by-side theme evaluation, the five mandatory visual states (loading, empty, error with correlation ID, success, validation), and labelled demo booking/tracking mocks without altering shared M7 screens or production dashboards.
 
 [`test-ids.md`](test-ids.md) records all implemented customer/merchant prototype selectors, registers the visual preview studio selectors, and reserves canonical IDs for future integrated features. Input labels in the customer prototype and preview studio are properly associated with their controls via `htmlFor`/`id`.
 
