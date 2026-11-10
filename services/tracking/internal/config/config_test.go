@@ -70,6 +70,30 @@ func TestConfigLoadDefaults(t *testing.T) {
 	if cfg.DBQueryTimeout != 3*time.Second {
 		t.Errorf("expected default DBQueryTimeout 3s, got %v", cfg.DBQueryTimeout)
 	}
+	if cfg.RabbitMQQueue != "q.tracking.updates" {
+		t.Errorf("expected default RabbitMQQueue q.tracking.updates, got %s", cfg.RabbitMQQueue)
+	}
+	if cfg.RabbitMQExchange != "swiftdrop.events.topic" {
+		t.Errorf("expected default RabbitMQExchange swiftdrop.events.topic, got %s", cfg.RabbitMQExchange)
+	}
+	if cfg.RabbitMQPrefetch != 10 {
+		t.Errorf("expected default RabbitMQPrefetch 10, got %d", cfg.RabbitMQPrefetch)
+	}
+	if cfg.RabbitMQReconnectDelay != 2*time.Second {
+		t.Errorf("expected default RabbitMQReconnectDelay 2s, got %v", cfg.RabbitMQReconnectDelay)
+	}
+	if cfg.RedisChannel != "tracking:updates" {
+		t.Errorf("expected default RedisChannel tracking:updates, got %s", cfg.RedisChannel)
+	}
+	if cfg.RedisDialTimeout != 5*time.Second {
+		t.Errorf("expected default RedisDialTimeout 5s, got %v", cfg.RedisDialTimeout)
+	}
+	if cfg.RedisReadTimeout != 3*time.Second {
+		t.Errorf("expected default RedisReadTimeout 3s, got %v", cfg.RedisReadTimeout)
+	}
+	if cfg.RedisWriteTimeout != 3*time.Second {
+		t.Errorf("expected default RedisWriteTimeout 3s, got %v", cfg.RedisWriteTimeout)
+	}
 }
 
 func TestConfigAddrPrecedence(t *testing.T) {
@@ -262,24 +286,88 @@ func TestConfigValidationErrors(t *testing.T) {
 			},
 			wantErr: "JWTSecret must be at least 32 characters in production",
 		},
+		{
+			name: "empty RabbitMQQueue",
+			mutate: func(c *Config) {
+				c.RabbitMQQueue = ""
+			},
+			wantErr: "RabbitMQQueue cannot be empty",
+		},
+		{
+			name: "empty RabbitMQExchange",
+			mutate: func(c *Config) {
+				c.RabbitMQExchange = ""
+			},
+			wantErr: "RabbitMQExchange cannot be empty",
+		},
+		{
+			name: "non-positive RabbitMQPrefetch",
+			mutate: func(c *Config) {
+				c.RabbitMQPrefetch = 0
+			},
+			wantErr: "RabbitMQPrefetch must be greater than zero",
+		},
+		{
+			name: "non-positive RabbitMQReconnectDelay",
+			mutate: func(c *Config) {
+				c.RabbitMQReconnectDelay = 0
+			},
+			wantErr: "RabbitMQReconnectDelay must be greater than zero",
+		},
+		{
+			name: "empty RedisChannel",
+			mutate: func(c *Config) {
+				c.RedisChannel = ""
+			},
+			wantErr: "RedisChannel cannot be empty",
+		},
+		{
+			name: "non-positive RedisDialTimeout",
+			mutate: func(c *Config) {
+				c.RedisDialTimeout = 0
+			},
+			wantErr: "RedisDialTimeout must be greater than zero",
+		},
+		{
+			name: "non-positive RedisReadTimeout",
+			mutate: func(c *Config) {
+				c.RedisReadTimeout = 0
+			},
+			wantErr: "RedisReadTimeout must be greater than zero",
+		},
+		{
+			name: "non-positive RedisWriteTimeout",
+			mutate: func(c *Config) {
+				c.RedisWriteTimeout = 0
+			},
+			wantErr: "RedisWriteTimeout must be greater than zero",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
-				HTTPAddr:            ":8081",
-				AppEnv:              "local",
-				ShutdownTimeout:     15 * time.Second,
-				ReadTimeout:         15 * time.Second,
-				WriteTimeout:        30 * time.Second,
-				IdleTimeout:         60 * time.Second,
-				LogLevel:            "info",
-				SSEHeartbeatSeconds: 15,
-				DBMaxOpenConns:      5,
-				DBMaxIdleConns:      2,
-				DBConnMaxLifetime:   15 * time.Minute,
-				DBConnMaxIdleTime:   5 * time.Minute,
-				DBQueryTimeout:      3 * time.Second,
+				HTTPAddr:               ":8081",
+				AppEnv:                 "local",
+				ShutdownTimeout:        15 * time.Second,
+				ReadTimeout:            15 * time.Second,
+				WriteTimeout:           30 * time.Second,
+				IdleTimeout:            60 * time.Second,
+				LogLevel:               "info",
+				SSEHeartbeatSeconds:    15,
+				DBMaxOpenConns:         5,
+				DBMaxIdleConns:         2,
+				DBConnMaxLifetime:      15 * time.Minute,
+				DBConnMaxIdleTime:      5 * time.Minute,
+				DBQueryTimeout:         3 * time.Second,
+				RabbitMQQueue:          "q.tracking.updates",
+				RabbitMQExchange:       "swiftdrop.events.topic",
+				RabbitMQPrefetch:       10,
+				RabbitMQReconnectDelay: 2 * time.Second,
+				RedisChannel:           "tracking:updates",
+				RedisDialTimeout:       5 * time.Second,
+				RedisReadTimeout:       3 * time.Second,
+				RedisWriteTimeout:      3 * time.Second,
 			}
 			tt.mutate(cfg)
 			err := cfg.Validate()

@@ -37,6 +37,16 @@ type Config struct {
 	RabbitMQURL         string
 	SSEHeartbeatSeconds int
 
+	// Messaging & Real-Time Event Pipeline (Phase 5)
+	RabbitMQQueue          string
+	RabbitMQExchange       string
+	RabbitMQPrefetch       int
+	RabbitMQReconnectDelay time.Duration
+	RedisChannel           string
+	RedisDialTimeout       time.Duration
+	RedisReadTimeout       time.Duration
+	RedisWriteTimeout      time.Duration
+
 	// Database Connection Pool (Phase 2)
 	DBMaxOpenConns    int
 	DBMaxIdleConns    int
@@ -66,6 +76,16 @@ func Load() (*Config, error) {
 		RedisURL:            getString("REDIS_URL", ""),
 		RabbitMQURL:         getString("RABBITMQ_URL", ""),
 		SSEHeartbeatSeconds: getInt("SSE_HEARTBEAT_SECONDS", 15),
+
+		// Messaging & Real-Time Event Pipeline (Phase 5)
+		RabbitMQQueue:          getString("TRACKING_RABBITMQ_QUEUE", getString("RABBITMQ_QUEUE", "q.tracking.updates")),
+		RabbitMQExchange:       getString("TRACKING_RABBITMQ_EXCHANGE", getString("RABBITMQ_EXCHANGE", "swiftdrop.events.topic")),
+		RabbitMQPrefetch:       getInt("TRACKING_RABBITMQ_PREFETCH", getInt("RABBITMQ_PREFETCH", 10)),
+		RabbitMQReconnectDelay: getDuration("TRACKING_RABBITMQ_RECONNECT_DELAY", getDuration("RABBITMQ_RECONNECT_DELAY", 2*time.Second)),
+		RedisChannel:           getString("TRACKING_REDIS_CHANNEL", getString("REDIS_CHANNEL", "tracking:updates")),
+		RedisDialTimeout:       getDuration("TRACKING_REDIS_DIAL_TIMEOUT", 5*time.Second),
+		RedisReadTimeout:       getDuration("TRACKING_REDIS_READ_TIMEOUT", 3*time.Second),
+		RedisWriteTimeout:      getDuration("TRACKING_REDIS_WRITE_TIMEOUT", 3*time.Second),
 
 		// Database Connection Pool (Agreement D8: max 5 connections per pod replica)
 		DBMaxOpenConns:    getInt("TRACKING_DB_MAX_OPEN_CONNS", getInt("DATABASE_MAX_OPEN_CONNS", 5)),
@@ -168,6 +188,32 @@ func (c *Config) Validate() error {
 	}
 	if c.DBQueryTimeout <= 0 {
 		return fmt.Errorf("%w: DBQueryTimeout must be greater than zero", ErrInvalidConfig)
+	}
+
+	// Validate RabbitMQ and Redis settings (Phase 5)
+	if strings.TrimSpace(c.RabbitMQQueue) == "" {
+		return fmt.Errorf("%w: RabbitMQQueue cannot be empty", ErrInvalidConfig)
+	}
+	if strings.TrimSpace(c.RabbitMQExchange) == "" {
+		return fmt.Errorf("%w: RabbitMQExchange cannot be empty", ErrInvalidConfig)
+	}
+	if c.RabbitMQPrefetch <= 0 {
+		return fmt.Errorf("%w: RabbitMQPrefetch must be greater than zero", ErrInvalidConfig)
+	}
+	if c.RabbitMQReconnectDelay <= 0 {
+		return fmt.Errorf("%w: RabbitMQReconnectDelay must be greater than zero", ErrInvalidConfig)
+	}
+	if strings.TrimSpace(c.RedisChannel) == "" {
+		return fmt.Errorf("%w: RedisChannel cannot be empty", ErrInvalidConfig)
+	}
+	if c.RedisDialTimeout <= 0 {
+		return fmt.Errorf("%w: RedisDialTimeout must be greater than zero", ErrInvalidConfig)
+	}
+	if c.RedisReadTimeout <= 0 {
+		return fmt.Errorf("%w: RedisReadTimeout must be greater than zero", ErrInvalidConfig)
+	}
+	if c.RedisWriteTimeout <= 0 {
+		return fmt.Errorf("%w: RedisWriteTimeout must be greater than zero", ErrInvalidConfig)
 	}
 
 	// Validate JWT settings in production
