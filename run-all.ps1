@@ -4,7 +4,7 @@
 .DESCRIPTION
     Starts the complete SwiftDrop messaging and API ecosystem in one command:
     - Docker Infrastructure (PostgreSQL 16, RabbitMQ 3.12, Mailpit)
-    - Core API & Swagger UI (port 8080)
+    - Core API and Swagger UI (port 8080)
     - Outbox Relay Daemon (port 8082)
     - Event Worker Daemon (port 8083)
     - Webhook Test Receiver (port 8088)
@@ -21,7 +21,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 Write-Host "==================================================================" -ForegroundColor Cyan
-Write-Host "         🚀 SwiftDrop All-in-One Live Stack Launcher" -ForegroundColor Cyan
+Write-Host "         [SwiftDrop All-in-One Live Stack Launcher]               " -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------------------
@@ -70,6 +70,7 @@ Set-DefaultEnv "RELAY_PROBE_PORT" "8082"
 Set-DefaultEnv "WORKER_PROBE_PORT" "8083"
 Set-DefaultEnv "RECEIVER_PORT" "8088"
 Set-DefaultEnv "SWAGGER_ENABLED" "true"
+Set-DefaultEnv "WEBHOOK_ALLOW_PRIVATE_HOSTS" "true"
 
 # ------------------------------------------------------------------------------
 # 2. Check Docker Daemon & Start Infrastructure Containers
@@ -89,8 +90,8 @@ try {
 Write-Host "      Starting PostgreSQL, RabbitMQ, and Mailpit containers..." -ForegroundColor Green
 docker compose -f "services/messaging/docker-compose.dev.yml" up -d | Out-Null
 
-# Wait briefly for Postgres & RabbitMQ connectivity
-Write-Host "      Waiting for PostgreSQL & RabbitMQ readiness..." -NoNewline
+# Wait briefly for Postgres & RabbitMQ readiness
+Write-Host "      Waiting for PostgreSQL and RabbitMQ readiness..." -NoNewline
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 800
     Write-Host "." -NoNewline
@@ -182,7 +183,7 @@ try {
 
     # 4. Core API & Swagger UI (:8080)
     $procCore = Start-ServiceProcess `
-        "Core API & Swagger (:8080)" `
+        "Core API and Swagger (:8080)" `
         (Join-Path $ScriptDir "core-api") `
         "run ./cmd/api" `
         "core-api.log" "core-api.err.log"
@@ -196,12 +197,12 @@ try {
     # --------------------------------------------------------------------------
     Write-Host "`n[4/5] All systems operational! Active Web Endpoints:" -ForegroundColor Green
     Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  📖 Swagger UI (Events REST API): " -NoNewline; Write-Host "http://localhost:8080/swagger/" -ForegroundColor Yellow
-    Write-Host "  ✉️  Mailpit (Customer Emails):   " -NoNewline; Write-Host "http://localhost:8025" -ForegroundColor Yellow
-    Write-Host "  🐰 RabbitMQ Management UI:       " -NoNewline; Write-Host "http://localhost:15672" -ForegroundColor Yellow -NoNewline; Write-Host " (guest / guest)" -ForegroundColor DarkGray
-    Write-Host "  🔗 Webhook Receiver Endpoint:    " -NoNewline; Write-Host "http://localhost:8088/webhook" -ForegroundColor Yellow
-    Write-Host "  📊 Outbox Relay Health & Metrics:" -NoNewline; Write-Host "http://localhost:8082/metrics" -ForegroundColor Yellow
-    Write-Host "  📊 Event Worker Health & Metrics:" -NoNewline; Write-Host "http://localhost:8083/metrics" -ForegroundColor Yellow
+    Write-Host "  [SWAGGER]  Events REST API Docs: " -NoNewline; Write-Host "http://localhost:8080/swagger/" -ForegroundColor Yellow
+    Write-Host "  [MAILPIT]  Customer Email Box:   " -NoNewline; Write-Host "http://localhost:8025" -ForegroundColor Yellow
+    Write-Host "  [RABBITMQ] Broker Management UI: " -NoNewline; Write-Host "http://localhost:15672" -ForegroundColor Yellow -NoNewline; Write-Host " (guest / guest)" -ForegroundColor DarkGray
+    Write-Host "  [WEBHOOK]  Merchant Receiver:    " -NoNewline; Write-Host "http://localhost:8088/webhook" -ForegroundColor Yellow
+    Write-Host "  [RELAY]    Health and Metrics:   " -NoNewline; Write-Host "http://localhost:8082/metrics" -ForegroundColor Yellow
+    Write-Host "  [WORKER]   Health and Metrics:   " -NoNewline; Write-Host "http://localhost:8083/metrics" -ForegroundColor Yellow
     Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  Service logs stored in: $logDir" -ForegroundColor DarkGray
 
@@ -212,8 +213,8 @@ try {
         Write-Host "`n[5/5] Emitting initial live milestone event..." -ForegroundColor Yellow
         Push-Location "services/messaging"
         try {
-            go run cmd/devemit/main.go -type parcel.booked.v1 -email kasun.perera@example.lk
-            Write-Host "      -> Check Mailpit (http://localhost:8025) to view the rendered email!" -ForegroundColor Green
+            go run cmd/devemit/main.go -type parcel.booked.v1 -email c13967001@smtp-brevo.com
+            Write-Host "      -> Event emitted! Notification dispatched via SMTP." -ForegroundColor Green
         } finally {
             Pop-Location
         }
@@ -223,10 +224,10 @@ try {
     # Interactive Command Loop
     # --------------------------------------------------------------------------
     Write-Host "`n==================================================================" -ForegroundColor Cyan
-    Write-Host "  🎮 Interactive Controls:" -ForegroundColor Cyan
+    Write-Host "  Interactive Controls:" -ForegroundColor Cyan
     Write-Host "     [e] Emit a live test event (parcel.delivered.v1)"
     Write-Host "     [r] Run background Reconciler audit pass"
-    Write-Host "     [s] Query live Outbox & Delivery statistics"
+    Write-Host "     [s] Query live Outbox and Delivery statistics"
     Write-Host "     [q] Stop all services and quit"
     Write-Host "==================================================================" -ForegroundColor Cyan
 
@@ -246,11 +247,11 @@ try {
                     Write-Host "`n[ACTION] Emitting live parcel.delivered.v1 event..." -ForegroundColor Cyan
                     Push-Location "services/messaging"
                     try {
-                        go run cmd/devemit/main.go -type parcel.delivered.v1 -email kasun.perera@example.lk
+                        go run cmd/devemit/main.go -type parcel.delivered.v1 -email c13967001@smtp-brevo.com
                     } finally {
                         Pop-Location
                     }
-                    Write-Host "[SUCCESS] Event staged! Watch Relay publish it and Worker email it to Mailpit." -ForegroundColor Green
+                    Write-Host "[SUCCESS] Event staged! Watch Relay publish it and Worker email it." -ForegroundColor Green
                 }
                 'r' {
                     Write-Host "`n[ACTION] Running Reconciler audit pass..." -ForegroundColor Cyan
