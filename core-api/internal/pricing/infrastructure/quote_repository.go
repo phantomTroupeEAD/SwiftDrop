@@ -30,6 +30,25 @@ func NewPostgresQuoteRepository(querier db.Querier) *PostgresQuoteRepository {
 	return &PostgresQuoteRepository{querier: querier}
 }
 
+func toNullString(val *string) sql.NullString {
+	if val == nil {
+		return sql.NullString{Valid: false}
+	}
+	trimmed := strings.TrimSpace(*val)
+	if trimmed == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: trimmed, Valid: true}
+}
+
+func fromNullString(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	s := ns.String
+	return &s
+}
+
 // Save inserts a new pricing quote record in PostgreSQL.
 // It is strictly insert-only; saving an existing quote will return ErrDuplicateQuote
 // and cannot overwrite used_at or any other quote attributes.
@@ -47,6 +66,8 @@ func (r *PostgresQuoteRepository) Save(ctx context.Context, quote domain.Quote) 
 			id,
 			tariff_id,
 			tariff_version,
+			requester_id,
+			merchant_id,
 			chargeable_weight_kg,
 			service_level,
 			fee_cents,
@@ -54,7 +75,7 @@ func (r *PostgresQuoteRepository) Save(ctx context.Context, quote domain.Quote) 
 			created_at,
 			expires_at,
 			used_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 	`
 
 	_, err := r.querier.ExecContext(
@@ -63,6 +84,8 @@ func (r *PostgresQuoteRepository) Save(ctx context.Context, quote domain.Quote) 
 		quote.ID,
 		quote.TariffID,
 		quote.TariffVersion,
+		toNullString(quote.RequesterID),
+		toNullString(quote.MerchantID),
 		quote.ChargeableWeightKg,
 		string(quote.ServiceLevel),
 		quote.Fee.Amount,
@@ -103,6 +126,8 @@ func (r *PostgresQuoteRepository) FindByID(ctx context.Context, id string) (doma
 			id,
 			tariff_id,
 			tariff_version,
+			requester_id,
+			merchant_id,
 			chargeable_weight_kg,
 			service_level,
 			fee_cents,
@@ -116,15 +141,16 @@ func (r *PostgresQuoteRepository) FindByID(ctx context.Context, id string) (doma
 	`
 
 	var (
-		quoteID, tariffID string
-		tariffVersion     int
-		chargeableWeight  float64
-		serviceLevel      string
-		feeCents          int64
-		currency          string
-		createdAt         time.Time
-		expiresAt         time.Time
-		usedAt            sql.NullTime
+		quoteID, tariffID       string
+		tariffVersion           int
+		requesterID, merchantID sql.NullString
+		chargeableWeight        float64
+		serviceLevel            string
+		feeCents                int64
+		currency                string
+		createdAt               time.Time
+		expiresAt               time.Time
+		usedAt                  sql.NullTime
 	)
 
 	row := r.querier.QueryRowContext(ctx, query, cleanID)
@@ -132,6 +158,8 @@ func (r *PostgresQuoteRepository) FindByID(ctx context.Context, id string) (doma
 		&quoteID,
 		&tariffID,
 		&tariffVersion,
+		&requesterID,
+		&merchantID,
 		&chargeableWeight,
 		&serviceLevel,
 		&feeCents,
@@ -156,6 +184,8 @@ func (r *PostgresQuoteRepository) FindByID(ctx context.Context, id string) (doma
 		ID:                 quoteID,
 		TariffID:           tariffID,
 		TariffVersion:      tariffVersion,
+		RequesterID:        fromNullString(requesterID),
+		MerchantID:         fromNullString(merchantID),
 		ChargeableWeightKg: chargeableWeight,
 		ServiceLevel:       domain.ServiceLevel(serviceLevel),
 		Fee:                domain.Money{Amount: feeCents, Currency: currency},
