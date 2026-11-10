@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+func ptrString(s string) *string {
+	return &s
+}
+
 func validQuote() Quote {
 	createdAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
 
@@ -12,6 +16,8 @@ func validQuote() Quote {
 		ID:                 "quote-001",
 		TariffID:           "tariff-001",
 		TariffVersion:      1,
+		RequesterID:        ptrString("018f4a7c-1005-7000-8000-000000000005"),
+		MerchantID:         nil,
 		ChargeableWeightKg: 2.5,
 		ServiceLevel:       ServiceLevelStandard,
 		Fee:                Money{Amount: 51000, Currency: CurrencyLKR},
@@ -30,6 +36,7 @@ func validQuoteTariff() Tariff {
 
 func TestNewQuote(t *testing.T) {
 	createdAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	reqID := "  018f4a7c-1005-7000-8000-000000000005  "
 
 	quote, err := NewQuote(
 		"quote-001",
@@ -38,6 +45,8 @@ func TestNewQuote(t *testing.T) {
 		ServiceLevelStandard,
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
+		&reqID,
+		nil,
 	)
 
 	if err != nil {
@@ -56,6 +65,14 @@ func TestNewQuote(t *testing.T) {
 		t.Errorf("expected tariff version 1, got %d", quote.TariffVersion)
 	}
 
+	if quote.RequesterID == nil || *quote.RequesterID != "018f4a7c-1005-7000-8000-000000000005" {
+		t.Errorf("expected trimmed RequesterID, got %v", quote.RequesterID)
+	}
+
+	if quote.MerchantID != nil {
+		t.Errorf("expected nil MerchantID, got %v", quote.MerchantID)
+	}
+
 	if quote.ServiceLevel != ServiceLevelStandard {
 		t.Errorf("expected service level %s, got %s", ServiceLevelStandard, quote.ServiceLevel)
 	}
@@ -63,6 +80,124 @@ func TestNewQuote(t *testing.T) {
 	if !quote.ExpiresAt.Equal(createdAt.Add(15 * time.Minute)) {
 		t.Errorf("expected quote to expire after 15 minutes")
 	}
+}
+
+func TestNewQuoteOwnershipModes(t *testing.T) {
+	createdAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	weight := Weight{ActualKg: 2, VolumetricKg: 2.5, ChargeableKg: 2.5}
+	fee := Money{Amount: 51000, Currency: CurrencyLKR}
+
+	t.Run("customer-only quote", func(t *testing.T) {
+		quote, err := NewQuote(
+			"quote-cust-001",
+			validQuoteTariff(),
+			weight,
+			ServiceLevelStandard,
+			fee,
+			createdAt,
+			ptrString("usr-123"),
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("expected customer-only quote to succeed, got: %v", err)
+		}
+		if quote.RequesterID == nil || *quote.RequesterID != "usr-123" || quote.MerchantID != nil {
+			t.Fatalf("unexpected ownership: requester=%v merchant=%v", quote.RequesterID, quote.MerchantID)
+		}
+	})
+
+	t.Run("merchant-only quote with whitespace trimming", func(t *testing.T) {
+		quote, err := NewQuote(
+			"quote-merch-001",
+			validQuoteTariff(),
+			weight,
+			ServiceLevelExpress,
+			fee,
+			createdAt,
+			nil,
+			ptrString("  mrc-456  "),
+		)
+		if err != nil {
+			t.Fatalf("expected merchant-only quote to succeed, got: %v", err)
+		}
+		if quote.RequesterID != nil || quote.MerchantID == nil || *quote.MerchantID != "mrc-456" {
+			t.Fatalf("unexpected ownership: requester=%v merchant=%v", quote.RequesterID, quote.MerchantID)
+		}
+	})
+
+	t.Run("customer-plus-merchant quote", func(t *testing.T) {
+		quote, err := NewQuote(
+			"quote-both-001",
+			validQuoteTariff(),
+			weight,
+			ServiceLevelSameDay,
+			fee,
+			createdAt,
+			ptrString(" usr-123 "),
+			ptrString(" mrc-456 "),
+		)
+		if err != nil {
+			t.Fatalf("expected customer+merchant quote to succeed, got: %v", err)
+		}
+		if quote.RequesterID == nil || *quote.RequesterID != "usr-123" {
+			t.Fatalf("expected trimmed RequesterID, got %v", quote.RequesterID)
+		}
+		if quote.MerchantID == nil || *quote.MerchantID != "mrc-456" {
+			t.Fatalf("expected trimmed MerchantID, got %v", quote.MerchantID)
+		}
+	})
+
+	t.Run("rejects both nil ownership", func(t *testing.T) {
+		_, err := NewQuote(
+			"quote-none-001",
+			validQuoteTariff(),
+			weight,
+			ServiceLevelStandard,
+			fee,
+			createdAt,
+			nil,
+			nil,
+		)
+		if err != ErrInvalidQuote {
+			t.Fatalf("expected ErrInvalidQuote when both owners nil, got: %v", err)
+		}
+	})
+
+	t.Run("rejects non-nil empty or whitespace requester ID", func(t *testing.T) {
+		for _, bad := range []string{"", "   ", "\t\n"} {
+			_, err := NewQuote(
+				"quote-bad-req",
+				validQuoteTariff(),
+				weight,
+				ServiceLevelStandard,
+				fee,
+				createdAt,
+				ptrString(bad),
+				ptrString("mrc-456"),
+			)
+			if err != ErrInvalidQuote {
+				t.Fatalf("expected ErrInvalidQuote for requester %q, got: %v", bad, err)
+			}
+		}
+	})
+
+	t.Run("rejects non-nil empty or whitespace merchant ID", func(t *testing.T) {
+		for _, bad := range []string{"", "   ", "\t\n"} {
+			_, err := NewQuote(
+				"quote-bad-merch",
+				validQuoteTariff(),
+				weight,
+				ServiceLevelStandard,
+				fee,
+				createdAt,
+				ptrString("usr-123"),
+				ptrString(bad),
+			)
+			if err != ErrInvalidQuote {
+				t.Fatalf("expected ErrInvalidQuote for merchant %q, got: %v", bad, err)
+			}
+		}
+	})
 }
 
 func TestNewQuoteRejectsInactiveTariff(t *testing.T) {
@@ -77,6 +212,8 @@ func TestNewQuoteRejectsInactiveTariff(t *testing.T) {
 		ServiceLevelStandard,
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
+		ptrString("usr-001"),
+		nil,
 	)
 
 	if err != ErrInvalidQuote {
@@ -94,6 +231,8 @@ func TestNewQuoteRejectsExcessiveWeight(t *testing.T) {
 		ServiceLevelStandard,
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
+		ptrString("usr-001"),
+		nil,
 	)
 
 	if err != ErrInvalidQuote {
@@ -111,6 +250,8 @@ func TestNewQuoteRejectsInvalidServiceLevel(t *testing.T) {
 		ServiceLevel("INVALID"),
 		Money{Amount: 51000, Currency: CurrencyLKR},
 		createdAt,
+		ptrString("usr-001"),
+		nil,
 	)
 
 	if err != ErrInvalidQuote {
@@ -124,6 +265,44 @@ func TestQuoteValidate(t *testing.T) {
 	if err := quote.Validate(); err != nil {
 		t.Fatalf("expected valid quote, got: %v", err)
 	}
+}
+
+func TestQuoteValidateOwnershipRules(t *testing.T) {
+	t.Run("rejects both nil owners", func(t *testing.T) {
+		q := validQuote()
+		q.RequesterID = nil
+		q.MerchantID = nil
+		if err := q.Validate(); err != ErrInvalidQuote {
+			t.Fatalf("expected ErrInvalidQuote, got: %v", err)
+		}
+	})
+
+	t.Run("rejects whitespace-only RequesterID even with valid MerchantID", func(t *testing.T) {
+		q := validQuote()
+		q.RequesterID = ptrString("   ")
+		q.MerchantID = ptrString("mrc-001")
+		if err := q.Validate(); err != ErrInvalidQuote {
+			t.Fatalf("expected ErrInvalidQuote, got: %v", err)
+		}
+	})
+
+	t.Run("rejects whitespace-only MerchantID even with valid RequesterID", func(t *testing.T) {
+		q := validQuote()
+		q.RequesterID = ptrString("usr-001")
+		q.MerchantID = ptrString("")
+		if err := q.Validate(); err != ErrInvalidQuote {
+			t.Fatalf("expected ErrInvalidQuote, got: %v", err)
+		}
+	})
+
+	t.Run("accepts merchant-only quote", func(t *testing.T) {
+		q := validQuote()
+		q.RequesterID = nil
+		q.MerchantID = ptrString("mrc-001")
+		if err := q.Validate(); err != nil {
+			t.Fatalf("expected valid merchant-only quote, got: %v", err)
+		}
+	})
 }
 
 func TestQuoteValidateRejectsInvalidExpiry(t *testing.T) {
