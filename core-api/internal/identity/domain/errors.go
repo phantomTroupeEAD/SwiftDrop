@@ -20,4 +20,12 @@ var (
 	ErrForbidden          = errors.New("access denied for this role")
 	ErrTenantRequired     = errors.New("merchant tenant context is required")
 	ErrConcurrentConflict = errors.New("concurrent update conflict")
+	ErrInvalidPhone       = errors.New("invalid phone number format")
+
+	// Registration OTP errors
+	ErrOTPInvalid        = errors.New("otp code is invalid or has already been used")
+	ErrOTPExpired        = errors.New("otp code has expired")
+	ErrOTPCooldownActive = errors.New("please wait before requesting another verification code")
+	ErrOTPMaxAttempts    = errors.New("too many invalid otp attempts, please request a new code")
+	ErrTermsNotAccepted  = errors.New("you must accept the terms and conditions to register")
 )

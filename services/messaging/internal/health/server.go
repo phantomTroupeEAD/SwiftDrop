@@ -3,7 +3,9 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -62,8 +64,8 @@ func (s *Server) Start() error {
 	s.listener = ln
 
 	go func() {
-		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
-			// Serve exited unexpectedly
+		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("Health HTTP server exited: %v", err)
 		}
 	}()
 
@@ -86,7 +88,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})

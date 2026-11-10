@@ -36,7 +36,7 @@ func init() {
 	sql.Register("reconciler_mock_driver", testDriver)
 }
 
-func (d *mockDriver) Open(name string) (driver.Conn, error) {
+func (d *mockDriver) Open(_ string) (driver.Conn, error) {
 	return &mockConn{d: d}, nil
 }
 
@@ -67,7 +67,7 @@ type mockStmt struct {
 func (s *mockStmt) Close() error  { return nil }
 func (s *mockStmt) NumInput() int { return -1 }
 
-func (s *mockStmt) Exec(args []driver.Value) (driver.Result, error) {
+func (s *mockStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	s.c.d.mu.Lock()
 	defer s.c.d.mu.Unlock()
 	s.c.d.execs = append(s.c.d.execs, s.query)
@@ -127,7 +127,7 @@ func (s *mockStmt) Exec(args []driver.Value) (driver.Result, error) {
 	return driver.RowsAffected(0), nil
 }
 
-func (s *mockStmt) Query(args []driver.Value) (driver.Rows, error) {
+func (s *mockStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	s.c.d.mu.Lock()
 	defer s.c.d.mu.Unlock()
 	s.c.d.queries = append(s.c.d.queries, s.query)

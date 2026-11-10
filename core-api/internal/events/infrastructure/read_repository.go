@@ -39,7 +39,7 @@ func (r *PostgresEventsRepository) ListOutbox(ctx context.Context, filter applic
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(`
 		SELECT
-			id, event_id, event_type, aggregate_type, aggregate_id, aggregate_version,
+			id, event_type, aggregate_type, aggregate_id, aggregate_version,
 			schema_version, occurred_at, correlation_id, producer, payload, status,
 			attempt_count, last_error, next_attempt_at, published_at, created_at
 		FROM outbox_events
@@ -76,7 +76,6 @@ func (r *PostgresEventsRepository) ListOutbox(ctx context.Context, filter applic
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))
@@ -95,7 +94,6 @@ func (r *PostgresEventsRepository) ListOutbox(ctx context.Context, filter applic
 
 		if err := rows.Scan(
 			&it.ID,
-			&it.EventID,
 			&it.EventType,
 			&it.AggregateType,
 			&it.AggregateID,
@@ -114,6 +112,7 @@ func (r *PostgresEventsRepository) ListOutbox(ctx context.Context, filter applic
 		); err != nil {
 			return nil, nil, fmt.Errorf("failed to scan outbox row: %w", err)
 		}
+		it.EventID = it.ID
 
 		if lastErr.Valid {
 			it.LastError = &lastErr.String
@@ -251,7 +250,6 @@ func (r *PostgresEventsRepository) ListDeliveries(ctx context.Context, filter ap
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" WHERE (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))
@@ -367,7 +365,6 @@ func (r *PostgresEventsRepository) ListMerchantWebhookDeliveries(ctx context.Con
 	if !cursor.CreatedAt.IsZero() && cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, cursor.CreatedAt, cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))

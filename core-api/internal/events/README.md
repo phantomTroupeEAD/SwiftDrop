@@ -202,16 +202,14 @@ For detailed payload schemas, query parameters, and example responses, see the c
 
 ---
 
-## 6. Swagger UI Registry Integration
+## 6. Swagger UI & Automated OpenAPI Integration
 
 The `swagger` package provides a standalone, zero-dependency Swagger UI documentation server embedded directly into the Core API:
-- Any team module can register its embedded OpenAPI JSON specification during startup:
-  ```go
-  swagger.Register("events", transport.OpenAPISpec)
-  swagger.Register("identity", identitytransport.OpenAPISpec)
-  ```
-- Serves Swagger UI via official CDN assets (`swagger-ui-dist@5.11.0`) with dark/light responsive layout.
-- Accessible at `/swagger/events/` and `/swagger/`.
+- Automatically serves the unified specification generated from code docstring annotations (`swaggo/swag`).
+- Serves interactive Swagger UI via official CDN assets (`swagger-ui-dist@5.18.2`) at `/swagger/`.
+- Raw unified OpenAPI specification served at `/swagger/spec.json`, `/swagger/swagger.json`, and `/api/v1/openapi.json`.
+- Developers update endpoints by annotating handlers and running `make swagger`. See [`docs/contracts/swagger-guide.md`](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/swagger-guide.md).
+- Preserves pluggable modular spec fallback via `swagger.Register(name, specBytes)` for isolated module endpoints.
 
 ---
 

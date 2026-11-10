@@ -111,6 +111,9 @@ func TestIntegration_TopologyAndRoundTrip(t *testing.T) {
 		t.Fatalf("second DeclareTopology failed (not idempotent): %v", err)
 	}
 
+	// Purge queue before test roundtrip to ensure clean state
+	_, _ = ch.QueuePurge(QueueNotificationsWorker, false)
+
 	// Test 3: Publish and consume round-trip
 	msgID := "test-msg-uuid"
 	routingKey := "parcel.booked.v1"

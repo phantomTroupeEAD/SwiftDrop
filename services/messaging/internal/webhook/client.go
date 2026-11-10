@@ -19,18 +19,22 @@ var (
 
 // BlacklistedCIDRs contains all private, loopback, link-local, and reserved IP ranges.
 var BlacklistedCIDRs = []string{
-	"127.0.0.0/8",    // IPv4 loopback
+	"0.0.0.0/8",      // "This" network (RFC 1122)
 	"10.0.0.0/8",     // RFC 1918 private
-	"172.16.0.0/12",  // RFC 1918 private
-	"192.168.0.0/16", // RFC 1918 private
-	"169.254.0.0/16", // Link-local / Cloud metadata (169.254.169.254)
 	"100.64.0.0/10",  // Carrier-Grade NAT (RFC 6598)
-	"0.0.0.0/8",      // "This" network
-	"224.0.0.0/4",    // Multicast
-	"240.0.0.0/4",    // Reserved
-	"::1/128",        // IPv6 loopback
-	"fc00::/7",       // IPv6 Unique Local Address (ULA)
-	"fe80::/10",      // IPv6 Link-Local
+	"127.0.0.0/8",    // IPv4 loopback (RFC 1122)
+	"169.254.0.0/16", // Link-local / Cloud metadata (169.254.169.254)
+	"172.16.0.0/12",  // RFC 1918 private
+	"192.0.0.0/24",   // IETF Protocol Assignments (RFC 6890)
+	"192.168.0.0/16", // RFC 1918 private
+	"198.18.0.0/15",  // Benchmark testing (RFC 2544)
+	"224.0.0.0/4",    // Multicast (RFC 5771)
+	"240.0.0.0/4",    // Reserved (RFC 1112)
+	"::1/128",        // IPv6 loopback (RFC 4291)
+	"fe80::/10",      // IPv6 Link-Local (RFC 4291)
+	"fc00::/7",       // IPv6 Unique Local Address (ULA, RFC 4193)
+	"ff00::/8",       // IPv6 Multicast (RFC 4291)
+	"64:ff9b::/96",   // IPv4/IPv6 translation (RFC 6052)
 }
 
 var parsedBlacklist []*net.IPNet
@@ -46,16 +50,22 @@ func init() {
 
 // IsPrivateOrBlockedIP returns true if ip falls into any private, loopback, or metadata CIDR.
 func IsPrivateOrBlockedIP(ip net.IP) bool {
-	// Unmap IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
-	if ipv4 := ip.To4(); ipv4 != nil {
-		ip = ipv4
-	}
-
+	// 1. Direct match on native IP (matches native IPv6: ::1, fe80::/10, fc00::/7, ff00::/8, 64:ff9b::/96)
 	for _, block := range parsedBlacklist {
 		if block.Contains(ip) {
 			return true
 		}
 	}
+
+	// 2. Unmap IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1 -> 10.0.0.1) and check against IPv4 blocks
+	if ipv4 := ip.To4(); ipv4 != nil {
+		for _, block := range parsedBlacklist {
+			if block.Contains(ipv4) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -134,7 +144,7 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 	sc.httpClient = &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			// Rule: NEVER follow HTTP redirects
 			return http.ErrUseLastResponse
 		},

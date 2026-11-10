@@ -1,0 +1,21 @@
+{
+  "name": "@swiftdrop/mock-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Multi-Tenant Mock Webhook Receiver & Visual Examiner Dashboard",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "test": "tsx --test src/server.test.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.24",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2"
+  }
+}
