@@ -8,8 +8,8 @@ import (
 func calculatorTestTariff() Tariff {
 	return Tariff{
 		ID:                "tariff-001",
-		OriginZoneID:      "COLOMBO",
-		DestinationZoneID: "GAMPAHA",
+		OriginZoneID:      "ZONE_COLOMBO_01",
+		DestinationZoneID: "ZONE_GAMPAHA_01",
 		BaseFee:           Money{Amount: 35000, Currency: CurrencyLKR},
 		PerKgRate:         Money{Amount: 8000, Currency: CurrencyLKR},
 		EffectiveFrom:     validTariff().EffectiveFrom,
