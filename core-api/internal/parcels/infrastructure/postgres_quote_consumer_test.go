@@ -12,49 +12,103 @@ import (
 	"github.com/swiftdrop/core-api/internal/parcels/application"
 )
 
-func TestPostgresQuoteConsumer_ConsumeQuote_Success(t *testing.T) {
+func TestPostgresQuoteConsumer_ConsumeQuote_OwnershipModes(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
-	quoteID := "quote-uuid-001"
 
-	columns := []string{
-		"id", "tariff_id", "tariff_version", "origin_zone_id", "destination_zone_id",
-		"chargeable_weight_kg", "service_level", "fee_cents", "currency",
-		"created_at", "expires_at", "used_at",
-	}
-	data := [][]driver.Value{
+	tests := []struct {
+		name          string
+		quoteID       string
+		dbRequesterID driver.Value
+		dbMerchantID  driver.Value
+		wantRequester *string
+		wantMerchant  *string
+	}{
 		{
-			quoteID, "rule-001", int64(2), "ZONE-WESTERN-01", "ZONE-CENTRAL-01",
-			2.5, "STANDARD", int64(55000), "LKR",
-			now.Add(-5 * time.Minute), now.Add(10 * time.Minute), now,
+			name:          "customer-owned quote with SQL NULL merchant_id",
+			quoteID:       "quote-uuid-cust-001",
+			dbRequesterID: "usr-cust-001",
+			dbMerchantID:  nil,
+			wantRequester: strPtr("usr-cust-001"),
+			wantMerchant:  nil,
+		},
+		{
+			name:          "merchant-owned quote with SQL NULL requester_id",
+			quoteID:       "quote-uuid-merch-001",
+			dbRequesterID: nil,
+			dbMerchantID:  "mrc-001",
+			wantRequester: nil,
+			wantMerchant:  strPtr("mrc-001"),
+		},
+		{
+			name:          "combined customer and merchant quote ownership",
+			quoteID:       "quote-uuid-both-001",
+			dbRequesterID: "usr-merch-owner-001",
+			dbMerchantID:  "mrc-001",
+			wantRequester: strPtr("usr-merch-owner-001"),
+			wantMerchant:  strPtr("mrc-001"),
 		},
 	}
 
-	database := registerMockDB("consume_quote_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
-		return &testRows{columns: columns, data: data}, nil, nil
-	})
-	defer database.Close()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			columns := []string{
+				"id", "tariff_id", "tariff_version", "requester_id", "merchant_id",
+				"origin_zone_id", "destination_zone_id", "chargeable_weight_kg", "service_level",
+				"fee_cents", "currency", "created_at", "expires_at", "used_at",
+			}
+			data := [][]driver.Value{
+				{
+					tc.quoteID, "rule-001", int64(2), tc.dbRequesterID, tc.dbMerchantID,
+					"ZONE_WESTERN_01", "ZONE_CENTRAL_01", 2.5, "STANDARD",
+					int64(55000), "LKR", now.Add(-5 * time.Minute), now.Add(10 * time.Minute), now,
+				},
+			}
 
-	consumer := NewPostgresQuoteConsumer(database)
-	snapshot, err := consumer.ConsumeQuote(context.Background(), nil, quoteID, now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			var executedQuery string
+			database := registerMockDB("consume_quote_"+tc.quoteID, func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+				executedQuery = query
+				return &testRows{columns: columns, data: data}, nil, nil
+			})
+			defer database.Close()
 
-	if snapshot.QuoteID != quoteID {
-		t.Errorf("expected quote ID %s, got %s", quoteID, snapshot.QuoteID)
+			consumer := NewPostgresQuoteConsumer(database)
+			snapshot, err := consumer.ConsumeQuote(context.Background(), nil, tc.quoteID, now)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !strings.Contains(executedQuery, "requester_id") || !strings.Contains(executedQuery, "merchant_id") {
+				t.Errorf("expected query to select requester_id and merchant_id, got: %s", executedQuery)
+			}
+			if snapshot.QuoteID != tc.quoteID {
+				t.Errorf("expected quote ID %s, got %s", tc.quoteID, snapshot.QuoteID)
+			}
+			if snapshot.TariffID != "rule-001" || snapshot.TariffVersion != 2 {
+				t.Errorf("expected tariff rule-001 v2, got %s v%d", snapshot.TariffID, snapshot.TariffVersion)
+			}
+			if (snapshot.RequesterID == nil) != (tc.wantRequester == nil) ||
+				(snapshot.RequesterID != nil && *snapshot.RequesterID != *tc.wantRequester) {
+				t.Errorf("expected RequesterID %v, got %v", tc.wantRequester, snapshot.RequesterID)
+			}
+			if (snapshot.MerchantID == nil) != (tc.wantMerchant == nil) ||
+				(snapshot.MerchantID != nil && *snapshot.MerchantID != *tc.wantMerchant) {
+				t.Errorf("expected MerchantID %v, got %v", tc.wantMerchant, snapshot.MerchantID)
+			}
+			if snapshot.OriginZoneID != "ZONE_WESTERN_01" || snapshot.DestinationZoneID != "ZONE_CENTRAL_01" {
+				t.Errorf("unexpected zones: %s -> %s", snapshot.OriginZoneID, snapshot.DestinationZoneID)
+			}
+			if snapshot.FeeCents != 55000 || snapshot.Currency != "LKR" {
+				t.Errorf("unexpected fee: %d %s", snapshot.FeeCents, snapshot.Currency)
+			}
+			if snapshot.ServiceLevel != "STANDARD" {
+				t.Errorf("expected service level STANDARD, got %s", snapshot.ServiceLevel)
+			}
+		})
 	}
-	if snapshot.TariffID != "rule-001" || snapshot.TariffVersion != 2 {
-		t.Errorf("expected tariff rule-001 v2, got %s v%d", snapshot.TariffID, snapshot.TariffVersion)
-	}
-	if snapshot.OriginZoneID != "ZONE-WESTERN-01" || snapshot.DestinationZoneID != "ZONE-CENTRAL-01" {
-		t.Errorf("unexpected zones: %s -> %s", snapshot.OriginZoneID, snapshot.DestinationZoneID)
-	}
-	if snapshot.FeeCents != 55000 || snapshot.Currency != "LKR" {
-		t.Errorf("unexpected fee: %d %s", snapshot.FeeCents, snapshot.Currency)
-	}
-	if snapshot.ServiceLevel != "STANDARD" {
-		t.Errorf("expected service level STANDARD, got %s", snapshot.ServiceLevel)
-	}
+}
+
+func strPtr(s string) *string {
+	return &s
 }
 
 func TestPostgresQuoteConsumer_ConsumeQuote_MissingQuote(t *testing.T) {
@@ -146,15 +200,15 @@ func TestPostgresQuoteConsumer_ConsumeQuote_ConcurrentConsumption(t *testing.T) 
 				// Worker 1 wins the atomic update race!
 				consumed = true
 				columns := []string{
-					"id", "tariff_id", "tariff_version", "origin_zone_id", "destination_zone_id",
-					"chargeable_weight_kg", "service_level", "fee_cents", "currency",
-					"created_at", "expires_at", "used_at",
+					"id", "tariff_id", "tariff_version", "requester_id", "merchant_id",
+					"origin_zone_id", "destination_zone_id", "chargeable_weight_kg", "service_level",
+					"fee_cents", "currency", "created_at", "expires_at", "used_at",
 				}
 				data := [][]driver.Value{
 					{
-						quoteID, "rule-001", int64(1), "ZONE-WESTERN-01", "ZONE-CENTRAL-01",
-						2.5, "STANDARD", int64(55000), "LKR",
-						now.Add(-time.Minute), now.Add(14 * time.Minute), now,
+						quoteID, "rule-001", int64(1), "usr-race-001", nil,
+						"ZONE_WESTERN_01", "ZONE_CENTRAL_01", 2.5, "STANDARD",
+						int64(55000), "LKR", now.Add(-time.Minute), now.Add(14 * time.Minute), now,
 					},
 				}
 				return &testRows{columns: columns, data: data}, nil, nil
@@ -207,4 +261,3 @@ func TestPostgresQuoteConsumer_ConsumeQuote_ConcurrentConsumption(t *testing.T) 
 		t.Errorf("expected exactly 1 ErrQuoteAlreadyUsed under concurrent booking, got %d", alreadyUsedCount)
 	}
 }
-

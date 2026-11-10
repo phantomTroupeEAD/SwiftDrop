@@ -60,6 +60,8 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 				id,
 				tariff_id,
 				tariff_version,
+				requester_id,
+				merchant_id,
 				chargeable_weight_kg,
 				service_level,
 				fee_cents,
@@ -72,6 +74,8 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 			c.id,
 			c.tariff_id,
 			c.tariff_version,
+			c.requester_id,
+			c.merchant_id,
 			r.origin_zone_id,
 			r.destination_zone_id,
 			c.chargeable_weight_kg,
@@ -88,6 +92,7 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 
 	var (
 		id, tariffID, originZoneID, destinationZoneID, serviceLevel, currency string
+		requesterID, merchantID                                               sql.NullString
 		tariffVersion                                                         int
 		chargeableWeightKg                                                    float64
 		feeCents                                                              int64
@@ -99,6 +104,8 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 		&id,
 		&tariffID,
 		&tariffVersion,
+		&requesterID,
+		&merchantID,
 		&originZoneID,
 		&destinationZoneID,
 		&chargeableWeightKg,
@@ -114,6 +121,8 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 			QuoteID:            id,
 			TariffID:           tariffID,
 			TariffVersion:      tariffVersion,
+			RequesterID:        fromNullString(requesterID),
+			MerchantID:         fromNullString(merchantID),
 			OriginZoneID:       originZoneID,
 			DestinationZoneID:  destinationZoneID,
 			ChargeableWeightKg: chargeableWeightKg,

@@ -26,14 +26,60 @@ func NewPostgresParcelRepository(defaultQuerier db.Querier) *PostgresParcelRepos
 	return &PostgresParcelRepository{defaultQuerier: defaultQuerier}
 }
 
+func resolveQuerier(q, defaultQuerier db.Querier, errMsg string) (db.Querier, error) {
+	if q != nil {
+		return q, nil
+	}
+	if defaultQuerier != nil {
+		return defaultQuerier, nil
+	}
+	return nil, errors.New(errMsg)
+}
+
+func toNullString(val *string) sql.NullString {
+	if val == nil {
+		return sql.NullString{Valid: false}
+	}
+	trimmed := strings.TrimSpace(*val)
+	if trimmed == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: trimmed, Valid: true}
+}
+
+func fromNullString(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	s := ns.String
+	return &s
+}
+
+func normalizeParcelOwnersForSave(senderID, merchantID *string) (sql.NullString, sql.NullString, error) {
+	if senderID != nil && strings.TrimSpace(*senderID) == "" {
+		return sql.NullString{}, sql.NullString{}, domain.ErrInvalidSenderID
+	}
+	if merchantID != nil && strings.TrimSpace(*merchantID) == "" {
+		return sql.NullString{}, sql.NullString{}, domain.ErrInvalidMerchantID
+	}
+	senderNull := toNullString(senderID)
+	merchantNull := toNullString(merchantID)
+	if !senderNull.Valid && !merchantNull.Valid {
+		return sql.NullString{}, sql.NullString{}, domain.ErrInvalidOwner
+	}
+	return senderNull, merchantNull, nil
+}
+
 // Save inserts a new parcel record into PostgreSQL.
 func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parcel domain.Parcel) error {
-	querier := q
-	if querier == nil {
-		querier = r.defaultQuerier
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return err
 	}
-	if querier == nil {
-		return errors.New("parcel repo: nil db querier")
+
+	senderNull, merchantNull, err := normalizeParcelOwnersForSave(parcel.SenderID, parcel.MerchantID)
+	if err != nil {
+		return err
 	}
 
 	pickupJSON, err := json.Marshal(parcel.PickupAddress)
@@ -70,7 +116,7 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 			pickup_address,
 			dropoff_address,
 			status,
-			delivery_attempts,
+			attempt_count,
 			version,
 			created_at,
 			updated_at
@@ -86,8 +132,8 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 		query,
 		parcel.ID,
 		parcel.TrackingNumber.String(),
-		parcel.SenderID,
-		parcel.MerchantID,
+		senderNull,
+		merchantNull,
 		parcel.RecipientName,
 		parcel.RecipientPhone,
 		parcel.QuoteID,
@@ -107,7 +153,7 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 		pickupJSON,
 		dropoffJSON,
 		string(parcel.Status),
-		parcel.DeliveryAttempts,
+		parcel.AttemptCount,
 		parcel.Version,
 		parcel.CreatedAt,
 		parcel.UpdatedAt,
@@ -121,19 +167,15 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 
 // ExistsTrackingNumber checks if a given tracking number already exists in parcels.
 func (r *PostgresParcelRepository) ExistsTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (bool, error) {
-	querier := q
-	if querier == nil {
-		querier = r.defaultQuerier
-	}
-	if querier == nil {
-		return false, errors.New("parcel repo: nil db querier")
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return false, err
 	}
 
 	const query = `SELECT EXISTS(SELECT 1 FROM parcels WHERE tracking_number = $1);`
 
 	var exists bool
-	err := querier.QueryRowContext(ctx, query, tn.String()).Scan(&exists)
-	if err != nil {
+	if err := querier.QueryRowContext(ctx, query, tn.String()).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check tracking number exists: %w", err)
 	}
 
@@ -142,12 +184,9 @@ func (r *PostgresParcelRepository) ExistsTrackingNumber(ctx context.Context, q d
 
 // FindByID retrieves a parcel by its unique UUID identifier.
 func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error) {
-	querier := q
-	if querier == nil {
-		querier = r.defaultQuerier
-	}
-	if querier == nil {
-		return domain.Parcel{}, errors.New("parcel repo: nil db querier")
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return domain.Parcel{}, err
 	}
 
 	cleanID := strings.TrimSpace(id)
@@ -180,7 +219,7 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 			pickup_address,
 			dropoff_address,
 			status,
-			delivery_attempts,
+			attempt_count,
 			version,
 			created_at,
 			updated_at
@@ -190,8 +229,8 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 	`
 
 	var (
-		parcelID, tnStr, senderID string
-		merchantID                sql.NullString
+		parcelID, tnStr           string
+		senderID, merchantID      sql.NullString
 		recipName, recipPhone     string
 		quoteID, ruleID           string
 		ruleVersion               int
@@ -208,7 +247,7 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 	)
 
 	row := querier.QueryRowContext(ctx, query, cleanID)
-	err := row.Scan(
+	err = row.Scan(
 		&parcelID,
 		&tnStr,
 		&senderID,
@@ -249,11 +288,6 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 		return domain.Parcel{}, fmt.Errorf("corrupt tracking number in db: %w", err)
 	}
 
-	var merchIDPtr *string
-	if merchantID.Valid {
-		merchIDPtr = &merchantID.String
-	}
-
 	fee, err := domain.NewMoney(feeCents, currency)
 	if err != nil {
 		return domain.Parcel{}, fmt.Errorf("corrupt delivery fee in db: %w", err)
@@ -280,8 +314,8 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 	return domain.ReconstituteParcel(domain.ReconstituteParcelParams{
 		ID:                 parcelID,
 		TrackingNumber:     tn,
-		SenderID:           senderID,
-		MerchantID:         merchIDPtr,
+		SenderID:           fromNullString(senderID),
+		MerchantID:         fromNullString(merchantID),
 		RecipientName:      recipName,
 		RecipientPhone:     recipPhone,
 		QuoteID:            quoteID,
@@ -296,7 +330,7 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 		PickupAddress:      pickupAddr,
 		DropoffAddress:     dropoffAddr,
 		Status:             domain.ParcelStatus(statusStr),
-		DeliveryAttempts:   attempts,
+		AttemptCount:       attempts,
 		Version:            version,
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
@@ -306,18 +340,15 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 // UpdateStatus updates the parcel's lifecycle status, attempt count, version, and updated_at
 // in PostgreSQL using optimistic concurrency control with a version condition.
 func (r *PostgresParcelRepository) UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error {
-	querier := q
-	if querier == nil {
-		querier = r.defaultQuerier
-	}
-	if querier == nil {
-		return errors.New("parcel repo: nil db querier")
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return err
 	}
 
 	const query = `
 		UPDATE parcels
 		SET status = $1,
-			delivery_attempts = $2,
+			attempt_count = $2,
 			version = version + 1,
 			updated_at = $3
 		WHERE id = $4
@@ -328,7 +359,7 @@ func (r *PostgresParcelRepository) UpdateStatus(ctx context.Context, q db.Querie
 		ctx,
 		query,
 		string(parcel.Status),
-		parcel.DeliveryAttempts,
+		parcel.AttemptCount,
 		parcel.UpdatedAt,
 		parcel.ID,
 		expectedVersion,
