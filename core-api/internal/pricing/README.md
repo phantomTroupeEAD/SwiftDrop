@@ -52,7 +52,7 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 internal/pricing/
 ├── domain/                  # Money VO (LKR cents), Tariff entity, ServiceLevel VO, Quote aggregate, Calculator, domain errors
 ├── application/             # GenerateQuoteUseCase, ports (TariffRepository, QuoteRepository, Clock, QuoteIDGenerator)
-├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository (db.Querier backed)
+├── infrastructure/          # PostgresTariffRepository, PostgresQuoteRepository, & UUIDv7QuoteIDGenerator (db.Querier / UUIDv7 backed)
 └── transport/               # HTTP handler (/api/v1/pricing/quotes) and request/response DTOs
 ```
 
@@ -86,6 +86,7 @@ internal/pricing/
 | 2026-11-10 | Task 6 (Step 1): Added canonical `ValidateZoneID` (`^ZONE_[A-Z0-9_]{2,27}$`) in `domain/tariff.go` and quote requester/merchant ownership (`RequesterID`, `MerchantID`) in `domain/quote.go` | Member 2 |
 | 2026-11-10 | Task 6 (Step 2): Updated `GenerateQuoteCommand` and `GenerateQuoteUseCase.Execute` to validate zone IDs via `domain.ValidateZoneID` and validate/forward requester & merchant ownership before tariff lookup | Member 2 |
 | 2026-11-10 | Task 6 (Step 3): Updated `PostgresQuoteRepository` (`Save`, `FindByID`) to persist and scan nullable `requester_id` and `merchant_id` columns via `sql.NullString`, updated mock repository tests and `ZONE_` tariff fixtures | Member 2 |
+| 2026-11-10 | Task 7C: Added production `UUIDv7QuoteIDGenerator` implementing `application.QuoteIDGenerator` via shared `events.GenerateUUIDv7` and `events.IsValidUUID` | Member 2 |
 
 ---
 
