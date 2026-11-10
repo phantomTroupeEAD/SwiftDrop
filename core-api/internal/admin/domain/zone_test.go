@@ -164,6 +164,112 @@ func TestReplacePrefixesInvalidKeepsOld(t *testing.T) {
 	}
 }
 
+// Replacing the prefixes with the same prefixes is a no-op: no version, no event.
+func TestReplacePrefixesIdenticalIsNoOp(t *testing.T) {
+	z := aZone(t)
+	z.PullEvents() // saved: version 1, no pending events
+	if err := z.ReplacePrefixes(prefixes(t, "00100", "00200", "00300")); err != nil {
+		t.Fatalf("identical replace: %v", err)
+	}
+	if z.Version() != 1 {
+		t.Errorf("version = %d, want 1 (identical prefixes must not bump it)", z.Version())
+	}
+	if ev := z.PullEvents(); len(ev) != 0 {
+		t.Errorf("identical replace recorded events: %+v", ev)
+	}
+	if got := prefixStrings(z.Prefixes()); !reflect.DeepEqual(got, []string{"00100", "00200", "00300"}) {
+		t.Errorf("prefixes changed: %v", got)
+	}
+}
+
+// The same prefixes in another order are still the same set, so nothing changed.
+func TestReplacePrefixesSameSetInOtherOrderIsNoOp(t *testing.T) {
+	z := aZone(t)
+	z.PullEvents()
+	if err := z.ReplacePrefixes(prefixes(t, "00300", "00100", "00200")); err != nil {
+		t.Fatal(err)
+	}
+	if z.Version() != 1 || len(z.PullEvents()) != 0 {
+		t.Error("a reordered but identical set must not change version or record events")
+	}
+}
+
+// A real change still bumps the version once and records one ZoneChanged event with old and new.
+func TestReplacePrefixesDifferentStillChanges(t *testing.T) {
+	for name, next := range map[string][]string{
+		"fewer":         {"00100", "00300"},
+		"more":          {"00100", "00200", "00300", "00400"},
+		"one swapped":   {"00100", "00200", "00400"},
+		"one digit off": {"00100", "00200", "00301"},
+	} {
+		z := aZone(t)
+		z.PullEvents()
+		if err := z.ReplacePrefixes(prefixes(t, next...)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if z.Version() != 2 {
+			t.Errorf("%s: version = %d, want 2", name, z.Version())
+		}
+		ev := z.PullEvents()
+		if len(ev) != 1 || ev[0].Type != ZoneChanged || ev[0].ZoneID != "ZONE_COLOMBO_01" {
+			t.Fatalf("%s: events %+v", name, ev)
+		}
+		want := [2]any{[]string{"00100", "00200", "00300"}, next}
+		if !reflect.DeepEqual(ev[0].Changes["prefixes"], want) {
+			t.Errorf("%s: change = %v, want %v", name, ev[0].Changes["prefixes"], want)
+		}
+		if got := prefixStrings(z.Prefixes()); !reflect.DeepEqual(got, next) {
+			t.Errorf("%s: prefixes = %v, want %v", name, got, next)
+		}
+	}
+}
+
+// An identical replace next to a real change in the same save adds no extra event or version.
+func TestReplacePrefixesIdenticalNextToRealChange(t *testing.T) {
+	z := aZone(t)
+	z.PullEvents()
+	if err := z.Rename("Colombo Centre"); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.ReplacePrefixes(prefixes(t, "00100", "00200", "00300")); err != nil {
+		t.Fatal(err)
+	}
+	ev := z.PullEvents()
+	if z.Version() != 2 || len(ev) != 1 {
+		t.Fatalf("version %d, events %+v: want the rename only", z.Version(), ev)
+	}
+	if _, ok := ev[0].Changes["name"]; !ok {
+		t.Fatalf("the one event must be the rename: %+v", ev[0])
+	}
+}
+
+// Invalid prefixes are refused, and the zone keeps its prefixes, version and (empty) event list.
+func TestReplacePrefixesInvalidIsRefusedWithoutChange(t *testing.T) {
+	cases := map[string]struct {
+		in   []PostalPrefix
+		want error
+	}{
+		"empty":     {nil, ErrNoPrefixes},
+		"empty set": {[]PostalPrefix{}, ErrNoPrefixes},
+		"duplicate": {prefixes(t, "00100", "00100"), ErrDuplicatePrefixInZone},
+		// A duplicate of the existing set must still be refused, never treated as "identical".
+		"duplicate of existing": {prefixes(t, "00100", "00200", "00300", "00300"), ErrDuplicatePrefixInZone},
+	}
+	for name, c := range cases {
+		z := aZone(t)
+		z.PullEvents()
+		if err := z.ReplacePrefixes(c.in); !errors.Is(err, c.want) {
+			t.Errorf("%s: got %v, want %v", name, err, c.want)
+		}
+		if z.Version() != 1 || len(z.PullEvents()) != 0 {
+			t.Errorf("%s: refused replace changed version or recorded events", name)
+		}
+		if got := prefixStrings(z.Prefixes()); !reflect.DeepEqual(got, []string{"00100", "00200", "00300"}) {
+			t.Errorf("%s: prefixes changed to %v", name, got)
+		}
+	}
+}
+
 // UT-AD-11: callers cannot change prefixes through the returned slice.
 func TestPrefixesAreCopied(t *testing.T) {
 	z := aZone(t)

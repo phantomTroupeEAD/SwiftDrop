@@ -101,6 +101,9 @@ func (z *Zone) ReplacePrefixes(p []PostalPrefix) error {
 	if err := checkPrefixes(p); err != nil {
 		return err
 	}
+	if samePrefixSet(z.prefixes, p) {
+		return nil // nothing changed: no new version, no event
+	}
 	old := prefixStrings(z.prefixes)
 	z.prefixes = copyPrefixes(p)
 	z.changed(ZoneChanged, "prefixes", old, prefixStrings(p))
@@ -176,6 +179,25 @@ func checkPrefixes(p []PostalPrefix) error {
 }
 
 func copyPrefixes(p []PostalPrefix) []PostalPrefix { return append([]PostalPrefix(nil), p...) }
+
+// samePrefixSet reports whether a and b hold the same prefixes, in any order. A zone's
+// prefixes are a set (checkPrefixes refuses duplicates) and storage returns them sorted,
+// so a client that sends the same prefixes in another order has changed nothing.
+func samePrefixSet(a, b []PostalPrefix) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	have := make(map[string]struct{}, len(a))
+	for _, x := range a {
+		have[x.v] = struct{}{}
+	}
+	for _, x := range b {
+		if _, ok := have[x.v]; !ok {
+			return false
+		}
+	}
+	return true
+}
 
 func prefixStrings(p []PostalPrefix) []string {
 	out := make([]string, len(p))
