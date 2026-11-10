@@ -118,8 +118,8 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 
 | Dependency | Owner | Current Implementation Status |
 | :--- | :--- | :--- |
-| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` in `cmd/api/wiring_merchants.go`. Role assignment stubbed via `RoleAssigner` until `user_roles` schema is published. |
-| **Audit Logging** | Member 1 / Platform | Stand-in via `infrastructure.AuditWriter` pending canonical `audit_logs` schema migration. |
+| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` and `roleAssignerAdapter` in `cmd/api/wiring_merchants.go` to Member 1's `UserService.AssignRole`. |
+| **Audit Logging** | Member 1 / Platform | Wired via `infrastructure.AuditWriter` inserting into canonical `audit_logs` table (`20261109000001_create_audit_logs.up.sql`). |
 | **Parcel Booking Engine** | Member 2 (Parcels) | Integrated with `infrastructure.BookingStub`; will switch to Member 2's `ParcelService` once published. |
 | **Admin UI & Action Endpoints** | Member 7 (Admin) | Stand-in handlers implemented at `/api/v1/admin/merchants/*`; ready for gateway routing. |
 | **Webhook Delivery Worker** | Member 8 (Messaging) | View `merchant_webhook_targets` exposes active webhook subscriptions joined with merchant status for consumer worker dispatch. |

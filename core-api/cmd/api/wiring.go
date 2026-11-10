@@ -169,7 +169,7 @@ func BuildAppContainer() *AppContainer {
 
 	// 9. Register Member 04 Merchant Integration Operations
 	if dbConn != nil {
-		if err := registerMerchantsModule(mux, dbConn, tokenProvider); err != nil {
+		if err := registerMerchantsModule(mux, dbConn, tokenProvider, userService); err != nil {
 			if config.IsProduction() {
 				log.Fatalf("[FATAL] Failed to initialize Member 04 Merchant Integration: %v", err)
 			}
