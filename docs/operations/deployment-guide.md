@@ -29,9 +29,9 @@ sudo usermod -aG docker $USER
 git clone https://github.com/phantomTroupeEAD/SwiftDrop.git /opt/swiftdrop
 cd /opt/swiftdrop
 
-# Generate production environment file
-cp .env.example .env
-nano .env  # Populate production DB passwords, JWT RSA keys, and third-party secrets
+# Generate the Compose environment file (Compose reads .env from deploy/, not the repo root)
+cp deploy/.env.example deploy/.env
+nano deploy/.env  # Set real DB/RabbitMQ passwords, JWT secret, webhook key and pepper
 ```
 
 ### Step 3: Launch Production Stack

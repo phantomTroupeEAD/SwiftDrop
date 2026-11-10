@@ -27,7 +27,6 @@ spec:
           ports:
             - containerPort: 5432
               name: postgres
-          # Only the bootstrap keys; postgres-secrets also holds the per-role app URLs (A5)
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -107,3 +106,4 @@ spec:
     - port: 5432
       targetPort: 5432
       name: postgres
+

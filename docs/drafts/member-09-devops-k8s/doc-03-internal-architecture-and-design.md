@@ -71,7 +71,7 @@ Existing files are marked ✅. Everything else is planned.
 
 ```
 Makefile                                  # make up · migrate-up · seed · test-e2e (C22)
-.env.example                              # placeholders only (SRS §11.1)
+deploy/.env.example                       # Compose overrides, placeholders only (SRS §11.1)
 web/Dockerfile + web/nginx.conf           # owned by Member 9 (Member 6 decision, 2026-10-25): port 3000, SPA fallback
 services/messaging/Dockerfile             # Member 8: ONE image, binaries relay / worker / reconcile
 deploy/
