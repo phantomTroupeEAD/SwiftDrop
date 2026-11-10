@@ -28,8 +28,8 @@ All endpoints adhere strictly to the ratified team-wide standards:
 | Endpoint | Method | Access | Format | Purpose |
 |---|---|---|---|---|
 | `/api/v1/tracking/public/{tracking_number}` | `GET` | Public | JSON | Retrieve current status and sanitized milestone timeline. |
-| `/api/v1/tracking/public/{tracking_number}/stream` | `GET` | Public | SSE | Live real-time stream of parcel milestone events (public alias). |
-| `/api/v1/tracking/{tracking_number}/stream` | `GET` | Public | SSE | Canonical real-time stream of parcel milestone events. |
+| `/api/v1/tracking/public/{tracking_number}/stream` | `GET` | Public | SSE | Canonical real-time stream of sanitized parcel milestone events (used by web frontend). |
+| `/api/v1/tracking/{tracking_number}/stream` | `GET` | Public | SSE | Live real-time stream of parcel milestone events (backward-compatible alias). |
 | `/api/v1/tracking/{tracking_number}` | `GET` | Bearer JWT | JSON | Complete historical audit trail for authorized parcel owner. |
 | `/health/live` | `GET` | Internal | JSON | Kubernetes liveness probe. |
 | `/health/ready` | `GET` | Internal | JSON | Kubernetes readiness probe (PostgreSQL/Redis connectivity). |
@@ -151,8 +151,8 @@ All endpoints adhere strictly to the ratified team-wide standards:
 
 ### 5.1 Endpoint Details
 - **Paths:** 
-  - Canonical: `GET /api/v1/tracking/{tracking_number}/stream`
-  - Public Alias: `GET /api/v1/tracking/public/{tracking_number}/stream`
+  - Canonical Public Stream: `GET /api/v1/tracking/public/{tracking_number}/stream`
+  - Stream Alias: `GET /api/v1/tracking/{tracking_number}/stream`
 - **Protocol:** `text/event-stream; charset=utf-8`
 - **HTTP Headers:**
   - `Content-Type: text/event-stream`

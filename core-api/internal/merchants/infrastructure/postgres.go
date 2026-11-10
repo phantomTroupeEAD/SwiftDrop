@@ -441,14 +441,39 @@ func (WebhookRepo) DisableAll(ctx context.Context, querier application.Querier, 
 	return int(rows), nil
 }
 
-// ---------------- audit (STAND-IN for Member 1's shared audit_logs table) ----------------
+// ---------------- audit (Member 1's shared audit_logs table) ----------------
 
-// AuditWriter is a temporary stub until Member 1 adds the audit_logs migration.
-// Replace this no-op with the real SQL INSERT once audit_logs is available.
+// AuditWriter records sensitive domain lifecycle events to the centralized audit_logs table.
 type AuditWriter struct{}
 
-func (AuditWriter) Write(_ context.Context, _ application.Querier, _ application.AuditEntry) error {
-	// TODO(Member 1): wire to audit_logs table once migration is committed.
+func (AuditWriter) Write(ctx context.Context, q application.Querier, e application.AuditEntry) error {
+	sq, err := asQ(q)
+	if err != nil {
+		return err
+	}
+	meta := map[string]any{}
+	if e.Previous != nil {
+		meta["previous"] = e.Previous
+	}
+	if e.New != nil {
+		meta["new"] = e.New
+	}
+	if e.RequestID != "" {
+		meta["request_id"] = e.RequestID
+	}
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		metaJSON = []byte("{}")
+	}
+
+	query := `
+		INSERT INTO audit_logs (actor_id, actor_role, action, entity_type, entity_id, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7);
+	`
+	_, err = sq.ExecContext(ctx, query, e.ActorID, e.ActorRole, e.Action, "MERCHANT", e.TargetID, metaJSON, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("audit log insert failed: %w", err)
+	}
 	return nil
 }
 

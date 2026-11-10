@@ -12,6 +12,7 @@ import (
 	"time"
 
 	identityapp "github.com/swiftdrop/core-api/internal/identity/application"
+	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/merchants/application"
 	"github.com/swiftdrop/core-api/internal/merchants/domain"
 	"github.com/swiftdrop/core-api/internal/merchants/infrastructure"
@@ -21,7 +22,7 @@ import (
 
 // registerMerchantsModule wires Member 04 Merchant Integration operations into the router.
 // Returns an error if dependencies or cryptographic requirements fail validation.
-func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identityapp.TokenProvider) error {
+func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identityapp.TokenProvider, roleAssigners ...identityapp.RoleAssigner) error {
 	if mux == nil {
 		return errors.New("merchants: http.ServeMux is required")
 	}
@@ -77,13 +78,18 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 	}
 
 	// 4. Application Service construction
+	var roleAssigner application.RoleAssigner = infrastructure.RoleAssigner{}
+	if len(roleAssigners) > 0 && roleAssigners[0] != nil {
+		roleAssigner = &roleAssignerAdapter{assigner: roleAssigners[0]}
+	}
+
 	svc := application.NewService(application.Deps{
 		Tx:        &sqlTxRunner{db: db},
 		Merchants: infrastructure.MerchantRepo{},
 		Creds:     infrastructure.CredentialRepo{},
 		Hooks:     infrastructure.WebhookRepo{},
 		Audit:     infrastructure.AuditWriter{},
-		Roles:     infrastructure.RoleAssigner{},
+		Roles:     roleAssigner,
 		KeyGen:    infrastructure.KeyGenerator{},
 		Hasher:    infrastructure.Hasher{Peppers: map[int][]byte{1: pepper}, Current: 1},
 		Cipher:    infrastructure.Cipher{Key: encKey, Version: 1},
@@ -155,3 +161,15 @@ type noopObserver struct{}
 func (noopObserver) AuthResult(_ string)    {}
 func (noopObserver) SSRFBlocked()           {}
 func (noopObserver) StatusChanged(_ string) {}
+
+// roleAssignerAdapter adapts Member 1's RoleAssigner to Member 4's application.RoleAssigner.
+type roleAssignerAdapter struct {
+	assigner identityapp.RoleAssigner
+}
+
+func (a *roleAssignerAdapter) GrantMerchantRole(ctx context.Context, _ application.Querier, userID, merchantID string) error {
+	if a.assigner == nil {
+		return nil
+	}
+	return a.assigner.AssignRole(ctx, userID, identitydomain.RoleMerchant, &merchantID)
+}

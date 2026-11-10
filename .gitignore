@@ -52,3 +52,7 @@ desktop.ini
 
 #graphify
 graphify-out
+graphify-out/
+
+# Kubernetes real secrets (never commit — only secrets.example.yaml is tracked)
+deploy/kubernetes/secrets.yaml
