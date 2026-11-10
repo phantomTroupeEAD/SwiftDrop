@@ -11,6 +11,7 @@ var (
 	// Pricing rule errors.
 	ErrTariffNotFound      = errors.New("no applicable pricing tariff found")
 	ErrInvalidTariff       = errors.New("invalid pricing tariff")
+	ErrInvalidZoneID       = errors.New("invalid zone ID")
 	ErrInvalidServiceLevel = errors.New("invalid service level")
 
 	// Quote-related errors.
