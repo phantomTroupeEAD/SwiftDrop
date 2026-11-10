@@ -333,34 +333,5 @@ func handleHealthReady(dbConn *sql.DB) http.HandlerFunc {
 			"status":   "ok",
 			"database": "connected",
 		})
-	})
-
-	// 8. Register Member 08 Events & Messaging Operations & Swagger UI
-	registerEventsModules(mux, dbConn, security)
-
-	// 9. Register Member 04 Merchant Integration Operations
-	if err := registerMerchantsModule(mux, dbConn, tokenProvider); err != nil {
-		if config.IsProduction() {
-			log.Fatalf("[FATAL] Failed to initialize Member 04 Merchant Integration: %v", err)
-		}
-		log.Printf("[NOTICE] Member 04 Merchant Integration not fully active in local mode: %v\n", err)
-	}
-
-	// 10. Register Member 07 Admin Operations (zones, postal codes, settings, audit log)
-	if err := registerAdminModule(mux, dbConn, security); err != nil {
-		if config.IsProduction() {
-			log.Fatalf("[FATAL] Failed to initialize Member 07 Admin Operations: %v", err)
-		}
-		log.Printf("[NOTICE] Member 07 Admin Operations not active in local mode: %v\n", err)
-	}
-
-	return &AppContainer{
-		Mux:         mux,
-		AuthSvc:     authService,
-		UserRepo:    userRepo,
-		Security:    security,
-		TokenProv:   tokenProvider,
-		DB:          dbConn,
-		StorageType: storageType,
 	}
 }
