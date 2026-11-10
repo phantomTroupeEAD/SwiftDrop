@@ -223,6 +223,7 @@ make reset
 | `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
 | `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
 | `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
+| `swiftdrop-tracking-api` | 8081 | `8081` | `GET /health/live`, `/health/ready` | Tracking API & SSE projections service |
 | `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
 | `swiftdrop-event-worker` | 8083 | `8083` | `GET /health/live`, `/metrics` | Asynchronous consumer worker (KEDA scaled) |
 | `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
