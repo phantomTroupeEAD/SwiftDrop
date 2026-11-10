@@ -39,10 +39,11 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ## 2. Domain Invariants & Business Rules
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
-3. **Approved Option A Architecture:** `Tariff` represents geographic pricing only (`OriginZoneID`, `DestinationZoneID`, `BaseFee`, `PerKgRate`, `Version`, `IsActive`, `EffectiveFrom`, `EffectiveUntil`). Service levels and multipliers are applied independently during calculation to eliminate duplicate pricing rules.
-4. **Volumetric Divisor (5000 cm³/kg):** Dimensions in cm are required for all parcels. $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$, capped at 30 kg — *Confirmed Project Standard*.
-5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Project Standard*.
-6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
+3. **Approved Option A Architecture:** `Tariff` represents geographic pricing only (`OriginZoneID`, `DestinationZoneID`, `BaseFee`, `PerKgRate`, `Version`, `IsActive`, `EffectiveFrom`, `EffectiveUntil`). Zone identifiers must follow Member 7's canonical `^ZONE_[A-Z0-9_]{2,27}$` format (validated via `domain.ValidateZoneID`). Service levels and multipliers are applied independently during calculation to eliminate duplicate pricing rules.
+4. **Quote Ownership Invariants:** `domain.Quote` and `application.GenerateQuoteCommand` track `RequesterID` (`*string`, customer/user ID) and `MerchantID` (`*string`, merchant tenant ID). At least one owner must be supplied (supporting customer-only, merchant-only, and customer-plus-merchant quotes), valid identifiers are trimmed, and non-nil empty/whitespace-only pointers are rejected before tariff repository lookup.
+5. **Volumetric Divisor (5000 cm³/kg):** Dimensions in cm are required for all parcels. $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$, capped at 30 kg — *Confirmed Project Standard*.
+6. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Project Standard*.
+7. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
 
 ---
 
@@ -67,7 +68,7 @@ internal/pricing/
   - `20261101000500_create_worker_dedup_and_webhooks.up.sql`
 - **Proposed Pricing Migrations (Member 9):**
   - `pricing_rules`: Geographic base tariffs (composite PK `(id, version)`, `origin_zone_id`, `destination_zone_id`, `base_fee_cents`, `per_kg_rate_cents`, `effective_from`, `effective_until`, `version`, `is_active`, `created_at`, `updated_at`).
-  - `pricing_quotes`: Pre-booking quotation cache (PK `id` UUID, `tariff_id`, `tariff_version`, `chargeable_weight_kg`, `service_level`, `fee_cents`, `currency`, `created_at`, `expires_at`, `used_at`).
+  - `pricing_quotes`: Pre-booking quotation cache (PK `id` UUID, `tariff_id`, `tariff_version`, `requester_id` UUID NULL, `merchant_id` UUID NULL, `chargeable_weight_kg`, `service_level`, `fee_cents`, `currency`, `created_at`, `expires_at`, `used_at`).
   - *Insert-Only Semantics:* `QuoteRepository.Save` performs strict `INSERT` without `ON CONFLICT DO UPDATE`. Duplicate IDs are rejected with `ErrDuplicateQuote`.
   - *Atomic Single-Use Quote Consumption:* Quote consumption during parcel booking must be executed via an atomic conditional SQL update (`UPDATE pricing_quotes SET used_at = $2 WHERE id = $1 AND used_at IS NULL AND expires_at > $2`).
 
@@ -82,6 +83,9 @@ internal/pricing/
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
 | 2026-11-06 | Task 1: Refactored Tariff domain model to Option A architecture. Removed ServiceLevel from Tariff; renamed Pickup/DestinationZone to Origin/DestinationZoneID; added IsActive, CreatedAt, UpdatedAt; moved multipliers to ServiceLevel; updated Calculator and GenerateQuoteUseCase to support independent service level pricing | Member 2 |
 | 2026-11-06 | Task 3: Implemented and refined Pricing PostgreSQL Repositories (`PostgresTariffRepository`, `PostgresQuoteRepository`). Enforced Option A geographic tariff lookup with version and temporal window queries, strictly insert-only quote persistence (`ErrDuplicateQuote` on duplicate ID; no `ON CONFLICT DO UPDATE` overwriting `used_at`), and comprehensive in-memory test suite via standard `database/sql/driver` test mock | Member 2 |
+| 2026-11-10 | Task 6 (Step 1): Added canonical `ValidateZoneID` (`^ZONE_[A-Z0-9_]{2,27}$`) in `domain/tariff.go` and quote requester/merchant ownership (`RequesterID`, `MerchantID`) in `domain/quote.go` | Member 2 |
+| 2026-11-10 | Task 6 (Step 2): Updated `GenerateQuoteCommand` and `GenerateQuoteUseCase.Execute` to validate zone IDs via `domain.ValidateZoneID` and validate/forward requester & merchant ownership before tariff lookup | Member 2 |
+| 2026-11-10 | Task 6 (Step 3): Updated `PostgresQuoteRepository` (`Save`, `FindByID`) to persist and scan nullable `requester_id` and `merchant_id` columns via `sql.NullString`, updated mock repository tests and `ZONE_` tariff fixtures | Member 2 |
 
 ---
 

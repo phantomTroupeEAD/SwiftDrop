@@ -1,9 +1,20 @@
 package domain
 
 import (
+	"regexp"
 	"strings"
 	"time"
 )
+
+var zoneIDPattern = regexp.MustCompile(`^ZONE_[A-Z0-9_]{2,27}$`)
+
+// ValidateZoneID checks whether zoneID matches the canonical delivery zone identifier format.
+func ValidateZoneID(zoneID string) error {
+	if !zoneIDPattern.MatchString(zoneID) {
+		return ErrInvalidZoneID
+	}
+	return nil
+}
 
 type ServiceLevel string
 
@@ -64,8 +75,8 @@ type Tariff struct {
 // Validate checks whether the tariff contains valid pricing configuration.
 func (t Tariff) Validate() error {
 	if strings.TrimSpace(t.ID) == "" ||
-		strings.TrimSpace(t.OriginZoneID) == "" ||
-		strings.TrimSpace(t.DestinationZoneID) == "" {
+		ValidateZoneID(t.OriginZoneID) != nil ||
+		ValidateZoneID(t.DestinationZoneID) != nil {
 		return ErrInvalidTariff
 	}
 
