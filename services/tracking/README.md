@@ -11,6 +11,7 @@ The `tracking` service is a standalone read-optimized projection service designe
 
 ### Key Responsibilities:
 - Public tracking lookup by canonical tracking number (`SD-YYYYMMDD-XXXXXX`).
+- Authenticated tracking lookup with ownership authorization (`GET /api/v1/tracking/{tracking_number}`).
 - Canonical Server-Sent Events (SSE) streaming (`GET /api/v1/tracking/public/{tracking_number}/stream`).
 - Strict SEC-009 public data sanitization and PII redaction.
 - Decoupled real-time event source abstraction (`TrackingEventSource`) for Redis Pub/Sub / RabbitMQ integration in Phase 5.
@@ -33,4 +34,5 @@ The `tracking` service is a standalone read-optimized projection service designe
 | 2026-10-21 | - | Initial service architecture baseline created | Architecture Setup |
 | 2026-11-10 | Phase 1 | Standalone Go Tracking API foundation, HTTP server, probes | Member 5 |
 | 2026-11-10 | Phase 2 | Public tracking REST API, PostgreSQL repository adapter, SEC-009 privacy | Member 5 |
+| 2026-11-10 | Phase 3 | Authenticated Tracking REST API, HS256 JWT verification, customer & merchant ownership authorization | Member 5 |
 | 2026-11-10 | Phase 4 | Standalone SSE streaming infrastructure, heartbeat, reconnect, backpressure, event source abstraction | Member 5 |

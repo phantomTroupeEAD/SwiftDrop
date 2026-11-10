@@ -13,6 +13,9 @@ import (
 var (
 	// ErrInvalidConfig indicates a configuration validation failure.
 	ErrInvalidConfig = errors.New("config: invalid configuration value")
+
+	// DefaultDevJWTSecret is the default secret key used in local and development environments.
+	DefaultDevJWTSecret = "swiftdrop-development-secret-key-change-in-production-32chars"
 )
 
 // Config encapsulates runtime configuration for the Tracking service.
@@ -40,6 +43,10 @@ type Config struct {
 	DBConnMaxLifetime time.Duration
 	DBConnMaxIdleTime time.Duration
 	DBQueryTimeout    time.Duration
+
+	// Identity & JWT Verification (Phase 3)
+	JWTSecret string
+	JWTIssuer string
 }
 
 // Load reads configuration from environment variables with sensible defaults
@@ -66,6 +73,10 @@ func Load() (*Config, error) {
 		DBConnMaxLifetime: getDuration("TRACKING_DB_CONN_MAX_LIFETIME", 15*time.Minute),
 		DBConnMaxIdleTime: getDuration("TRACKING_DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
 		DBQueryTimeout:    getDuration("TRACKING_DB_QUERY_TIMEOUT", 3*time.Second),
+
+		// Identity & JWT Verification (Phase 3)
+		JWTSecret: getString("TRACKING_JWT_SECRET", getString("JWT_SECRET", DefaultDevJWTSecret)),
+		JWTIssuer: getString("TRACKING_JWT_ISSUER", getString("JWT_ISSUER", "https://api.swiftdrop.io")),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -157,6 +168,16 @@ func (c *Config) Validate() error {
 	}
 	if c.DBQueryTimeout <= 0 {
 		return fmt.Errorf("%w: DBQueryTimeout must be greater than zero", ErrInvalidConfig)
+	}
+
+	// Validate JWT settings in production
+	if c.IsProduction() {
+		if c.JWTSecret == "" || c.JWTSecret == DefaultDevJWTSecret {
+			return fmt.Errorf("%w: JWTSecret must be explicitly configured in production and cannot use default dev secret", ErrInvalidConfig)
+		}
+		if len(c.JWTSecret) < 32 {
+			return fmt.Errorf("%w: JWTSecret must be at least 32 characters in production", ErrInvalidConfig)
+		}
 	}
 
 	return nil

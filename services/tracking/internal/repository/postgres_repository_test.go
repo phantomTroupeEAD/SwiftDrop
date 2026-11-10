@@ -20,9 +20,9 @@ func TestPostgresTrackingRepository_FindParcelByTrackingNumber_Success(t *testin
 	database := registerMockDB("find_parcel_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
 		capturedQuery = query
 		capturedArgs = args
-		cols := []string{"id", "tracking_number", "status", "destination_city", "created_at", "updated_at"}
+		cols := []string{"id", "tracking_number", "status", "sender_id", "merchant_id", "destination_city", "destination_postal_code", "destination_zone_id", "created_at", "updated_at"}
 		data := [][]driver.Value{
-			{"parcel-uuid-1", "SD-20261106-000001", "IN_TRANSIT", "Kandy", now, now.Add(time.Hour)},
+			{"parcel-uuid-1", "SD-20261106-000001", "IN_TRANSIT", "usr_sender_1", nil, "Kandy", "20000", "ZONE_KANDY_01", now, now.Add(time.Hour)},
 		}
 		return &testRows{columns: cols, data: data}, nil, nil
 	})
@@ -45,6 +45,18 @@ func TestPostgresTrackingRepository_FindParcelByTrackingNumber_Success(t *testin
 	}
 	if parcel.DestinationCity != "Kandy" {
 		t.Errorf("expected city Kandy, got %s", parcel.DestinationCity)
+	}
+	if parcel.SenderID == nil || *parcel.SenderID != "usr_sender_1" {
+		t.Errorf("expected sender_id usr_sender_1, got %v", parcel.SenderID)
+	}
+	if parcel.MerchantID != nil {
+		t.Errorf("expected nil merchant_id, got %v", *parcel.MerchantID)
+	}
+	if parcel.DestinationPostalCode != "20000" {
+		t.Errorf("expected postal code 20000, got %s", parcel.DestinationPostalCode)
+	}
+	if parcel.DestinationZoneID != "ZONE_KANDY_01" {
+		t.Errorf("expected zone id ZONE_KANDY_01, got %s", parcel.DestinationZoneID)
 	}
 
 	// Verify SQL query contains required dropoff_address->>'city' extraction
@@ -154,9 +166,9 @@ func TestPostgresTrackingRepository_FindTrackingSummary(t *testing.T) {
 
 	database := registerMockDB("find_summary_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
 		if strings.Contains(query, "FROM parcels") {
-			cols := []string{"id", "tracking_number", "status", "destination_city", "created_at", "updated_at"}
+			cols := []string{"id", "tracking_number", "status", "sender_id", "merchant_id", "destination_city", "destination_postal_code", "destination_zone_id", "created_at", "updated_at"}
 			data := [][]driver.Value{
-				{"parcel-uuid-99", "SD-20261106-999999", "DELIVERED", "Colombo", now, now.Add(3 * time.Hour)},
+				{"parcel-uuid-99", "SD-20261106-999999", "DELIVERED", nil, "mrc_merchant_1", "Colombo", "00300", "ZONE_COLOMBO_03", now, now.Add(3 * time.Hour)},
 			}
 			return &testRows{columns: cols, data: data}, nil, nil
 		}
@@ -186,6 +198,15 @@ func TestPostgresTrackingRepository_FindTrackingSummary(t *testing.T) {
 	}
 	if parcel.DestinationCity != "Colombo" {
 		t.Errorf("expected city Colombo, got %s", parcel.DestinationCity)
+	}
+	if parcel.MerchantID == nil || *parcel.MerchantID != "mrc_merchant_1" {
+		t.Errorf("expected merchant_id mrc_merchant_1, got %v", parcel.MerchantID)
+	}
+	if parcel.DestinationPostalCode != "00300" {
+		t.Errorf("expected postal code 00300, got %s", parcel.DestinationPostalCode)
+	}
+	if parcel.DestinationZoneID != "ZONE_COLOMBO_03" {
+		t.Errorf("expected zone id ZONE_COLOMBO_03, got %s", parcel.DestinationZoneID)
 	}
 	if len(history) != 2 {
 		t.Fatalf("expected 2 history entries, got %d", len(history))

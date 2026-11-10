@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/swiftdrop/tracking/internal/auth"
 	"github.com/swiftdrop/tracking/internal/config"
 	"github.com/swiftdrop/tracking/internal/health"
 	trackinghttp "github.com/swiftdrop/tracking/internal/http"
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	fmt.Println("==================================================================")
-	fmt.Println("   SwiftDrop Tracking API — Phase 4: Standalone SSE Infrastructure")
+	fmt.Println("   SwiftDrop Tracking API — Phase 3: Authenticated Tracking REST")
 	fmt.Printf("   Service Address: %s | Environment: %s\n", cfg.HTTPAddr, cfg.AppEnv)
 	fmt.Println("==================================================================")
 
@@ -122,8 +123,13 @@ func main() {
 		logger,
 	)
 
+	// Phase 3: Authenticated Tracking REST Endpoint
+	jwtVerifier := auth.NewJWTVerifier(cfg.JWTSecret, cfg.JWTIssuer)
+	authTrackingSvc := service.NewAuthenticatedTrackingService(trackingRepo)
+	authTrackingHandler := trackinghttp.NewAuthenticatedTrackingHandler(authTrackingSvc, jwtVerifier, logger)
+
 	// 7. Construct HTTP router with middleware pipeline
-	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler)
+	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler, authTrackingHandler)
 
 	// 8. Initialize HTTP server
 	srv := trackinghttp.NewServer(cfg, router, logger)
