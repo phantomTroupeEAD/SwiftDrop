@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,8 @@ type Quote struct {
 	ID                 string
 	TariffID           string
 	TariffVersion      int
+	RequesterID        *string
+	MerchantID         *string
 	ChargeableWeightKg float64
 	ServiceLevel       ServiceLevel
 	Fee                Money
@@ -19,7 +22,20 @@ type Quote struct {
 	UsedAt             *time.Time
 }
 
-// NewQuote creates a quote using the selected tariff, calculated weight, and service level.
+func normalizeOptionalID(raw *string) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return nil, false
+	}
+
+	return &trimmed, true
+}
+
+// NewQuote creates a quote using the selected tariff, calculated weight, service level, and ownership.
 func NewQuote(
 	id string,
 	tariff Tariff,
@@ -27,6 +43,8 @@ func NewQuote(
 	serviceLevel ServiceLevel,
 	fee Money,
 	createdAt time.Time,
+	requesterID *string,
+	merchantID *string,
 ) (Quote, error) {
 	if err := tariff.Validate(); err != nil {
 		return Quote{}, ErrInvalidQuote
@@ -36,7 +54,14 @@ func NewQuote(
 		return Quote{}, ErrInvalidQuote
 	}
 
-	if id == "" ||
+	normRequesterID, reqOK := normalizeOptionalID(requesterID)
+	normMerchantID, merchOK := normalizeOptionalID(merchantID)
+	if !reqOK || !merchOK || (normRequesterID == nil && normMerchantID == nil) {
+		return Quote{}, ErrInvalidQuote
+	}
+
+	cleanID := strings.TrimSpace(id)
+	if cleanID == "" ||
 		math.IsNaN(weight.ChargeableKg) ||
 		math.IsInf(weight.ChargeableKg, 0) ||
 		weight.ChargeableKg <= 0 ||
@@ -51,9 +76,11 @@ func NewQuote(
 	}
 
 	quote := Quote{
-		ID:                 id,
-		TariffID:           tariff.ID,
+		ID:                 cleanID,
+		TariffID:           strings.TrimSpace(tariff.ID),
 		TariffVersion:      tariff.Version,
+		RequesterID:        normRequesterID,
+		MerchantID:         normMerchantID,
 		ChargeableWeightKg: weight.ChargeableKg,
 		ServiceLevel:       serviceLevel,
 		Fee:                fee,
@@ -68,9 +95,15 @@ func NewQuote(
 	return quote, nil
 }
 
-// Validate checks the quote's required data and expiry configuration.
+// Validate checks the quote's required data, ownership, and expiry configuration.
 func (q Quote) Validate() error {
-	if q.ID == "" || q.TariffID == "" || q.TariffVersion <= 0 {
+	if strings.TrimSpace(q.ID) == "" || strings.TrimSpace(q.TariffID) == "" || q.TariffVersion <= 0 {
+		return ErrInvalidQuote
+	}
+
+	normRequesterID, reqOK := normalizeOptionalID(q.RequesterID)
+	normMerchantID, merchOK := normalizeOptionalID(q.MerchantID)
+	if !reqOK || !merchOK || (normRequesterID == nil && normMerchantID == nil) {
 		return ErrInvalidQuote
 	}
 
