@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -8,13 +10,47 @@ import (
 func validTariff() Tariff {
 	return Tariff{
 		ID:                "tariff-001",
-		OriginZoneID:      "COLOMBO",
-		DestinationZoneID: "GAMPAHA",
+		OriginZoneID:      "ZONE_COLOMBO_01",
+		DestinationZoneID: "ZONE_GAMPAHA_01",
 		BaseFee:           Money{Amount: 35000, Currency: CurrencyLKR},
 		PerKgRate:         Money{Amount: 8000, Currency: CurrencyLKR},
 		EffectiveFrom:     time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
 		IsActive:          true,
 		Version:           1,
+	}
+}
+
+func TestValidateZoneID(t *testing.T) {
+	tests := []struct {
+		name    string
+		zoneID  string
+		wantErr bool
+	}{
+		{name: "valid standard zone", zoneID: "ZONE_COLOMBO_01", wantErr: false},
+		{name: "valid min length 7 chars", zoneID: "ZONE_AB", wantErr: false},
+		{name: "valid max length 32 chars", zoneID: "ZONE_" + strings.Repeat("A", 27), wantErr: false},
+		{name: "valid digits and underscores", zoneID: "ZONE_WEST_01_A", wantErr: false},
+		{name: "empty string", zoneID: "", wantErr: true},
+		{name: "whitespace only", zoneID: "   ", wantErr: true},
+		{name: "surrounding whitespace", zoneID: " ZONE_COLOMBO_01 ", wantErr: true},
+		{name: "missing ZONE prefix", zoneID: "COLOMBO", wantErr: true},
+		{name: "hyphenated legacy format", zoneID: "ZONE-WESTERN-01", wantErr: true},
+		{name: "lowercase characters", zoneID: "zone_colombo_01", wantErr: true},
+		{name: "too short suffix", zoneID: "ZONE_A", wantErr: true},
+		{name: "too long 33 chars", zoneID: "ZONE_" + strings.Repeat("A", 28), wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateZoneID(tc.zoneID)
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidZoneID) {
+					t.Fatalf("expected ErrInvalidZoneID for %q, got: %v", tc.zoneID, err)
+				}
+			} else if err != nil {
+				t.Fatalf("expected valid zone ID %q, got error: %v", tc.zoneID, err)
+			}
+		})
 	}
 }
 
@@ -39,6 +75,30 @@ func TestTariffValidateRejectsMissingZone(t *testing.T) {
 
 	if err := tariff.Validate(); err != ErrInvalidTariff {
 		t.Fatalf("expected ErrInvalidTariff for empty destination, got: %v", err)
+	}
+}
+
+func TestTariffValidateRejectsInvalidZoneFormat(t *testing.T) {
+	invalidZones := []string{
+		"COLOMBO",
+		"ZONE-WESTERN-01",
+		"zone_colombo_01",
+		"ZONE_A",
+		" ZONE_COLOMBO_01 ",
+	}
+
+	for _, z := range invalidZones {
+		tariff := validTariff()
+		tariff.OriginZoneID = z
+		if err := tariff.Validate(); err != ErrInvalidTariff {
+			t.Fatalf("expected ErrInvalidTariff for invalid origin zone %q, got: %v", z, err)
+		}
+
+		tariff = validTariff()
+		tariff.DestinationZoneID = z
+		if err := tariff.Validate(); err != ErrInvalidTariff {
+			t.Fatalf("expected ErrInvalidTariff for invalid destination zone %q, got: %v", z, err)
+		}
 	}
 }
 
