@@ -193,7 +193,8 @@ func (r *PostgresTrackingRepository) FindParcelByTrackingNumber(ctx context.Cont
 }
 
 // FindStatusHistoryByParcelID queries the authoritative parcel_status_history table
-// returning chronological milestones with deterministic ordering (timestamp ASC, id ASC).
+// returning chronological milestones with deterministic ordering (occurred_at ASC, id ASC).
+// Aligns strictly with Member 2's authoritative schema (occurred_at).
 func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Context, parcelID string) ([]domain.MilestoneRecord, error) {
 	if r.db == nil {
 		return nil, domain.ErrDatabaseUnavailable
@@ -209,12 +210,13 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 			from_status,
 			to_status,
 			actor_id,
+			actor_type,
 			actor_role,
 			reason,
-			timestamp
+			occurred_at
 		FROM parcel_status_history
 		WHERE parcel_id = $1
-		ORDER BY timestamp ASC, id ASC;
+		ORDER BY occurred_at ASC, id ASC;
 	`
 
 	rows, err := r.db.QueryContext(timeoutCtx, query, parcelID)
@@ -231,6 +233,7 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 		var (
 			rec        domain.MilestoneRecord
 			fromStatus sql.NullString
+			actorID    sql.NullString
 		)
 
 		err := rows.Scan(
@@ -238,7 +241,8 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 			&rec.ParcelID,
 			&fromStatus,
 			&rec.ToStatus,
-			&rec.ActorID,
+			&actorID,
+			&rec.ActorType,
 			&rec.ActorRole,
 			&rec.Reason,
 			&rec.Timestamp,
@@ -250,6 +254,9 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 		if fromStatus.Valid {
 			statusVal := fromStatus.String
 			rec.FromStatus = &statusVal
+		}
+		if actorID.Valid {
+			rec.ActorID = actorID.String
 		}
 
 		records = append(records, rec)
@@ -352,12 +359,13 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 			from_status,
 			to_status,
 			actor_id,
+			actor_type,
 			actor_role,
 			reason,
-			timestamp
+			occurred_at
 		FROM parcel_status_history
 		WHERE parcel_id = $1
-		ORDER BY timestamp ASC, id ASC;
+		ORDER BY occurred_at ASC, id ASC;
 	`
 
 	rows, err := tx.QueryContext(timeoutCtx, historyQuery, id)
@@ -374,6 +382,7 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 		var (
 			rec        domain.MilestoneRecord
 			fromStatus sql.NullString
+			actorID    sql.NullString
 		)
 
 		err := rows.Scan(
@@ -381,7 +390,8 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 			&rec.ParcelID,
 			&fromStatus,
 			&rec.ToStatus,
-			&rec.ActorID,
+			&actorID,
+			&rec.ActorType,
 			&rec.ActorRole,
 			&rec.Reason,
 			&rec.Timestamp,
@@ -393,6 +403,9 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 		if fromStatus.Valid {
 			statusVal := fromStatus.String
 			rec.FromStatus = &statusVal
+		}
+		if actorID.Valid {
+			rec.ActorID = actorID.String
 		}
 
 		records = append(records, rec)

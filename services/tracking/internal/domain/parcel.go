@@ -20,6 +20,7 @@ type MilestoneRecord struct {
 	FromStatus *string
 	ToStatus   string
 	ActorID    string
+	ActorType  string
 	ActorRole  string
 	Reason     string
 	Timestamp  time.Time

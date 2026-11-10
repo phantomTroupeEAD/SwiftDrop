@@ -120,7 +120,7 @@ func extractTrackingNumberFromPath(path string) string {
 	const prefix = "/api/v1/tracking/public/"
 	if strings.HasPrefix(path, prefix) {
 		trimmed := strings.TrimPrefix(path, prefix)
-		// Strip query parameters or trailing slashes if present
+		// Strip query parameters, trailing slashes, or sub-paths like /stream
 		if idx := strings.Index(trimmed, "/"); idx != -1 {
 			trimmed = trimmed[:idx]
 		}

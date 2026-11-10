@@ -48,7 +48,7 @@ func TestPostgresTrackingRepository_RealDB_Integration(t *testing.T) {
 	`
 	var tableExists bool
 	if err := db.QueryRowContext(ctx, checkTableQuery).Scan(&tableExists); err != nil || !tableExists {
-		t.Skip("INTEGRATION BLOCKED: Authoritative 'parcels' table is absent in PostgreSQL. Member 2 migration 000005_create_parcels_and_quotes is pending.")
+		t.Skip("INTEGRATION BLOCKED: Authoritative 'parcels' table is absent in PostgreSQL. Member 2 migration 20261110000002_create_parcel_tables is pending.")
 	}
 
 	// Real database verified: test repository operations

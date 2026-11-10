@@ -98,3 +98,74 @@ func TestPublicTrackingResponse_SEC009_PrivacyRedaction(t *testing.T) {
 		t.Errorf("expected estimated_delivery to be omitted when nil, got: %s", jsonStr)
 	}
 }
+
+func TestPublicStatusUpdateEvent_SEC009_PrivacyRedaction(t *testing.T) {
+	now := time.Date(2026, 11, 10, 14, 0, 0, 0, time.UTC)
+
+	ev := PublicStatusUpdateEvent{
+		TrackingNumber: "SD-20261110-A8F3K2",
+		Status:         "OUT_FOR_DELIVERY",
+		Description:    "Courier is out for final doorstep delivery.",
+		Timestamp:      now,
+	}
+
+	bytes, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	jsonStr := string(bytes)
+
+	// List of forbidden field names and sensitive markers that must NEVER appear in public SSE JSON
+	forbiddenSubstrings := []string{
+		"sender_id",
+		"customer_id",
+		"merchant_id",
+		"recipient_name",
+		"recipient_phone",
+		"phone",
+		"street",
+		"street_line1",
+		"street_line2",
+		"pickup_address",
+		"dropoff_address",
+		"postal_code",
+		"zone_id",
+		"origin_zone_id",
+		"destination_zone_id",
+		"courier_notes",
+		"internal_notes",
+		"reason",
+		"reason_code",
+		"actor_id",
+		"actor_role",
+		"proof_id",
+		"proof_photo_url",
+		"delivery_fee",
+		"delivery_fee_cents",
+		"fee_cents",
+		"currency",
+		"chargeable_weight",
+		"pricing_rule",
+	}
+
+	for _, forbidden := range forbiddenSubstrings {
+		if strings.Contains(strings.ToLower(jsonStr), `"`+forbidden+`"`) {
+			t.Errorf("SEC-009 VIOLATION: SSE JSON payload leaked sensitive field %q: %s", forbidden, jsonStr)
+		}
+	}
+
+	// Verify required fields are present
+	requiredKeys := []string{
+		`"tracking_number":"SD-20261110-A8F3K2"`,
+		`"status":"OUT_FOR_DELIVERY"`,
+		`"description":"Courier is out for final doorstep delivery."`,
+		`"timestamp":"2026-11-10T14:00:00Z"`,
+	}
+
+	for _, req := range requiredKeys {
+		if !strings.Contains(jsonStr, req) {
+			t.Errorf("expected SSE JSON payload to contain %s, got: %s", req, jsonStr)
+		}
+	}
+}

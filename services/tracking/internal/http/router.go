@@ -9,12 +9,14 @@ import (
 )
 
 // NewRouter constructs and configures the HTTP request multiplexer with standard
-// platform middleware and endpoints.
+// platform middleware and endpoints. Supports optional handlers (*PublicTrackingHandler, *SSEHandler).
+// All public endpoints are strictly isolated under the /api/v1/tracking/public/ namespace,
+// preserving the /api/v1/tracking/ namespace for authenticated tracking.
 func NewRouter(
 	cfg *config.Config,
 	logger *slog.Logger,
 	healthHandler *health.Handler,
-	trackingHandlers ...*PublicTrackingHandler,
+	handlers ...any,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -22,9 +24,29 @@ func NewRouter(
 	mux.HandleFunc("GET /health/live", healthHandler.Live)
 	mux.HandleFunc("GET /health/ready", healthHandler.Ready)
 
+	// Scan optional handlers
+	var (
+		trackingHandler *PublicTrackingHandler
+		sseHandler      *SSEHandler
+	)
+
+	for _, h := range handlers {
+		switch v := h.(type) {
+		case *PublicTrackingHandler:
+			trackingHandler = v
+		case *SSEHandler:
+			sseHandler = v
+		}
+	}
+
 	// Phase 2: Public Tracking REST endpoint
-	if len(trackingHandlers) > 0 && trackingHandlers[0] != nil {
-		mux.HandleFunc("GET /api/v1/tracking/public/{tracking_number}", trackingHandlers[0].GetPublicTracking)
+	if trackingHandler != nil {
+		mux.HandleFunc("GET /api/v1/tracking/public/{tracking_number}", trackingHandler.GetPublicTracking)
+	}
+
+	// Phase 4: Canonical Server-Sent Events (SSE) Public Streaming Endpoint
+	if sseHandler != nil {
+		mux.HandleFunc("GET /api/v1/tracking/public/{tracking_number}/stream", sseHandler.StreamTracking)
 	}
 
 	// Pipeline: RequestID -> Recover -> AccessLog -> Mux
