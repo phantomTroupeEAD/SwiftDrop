@@ -32,7 +32,7 @@ func TestEndToEndLifecycle_Integration(t *testing.T) {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/swiftdrop_db?sslmode=disable"
+		dbURL = "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable"
 	}
 
 	rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -156,16 +156,11 @@ func TestEndToEndLifecycle_Integration(t *testing.T) {
 		t.Fatalf("notification consumer handle failed: %v", err)
 	}
 
-	// Verify deduplication
-	seen, err := idempotencyStore.Seen(context.Background(), "notifier", eventID)
-	if err != nil || !seen {
-		t.Errorf("expected event %s to be seen in processed_events, err=%v", eventID, err)
-	}
-
 	// Verify notification delivery row created
+	var notifID string
 	var notifStatus string
 	var recipientEmail string
-	err = db.QueryRow("SELECT status, recipient_email FROM notification_deliveries WHERE event_id = $1", eventID).Scan(&notifStatus, &recipientEmail)
+	err = db.QueryRow("SELECT id, status, recipient FROM notification_deliveries WHERE event_id = $1", eventID).Scan(&notifID, &notifStatus, &recipientEmail)
 	if err != nil {
 		t.Fatalf("failed to query notification_deliveries: %v", err)
 	}
@@ -174,6 +169,16 @@ func TestEndToEndLifecycle_Integration(t *testing.T) {
 	}
 	if recipientEmail != "recipient@swiftdrop.test" {
 		t.Errorf("expected recipient email recipient@swiftdrop.test, got %s", recipientEmail)
+	}
+
+	// Simulate worker poller outcome: record success and verify processed_events entry
+	if err := delivRepo.RecordNotificationSuccess(context.Background(), notifID, eventID, "msg-e2e-1"); err != nil {
+		t.Fatalf("failed to record notification success: %v", err)
+	}
+
+	seen, err := idempotencyStore.Seen(context.Background(), "notifier", eventID)
+	if err != nil || !seen {
+		t.Errorf("expected event %s to be seen in processed_events, err=%v", eventID, err)
 	}
 
 	// 7. HMAC Signer & Webhook Dispatch verification

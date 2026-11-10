@@ -115,14 +115,14 @@ type mockAcknowledger struct {
 	nacked []uint64
 }
 
-func (m *mockAcknowledger) Ack(tag uint64, multiple bool) error {
+func (m *mockAcknowledger) Ack(tag uint64, _ bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.acked = append(m.acked, tag)
 	return nil
 }
 
-func (m *mockAcknowledger) Nack(tag uint64, multiple bool, requeue bool) error {
+func (m *mockAcknowledger) Nack(tag uint64, _ bool, _ bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.nacked = append(m.nacked, tag)
@@ -135,7 +135,7 @@ func (m *mockAcknowledger) Reject(tag uint64, requeue bool) error {
 
 func TestConsumerRunner_MalformedMessageRoutesToDLQ(t *testing.T) {
 	ack := &mockAcknowledger{}
-	runner := NewRunner("test-consumer", func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	runner := NewRunner("test-consumer", func(_ context.Context, _ amqp.Delivery, _ *relay.OutboxEnvelope) error {
 		return nil
 	}, nil)
 
@@ -158,7 +158,7 @@ func TestConsumerRunner_MalformedMessageRoutesToDLQ(t *testing.T) {
 
 func TestConsumerRunner_PanicRecovery(t *testing.T) {
 	ack := &mockAcknowledger{}
-	runner := NewRunner("test-panic", func(ctx context.Context, d amqp.Delivery, env *relay.OutboxEnvelope) error {
+	runner := NewRunner("test-panic", func(_ context.Context, _ amqp.Delivery, _ *relay.OutboxEnvelope) error {
 		panic("unexpected runtime panic")
 	}, nil)
 
@@ -234,6 +234,53 @@ func TestNotificationHandler_MilestoneAndIdempotency(t *testing.T) {
 	_ = idemp.MarkDone(ctx, nil, "notifier", env.EventID)
 	if err := handler(ctx, amqp.Delivery{}, env); err != nil {
 		t.Fatalf("error when already marked done: %v", err)
+	}
+}
+
+func TestNotificationHandler_MissingRecipientEmail(t *testing.T) {
+	repo := newMockDeliveryRepo()
+	idemp := idempotency.NewMemoryStore()
+	handler := NewNotificationHandler(repo, idemp, nil)
+
+	payloadWithoutEmail := map[string]interface{}{
+		"parcel_id": "0192e2b3-7c8a-7890-a123-000000000002",
+		"notify": map[string]interface{}{
+			"recipient_name": "No Email Person",
+		},
+	}
+	pBytes, _ := json.Marshal(payloadWithoutEmail)
+
+	env := &relay.OutboxEnvelope{
+		EventID:          "0192e2b3-7c8a-7890-a123-000000000099",
+		EventType:        "parcel.delivered.v1",
+		AggregateID:      "0192e2b3-7c8a-7890-a123-000000000002",
+		AggregateVersion: 2,
+		Payload:          pBytes,
+	}
+
+	ctx := context.Background()
+	if err := handler(ctx, amqp.Delivery{}, env); err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+
+	if len(repo.notifications) != 1 {
+		t.Fatalf("expected 1 notification row, got %d", len(repo.notifications))
+	}
+	notif := repo.notifications[0]
+	if notif.Status != "FAILED" {
+		t.Errorf("expected status FAILED, got %s", notif.Status)
+	}
+	if notif.LastError != "NO_RECIPIENT" {
+		t.Errorf("expected last_error NO_RECIPIENT, got %s", notif.LastError)
+	}
+	if notif.Recipient != "-" {
+		t.Errorf("expected recipient '-', got %s", notif.Recipient)
+	}
+
+	// Verify idempotency was marked
+	seen, err := idemp.Seen(ctx, "notifier", env.EventID)
+	if err != nil || !seen {
+		t.Errorf("expected event to be marked seen in idempotency, err=%v seen=%v", err, seen)
 	}
 }
 

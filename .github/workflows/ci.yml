@@ -2,9 +2,9 @@ name: SwiftDrop CI Quality Gates
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
 
 jobs:
   secret-scan:
@@ -22,7 +22,7 @@ jobs:
           extra_args: --only-verified
 
   go-checks:
-    name: Core API Quality & Architecture Verification
+    name: Go Quality & Architecture Verification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

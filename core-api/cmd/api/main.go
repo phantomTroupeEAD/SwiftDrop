@@ -12,6 +12,24 @@ import (
 	"time"
 )
 
+// @title                      SwiftDrop Core API
+// @version                    1.0
+// @description                Authoritative REST API Modular Monolith for SwiftDrop Courier & Parcel Delivery Management System.
+// @termsOfService             https://swiftdrop.local/terms
+
+// @contact.name               SwiftDrop Engineering Team
+// @contact.url                https://github.com/swiftdrop
+
+// @license.name               Proprietary / Academic Use Only
+
+// @host                       localhost:8080
+// @BasePath                   /
+
+// @securityDefinitions.apikey BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Type "Bearer" followed by a space and JWT token (e.g. 'Bearer eyJhbGci...').
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {

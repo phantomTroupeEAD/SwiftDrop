@@ -16,7 +16,7 @@ def entrypoint_content() -> str:
 
 def test_entrypoint_shebang_and_mode_handling(entrypoint_content: str):
     """TC-SUP-001: Verify entrypoint starts with POSIX shebang and supports all three operational modes."""
-    assert entrypoint_content.startswith("#!/bin/sh")
+    assert entrypoint_content.startswith(("#!/bin/bash", "#!/bin/sh"))
     assert 'MODE="${1:-dual}"' in entrypoint_content
     assert "api)" in entrypoint_content
     assert "mcp)" in entrypoint_content

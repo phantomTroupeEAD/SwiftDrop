@@ -27,6 +27,7 @@ func NewBackoffCalculator(schedule []time.Duration, rng *rand.Rand) *BackoffCalc
 		schedule = DefaultRetrySchedule
 	}
 	if rng == nil {
+		//nolint:gosec // exponential backoff jitter does not require cryptographic randomness
 		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
 	return &BackoffCalculator{

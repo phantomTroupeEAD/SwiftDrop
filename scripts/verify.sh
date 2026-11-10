@@ -70,6 +70,17 @@ if command -v go >/dev/null 2>&1; then
     if [ $FAILED -eq 0 ]; then
         echo "  [PASS] All tests passed."
     fi
+
+    # 5. Swagger Specification Verification
+    if [ -f "core-api/docs/swagger.json" ]; then
+        echo "  Verifying core-api Swagger specification..."
+        if python3 -c "import json, sys; d = json.load(open('core-api/docs/swagger.json')); sys.exit(0 if ('swagger' in d or 'openapi' in d) else 1)" 2>/dev/null; then
+            echo "  [PASS] Unified Swagger specification is valid JSON."
+        else
+            echo "  [ERROR] core-api/docs/swagger.json is invalid JSON or missing root spec keys."
+            FAILED=1
+        fi
+    fi
 else
     echo "[4/4] Skipping Go test execution (go not installed)."
 fi
