@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/swiftdrop/core-api/internal/dispatch/application"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
@@ -29,7 +28,16 @@ func (m *mockTxManager) WithTransaction(ctx context.Context, fn func(tx *sql.Tx)
 }
 
 type mockCourierRepo struct {
-	couriers map[uuid.UUID]*domain.Courier
+	couriers  map[uuid.UUID]*domain.Courier
+	userRoles map[uuid.UUID]string
+}
+
+func (m *mockCourierRepo) GetUserRole(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	if m.userRoles != nil {
+		role, ok := m.userRoles[userID]
+		return role, ok, nil
+	}
+	return "COURIER", true, nil
 }
 
 func (m *mockCourierRepo) GetByID(ctx context.Context, userID uuid.UUID) (*domain.Courier, error) {
@@ -77,6 +85,10 @@ func (m *mockAssignmentRepo) GetActiveByParcelID(ctx context.Context, tx *sql.Tx
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockAssignmentRepo) GetActiveByParcelIDReadOnly(ctx context.Context, parcelID uuid.UUID) (*domain.CourierAssignment, error) {
+	return m.GetActiveByParcelID(ctx, nil, parcelID)
 }
 
 func (m *mockAssignmentRepo) CountActiveByCourierID(ctx context.Context, tx *sql.Tx, courierID uuid.UUID) (int, error) {
@@ -128,7 +140,7 @@ func (m *mockDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zone
 
 func (m *mockDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneID string) ([]application.CourierLoadDTO, error) {
 	return []application.CourierLoadDTO{
-		{UserID: uuid.New().String(), CourierName: "Driver 1", ActiveCount: 3, MaxCapacity: 25, Status: "ON_SHIFT"},
+		{CourierID: uuid.New().String(), Name: "Driver 1", ActiveAssignments: 3, MaxCapacity: 25, Status: domain.ShiftStatusOnShift, VehicleType: domain.VehicleTypeMotorcycle},
 	}, nil
 }
 
@@ -148,8 +160,8 @@ func setupTestDispatchHandler() (*transport.DispatchHandler, *transport.CourierS
 	parcelID := uuid.New()
 	parcelUpdater.statuses[parcelID] = "CREATED"
 
-	regUC := application.NewRegisterCourierUseCase(courierRepo)
-	listQ := application.NewListCouriersQueryHandler(boardReader)
+	regUC := application.NewRegisterCourierUseCase(courierRepo, courierRepo)
+	listQ := application.NewListCouriersQueryHandler(courierRepo)
 	boardQ := application.NewGetDispatchBoardQueryHandler(boardReader)
 	assignUC := application.NewAssignCourierUseCase(txMgr, courierRepo, asgnRepo, parcelUpdater, outbox)
 	cancelUC := application.NewCancelAssignmentUseCase(txMgr, asgnRepo, parcelUpdater, outbox)
@@ -253,3 +265,213 @@ func TestCourierShiftHandler_ToggleShift(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ON_BREAK")
 }
 
+func TestDispatchHandler_CancelAssignment(t *testing.T) {
+	t.Run("Valid cancellation returns 200 OK", func(t *testing.T) {
+		dh, _, courierID, parcelID := setupTestDispatchHandler()
+		// Assign first
+		assignBody, _ := json.Marshal(map[string]any{
+			"parcel_id":  parcelID.String(),
+			"courier_id": courierID.String(),
+		})
+		reqAssign := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/assignments", bytes.NewReader(assignBody))
+		reqAssign = withAuth(reqAssign, uuid.NewString(), identityDomain.RoleDispatcher)
+		recAssign := httptest.NewRecorder()
+		dh.AssignCourier(recAssign, reqAssign)
+		assert.Equal(t, http.StatusCreated, recAssign.Code)
+
+		// Now cancel
+		cancelBody, _ := json.Marshal(map[string]any{
+			"reason": "Customer requested delivery hold",
+		})
+		reqCancel := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/assignments/"+parcelID.String()+"/cancel", bytes.NewReader(cancelBody))
+		reqCancel.SetPathValue("id", parcelID.String())
+		reqCancel = withAuth(reqCancel, uuid.NewString(), identityDomain.RoleDispatcher)
+		recCancel := httptest.NewRecorder()
+
+		dh.CancelAssignment(recCancel, reqCancel)
+		assert.Equal(t, http.StatusOK, recCancel.Code)
+		assert.Contains(t, recCancel.Body.String(), "CANCELLED")
+	})
+
+	t.Run("Missing reason returns 422 Unprocessable Entity", func(t *testing.T) {
+		dh, _, _, parcelID := setupTestDispatchHandler()
+		cancelBody, _ := json.Marshal(map[string]any{
+			"reason": "",
+		})
+		reqCancel := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/assignments/"+parcelID.String()+"/cancel", bytes.NewReader(cancelBody))
+		reqCancel.SetPathValue("id", parcelID.String())
+		reqCancel = withAuth(reqCancel, uuid.NewString(), identityDomain.RoleDispatcher)
+		recCancel := httptest.NewRecorder()
+
+		dh.CancelAssignment(recCancel, reqCancel)
+		assert.Equal(t, http.StatusUnprocessableEntity, recCancel.Code)
+		assert.Contains(t, recCancel.Body.String(), "VALIDATION_FAILED")
+	})
+}
+
+func TestDispatchHandler_RescheduleParcel(t *testing.T) {
+	t.Run("Missing courier_id returns 422 Unprocessable Entity", func(t *testing.T) {
+		dh, _, _, parcelID := setupTestDispatchHandler()
+		reschedBody, _ := json.Marshal(map[string]any{
+			"courier_id": "",
+			"notes":      "Rescheduling attempt 2",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/parcels/"+parcelID.String()+"/reschedule", bytes.NewReader(reschedBody))
+		req.SetPathValue("id", parcelID.String())
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		dh.RescheduleParcel(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "VALIDATION_FAILED")
+	})
+}
+
+func TestDispatchHandler_RegisterCourier_Validation(t *testing.T) {
+	dh, _, _, _ := setupTestDispatchHandler()
+
+	t.Run("Invalid vehicle type returns 400 Bad Request", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         uuid.NewString(),
+			"employee_code":   "CR-1010",
+			"vehicle_type":    "PLANE",
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		dh.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "INVALID_VEHICLE_TYPE")
+	})
+
+	t.Run("Capacity exceeds 200 returns 422 Unprocessable Entity", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         uuid.NewString(),
+			"employee_code":   "CR-1010",
+			"vehicle_type":    "VAN",
+			"max_capacity":    500,
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		dh.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "VALIDATION_FAILED")
+	})
+
+	t.Run("User with non-courier role returns 422 Unprocessable Entity", func(t *testing.T) {
+		mockRepo := &mockCourierRepo{
+			couriers:  make(map[uuid.UUID]*domain.Courier),
+			userRoles: make(map[uuid.UUID]string),
+		}
+		adminUID := uuid.New()
+		mockRepo.userRoles[adminUID] = "ADMIN"
+
+		regUC := application.NewRegisterCourierUseCase(mockRepo, mockRepo)
+		customDH := transport.NewDispatchHandler(regUC, nil, nil, nil, nil, nil)
+
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         adminUID.String(),
+			"employee_code":   "CR-1011",
+			"vehicle_type":    "MOTORCYCLE",
+			"max_capacity":    25,
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		customDH.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "USER_NOT_A_COURIER")
+	})
+
+	t.Run("User not found returns 404 Not Found", func(t *testing.T) {
+		mockRepo := &mockCourierRepo{
+			couriers:  make(map[uuid.UUID]*domain.Courier),
+			userRoles: make(map[uuid.UUID]string), // empty, user does not exist
+		}
+		nonExistentUID := uuid.New()
+
+		regUC := application.NewRegisterCourierUseCase(mockRepo, mockRepo)
+		customDH := transport.NewDispatchHandler(regUC, nil, nil, nil, nil, nil)
+
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         nonExistentUID.String(),
+			"employee_code":   "CR-1012",
+			"vehicle_type":    "MOTORCYCLE",
+			"max_capacity":    25,
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		customDH.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "USER_NOT_FOUND")
+	})
+
+	t.Run("Duplicate courier profile returns 409 Conflict", func(t *testing.T) {
+		existingUID := uuid.New()
+		existingCourier, _ := domain.NewCourier(existingUID, "CR-1013", domain.VehicleTypeMotorcycle, 25, "ZONE_COLOMBO_01")
+		mockRepo := &mockCourierRepo{
+			couriers: map[uuid.UUID]*domain.Courier{
+				existingUID: existingCourier,
+			},
+			userRoles: map[uuid.UUID]string{
+				existingUID: "COURIER",
+			},
+		}
+
+		regUC := application.NewRegisterCourierUseCase(mockRepo, mockRepo)
+		customDH := transport.NewDispatchHandler(regUC, nil, nil, nil, nil, nil)
+
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         existingUID.String(),
+			"employee_code":   "CR-1014",
+			"vehicle_type":    "MOTORCYCLE",
+			"max_capacity":    25,
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		customDH.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		assert.Contains(t, rec.Body.String(), "COURIER_PROFILE_EXISTS")
+	})
+
+	t.Run("Valid courier registration returns 201 Created", func(t *testing.T) {
+		validUID := uuid.New()
+		mockRepo := &mockCourierRepo{
+			couriers: make(map[uuid.UUID]*domain.Courier),
+			userRoles: map[uuid.UUID]string{
+				validUID: "COURIER",
+			},
+		}
+
+		regUC := application.NewRegisterCourierUseCase(mockRepo, mockRepo)
+		customDH := transport.NewDispatchHandler(regUC, nil, nil, nil, nil, nil)
+
+		body, _ := json.Marshal(map[string]any{
+			"user_id":         validUID.String(),
+			"employee_code":   "CR-1015",
+			"vehicle_type":    "MOTORCYCLE",
+			"max_capacity":    25,
+			"current_zone_id": "ZONE_COLOMBO_01",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewReader(body))
+		req = withAuth(req, uuid.NewString(), identityDomain.RoleDispatcher)
+		rec := httptest.NewRecorder()
+
+		customDH.RegisterCourier(rec, req)
+		assert.Equal(t, http.StatusCreated, rec.Code)
+		assert.Contains(t, rec.Body.String(), "CR-1015")
+	})
+}

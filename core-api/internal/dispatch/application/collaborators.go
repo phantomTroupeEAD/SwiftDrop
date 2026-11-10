@@ -48,3 +48,7 @@ type OutboxWriter interface {
 	) error
 }
 
+// UserRoleChecker validates whether a user exists and retrieves their role in the identity store.
+type UserRoleChecker interface {
+	GetUserRole(ctx context.Context, userID uuid.UUID) (role string, exists bool, err error)
+}

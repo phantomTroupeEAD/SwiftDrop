@@ -129,5 +129,41 @@ func TestDeliveryAttempt_Validate(t *testing.T) {
 	if err := failedAttempt.Validate(); !errors.Is(err, domain.ErrFailureConflict) {
 		t.Errorf("expected ErrFailureConflict, got %v", err)
 	}
-}
 
+	// Attempt limit bounds on Validate
+	invalidNumAttempt, _ := domain.NewSuccessfulAttempt(parcelID, courierID, 1, pod, nil, "")
+	invalidNumAttempt.AttemptNumber = 0
+	if err := invalidNumAttempt.Validate(); !errors.Is(err, domain.ErrAttemptLimitExceeded) {
+		t.Errorf("expected ErrAttemptLimitExceeded for attempt 0, got %v", err)
+	}
+	invalidNumAttempt.AttemptNumber = 4
+	if err := invalidNumAttempt.Validate(); !errors.Is(err, domain.ErrAttemptLimitExceeded) {
+		t.Errorf("expected ErrAttemptLimitExceeded for attempt 4, got %v", err)
+	}
+
+	// Missing proof on success
+	missingProofAttempt, _ := domain.NewSuccessfulAttempt(parcelID, courierID, 1, pod, nil, "")
+	missingProofAttempt.Proof = nil
+	if err := missingProofAttempt.Validate(); !errors.Is(err, domain.ErrMissingDeliveryProof) {
+		t.Errorf("expected ErrMissingDeliveryProof, got %v", err)
+	}
+
+	// Missing failure reason on failed attempt
+	missingReasonAttempt, _ := domain.NewFailedAttempt(parcelID, courierID, 1, reason, nil, "")
+	missingReasonAttempt.FailureReason = nil
+	if err := missingReasonAttempt.Validate(); !errors.Is(err, domain.ErrInvalidFailureReasonCode) {
+		t.Errorf("expected ErrInvalidFailureReasonCode, got %v", err)
+	}
+
+	// Invalid outcome value
+	invalidOutcomeAttempt, _ := domain.NewSuccessfulAttempt(parcelID, courierID, 1, pod, nil, "")
+	invalidOutcomeAttempt.Outcome = domain.AttemptOutcome("INVALID_OUTCOME")
+	if err := invalidOutcomeAttempt.Validate(); !errors.Is(err, domain.ErrInvalidAttemptOutcome) {
+		t.Errorf("expected ErrInvalidAttemptOutcome, got %v", err)
+	}
+
+	// Outcome String() method
+	if domain.AttemptOutcomeSuccess.String() != "SUCCESS" || domain.AttemptOutcomeFailed.String() != "FAILED" {
+		t.Errorf("unexpected string representation for AttemptOutcome")
+	}
+}

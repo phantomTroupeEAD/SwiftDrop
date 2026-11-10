@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -62,6 +61,10 @@ func (s *concurrentMockAssignmentStorage) GetByID(ctx context.Context, userID uu
 	return s.GetByIDWithLock(ctx, nil, userID)
 }
 
+func (s *concurrentMockAssignmentStorage) GetUserRole(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	return "COURIER", true, nil
+}
+
 func (s *concurrentMockAssignmentStorage) Save(ctx context.Context, tx *sql.Tx, courier *dispatchDomain.Courier) error {
 	s.couriers[courier.UserID] = courier
 	return nil
@@ -98,6 +101,12 @@ func (s *concurrentMockAssignmentStorage) GetActiveByParcelID(ctx context.Contex
 		}
 	}
 	return nil, nil
+}
+
+func (s *concurrentMockAssignmentStorage) GetActiveByParcelIDReadOnly(ctx context.Context, parcelID uuid.UUID) (*dispatchDomain.CourierAssignment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.GetActiveByParcelID(ctx, nil, parcelID)
 }
 
 func (s *concurrentMockAssignmentStorage) CountActiveByCourierID(ctx context.Context, tx *sql.Tx, courierID uuid.UUID) (int, error) {
@@ -165,7 +174,7 @@ func TestAT013_AssignmentConcurrencyRace(t *testing.T) {
 	assignUC := dispatchApp.NewAssignCourierUseCase(storage, storage, storage, storage, storage)
 	cancelUC := dispatchApp.NewCancelAssignmentUseCase(storage, storage, storage, storage)
 	reschedUC := dispatchApp.NewRescheduleParcelUseCase(storage, storage, storage, storage, storage)
-	regUC := dispatchApp.NewRegisterCourierUseCase(storage)
+	regUC := dispatchApp.NewRegisterCourierUseCase(storage, storage)
 	listQ := dispatchApp.NewListCouriersQueryHandler(storage)
 	boardQ := dispatchApp.NewGetDispatchBoardQueryHandler(storage)
 
@@ -240,4 +249,3 @@ func TestAT013_AssignmentConcurrencyRace(t *testing.T) {
 	assert.Equal(t, 1, activeCount, "AT-013: Exactly ONE active assignment must exist in persistence for target parcel")
 	assert.Equal(t, "ASSIGNED", storage.statuses[targetParcelID], "AT-013: Parcel status must be ASSIGNED")
 }
-

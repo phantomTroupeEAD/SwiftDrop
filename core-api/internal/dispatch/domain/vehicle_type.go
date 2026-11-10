@@ -35,4 +35,3 @@ func (v VehicleType) Validate() error {
 func (v VehicleType) String() string {
 	return string(v)
 }
-

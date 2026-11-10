@@ -16,4 +16,3 @@ func NewGeoCoordinate(lat, lng float64) (*GeoCoordinate, error) {
 		Longitude: lng,
 	}, nil
 }
-

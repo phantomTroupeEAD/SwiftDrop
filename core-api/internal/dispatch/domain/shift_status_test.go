@@ -73,4 +73,3 @@ func TestShiftStatus_CanTransitionTo_Admin(t *testing.T) {
 	// Direct reinstatement to ON_SHIFT from suspended is barred; must go through OFF_SHIFT
 	assertTransition(domain.ShiftStatusSuspended, domain.ShiftStatusOnShift, false)
 }
-

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresOutboxWriter implements application.OutboxWriter
@@ -22,6 +23,8 @@ func NewPostgresOutboxWriter(db *sql.DB) *PostgresOutboxWriter {
 
 // Write appends an event to the outbox_events table within the active transaction.
 func (w *PostgresOutboxWriter) Write(
+	// Check db handle
+
 	ctx context.Context,
 	tx *sql.Tx,
 	aggregateType string,
@@ -31,6 +34,9 @@ func (w *PostgresOutboxWriter) Write(
 	payload any,
 	correlationID string,
 ) error {
+	if tx == nil && w.db == nil {
+		return fmt.Errorf("outbox writer: %w", db.ErrNilDB)
+	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal outbox event payload: %w", err)
@@ -79,4 +85,3 @@ func (w *PostgresOutboxWriter) Write(
 	}
 	return nil
 }
-

@@ -54,4 +54,3 @@ func RegisterRoutes(
 		security.Authenticate(courierOrStaff(http.HandlerFunc(courierHandler.ToggleShift))),
 	)
 }
-

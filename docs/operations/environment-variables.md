@@ -39,7 +39,13 @@ Primary backend modular monolith (HTTP Port `8080`, Probes at `/health/live`, `/
 | `IDEMPOTENCY_EXPIRY_HOURS`| Lifetime before stored idempotency cache rows expire. | `24` | No | No |
 | `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for encrypting merchant webhook secrets (shared with Event Worker). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
 | `MERCHANT_API_KEY_PEPPER`| Server-side pepper string for merchant API key HMAC hashing. | *(Secret pepper string)* | **Yes** | **Yes** |
-| `OBJECT_STORAGE_ENDPOINT` / `S3_ENDPOINT` | S3-compatible storage endpoint URL. | `http://minio:9000` (local) or Cloudflare R2 | No | No |
+| `OBJECT_STORAGE_DRIVER` / `STORAGE_DRIVER` | Storage driver selection (`local`, `r2`, `minio`, `s3`). | `local` | No | No |
+| `LOCAL_STORAGE_PATH` | Local disk folder path when `OBJECT_STORAGE_DRIVER=local`. | `./data/proofs` | No | No |
+| `LOCAL_STORAGE_BASE_URL` | Base URL path for serving local proofs. | `/api/v1/deliveries/proofs` | No | No |
+| `OBJECT_STORAGE_ACCOUNT_ID` / `R2_ACCOUNT_ID` | Cloudflare 32-character hexadecimal Account ID (for auto endpoint generation). | *(Account ID)* | No | No |
+| `OBJECT_STORAGE_ENDPOINT` / `S3_ENDPOINT` | S3-compatible storage endpoint URL. Auto-derived if Account ID provided for R2. | `http://minio:9000` (local) or `https://<account_id>.r2.cloudflarestorage.com` | No | No |
+| `OBJECT_STORAGE_REGION` / `S3_REGION` | Storage region (`auto` for Cloudflare R2). | `auto` | No | No |
+| `OBJECT_STORAGE_PUBLIC_URL` / `S3_PUBLIC_BASE_URL` | Optional custom CDN base URL for public attachments. | `https://media.swiftdrop.example.com` | No | No |
 | `OBJECT_STORAGE_BUCKET` / `S3_BUCKET` | Bucket name for proof-of-delivery attachments. | `swiftdrop-pod-attachments` | No | No |
 | `OBJECT_STORAGE_ACCESS_KEY` / `S3_ACCESS_KEY_ID`| S3 access key ID. | `minioadmin` | No | **Yes** |
 | `OBJECT_STORAGE_SECRET_KEY` / `S3_SECRET_ACCESS_KEY`| S3 secret access key. | `minioadmin` | No | **Yes** |

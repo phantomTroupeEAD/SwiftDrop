@@ -233,3 +233,129 @@ func TestCancelAssignmentUseCase_Success(t *testing.T) {
 	}
 }
 
+// MockUserRoleChecker provides role lookup for testing.
+type MockUserRoleChecker struct {
+	roles map[uuid.UUID]string
+}
+
+func (m *MockUserRoleChecker) GetUserRole(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	role, exists := m.roles[userID]
+	return role, exists, nil
+}
+
+func TestRegisterCourierUseCase(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Success registration for valid courier user", func(t *testing.T) {
+		courierRepo := NewMockCourierRepository()
+		validUID := uuid.New()
+		roleChecker := &MockUserRoleChecker{
+			roles: map[uuid.UUID]string{
+				validUID: "COURIER",
+			},
+		}
+
+		uc := application.NewRegisterCourierUseCase(courierRepo, roleChecker)
+		courier, err := uc.Execute(ctx, application.RegisterCourierCommand{
+			UserID:        validUID.String(),
+			EmployeeCode:  "CR-2001",
+			VehicleType:   domain.VehicleTypeMotorcycle,
+			MaxCapacity:   25,
+			CurrentZoneID: "ZONE_COLOMBO_01",
+		})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if courier == nil || courier.EmployeeCode != "CR-2001" {
+			t.Fatalf("unexpected courier result: %v", courier)
+		}
+	})
+
+	t.Run("Rejects non-courier role (ADMIN)", func(t *testing.T) {
+		courierRepo := NewMockCourierRepository()
+		adminUID := uuid.New()
+		roleChecker := &MockUserRoleChecker{
+			roles: map[uuid.UUID]string{
+				adminUID: "ADMIN",
+			},
+		}
+
+		uc := application.NewRegisterCourierUseCase(courierRepo, roleChecker)
+		_, err := uc.Execute(ctx, application.RegisterCourierCommand{
+			UserID:        adminUID.String(),
+			EmployeeCode:  "CR-2002",
+			VehicleType:   domain.VehicleTypeMotorcycle,
+			MaxCapacity:   25,
+			CurrentZoneID: "ZONE_COLOMBO_01",
+		})
+
+		if !errors.Is(err, application.ErrUserNotCourier) {
+			t.Errorf("expected ErrUserNotCourier, got %v", err)
+		}
+	})
+
+	t.Run("Rejects non-existent user", func(t *testing.T) {
+		courierRepo := NewMockCourierRepository()
+		roleChecker := &MockUserRoleChecker{
+			roles: make(map[uuid.UUID]string),
+		}
+
+		uc := application.NewRegisterCourierUseCase(courierRepo, roleChecker)
+		_, err := uc.Execute(ctx, application.RegisterCourierCommand{
+			UserID:        uuid.New().String(),
+			EmployeeCode:  "CR-2003",
+			VehicleType:   domain.VehicleTypeMotorcycle,
+			MaxCapacity:   25,
+			CurrentZoneID: "ZONE_COLOMBO_01",
+		})
+
+		if !errors.Is(err, application.ErrUserNotFound) {
+			t.Errorf("expected ErrUserNotFound, got %v", err)
+		}
+	})
+
+	t.Run("Rejects duplicate courier profile", func(t *testing.T) {
+		courierRepo := NewMockCourierRepository()
+		courierUID := uuid.New()
+		existingCourier, _ := domain.NewCourier(courierUID, "CR-2004", domain.VehicleTypeMotorcycle, 25, "ZONE_COLOMBO_01")
+		_ = courierRepo.Save(ctx, nil, existingCourier)
+
+		roleChecker := &MockUserRoleChecker{
+			roles: map[uuid.UUID]string{
+				courierUID: "COURIER",
+			},
+		}
+
+		uc := application.NewRegisterCourierUseCase(courierRepo, roleChecker)
+		_, err := uc.Execute(ctx, application.RegisterCourierCommand{
+			UserID:        courierUID.String(),
+			EmployeeCode:  "CR-2005",
+			VehicleType:   domain.VehicleTypeMotorcycle,
+			MaxCapacity:   25,
+			CurrentZoneID: "ZONE_COLOMBO_01",
+		})
+
+		if !errors.Is(err, application.ErrCourierProfileExists) {
+			t.Errorf("expected ErrCourierProfileExists, got %v", err)
+		}
+	})
+
+	t.Run("Rejects invalid user_id format", func(t *testing.T) {
+		courierRepo := NewMockCourierRepository()
+		roleChecker := &MockUserRoleChecker{}
+
+		uc := application.NewRegisterCourierUseCase(courierRepo, roleChecker)
+		_, err := uc.Execute(ctx, application.RegisterCourierCommand{
+			UserID:        "not-a-valid-uuid",
+			EmployeeCode:  "CR-2006",
+			VehicleType:   domain.VehicleTypeMotorcycle,
+			MaxCapacity:   25,
+			CurrentZoneID: "ZONE_COLOMBO_01",
+		})
+
+		if !errors.Is(err, application.ErrInvalidCommand) {
+			t.Errorf("expected ErrInvalidCommand, got %v", err)
+		}
+	})
+}

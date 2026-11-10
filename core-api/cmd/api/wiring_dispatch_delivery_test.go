@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,46 +40,45 @@ func TestDispatchAndDeliveryWiring_RoutesRegistered(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 
-	t.Run("Dispatcher can access dispatch board", func(t *testing.T) {
+	t.Run("Fails with 503 DATABASE_UNAVAILABLE when database is offline without writing to memory", func(t *testing.T) {
 		token, err := container.TokenProv.GenerateAccessToken(identityApp.Principal{
 			UserID: "0192e2b0-8c24-7df7-b087-0b1297e6e5a0",
-			Email:  "dispatcher@swiftdrop.io",
-			Role:   identityDomain.RoleDispatcher,
+			Email:  "admin@swiftdrop.io",
+			Role:   identityDomain.RoleAdmin,
 		})
 		require.NoError(t, err)
 
+		// 1. Dispatch board query fails because DB is disconnected
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/dispatch/board", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rec := httptest.NewRecorder()
 
 		container.Mux.ServeHTTP(rec, req)
-		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
 		var resp map[string]any
 		err = json.NewDecoder(rec.Body).Decode(&resp)
 		require.NoError(t, err)
-		assert.Contains(t, resp, "data")
-	})
+		errObj, ok := resp["error"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "DATABASE_UNAVAILABLE", errObj["code"])
 
-	t.Run("Courier can access active manifest", func(t *testing.T) {
-		token, err := container.TokenProv.GenerateAccessToken(identityApp.Principal{
-			UserID: "0192e2b0-8c24-7df7-b087-0b1297e6e5a1",
-			Email:  "courier@swiftdrop.io",
-			Role:   identityDomain.RoleCourier,
-		})
+		// 2. Courier registration query fails because DB is disconnected (violates atomicity if saved to memory)
+		courierBody := `{"user_id":"0192e2b0-8c24-7df7-b087-0b1297e6e5a1","employee_code":"CR-9999","vehicle_type":"MOTORCYCLE","max_capacity":20,"current_zone_id":"ZONE_COLOMBO_01"}`
+		reqPost := httptest.NewRequest(http.MethodPost, "/api/v1/dispatch/couriers", bytes.NewBufferString(courierBody))
+		reqPost.Header.Set("Authorization", "Bearer "+token)
+		reqPost.Header.Set("Content-Type", "application/json")
+		recPost := httptest.NewRecorder()
+
+		container.Mux.ServeHTTP(recPost, reqPost)
+		assert.Equal(t, http.StatusServiceUnavailable, recPost.Code)
+
+		var postResp map[string]any
+		err = json.NewDecoder(recPost.Body).Decode(&postResp)
 		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/courier/parcels", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		rec := httptest.NewRecorder()
-
-		container.Mux.ServeHTTP(rec, req)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var resp map[string]any
-		err = json.NewDecoder(rec.Body).Decode(&resp)
-		require.NoError(t, err)
-		assert.Contains(t, resp, "data")
+		postErrObj, ok := postResp["error"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "DATABASE_UNAVAILABLE", postErrObj["code"])
 	})
 
 	t.Run("Courier forbidden from accessing dispatcher endpoints", func(t *testing.T) {
@@ -118,4 +118,3 @@ func TestDispatchAndDeliveryWiring_AgreementA2Preserved(t *testing.T) {
 	container.Mux.ServeHTTP(recReady, reqReady)
 	assert.Equal(t, http.StatusOK, recReady.Code)
 }
-

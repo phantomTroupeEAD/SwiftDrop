@@ -52,4 +52,3 @@ type CourierManifestItemDTO struct {
 type CourierManifestReader interface {
 	GetActiveManifest(ctx context.Context, courierID uuid.UUID) ([]CourierManifestItemDTO, error)
 }
-

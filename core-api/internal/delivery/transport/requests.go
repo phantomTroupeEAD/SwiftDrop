@@ -36,13 +36,13 @@ func (r *StartBatchRunRequest) Validate() []httpx.ErrorDetail {
 
 // CompleteDeliveryRequest represents the JSON payload to record a successful doorstep delivery.
 type CompleteDeliveryRequest struct {
-	ProofType        string   `json:"proof_type"`
-	ProofURL         string   `json:"proof_url,omitempty"`
-	SignatureData    string   `json:"signature_data,omitempty"`
-	ReceivedByName   string   `json:"received_by_name"`
-	Latitude         *float64 `json:"latitude,omitempty"`
-	Longitude        *float64 `json:"longitude,omitempty"`
-	Notes            string   `json:"notes,omitempty"`
+	ProofType      string   `json:"proof_type"`
+	ProofURL       string   `json:"proof_url,omitempty"`
+	SignatureData  string   `json:"signature_data,omitempty"`
+	ReceivedByName string   `json:"received_by_name"`
+	Latitude       *float64 `json:"latitude,omitempty"`
+	Longitude      *float64 `json:"longitude,omitempty"`
+	Notes          string   `json:"notes,omitempty"`
 }
 
 // Validate checks delivery completion fields.
@@ -73,4 +73,3 @@ func (r *RecordFailedAttemptRequest) Validate() []httpx.ErrorDetail {
 	}
 	return details
 }
-

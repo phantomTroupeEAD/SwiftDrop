@@ -47,11 +47,15 @@ func (uc *ToggleShiftUseCase) Execute(ctx context.Context, cmd ToggleShiftComman
 // RegisterCourierUseCase handles onboarding of operational courier fleet profiles by dispatchers/admins.
 type RegisterCourierUseCase struct {
 	courierRepo CourierRepository
+	roleChecker UserRoleChecker
 }
 
 // NewRegisterCourierUseCase constructs the registration use case.
-func NewRegisterCourierUseCase(courierRepo CourierRepository) *RegisterCourierUseCase {
-	return &RegisterCourierUseCase{courierRepo: courierRepo}
+func NewRegisterCourierUseCase(courierRepo CourierRepository, roleChecker UserRoleChecker) *RegisterCourierUseCase {
+	return &RegisterCourierUseCase{
+		courierRepo: courierRepo,
+		roleChecker: roleChecker,
+	}
 }
 
 // Execute validates and saves a new courier fleet profile.
@@ -59,6 +63,29 @@ func (uc *RegisterCourierUseCase) Execute(ctx context.Context, cmd RegisterCouri
 	userUUID, err := uuid.Parse(cmd.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid user_id format", ErrInvalidCommand)
+	}
+
+	// 1. Verify user exists and has COURIER role in identity store
+	if uc.roleChecker != nil {
+		role, exists, err := uc.roleChecker.GetUserRole(ctx, userUUID)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, ErrUserNotFound
+		}
+		if role != "COURIER" {
+			return nil, ErrUserNotCourier
+		}
+	}
+
+	// 2. Invariant BR-FLT-001: Unique operational profile per courier
+	existing, err := uc.courierRepo.GetByID(ctx, userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing courier profile: %w", err)
+	}
+	if existing != nil {
+		return nil, ErrCourierProfileExists
 	}
 
 	courier, err := domain.NewCourier(
@@ -78,4 +105,3 @@ func (uc *RegisterCourierUseCase) Execute(ctx context.Context, cmd RegisterCouri
 
 	return courier, nil
 }
-

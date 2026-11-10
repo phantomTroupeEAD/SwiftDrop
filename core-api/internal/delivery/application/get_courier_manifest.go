@@ -35,4 +35,3 @@ func (h *GetCourierManifestQueryHandler) Execute(ctx context.Context, courierID 
 
 	return manifest, nil
 }
-

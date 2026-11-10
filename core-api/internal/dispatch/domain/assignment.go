@@ -107,4 +107,3 @@ func (a *CourierAssignment) Reassign(reason string) error {
 	}
 	return nil
 }
-

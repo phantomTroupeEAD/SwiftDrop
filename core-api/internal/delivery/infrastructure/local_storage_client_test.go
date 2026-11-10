@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -62,4 +61,3 @@ func TestLocalStorageClient_GeneratePresignedURL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "https://api.swiftdrop.io/api/v1/deliveries/proofs/parcels/123/proof.jpg", url)
 }
-

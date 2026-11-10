@@ -222,4 +222,3 @@ func getSignatureKey(key, dateStamp, regionName, serviceName string) []byte {
 	kSigning := hmacSHA256(kService, []byte("aws4_request"))
 	return kSigning
 }
-

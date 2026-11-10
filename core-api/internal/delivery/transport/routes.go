@@ -55,4 +55,3 @@ func RegisterRoutes(
 		security.Authenticate(courierOrStaff(http.HandlerFunc(deliveryHandler.GetDeliveryHistory))),
 	)
 }
-

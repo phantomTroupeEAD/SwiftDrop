@@ -6,7 +6,7 @@
 
 ## 1. Register Courier Profile
 
-Onboards an existing authenticated user into the operational courier delivery fleet.
+Onboards an existing authenticated user into the operational courier delivery fleet. The target user account must exist in the identity store and possess the `COURIER` role.
 
 - **Method / Path:** `POST /api/v1/dispatch/couriers`
 - **Auth Required:** Bearer JWT (`ADMIN`, `DISPATCHER`)
@@ -45,7 +45,11 @@ Onboards an existing authenticated user into the operational courier delivery fl
 - `400 Bad Request`: `INVALID_REQUEST_BODY` — Malformed JSON or unreadable payload.
 - `401 Unauthorized`: `AUTH_UNAUTHORIZED` — Missing or expired bearer token.
 - `403 Forbidden`: `AUTH_FORBIDDEN` — Insufficient role permissions.
-- `422 Unprocessable Entity`: `VALIDATION_FAILED` — Invalid UUID, unknown vehicle type, or out-of-range capacity.
+- `404 Not Found`: `USER_NOT_FOUND` — User account with specified `user_id` does not exist in identity store.
+- `409 Conflict`: `COURIER_PROFILE_EXISTS` — Operational fleet profile already exists for this `user_id` (BR-FLT-001).
+- `422 Unprocessable Entity`: `USER_NOT_A_COURIER` — Target user exists but does not possess the `COURIER` role (e.g. `ADMIN`, `DISPATCHER`, `MERCHANT`, `CUSTOMER`).
+- `422 Unprocessable Entity`: `VALIDATION_FAILED` — Invalid UUID format, unknown vehicle type, or out-of-range capacity.
+- `503 Service Unavailable`: `DATABASE_UNAVAILABLE` — Database connection is not available; query rejected per ACID durability rules.
 
 ---
 

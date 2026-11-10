@@ -52,9 +52,8 @@ type BatchStartRunResponse struct {
 
 // DeliveryHistoryResponse wraps the chronological attempt logs and current status.
 type DeliveryHistoryResponse struct {
-	ParcelID      string                           `json:"parcel_id"`
-	CurrentStatus string                           `json:"current_status"`
-	AttemptCount  int                              `json:"attempt_count"`
-	Attempts      []application.DeliveryAttemptDTO `json:"attempts"`
+	ParcelID      string                         `json:"parcel_id"`
+	CurrentStatus string                         `json:"current_status"`
+	AttemptCount  int                            `json:"attempt_count"`
+	Attempts      []application.AttemptRecordDTO `json:"attempts"`
 }
-

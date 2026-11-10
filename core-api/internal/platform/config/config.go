@@ -94,3 +94,34 @@ func IsProduction() bool {
 func IsLocal() bool {
 	return AppEnv() == "local"
 }
+
+// LoadEnv reads one or more .env files and sets environment variables that are not already set.
+// It skips non-existent files silently and ignores comments (#) and blank lines.
+func LoadEnv(files ...string) {
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			k := strings.TrimSpace(parts[0])
+			v := strings.TrimSpace(parts[1])
+			// Strip surrounding quotes if present
+			if len(v) >= 2 && ((v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'')) {
+				v = v[1 : len(v)-1]
+			}
+			if _, exists := os.LookupEnv(k); !exists {
+				_ = os.Setenv(k, v)
+			}
+		}
+	}
+}

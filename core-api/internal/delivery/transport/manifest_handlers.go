@@ -3,9 +3,10 @@ package transport
 import (
 	"net/http"
 	"strings"
+	"time"
 
-	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/delivery/application"
+	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
 
@@ -53,16 +54,21 @@ func (h *ManifestHandler) StartRun(w http.ResponseWriter, r *http.Request) {
 
 	courierID := identityTransport.GetUserID(r.Context())
 
-	dto, err := h.startRunUC.ExecuteSingle(r.Context(), parcelID, courierID)
+	cmd := application.StartRunCommand{
+		ParcelID:  parcelID,
+		CourierID: courierID,
+	}
+
+	err := h.startRunUC.ExecuteSingle(r.Context(), cmd)
 	if err != nil {
 		MapError(w, r, err)
 		return
 	}
 
 	resp := StartRunResponse{
-		ParcelID:  dto.ParcelID,
-		Status:    dto.Status,
-		StartedAt: dto.StartedAt,
+		ParcelID:  parcelID,
+		Status:    "OUT_FOR_DELIVERY",
+		StartedAt: time.Now().UTC(),
 	}
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
@@ -83,18 +89,22 @@ func (h *ManifestHandler) StartBatchRun(w http.ResponseWriter, r *http.Request) 
 
 	courierID := identityTransport.GetUserID(r.Context())
 
-	dto, err := h.startRunUC.ExecuteBatch(r.Context(), courierID, req.ParcelIDs)
+	cmd := application.StartBatchRunCommand{
+		ParcelIDs: req.ParcelIDs,
+		CourierID: courierID,
+	}
+
+	dto, err := h.startRunUC.ExecuteBatch(r.Context(), cmd)
 	if err != nil {
 		MapError(w, r, err)
 		return
 	}
 
 	resp := BatchStartRunResponse{
-		StartedParcels: dto.StartedParcels,
-		FailedParcels:  dto.FailedParcels,
+		StartedParcels: dto.ParcelIDs,
+		FailedParcels:  []string{},
 		TotalStarted:   dto.TotalStarted,
 	}
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
 }
-

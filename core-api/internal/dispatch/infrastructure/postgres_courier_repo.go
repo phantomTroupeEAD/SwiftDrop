@@ -3,11 +3,13 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresCourierRepository implements application.CourierRepository using PostgreSQL.
@@ -20,8 +22,28 @@ func NewPostgresCourierRepository(db *sql.DB) *PostgresCourierRepository {
 	return &PostgresCourierRepository{db: db}
 }
 
+// GetUserRole queries the user's role from the identity store users table.
+func (r *PostgresCourierRepository) GetUserRole(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	if r.db == nil {
+		return "", false, fmt.Errorf("failed to query user role: %w", db.ErrNilDB)
+	}
+	query := `SELECT role FROM users WHERE id = $1 LIMIT 1;`
+	var role string
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&role)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to query user role: %w", err)
+	}
+	return role, true, nil
+}
+
 // GetByID loads a courier profile by user ID.
 func (r *PostgresCourierRepository) GetByID(ctx context.Context, userID uuid.UUID) (*domain.Courier, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to query courier: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active, created_at, updated_at
 		FROM couriers
@@ -32,6 +54,9 @@ func (r *PostgresCourierRepository) GetByID(ctx context.Context, userID uuid.UUI
 
 // GetByIDWithLock acquires an exclusive row lock on the courier row for concurrency safety.
 func (r *PostgresCourierRepository) GetByIDWithLock(ctx context.Context, tx *sql.Tx, userID uuid.UUID) (*domain.Courier, error) {
+	if tx == nil && r.db == nil {
+		return nil, fmt.Errorf("failed to query courier with lock: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active, created_at, updated_at
 		FROM couriers
@@ -51,6 +76,9 @@ func (r *PostgresCourierRepository) GetByIDWithLock(ctx context.Context, tx *sql
 
 // Save inserts or updates a courier profile.
 func (r *PostgresCourierRepository) Save(ctx context.Context, tx *sql.Tx, c *domain.Courier) error {
+	if tx == nil && r.db == nil {
+		return fmt.Errorf("failed to save courier: %w", db.ErrNilDB)
+	}
 	query := `
 		INSERT INTO couriers (
 			user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active, created_at, updated_at
@@ -87,6 +115,9 @@ func (r *PostgresCourierRepository) List(
 	status *domain.ShiftStatus,
 	vehicleType *domain.VehicleType,
 ) ([]*domain.Courier, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to list couriers: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active, created_at, updated_at
 		FROM couriers
@@ -192,4 +223,3 @@ func (r *PostgresCourierRepository) scanRows(rows *sql.Rows) (*domain.Courier, e
 
 	return &c, nil
 }
-

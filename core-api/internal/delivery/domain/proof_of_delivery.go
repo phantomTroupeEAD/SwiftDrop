@@ -88,4 +88,3 @@ func (p *ProofOfDelivery) Validate() error {
 func (p ProofType) String() string {
 	return string(p)
 }
-

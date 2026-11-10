@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,29 +95,67 @@ func (h *GetDeliveryHistoryQueryHandler) Execute(ctx context.Context, parcelID s
 	}, nil
 }
 
-// UploadProofPhotoUseCase handles storing binary doorstep photos in object storage.
+// UploadProofPhotoUseCase handles storing binary doorstep photos in object storage with assigned courier verification.
 type UploadProofPhotoUseCase struct {
-	storageClient StorageClient
+	storageClient    StorageClient
+	assignmentFinder ActiveAssignmentFinder
 }
 
 // NewUploadProofPhotoUseCase constructs the upload use case.
-func NewUploadProofPhotoUseCase(storageClient StorageClient) *UploadProofPhotoUseCase {
-	return &UploadProofPhotoUseCase{storageClient: storageClient}
+func NewUploadProofPhotoUseCase(storageClient StorageClient, assignmentFinder ActiveAssignmentFinder) *UploadProofPhotoUseCase {
+	return &UploadProofPhotoUseCase{
+		storageClient:    storageClient,
+		assignmentFinder: assignmentFinder,
+	}
 }
 
-// Execute uploads the photo data and returns the permanent storage key.
-func (uc *UploadProofPhotoUseCase) Execute(ctx context.Context, parcelID string, data io.Reader, contentType string) (string, error) {
-	parcelUUID, err := uuid.Parse(parcelID)
+// Execute uploads the photo data and returns the permanent storage key after validating courier assignment (AT-006).
+func (uc *UploadProofPhotoUseCase) Execute(ctx context.Context, cmd UploadProofPhotoCommand) (*UploadProofPhotoResultDTO, error) {
+	parcelUUID, err := uuid.Parse(cmd.ParcelID)
 	if err != nil {
-		return "", fmt.Errorf("%w: invalid parcel_id format", ErrInvalidCommand)
+		return nil, fmt.Errorf("%w: invalid parcel_id format", ErrInvalidCommand)
 	}
 
-	key := fmt.Sprintf("proofs/%s_%d.jpg", parcelUUID.String(), time.Now().UTC().Unix())
-	storageURL, err := uc.storageClient.UploadProofPhoto(ctx, key, data, contentType)
+	courierUUID, err := uuid.Parse(cmd.CourierID)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload proof photo: %w", err)
+		return nil, fmt.Errorf("%w: invalid courier_id format", ErrInvalidCommand)
 	}
 
-	return storageURL, nil
+	// 1. Verify active courier assignment (AT-006 IDOR check)
+	if uc.assignmentFinder != nil {
+		asgn, err := uc.assignmentFinder.GetActiveAssignment(ctx, nil, parcelUUID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch assignment: %w", err)
+		}
+		if asgn == nil {
+			return nil, ErrParcelNotAssigned
+		}
+		if asgn.CourierID != courierUUID {
+			return nil, domain.ErrNotAssignedCourier
+		}
+	}
+
+	contentType := cmd.ContentType
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	now := time.Now().UTC()
+	key := fmt.Sprintf("proofs/%s_%d.jpg", parcelUUID.String(), now.Unix())
+	storageKey, err := uc.storageClient.UploadProofPhoto(ctx, key, cmd.FileReader, contentType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload proof photo: %w", err)
+	}
+
+	photoURL, err := uc.storageClient.GeneratePresignedURL(ctx, storageKey, 15*time.Minute)
+	if err != nil || photoURL == "" {
+		photoURL = storageKey
+	}
+
+	return &UploadProofPhotoResultDTO{
+		PhotoURL:    photoURL,
+		StorageKey:  storageKey,
+		ContentType: contentType,
+		UploadedAt:  now,
+	}, nil
 }
-

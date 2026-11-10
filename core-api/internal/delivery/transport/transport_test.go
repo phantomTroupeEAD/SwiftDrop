@@ -9,7 +9,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +108,10 @@ func (m *mockStorageClient) GeneratePresignedURL(ctx context.Context, key string
 }
 
 func setupTestDeliveryHandler() (*transport.DeliveryHandler, *transport.ManifestHandler, uuid.UUID, uuid.UUID) {
+	return setupTestDeliveryHandlerWithStatus("OUT_FOR_DELIVERY")
+}
+
+func setupTestDeliveryHandlerWithStatus(status string) (*transport.DeliveryHandler, *transport.ManifestHandler, uuid.UUID, uuid.UUID) {
 	txMgr := &mockDeliveryTxManager{}
 	finder := &mockAssignmentFinder{assignments: make(map[uuid.UUID]*application.ActiveAssignmentDTO)}
 	attemptRepo := &mockDeliveryAttemptRepo{attempts: make(map[uuid.UUID][]*domain.DeliveryAttempt)}
@@ -127,14 +130,14 @@ func setupTestDeliveryHandler() (*transport.DeliveryHandler, *transport.Manifest
 		CourierID:    courierID,
 		Status:       "ACTIVE",
 	}
-	parcelUpdater.statuses[parcelID] = "OUT_FOR_DELIVERY"
+	parcelUpdater.statuses[parcelID] = status
 	parcelUpdater.attempts[parcelID] = 0
 
 	manifestReader.items = []application.CourierManifestItemDTO{
 		{
 			ParcelID:       parcelID.String(),
 			TrackingNumber: "SD-20261102-0001",
-			CurrentStatus:  "OUT_FOR_DELIVERY",
+			CurrentStatus:  status,
 			RecipientName:  "Sunil Silva",
 			DeliveryStreet: "123 Galle Road",
 			DeliveryCity:   "Colombo",
@@ -164,9 +167,8 @@ func withDeliveryAuth(r *http.Request, userID string, role identityDomain.Role) 
 }
 
 func TestDeliveryHandler_CompleteDelivery(t *testing.T) {
-	dh, _, courierID, parcelID := setupTestDeliveryHandler()
-
 	t.Run("Success returns 200 OK", func(t *testing.T) {
+		dh, _, courierID, parcelID := setupTestDeliveryHandler()
 		reqBody := map[string]any{
 			"proof_type":       "PHOTO",
 			"proof_url":        "https://cdn.swiftdrop.io/proofs/sample.jpg",
@@ -184,6 +186,7 @@ func TestDeliveryHandler_CompleteDelivery(t *testing.T) {
 	})
 
 	t.Run("AT-006 IDOR defense: foreign courier rejected with 403 Forbidden", func(t *testing.T) {
+		dh, _, _, parcelID := setupTestDeliveryHandler()
 		reqBody := map[string]any{
 			"proof_type":       "PHOTO",
 			"proof_url":        "https://cdn.swiftdrop.io/proofs/sample.jpg",
@@ -270,3 +273,120 @@ func TestManifestHandler_GetManifest(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Sunil Silva")
 }
 
+func TestManifestHandler_StartBatchRun(t *testing.T) {
+	t.Run("Empty parcel list rejected with 422 Unprocessable Entity", func(t *testing.T) {
+		_, mh, courierID, _ := setupTestDeliveryHandler()
+		reqBody := map[string]any{
+			"parcel_ids": []string{},
+		}
+		b, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/courier/runs/start-batch", bytes.NewReader(b))
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		mh.StartBatchRun(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "VALIDATION_FAILED")
+	})
+
+	t.Run("Over 100 parcels rejected with 422 Unprocessable Entity", func(t *testing.T) {
+		_, mh, courierID, _ := setupTestDeliveryHandler()
+		excessiveIDs := make([]string, 101)
+		for i := 0; i < 101; i++ {
+			excessiveIDs[i] = uuid.NewString()
+		}
+		reqBody := map[string]any{
+			"parcel_ids": excessiveIDs,
+		}
+		b, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/courier/runs/start-batch", bytes.NewReader(b))
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		mh.StartBatchRun(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "VALIDATION_FAILED")
+	})
+
+	t.Run("Malformed JSON rejected with 400 Bad Request", func(t *testing.T) {
+		_, mh, courierID, _ := setupTestDeliveryHandler()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/courier/runs/start-batch", bytes.NewReader([]byte("{malformed-json")))
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		mh.StartBatchRun(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "INVALID_REQUEST_BODY")
+	})
+
+	t.Run("Valid batch run succeeds with 200 OK", func(t *testing.T) {
+		_, mh, courierID, parcelID := setupTestDeliveryHandlerWithStatus("ASSIGNED")
+		reqBody := map[string]any{
+			"parcel_ids": []string{parcelID.String()},
+		}
+		b, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/courier/runs/start-batch", bytes.NewReader(b))
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		mh.StartBatchRun(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "started_parcels")
+	})
+}
+
+func TestDeliveryHandler_CompleteDelivery_Signature(t *testing.T) {
+	t.Run("Valid signature POD succeeds with 200 OK", func(t *testing.T) {
+		dh, _, courierID, parcelID := setupTestDeliveryHandler()
+		reqBody := map[string]any{
+			"proof_type":       "SIGNATURE",
+			"signature_data":   "M10,20 L30,40 L50,60 L70,80 L90,100 L110,120 L130,140 L150,160 L170,180",
+			"received_by_name": "Kasun Perera",
+		}
+		b, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/deliveries/"+parcelID.String()+"/complete", bytes.NewReader(b))
+		req.SetPathValue("id", parcelID.String())
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		dh.CompleteDelivery(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "DELIVERED")
+	})
+
+	t.Run("Short signature stroke rejected with 422 Unprocessable Entity", func(t *testing.T) {
+		dh, _, courierID, parcelID := setupTestDeliveryHandler()
+		reqBody := map[string]any{
+			"proof_type":       "SIGNATURE",
+			"signature_data":   "M10,20", // Under 50 chars
+			"received_by_name": "Kasun Perera",
+		}
+		b, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/deliveries/"+parcelID.String()+"/complete", bytes.NewReader(b))
+		req.SetPathValue("id", parcelID.String())
+		req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+		rec := httptest.NewRecorder()
+
+		dh.CompleteDelivery(rec, req)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		assert.Contains(t, rec.Body.String(), "INVALID_SIGNATURE_DATA")
+	})
+}
+
+func TestManifestHandler_DataMinimization(t *testing.T) {
+	_, mh, courierID, _ := setupTestDeliveryHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/courier/parcels", nil)
+	req = withDeliveryAuth(req, courierID.String(), identityDomain.RoleCourier)
+	rec := httptest.NewRecorder()
+
+	mh.GetManifest(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body := rec.Body.String()
+	// Security / Privacy: Data Minimization verifies no sensitive billing or merchant fee fields
+	assert.NotContains(t, body, "delivery_fee")
+	assert.NotContains(t, body, "wholesale_tariff")
+	assert.NotContains(t, body, "merchant_profit")
+	assert.NotContains(t, body, "credit_card")
+}

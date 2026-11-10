@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresAssignmentRepository implements application.AssignmentRepository using PostgreSQL.
@@ -23,6 +23,9 @@ func NewPostgresAssignmentRepository(db *sql.DB) *PostgresAssignmentRepository {
 // Create inserts a new courier assignment.
 // Partial unique index idx_assignments_parcel_single_active rejects concurrent active assignments for the same parcel.
 func (r *PostgresAssignmentRepository) Create(ctx context.Context, tx *sql.Tx, asgn *domain.CourierAssignment) error {
+	if tx == nil && r.db == nil {
+		return fmt.Errorf("failed to create courier assignment: %w", db.ErrNilDB)
+	}
 	query := `
 		INSERT INTO courier_assignments (
 			id, parcel_id, courier_id, assigned_by, status, assigned_at, ended_at, notes
@@ -46,6 +49,9 @@ func (r *PostgresAssignmentRepository) Create(ctx context.Context, tx *sql.Tx, a
 
 // GetActiveByParcelID loads the currently active assignment for a parcel with an exclusive lock.
 func (r *PostgresAssignmentRepository) GetActiveByParcelID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*domain.CourierAssignment, error) {
+	if tx == nil && r.db == nil {
+		return nil, fmt.Errorf("failed to get active assignment: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT id, parcel_id, courier_id, assigned_by, status, assigned_at, ended_at, notes
 		FROM courier_assignments
@@ -65,6 +71,9 @@ func (r *PostgresAssignmentRepository) GetActiveByParcelID(ctx context.Context, 
 
 // GetActiveByParcelIDReadOnly loads the currently active assignment without taking a row lock.
 func (r *PostgresAssignmentRepository) GetActiveByParcelIDReadOnly(ctx context.Context, parcelID uuid.UUID) (*domain.CourierAssignment, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to get active assignment: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT id, parcel_id, courier_id, assigned_by, status, assigned_at, ended_at, notes
 		FROM courier_assignments
@@ -75,6 +84,9 @@ func (r *PostgresAssignmentRepository) GetActiveByParcelIDReadOnly(ctx context.C
 
 // CountActiveByCourierID counts active assignments for a courier to enforce max capacity limits.
 func (r *PostgresAssignmentRepository) CountActiveByCourierID(ctx context.Context, tx *sql.Tx, courierID uuid.UUID) (int, error) {
+	if tx == nil && r.db == nil {
+		return 0, fmt.Errorf("failed to count active courier assignments: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT COUNT(*)
 		FROM courier_assignments
@@ -97,6 +109,9 @@ func (r *PostgresAssignmentRepository) CountActiveByCourierID(ctx context.Contex
 
 // Update persists status, ended_at, and notes changes on an existing assignment.
 func (r *PostgresAssignmentRepository) Update(ctx context.Context, tx *sql.Tx, asgn *domain.CourierAssignment) error {
+	if tx == nil && r.db == nil {
+		return fmt.Errorf("failed to update courier assignment: %w", db.ErrNilDB)
+	}
 	query := `
 		UPDATE courier_assignments
 		SET status = $1, ended_at = $2, notes = $3
@@ -150,4 +165,3 @@ func (r *PostgresAssignmentRepository) scanRow(row *sql.Row) (*domain.CourierAss
 
 	return &a, nil
 }
-

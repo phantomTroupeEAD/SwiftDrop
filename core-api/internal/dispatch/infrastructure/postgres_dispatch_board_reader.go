@@ -8,6 +8,7 @@ import (
 
 	"github.com/swiftdrop/core-api/internal/dispatch/application"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresDispatchBoardReader implements application.DispatchBoardReader with optimized SQL joins.
@@ -22,6 +23,9 @@ func NewPostgresDispatchBoardReader(db *sql.DB) *PostgresDispatchBoardReader {
 
 // GetUnassignedParcels queries eligible unassigned parcels for a target delivery zone.
 func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zoneID string) ([]application.UnassignedParcelDTO, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to get unassigned parcels: %w", db.ErrNilDB)
+	}
 	// Query parcels in CREATED or ATTEMPT_FAILED status
 	query := `
 		SELECT 
@@ -77,6 +81,9 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 
 // GetCourierLoads queries couriers and their active parcel workloads for a zone.
 func (r *PostgresDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneID string) ([]application.CourierLoadDTO, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to get courier loads: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT 
 			c.user_id,
@@ -129,4 +136,3 @@ func (r *PostgresDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneI
 
 	return list, rows.Err()
 }
-

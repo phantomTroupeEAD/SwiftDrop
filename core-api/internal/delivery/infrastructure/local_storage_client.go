@@ -83,4 +83,3 @@ func (c *LocalStorageClient) GeneratePresignedURL(ctx context.Context, key strin
 	cleanKey := strings.TrimLeft(filepath.ToSlash(filepath.Clean(key)), "/")
 	return fmt.Sprintf("%s/%s", c.baseURL, cleanKey), nil
 }
-

@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"io"
 	"time"
 )
 
@@ -11,7 +12,28 @@ var (
 	ErrEmptyParcelList         = errors.New("parcel IDs list cannot be empty")
 	ErrInvalidCommand          = errors.New("invalid delivery command parameters")
 	ErrParcelNotFound          = errors.New("parcel not found or has no delivery records")
+	ErrEmptyPhotoUpload        = errors.New("photo file upload cannot be empty")
+	ErrInvalidPhotoFormat      = errors.New("unsupported image format (must be JPEG or PNG)")
+	ErrPhotoTooLarge           = errors.New("proof photo file exceeds maximum size limit (5MB)")
 )
+
+// UploadProofPhotoCommand carries input parameters for doorstep photo proof uploads.
+type UploadProofPhotoCommand struct {
+	ParcelID    string    `json:"parcel_id"`
+	CourierID   string    `json:"courier_id"`
+	FileName    string    `json:"file_name"`
+	ContentType string    `json:"content_type"`
+	FileReader  io.Reader `json:"-"`
+	FileSize    int64     `json:"file_size"`
+}
+
+// UploadProofPhotoResultDTO confirms successful doorstep photo proof upload.
+type UploadProofPhotoResultDTO struct {
+	PhotoURL    string    `json:"photo_url"`
+	StorageKey  string    `json:"storage_key"`
+	ContentType string    `json:"content_type"`
+	UploadedAt  time.Time `json:"uploaded_at"`
+}
 
 // StartRunCommand carries input parameters to confirm package pickup and begin the run.
 type StartRunCommand struct {
@@ -30,9 +52,9 @@ type StartBatchRunCommand struct {
 
 // BatchRunResultDTO reports the outcome of a batch start-run action.
 type BatchRunResultDTO struct {
-	TotalStarted int      `json:"total_started"`
+	TotalStarted int       `json:"total_started"`
 	StartedAt    time.Time `json:"started_at"`
-	ParcelIDs    []string `json:"parcel_ids"`
+	ParcelIDs    []string  `json:"parcel_ids"`
 }
 
 // CompleteDeliveryCommand carries proof and handover information for a successful delivery.
@@ -69,11 +91,18 @@ type RecordFailedAttemptCommand struct {
 
 // FailedAttemptResultDTO reports the recorded failure attempt outcome and next state machine step.
 type FailedAttemptResultDTO struct {
-	AttemptNumber int       `json:"attempt_number"`
-	MaxAttempts   int       `json:"max_attempts"`
-	Status        string    `json:"status"`
-	NextAction    string    `json:"next_action"`
-	RecordedAt    time.Time `json:"recorded_at"`
+	AttemptID         string    `json:"attempt_id"`
+	ParcelID          string    `json:"parcel_id"`
+	AttemptNumber     int       `json:"attempt_number"`
+	MaxAttempts       int       `json:"max_attempts"`
+	Outcome           string    `json:"outcome"`
+	FailureReasonCode string    `json:"failure_reason_code"`
+	ParcelStatus      string    `json:"parcel_status"`
+	Status            string    `json:"status"`
+	IsTerminal        bool      `json:"is_terminal"`
+	NextAction        string    `json:"next_action"`
+	AttemptedAt       time.Time `json:"attempted_at"`
+	RecordedAt        time.Time `json:"recorded_at"`
 }
 
 // AttemptRecordDTO represents an item in a parcel's historical delivery attempt timeline.
@@ -97,4 +126,3 @@ type DeliveryHistoryDTO struct {
 	AttemptCount  int                `json:"attempt_count"`
 	Attempts      []AttemptRecordDTO `json:"attempts"`
 }
-

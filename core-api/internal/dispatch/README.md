@@ -24,6 +24,7 @@ The `dispatch` module governs operational logistics: managing active courier fle
 3. **Assigned Status Transition:** Assigning a courier triggers the parcel state machine transition to `ASSIGNED`.
 4. **Active Courier Shift:** Assignments may only be made to couriers with active, unblocked status on shift (`ON_SHIFT`).
 5. **AT-013 Concurrency Safety:** Multiple dispatchers assigning the same parcel concurrently are serialized via pessimistic row locking; duplicate assignments are barred at the database engine level via partial unique index `idx_assignments_parcel_single_active`.
+6. **BR-FLT-001 Courier Operational Profile Integrity:** Operational fleet profiles are strictly bound 1:1 with user accounts that possess the `COURIER` role. Registration rejects non-courier roles (`ADMIN`, `DISPATCHER`, `MERCHANT`, `CUSTOMER`) with `422 Unprocessable Entity` (`USER_NOT_A_COURIER`), missing user accounts with `404 Not Found` (`USER_NOT_FOUND`), and duplicate registrations with `409 Conflict` (`COURIER_PROFILE_EXISTS`).
 
 ---
 
@@ -42,7 +43,7 @@ internal/dispatch/
 │   ├── shift_status_test.go # Unit tests for courier shift transitions
 │   └── errors.go            # Sentinel domain errors (ErrCourierOverloaded, etc.)
 ├── application/             # Use Cases, Command Handlers & Collaborator Ports
-│   ├── collaborators.go     # TransactionManager, ParcelLifecycleUpdater, OutboxWriter ports
+│   ├── collaborators.go     # TransactionManager, ParcelLifecycleUpdater, OutboxWriter, UserRoleChecker ports
 │   ├── repository.go        # CourierRepository, AssignmentRepository, DispatchBoardReader
 │   ├── commands.go          # Inbound command structs and DTO response envelopes
 │   ├── assign_courier.go    # AssignCourierUseCase (Pessimistic lock, capacity check, AT-013)
@@ -53,7 +54,7 @@ internal/dispatch/
 │   └── application_test.go  # In-memory mock tests for assignment & capacity enforcement
 ├── infrastructure/          # Concrete Persistence Drivers & External Adapters
 │   ├── postgres_tx_manager.go            # PostgresTransactionManager (database/sql ReadCommitted wrapper)
-│   ├── postgres_courier_repo.go          # PostgresCourierRepository (FOR UPDATE pessimistic row locking)
+│   ├── postgres_courier_repo.go          # PostgresCourierRepository (FOR UPDATE pessimistic row locking, UserRoleChecker)
 │   ├── postgres_assignment_repo.go       # PostgresAssignmentRepository (AT-013 unique index guard)
 │   ├── postgres_dispatch_board_reader.go # PostgresDispatchBoardReader (Optimized aggregation queries)
 │   ├── parcel_updater.go                 # PostgresParcelLifecycleUpdater (Aggregate lifecycle & audit trail)
@@ -87,8 +88,8 @@ internal/dispatch/
 
 ## 6. System Wiring & Dependency Injection
 All dispatch components are centrally registered in `core-api/cmd/api/wiring_dispatch_delivery.go` via `registerDispatchAndDeliveryModules(mux, dbConn, security)`.
-- When PostgreSQL is connected (`dbConn != nil`), concrete persistence drivers with `FOR UPDATE` pessimistic row locking are instantiated.
-- When running in local development mode without a database (`dbConn == nil`), an in-memory mock fallback is wired with pre-seeded test couriers so routes remain responsive.
+- **Authoritative Database Persistence:** Concrete PostgreSQL persistence drivers with `FOR UPDATE` pessimistic row locking are wired to guarantee ACID properties (Atomicity and Durability).
+- **Fail-Fast Offline Invariant:** When the database connection is unavailable (`dbConn == nil`), operations requiring persistence fail immediately with `503 Service Unavailable` (`DATABASE_UNAVAILABLE`). The system strictly forbids writing mutations to volatile in-memory maps, ensuring records never disappear silently upon application restart.
 
 ---
 
@@ -110,3 +111,6 @@ All dispatch components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-02 | Implemented Phase 6 system wiring: registered in cmd/api/wiring_dispatch_delivery.go, hooked into BuildAppContainer(), wired fallback mocks for local dev, and added container tests | Member 3 (Antigravity) |
 | 2026-11-02 | Implemented Phase 7 acceptance tests: AT-013 10-goroutine assignment race test proving concurrency serialization and unique active assignment invariant | Member 3 (Antigravity) |
 | 2026-11-03 | Phase 8 living documentation alignment: zero-drift contract verification against API.md, synchronized tests/README.md, and finalized roadmap sign-off | Member 3 (Antigravity) |
+| 2026-11-09 | Eliminated in-memory mock fallback from runtime wiring; enforced ACID atomicity and durability by failing queries with 503 DATABASE_UNAVAILABLE when PostgreSQL is disconnected | Member 3 (Antigravity) |
+| 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for Courier capacity [1, 200] and zone trimming, assignment reassignment error paths, AssignmentStatus enum validation, transport negative tests for malformed JSON and payload bounds, and mapped ErrParcelNotEligibleForAssignment to 409 Conflict. | Member 3 (Antigravity) |
+| 2026-11-10 | Enforced BR-FLT-001 role validation & uniqueness in RegisterCourierUseCase: rejects non-courier user accounts with 422 USER_NOT_A_COURIER, non-existent users with 404 USER_NOT_FOUND, and duplicate profiles with 409 COURIER_PROFILE_EXISTS. | Member 3 (Antigravity) |

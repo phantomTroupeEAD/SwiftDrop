@@ -16,4 +16,3 @@ var (
 	ErrInvalidEmployeeCode     = errors.New("employee code cannot be empty")
 	ErrInvalidZoneID           = errors.New("delivery zone ID cannot be empty")
 )
-

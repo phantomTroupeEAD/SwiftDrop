@@ -1,12 +1,8 @@
 package infrastructure
 
 import (
-	"context"
-	"database/sql"
-	"errors"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,4 +35,3 @@ func TestPostgresOutboxWriter_Constructor(t *testing.T) {
 	writer := NewPostgresOutboxWriter(nil)
 	assert.NotNil(t, writer)
 }
-

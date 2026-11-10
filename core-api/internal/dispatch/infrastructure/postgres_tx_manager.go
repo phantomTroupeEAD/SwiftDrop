@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresTransactionManager implements application.TransactionManager using database/sql.
@@ -18,6 +19,9 @@ func NewPostgresTransactionManager(db *sql.DB) *PostgresTransactionManager {
 
 // WithTransaction runs the provided function inside an atomic PostgreSQL transaction.
 func (tm *PostgresTransactionManager) WithTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	if tm.db == nil {
+		return fmt.Errorf("transaction manager: %w", db.ErrNilDB)
+	}
 	tx, err := tm.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return fmt.Errorf("failed to begin database transaction: %w", err)
@@ -40,4 +44,3 @@ func (tm *PostgresTransactionManager) WithTransaction(ctx context.Context, fn fu
 	}
 	return nil
 }
-

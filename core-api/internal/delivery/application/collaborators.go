@@ -53,4 +53,3 @@ type StorageClient interface {
 	UploadProofPhoto(ctx context.Context, key string, data io.Reader, contentType string) (string, error)
 	GeneratePresignedURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 }
-

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/delivery/application"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresAssignmentFinder implements application.ActiveAssignmentFinder
@@ -23,6 +24,9 @@ func NewPostgresAssignmentFinder(db *sql.DB) *PostgresAssignmentFinder {
 
 // GetActiveAssignment returns the currently active assignment for a parcel, or nil if none is active.
 func (f *PostgresAssignmentFinder) GetActiveAssignment(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*application.ActiveAssignmentDTO, error) {
+	if tx == nil && f.db == nil {
+		return nil, fmt.Errorf("assignment finder: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT id, parcel_id, courier_id, status
 		FROM courier_assignments
@@ -79,4 +83,3 @@ func (f *PostgresAssignmentFinder) CompleteAssignment(ctx context.Context, tx *s
 
 	return nil
 }
-

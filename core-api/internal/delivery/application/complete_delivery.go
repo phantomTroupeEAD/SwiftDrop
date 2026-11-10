@@ -173,4 +173,3 @@ func (uc *CompleteDeliveryUseCase) Execute(ctx context.Context, cmd CompleteDeli
 	}
 	return result, nil
 }
-

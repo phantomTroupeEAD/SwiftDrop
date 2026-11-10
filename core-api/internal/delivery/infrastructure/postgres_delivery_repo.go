@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/delivery/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresDeliveryRepository implements application.DeliveryAttemptRepository using PostgreSQL.
@@ -22,6 +23,9 @@ func NewPostgresDeliveryRepository(db *sql.DB) *PostgresDeliveryRepository {
 
 // InsertAttempt writes an immutable delivery attempt row to delivery_attempts.
 func (r *PostgresDeliveryRepository) InsertAttempt(ctx context.Context, tx *sql.Tx, a *domain.DeliveryAttempt) error {
+	if tx == nil && r.db == nil {
+		return fmt.Errorf("delivery repository: %w", db.ErrNilDB)
+	}
 	query := `
 		INSERT INTO delivery_attempts (
 			id,
@@ -198,4 +202,3 @@ func (r *PostgresDeliveryRepository) GetAttemptCount(ctx context.Context, tx *sq
 	}
 	return count, nil
 }
-

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/delivery/application"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresManifestReader implements application.CourierManifestReader
@@ -22,6 +23,9 @@ func NewPostgresManifestReader(db *sql.DB) *PostgresManifestReader {
 
 // GetActiveManifest retrieves the list of active delivery tasks for a specific courier.
 func (r *PostgresManifestReader) GetActiveManifest(ctx context.Context, courierID uuid.UUID) ([]application.CourierManifestItemDTO, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("manifest reader: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT 
 			ca.parcel_id::text,
@@ -98,4 +102,3 @@ func (r *PostgresManifestReader) GetActiveManifest(ctx context.Context, courierI
 
 	return manifest, rows.Err()
 }
-

@@ -148,11 +148,18 @@ func (uc *RecordFailedAttemptUseCase) Execute(ctx context.Context, cmd RecordFai
 			}
 
 			result = &FailedAttemptResultDTO{
-				AttemptNumber: newAttemptNumber,
-				MaxAttempts:   3,
-				Status:        "RETURNED",
-				NextAction:    "RETURN_TO_HUB_OR_SENDER",
-				RecordedAt:    attempt.AttemptedAt,
+				AttemptID:         attempt.ID.String(),
+				ParcelID:          parcelUUID.String(),
+				AttemptNumber:     newAttemptNumber,
+				MaxAttempts:       3,
+				Outcome:           "FAILED",
+				FailureReasonCode: string(reasonCode),
+				ParcelStatus:      "RETURNED",
+				Status:            "RETURNED",
+				IsTerminal:        true,
+				NextAction:        "RETURN_TO_HUB_OR_SENDER",
+				AttemptedAt:       attempt.AttemptedAt,
+				RecordedAt:        attempt.AttemptedAt,
 			}
 		} else {
 			// Transient recoverable failure: Parcel pauses in ATTEMPT_FAILED pending dispatcher review
@@ -195,11 +202,18 @@ func (uc *RecordFailedAttemptUseCase) Execute(ctx context.Context, cmd RecordFai
 			}
 
 			result = &FailedAttemptResultDTO{
-				AttemptNumber: newAttemptNumber,
-				MaxAttempts:   3,
-				Status:        "ATTEMPT_FAILED",
-				NextAction:    "AWAITING_DISPATCHER_REVIEW",
-				RecordedAt:    attempt.AttemptedAt,
+				AttemptID:         attempt.ID.String(),
+				ParcelID:          parcelUUID.String(),
+				AttemptNumber:     newAttemptNumber,
+				MaxAttempts:       3,
+				Outcome:           "FAILED",
+				FailureReasonCode: string(reasonCode),
+				ParcelStatus:      "ATTEMPT_FAILED",
+				Status:            "ATTEMPT_FAILED",
+				IsTerminal:        false,
+				NextAction:        "AWAITING_DISPATCHER_REVIEW",
+				AttemptedAt:       attempt.AttemptedAt,
+				RecordedAt:        attempt.AttemptedAt,
 			}
 		}
 
@@ -211,4 +225,3 @@ func (uc *RecordFailedAttemptUseCase) Execute(ctx context.Context, cmd RecordFai
 	}
 	return result, nil
 }
-

@@ -199,4 +199,3 @@ func (uc *StartDeliveryRunUseCase) ExecuteBatch(ctx context.Context, cmd StartBa
 		ParcelIDs:    startedIDs,
 	}, nil
 }
-

@@ -52,4 +52,3 @@ func TestFailureReasonCode_ImmediateReturn(t *testing.T) {
 		t.Errorf("expected RECIPIENT_UNAVAILABLE not to trigger immediate return")
 	}
 }
-

@@ -8,11 +8,19 @@ import (
 )
 
 var (
-	ErrParcelNotEligibleForAssignment = errors.New("parcel is not eligible for assignment (must be in CREATED or ATTEMPT_FAILED status)")
-	ErrCourierNotFound                = errors.New("courier operational profile not found")
-	ErrAssignmentNotFound             = errors.New("active courier assignment not found for parcel")
-	ErrParcelNotFound                 = errors.New("target parcel not found")
-	ErrInvalidCommand                 = errors.New("invalid application command input")
+	ErrParcelNotEligibleForAssignment   = errors.New("parcel is not eligible for assignment (must be in CREATED or ATTEMPT_FAILED status)")
+	ErrCourierNotFound                  = errors.New("courier operational profile not found")
+	ErrAssignmentNotFound               = errors.New("active courier assignment not found for parcel")
+	ErrParcelNotFound                   = errors.New("target parcel not found")
+	ErrInvalidCommand                   = errors.New("invalid application command input")
+	ErrDuplicateActiveAssignment        = errors.New("parcel already has an active courier assignment")
+	ErrParcelNotAssigned                = errors.New("parcel is not currently assigned to a courier")
+	ErrInvalidParcelStatusForAssignment = errors.New("parcel is not in a valid state for assignment")
+	ErrMaxAttemptsExceeded              = errors.New("parcel has reached the maximum permitted delivery attempts")
+	ErrUnauthorized                     = errors.New("unauthorized dispatch operation")
+	ErrUserNotFound                     = errors.New("user account not found")
+	ErrUserNotCourier                   = errors.New("user account does not possess the COURIER role")
+	ErrCourierProfileExists             = errors.New("courier operational profile already exists for this user")
 )
 
 // AssignCourierCommand carries input parameters for parcel dispatch.
@@ -70,4 +78,3 @@ type DispatchBoardDTO struct {
 	UnassignedParcels []UnassignedParcelDTO `json:"unassigned_parcels"`
 	ActiveCouriers    []CourierLoadDTO      `json:"active_couriers"`
 }
-

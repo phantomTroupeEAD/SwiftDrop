@@ -121,3 +121,59 @@ func TestCourier_ToggleShift(t *testing.T) {
 	}
 }
 
+func TestCourier_UpdateCapacity_And_Zone(t *testing.T) {
+	c, err := domain.NewCourier(uuid.New(), "CR-0012", domain.VehicleTypeMotorcycle, 25, "ZONE_COLOMBO_01")
+	if err != nil {
+		t.Fatalf("failed to initialize courier: %v", err)
+	}
+
+	// Boundary Value Analysis for Capacity [1, 200]
+	// Below lower bound (0) -> error
+	err = c.UpdateCapacity(0)
+	if !errors.Is(err, domain.ErrInvalidCapacity) {
+		t.Errorf("expected ErrInvalidCapacity for capacity 0, got %v", err)
+	}
+
+	// Negative value (-10) -> error
+	err = c.UpdateCapacity(-10)
+	if !errors.Is(err, domain.ErrInvalidCapacity) {
+		t.Errorf("expected ErrInvalidCapacity for capacity -10, got %v", err)
+	}
+
+	// Above upper bound (201) -> error
+	err = c.UpdateCapacity(201)
+	if !errors.Is(err, domain.ErrInvalidCapacity) {
+		t.Errorf("expected ErrInvalidCapacity for capacity 201, got %v", err)
+	}
+
+	// Valid lower boundary (1) -> success
+	err = c.UpdateCapacity(1)
+	if err != nil || c.MaxCapacity != 1 {
+		t.Errorf("expected capacity 1, got %d (err: %v)", c.MaxCapacity, err)
+	}
+
+	// Valid upper boundary (200) -> success
+	err = c.UpdateCapacity(200)
+	if err != nil || c.MaxCapacity != 200 {
+		t.Errorf("expected capacity 200, got %d (err: %v)", c.MaxCapacity, err)
+	}
+
+	// Zone update validation
+	// Empty zone -> error
+	err = c.UpdateZone("")
+	if !errors.Is(err, domain.ErrInvalidZoneID) {
+		t.Errorf("expected ErrInvalidZoneID for empty zone, got %v", err)
+	}
+
+	// Whitespace only zone -> error
+	err = c.UpdateZone("    ")
+	if !errors.Is(err, domain.ErrInvalidZoneID) {
+		t.Errorf("expected ErrInvalidZoneID for whitespace zone, got %v", err)
+	}
+
+	// Valid zone with whitespace trimming -> success
+	err = c.UpdateZone("  ZONE_KANDY_02  ")
+	if err != nil || c.CurrentZoneID != "ZONE_KANDY_02" {
+		t.Errorf("expected zone 'ZONE_KANDY_02', got '%s' (err: %v)", c.CurrentZoneID, err)
+	}
+}

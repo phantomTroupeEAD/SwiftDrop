@@ -20,4 +20,3 @@ func TestPostgresManifestReader_Constructor(t *testing.T) {
 	reader := NewPostgresManifestReader(nil)
 	assert.NotNil(t, reader)
 }
-

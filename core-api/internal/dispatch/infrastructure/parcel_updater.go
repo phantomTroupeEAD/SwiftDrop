@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresParcelLifecycleUpdater implements application.ParcelLifecycleUpdater
@@ -21,10 +22,15 @@ func NewPostgresParcelLifecycleUpdater(db *sql.DB) *PostgresParcelLifecycleUpdat
 
 // GetStatusWithLock acquires a row-level lock on the target parcel and retrieves its status.
 func (u *PostgresParcelLifecycleUpdater) GetStatusWithLock(
+	// Check db handle
+
 	ctx context.Context,
 	tx *sql.Tx,
 	parcelID uuid.UUID,
 ) (string, int, error) {
+	if tx == nil && u.db == nil {
+		return "", 0, fmt.Errorf("parcel updater: %w", db.ErrNilDB)
+	}
 	query := `
 		SELECT current_status, attempt_count
 		FROM parcels
@@ -54,6 +60,8 @@ func (u *PostgresParcelLifecycleUpdater) GetStatusWithLock(
 
 // TransitionStatus atomically updates parcel status and appends a row to parcel_status_history.
 func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
+	// Check db handle
+
 	ctx context.Context,
 	tx *sql.Tx,
 	parcelID uuid.UUID,
@@ -61,6 +69,9 @@ func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 	actorID uuid.UUID,
 	actorRole, note string,
 ) error {
+	if tx == nil && u.db == nil {
+		return fmt.Errorf("parcel updater: %w", db.ErrNilDB)
+	}
 	updateQuery := `
 		UPDATE parcels
 		SET current_status = $1, updated_at = NOW()
@@ -93,4 +104,3 @@ func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 
 	return nil
 }
-

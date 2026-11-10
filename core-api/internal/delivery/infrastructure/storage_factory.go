@@ -23,23 +23,63 @@ func NewStorageClientFromEnv() (application.StorageClient, error) {
 	switch driver {
 	case "s3", "r2", "minio":
 		endpoint := os.Getenv("S3_ENDPOINT")
+		if endpoint == "" {
+			endpoint = os.Getenv("OBJECT_STORAGE_ENDPOINT")
+		}
+		// If Cloudflare R2 driver is selected and Account ID is provided without explicit endpoint:
+		if endpoint == "" {
+			if accountID := os.Getenv("OBJECT_STORAGE_ACCOUNT_ID"); accountID != "" {
+				endpoint = fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
+			} else if accountID := os.Getenv("R2_ACCOUNT_ID"); accountID != "" {
+				endpoint = fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
+			}
+		}
+
 		bucket := os.Getenv("S3_BUCKET")
+		if bucket == "" {
+			bucket = os.Getenv("OBJECT_STORAGE_BUCKET")
+		}
 		if bucket == "" {
 			bucket = "swiftdrop-proofs"
 		}
+
 		region := os.Getenv("S3_REGION")
+		if region == "" {
+			region = os.Getenv("OBJECT_STORAGE_REGION")
+		}
 		if region == "" {
 			region = "auto"
 		}
+
 		accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 		if accessKey == "" {
 			accessKey = os.Getenv("S3_ACCESS_KEY_ID")
 		}
+		if accessKey == "" {
+			accessKey = os.Getenv("OBJECT_STORAGE_ACCESS_KEY")
+		}
+		if accessKey == "" {
+			accessKey = os.Getenv("R2_ACCESS_KEY_ID")
+		}
+
 		secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 		if secretKey == "" {
 			secretKey = os.Getenv("S3_SECRET_ACCESS_KEY")
 		}
+		if secretKey == "" {
+			secretKey = os.Getenv("OBJECT_STORAGE_SECRET_KEY")
+		}
+		if secretKey == "" {
+			secretKey = os.Getenv("R2_SECRET_ACCESS_KEY")
+		}
+
 		publicBaseURL := os.Getenv("S3_PUBLIC_BASE_URL")
+		if publicBaseURL == "" {
+			publicBaseURL = os.Getenv("OBJECT_STORAGE_PUBLIC_URL")
+		}
+		if publicBaseURL == "" {
+			publicBaseURL = os.Getenv("OBJECT_STORAGE_PUBLIC_BASE_URL")
+		}
 
 		cfg := S3StorageConfig{
 			Endpoint:      endpoint,
@@ -66,4 +106,3 @@ func NewStorageClientFromEnv() (application.StorageClient, error) {
 		return nil, fmt.Errorf("unsupported storage driver: %q (supported: 'local', 's3', 'r2', 'minio')", driver)
 	}
 }
-

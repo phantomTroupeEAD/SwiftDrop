@@ -20,9 +20,6 @@ func NewGetDispatchBoardQueryHandler(boardReader DispatchBoardReader) *GetDispat
 // Execute retrieves unassigned parcels and courier workloads for the target zone.
 func (h *GetDispatchBoardQueryHandler) Execute(ctx context.Context, zoneID string) (*DispatchBoardDTO, error) {
 	trimmedZone := strings.TrimSpace(zoneID)
-	if trimmedZone == "" {
-		return nil, ErrInvalidZoneID
-	}
 
 	unassigned, err := h.boardReader.GetUnassignedParcels(ctx, trimmedZone)
 	if err != nil {
@@ -66,4 +63,3 @@ func (h *ListCouriersQueryHandler) Execute(
 ) ([]*domain.Courier, error) {
 	return h.courierRepo.List(ctx, zoneID, status, vehicleType)
 }
-

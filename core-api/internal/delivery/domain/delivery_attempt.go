@@ -144,4 +144,3 @@ func (d *DeliveryAttempt) Validate() error {
 func (o AttemptOutcome) String() string {
 	return string(o)
 }
-

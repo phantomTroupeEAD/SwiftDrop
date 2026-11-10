@@ -88,8 +88,8 @@ internal/delivery/
 
 ## 6. System Wiring & Dependency Injection
 All delivery components are centrally registered in `core-api/cmd/api/wiring_dispatch_delivery.go` via `registerDispatchAndDeliveryModules(mux, dbConn, security)`.
-- When PostgreSQL is connected (`dbConn != nil`), concrete persistence drivers and cloud/local object storage clients are instantiated.
-- When running in local development mode without a database (`dbConn == nil`), an in-memory mock fallback is wired with pre-seeded test couriers so routes remain responsive.
+- **Authoritative Database Persistence:** Concrete PostgreSQL persistence drivers and cloud/local object storage clients are instantiated to uphold ACID invariants.
+- **Fail-Fast Offline Invariant:** When the database connection is unavailable (`dbConn == nil`), delivery operations fail immediately with `503 Service Unavailable` (`DATABASE_UNAVAILABLE`) rather than writing to in-memory state.
 - **Agreement A2 Preserved:** Object storage is strictly excluded from Kubernetes readiness probes (`/health/ready`).
 
 ---
@@ -114,3 +114,5 @@ All delivery components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-02 | Implemented Phase 6 system wiring: registered in cmd/api/wiring_dispatch_delivery.go, hooked into BuildAppContainer(), wired fallback mocks for local dev, and added container tests | Member 3 (Antigravity) |
 | 2026-11-02 | Implemented Phase 7 acceptance tests: AT-006 Courier IDOR defense, ADR-004 3-attempt ceiling and immediate return on refusal, and transaction atomicity verification | Member 3 (Antigravity) |
 | 2026-11-03 | Phase 8 living documentation alignment: zero-drift contract verification against API.md, synchronized tests/README.md, and finalized roadmap sign-off | Member 3 (Antigravity) |
+| 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for GeoCoordinates (-90..90, -180..180 boundaries), DeliveryAttempt entity cross-field consistency, Signature stroke validation, Manifest batch run limits (1..100) & malformed JSON checks, and manifest data minimization assertions (redaction of wholesale pricing and customer financial PII). | Member 3 (Antigravity) |
+| 2026-11-05 | Hardened storage factory environment resolution: Added Cloudflare R2 automatic endpoint resolution via Account ID, dual support for OBJECT_STORAGE_* and S3_* aliases, and updated .env and documentation. | Member 3 (Antigravity) |

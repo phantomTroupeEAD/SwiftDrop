@@ -15,6 +15,7 @@ import (
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	"github.com/swiftdrop/core-api/internal/identity/transport"
+	"github.com/swiftdrop/core-api/internal/platform/config"
 	"github.com/swiftdrop/core-api/migrations"
 )
 
@@ -33,6 +34,8 @@ type AppContainer struct {
 // It prioritizes PostgreSQL if running, automatically applies migrations,
 // and gracefully falls back to mock storage if PostgreSQL is not yet started.
 func BuildAppContainer() *AppContainer {
+	config.LoadEnv(".env", "../.env", "../../.env")
+
 	// 1. Password Hasher & JWT Token Provider
 	hasher := infrastructure.NewStandardPasswordHasher()
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -50,7 +53,7 @@ func BuildAppContainer() *AppContainer {
 	// 2. Attempt PostgreSQL Connection
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable"
+		dbURL = "postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable"
 	}
 
 	db, err := sql.Open("postgres", dbURL)

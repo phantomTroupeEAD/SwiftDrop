@@ -105,4 +105,3 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 		return nil
 	})
 }
-

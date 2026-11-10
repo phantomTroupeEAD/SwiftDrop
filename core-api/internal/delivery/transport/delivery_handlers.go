@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/delivery/application"
+	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
 
@@ -127,11 +127,11 @@ func (h *DeliveryHandler) CompleteDelivery(w http.ResponseWriter, r *http.Reques
 	}
 
 	resp := DeliveryCompletionResponse{
-		AttemptID:   dto.AttemptID,
+		AttemptID:   dto.DeliveryID,
 		ParcelID:    dto.ParcelID,
 		Status:      dto.Status,
-		Outcome:     dto.Outcome,
-		CompletedAt: dto.CompletedAt,
+		Outcome:     "SUCCESS",
+		CompletedAt: dto.DeliveredAt,
 	}
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
@@ -159,12 +159,12 @@ func (h *DeliveryHandler) RecordFailedAttempt(w http.ResponseWriter, r *http.Req
 	actorID := identityTransport.GetUserID(r.Context())
 
 	cmd := application.RecordFailedAttemptCommand{
-		ParcelID:          parcelID,
-		CourierID:         actorID,
-		FailureReasonCode: req.FailureReasonCode,
-		Notes:             req.Notes,
-		Latitude:          req.Latitude,
-		Longitude:         req.Longitude,
+		ParcelID:   parcelID,
+		CourierID:  actorID,
+		ReasonCode: req.FailureReasonCode,
+		Notes:      req.Notes,
+		Latitude:   req.Latitude,
+		Longitude:  req.Longitude,
 	}
 
 	dto, err := h.recordFailedAttemptUC.Execute(r.Context(), cmd)
@@ -211,4 +211,3 @@ func (h *DeliveryHandler) GetDeliveryHistory(w http.ResponseWriter, r *http.Requ
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
 }
-

@@ -96,4 +96,3 @@ func (r *ToggleShiftRequest) Validate() []httpx.ErrorDetail {
 	}
 	return details
 }
-

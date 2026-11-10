@@ -55,4 +55,3 @@ func (f FailureReasonCode) AllowsImmediateReattempt() bool {
 func (f FailureReasonCode) String() string {
 	return string(f)
 }
-

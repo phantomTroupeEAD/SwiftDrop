@@ -39,7 +39,7 @@ type CancelAssignmentResponse struct {
 
 // DispatchBoardResponse wraps unassigned parcels and courier workloads.
 type DispatchBoardResponse struct {
-	ZoneID            string                           `json:"zone_id"`
+	ZoneID            string                            `json:"zone_id"`
 	UnassignedParcels []application.UnassignedParcelDTO `json:"unassigned_parcels"`
 	CourierLoads      []application.CourierLoadDTO      `json:"courier_loads"`
 }
@@ -50,4 +50,3 @@ type ShiftStatusResponse struct {
 	NewStatus string `json:"new_status"`
 	UpdatedAt string `json:"updated_at"`
 }
-

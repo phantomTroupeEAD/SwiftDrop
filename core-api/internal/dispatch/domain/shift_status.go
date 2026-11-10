@@ -69,4 +69,3 @@ func (s ShiftStatus) CanTransitionTo(target ShiftStatus, isSelfService bool) boo
 func (s ShiftStatus) String() string {
 	return string(s)
 }
-

@@ -53,4 +53,3 @@ type DispatchBoardReader interface {
 	GetUnassignedParcels(ctx context.Context, zoneID string) ([]UnassignedParcelDTO, error)
 	GetCourierLoads(ctx context.Context, zoneID string) ([]CourierLoadDTO, error)
 }
-

@@ -6,6 +6,7 @@ import (
 
 	"github.com/swiftdrop/core-api/internal/delivery/application"
 	"github.com/swiftdrop/core-api/internal/delivery/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
 
@@ -16,6 +17,8 @@ func MapError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 
 	switch {
+	case errors.Is(err, db.ErrNilDB):
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Database connection is not available")
 	// Courier IDOR violation (AT-006)
 	case errors.Is(err, domain.ErrNotAssignedCourier):
 		httpx.WriteError(w, r, http.StatusForbidden, "COURIER_NOT_ASSIGNED", err.Error())
@@ -23,19 +26,19 @@ func MapError(w http.ResponseWriter, r *http.Request, err error) {
 	// Proof of Delivery validation errors
 	case errors.Is(err, domain.ErrMissingDeliveryProof):
 		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "DELIVERY_PROOF_REQUIRED", err.Error())
-	case errors.Is(err, domain.ErrInvalidProofRecipient):
+	case errors.Is(err, domain.ErrRecipientNameRequired):
 		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "INVALID_RECIPIENT_NAME", err.Error())
 	case errors.Is(err, domain.ErrInvalidSignatureData):
 		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "INVALID_SIGNATURE_DATA", err.Error())
 
 	// Failure Reason validation errors (ADR-004)
-	case errors.Is(err, domain.ErrInvalidFailureReason):
+	case errors.Is(err, domain.ErrInvalidFailureReasonCode):
 		httpx.WriteError(w, r, http.StatusBadRequest, "INVALID_FAILURE_REASON", err.Error())
-	case errors.Is(err, domain.ErrDetailedNoteRequired):
+	case errors.Is(err, domain.ErrFailureNoteTooShort):
 		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "DETAILED_NOTE_REQUIRED", err.Error())
-	case errors.Is(err, domain.ErrInvalidGeoCoordinate):
+	case errors.Is(err, domain.ErrInvalidCoordinates):
 		httpx.WriteError(w, r, http.StatusBadRequest, "INVALID_COORDINATES", err.Error())
-	case errors.Is(err, domain.ErrAttemptCeilingExceeded):
+	case errors.Is(err, domain.ErrAttemptLimitExceeded):
 		httpx.WriteError(w, r, http.StatusConflict, "ATTEMPT_CEILING_EXCEEDED", err.Error())
 
 	// Application state & assignment errors
@@ -58,4 +61,3 @@ func MapError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected delivery processing error occurred")
 	}
 }
-

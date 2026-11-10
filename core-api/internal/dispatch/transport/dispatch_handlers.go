@@ -3,9 +3,11 @@ package transport
 import (
 	"net/http"
 	"strings"
+	"time"
 
-	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/dispatch/application"
+	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
 
@@ -54,7 +56,7 @@ func (h *DispatchHandler) RegisterCourier(w http.ResponseWriter, r *http.Request
 	cmd := application.RegisterCourierCommand{
 		UserID:        req.UserID,
 		EmployeeCode:  req.EmployeeCode,
-		VehicleType:   req.VehicleType,
+		VehicleType:   domain.VehicleType(req.VehicleType),
 		MaxCapacity:   req.MaxCapacity,
 		CurrentZoneID: req.CurrentZoneID,
 	}
@@ -83,7 +85,7 @@ func (h *DispatchHandler) RegisterCourier(w http.ResponseWriter, r *http.Request
 func (h *DispatchHandler) ListCouriers(w http.ResponseWriter, r *http.Request) {
 	zoneID := strings.TrimSpace(r.URL.Query().Get("zone_id"))
 
-	loads, err := h.listCouriersQ.Execute(r.Context(), zoneID)
+	loads, err := h.listCouriersQ.Execute(r.Context(), zoneID, nil, nil)
 	if err != nil {
 		MapError(w, r, err)
 		return
@@ -105,7 +107,7 @@ func (h *DispatchHandler) GetDispatchBoard(w http.ResponseWriter, r *http.Reques
 	resp := DispatchBoardResponse{
 		ZoneID:            board.ZoneID,
 		UnassignedParcels: board.UnassignedParcels,
-		CourierLoads:      board.CourierLoads,
+		CourierLoads:      board.ActiveCouriers,
 	}
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
@@ -125,14 +127,12 @@ func (h *DispatchHandler) AssignCourier(w http.ResponseWriter, r *http.Request) 
 	}
 
 	actorID := identityTransport.GetUserID(r.Context())
-	actorRole := string(identityTransport.GetUserRole(r.Context()))
 
 	cmd := application.AssignCourierCommand{
-		ParcelID:     req.ParcelID,
-		CourierID:    req.CourierID,
-		AssignedBy:   actorID,
-		AssignedRole: actorRole,
-		Notes:        req.Notes,
+		ParcelID:   req.ParcelID,
+		CourierID:  req.CourierID,
+		AssignedBy: actorID,
+		Notes:      req.Notes,
 	}
 
 	dto, err := h.assignCourierUC.Execute(r.Context(), cmd)
@@ -173,26 +173,24 @@ func (h *DispatchHandler) CancelAssignment(w http.ResponseWriter, r *http.Reques
 	}
 
 	actorID := identityTransport.GetUserID(r.Context())
-	actorRole := string(identityTransport.GetUserRole(r.Context()))
 
 	cmd := application.CancelAssignmentCommand{
-		AssignmentID: assignmentID,
-		ActorID:      actorID,
-		ActorRole:    actorRole,
-		Reason:       req.Reason,
+		ParcelID:    assignmentID,
+		CancelledBy: actorID,
+		Reason:      req.Reason,
 	}
 
-	dto, err := h.cancelAssignmentUC.Execute(r.Context(), cmd)
+	err := h.cancelAssignmentUC.Execute(r.Context(), cmd)
 	if err != nil {
 		MapError(w, r, err)
 		return
 	}
 
 	resp := CancelAssignmentResponse{
-		AssignmentID: dto.AssignmentID,
-		ParcelID:     dto.ParcelID,
-		Status:       dto.Status,
-		EndedAt:      dto.EndedAt,
+		AssignmentID: assignmentID,
+		ParcelID:     assignmentID,
+		Status:       "CANCELLED",
+		EndedAt:      time.Now().UTC(),
 		Reason:       req.Reason,
 	}
 
@@ -219,14 +217,12 @@ func (h *DispatchHandler) RescheduleParcel(w http.ResponseWriter, r *http.Reques
 	}
 
 	actorID := identityTransport.GetUserID(r.Context())
-	actorRole := string(identityTransport.GetUserRole(r.Context()))
 
 	cmd := application.RescheduleParcelCommand{
-		ParcelID:       parcelID,
-		CourierID:      req.CourierID,
-		DispatcherID:   actorID,
-		DispatcherRole: actorRole,
-		Notes:          req.Notes,
+		ParcelID:    parcelID,
+		CourierID:   req.CourierID,
+		ScheduledBy: actorID,
+		Notes:       req.Notes,
 	}
 
 	dto, err := h.rescheduleParcelUC.Execute(r.Context(), cmd)
@@ -246,4 +242,3 @@ func (h *DispatchHandler) RescheduleParcel(w http.ResponseWriter, r *http.Reques
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
 }
-

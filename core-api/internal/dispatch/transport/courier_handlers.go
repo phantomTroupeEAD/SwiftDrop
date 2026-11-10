@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/dispatch/application"
+	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	identityTransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
 
@@ -44,11 +45,11 @@ func (h *CourierShiftHandler) ToggleShift(w http.ResponseWriter, r *http.Request
 		courierID = strings.TrimSpace(req.CourierID)
 	}
 
+	isSelfService := (actorRole == "COURIER")
 	cmd := application.ToggleShiftCommand{
-		CourierID:    courierID,
-		TargetStatus: req.TargetStatus,
-		ActorID:      actorID,
-		ActorRole:    actorRole,
+		CourierID:     courierID,
+		TargetStatus:  domain.ShiftStatus(req.TargetStatus),
+		IsSelfService: isSelfService,
 	}
 
 	courier, err := h.toggleShiftUC.Execute(r.Context(), cmd)
@@ -65,4 +66,3 @@ func (h *CourierShiftHandler) ToggleShift(w http.ResponseWriter, r *http.Request
 
 	_ = httpx.WriteData(w, http.StatusOK, resp)
 }
-

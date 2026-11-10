@@ -16,4 +16,3 @@ var (
 	ErrInvalidCoordinates       = errors.New("latitude/longitude coordinates are out of valid geographic range")
 	ErrNotAssignedCourier       = errors.New("authenticated courier is not assigned to this parcel")
 )
-

@@ -145,4 +145,3 @@ func (uc *RescheduleParcelUseCase) Execute(ctx context.Context, cmd ReschedulePa
 	}
 	return result, nil
 }
-

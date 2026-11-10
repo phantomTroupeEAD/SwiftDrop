@@ -56,4 +56,3 @@ func TestVehicleType_Validate(t *testing.T) {
 		}
 	}
 }
-

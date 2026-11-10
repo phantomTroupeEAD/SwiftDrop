@@ -328,4 +328,3 @@ func TestStartDeliveryRunUseCase_SingleAndBatch(t *testing.T) {
 		t.Errorf("expected parcels to be in OUT_FOR_DELIVERY status")
 	}
 }
-

@@ -134,4 +134,3 @@ func (c *Courier) Reactivate() error {
 	c.UpdatedAt = time.Now().UTC()
 	return nil
 }
-

@@ -72,4 +72,3 @@ func TestProofOfDelivery_RecipientConfirmation(t *testing.T) {
 		t.Errorf("expected ErrRecipientNameRequired, got %v", err)
 	}
 }
-

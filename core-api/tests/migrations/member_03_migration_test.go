@@ -101,4 +101,3 @@ func TestMember03_Migrations_Execution(t *testing.T) {
 	_, err = db.Exec(string(down06))
 	require.NoError(t, err)
 }
-

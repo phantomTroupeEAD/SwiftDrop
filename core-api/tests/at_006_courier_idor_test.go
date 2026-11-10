@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	deliveryApp "github.com/swiftdrop/core-api/internal/delivery/application"
 	deliveryDomain "github.com/swiftdrop/core-api/internal/delivery/domain"
@@ -241,4 +240,3 @@ func TestAT006_CourierIDORProtection(t *testing.T) {
 		assert.Equal(t, "DELIVERED", storage.statuses[parcelID])
 	})
 }
-

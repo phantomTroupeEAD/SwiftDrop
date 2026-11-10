@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	deliveryApp "github.com/swiftdrop/core-api/internal/delivery/application"
 	deliveryDomain "github.com/swiftdrop/core-api/internal/delivery/domain"
@@ -220,4 +220,3 @@ func TestADR004_ThreeAttemptCeilingAndReturn(t *testing.T) {
 	assert.Equal(t, "RETURNED", dataRefusal["parcel_status"], "Refused parcels must immediately transition to RETURNED")
 	assert.Equal(t, true, dataRefusal["is_terminal"])
 }
-

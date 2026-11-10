@@ -146,4 +146,3 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 	}
 	return result, nil
 }
-

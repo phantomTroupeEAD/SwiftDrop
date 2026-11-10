@@ -45,4 +45,3 @@ func TestS3StorageClient_GeneratePresignedURL_SigV4(t *testing.T) {
 	assert.Contains(t, url, "X-Amz-SignedHeaders=host")
 	assert.Contains(t, url, "X-Amz-Signature=")
 }
-
