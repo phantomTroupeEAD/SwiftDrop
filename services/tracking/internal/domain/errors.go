@@ -14,4 +14,10 @@ var (
 
 	// ErrDatabaseUnavailable indicates a transient or persistent failure connecting to PostgreSQL.
 	ErrDatabaseUnavailable = errors.New("database unavailable")
+
+	// ErrUnauthenticated indicates that a request lacks valid authentication credentials.
+	ErrUnauthenticated = errors.New("unauthenticated")
+
+	// ErrAccessDenied indicates that an authenticated caller lacks authorization to access the parcel.
+	ErrAccessDenied = errors.New("access denied")
 )

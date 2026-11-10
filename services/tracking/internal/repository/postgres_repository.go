@@ -137,7 +137,11 @@ func (r *PostgresTrackingRepository) FindParcelByTrackingNumber(ctx context.Cont
 			id,
 			tracking_number,
 			status,
+			sender_id,
+			merchant_id,
 			COALESCE(dropoff_address->>'city', '') AS destination_city,
+			COALESCE(dropoff_address->>'postal_code', '') AS destination_postal_code,
+			COALESCE(dropoff_address->>'zone_id', '') AS destination_zone_id,
 			created_at,
 			updated_at
 		FROM parcels
@@ -146,19 +150,27 @@ func (r *PostgresTrackingRepository) FindParcelByTrackingNumber(ctx context.Cont
 	`
 
 	var (
-		id        string
-		tnStr     string
-		statusStr string
-		destCity  sql.NullString
-		createdAt time.Time
-		updatedAt time.Time
+		id         string
+		tnStr      string
+		statusStr  string
+		senderID   sql.NullString
+		merchID    sql.NullString
+		destCity   sql.NullString
+		destPostal sql.NullString
+		destZone   sql.NullString
+		createdAt  time.Time
+		updatedAt  time.Time
 	)
 
 	err := r.db.QueryRowContext(timeoutCtx, query, trackingNumber).Scan(
 		&id,
 		&tnStr,
 		&statusStr,
+		&senderID,
+		&merchID,
 		&destCity,
+		&destPostal,
+		&destZone,
 		&createdAt,
 		&updatedAt,
 	)
@@ -177,23 +189,46 @@ func (r *PostgresTrackingRepository) FindParcelByTrackingNumber(ctx context.Cont
 		return nil, fmt.Errorf("corrupt tracking number in db: %w", err)
 	}
 
-	var city string
+	var senderPtr *string
+	if senderID.Valid && strings.TrimSpace(senderID.String) != "" {
+		s := strings.TrimSpace(senderID.String)
+		senderPtr = &s
+	}
+
+	var merchPtr *string
+	if merchID.Valid && strings.TrimSpace(merchID.String) != "" {
+		m := strings.TrimSpace(merchID.String)
+		merchPtr = &m
+	}
+
+	var city, postalCode, zoneID string
 	if destCity.Valid {
 		city = destCity.String
 	}
+	if destPostal.Valid {
+		postalCode = destPostal.String
+	}
+	if destZone.Valid {
+		zoneID = destZone.String
+	}
 
 	return &domain.ParcelTrackingInfo{
-		ID:              id,
-		TrackingNumber:  tn,
-		Status:          domain.ParcelStatus(statusStr),
-		DestinationCity: city,
-		CreatedAt:       createdAt,
-		UpdatedAt:       updatedAt,
+		ID:                    id,
+		TrackingNumber:        tn,
+		Status:                domain.ParcelStatus(statusStr),
+		SenderID:              senderPtr,
+		MerchantID:            merchPtr,
+		DestinationCity:       city,
+		DestinationPostalCode: postalCode,
+		DestinationZoneID:     zoneID,
+		CreatedAt:             createdAt,
+		UpdatedAt:             updatedAt,
 	}, nil
 }
 
 // FindStatusHistoryByParcelID queries the authoritative parcel_status_history table
-// returning chronological milestones with deterministic ordering (timestamp ASC, id ASC).
+// returning chronological milestones with deterministic ordering (occurred_at ASC, id ASC).
+// Aligns strictly with Member 2's authoritative schema (occurred_at).
 func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Context, parcelID string) ([]domain.MilestoneRecord, error) {
 	if r.db == nil {
 		return nil, domain.ErrDatabaseUnavailable
@@ -209,12 +244,13 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 			from_status,
 			to_status,
 			actor_id,
+			actor_type,
 			actor_role,
 			reason,
-			timestamp
+			occurred_at
 		FROM parcel_status_history
 		WHERE parcel_id = $1
-		ORDER BY timestamp ASC, id ASC;
+		ORDER BY occurred_at ASC, id ASC;
 	`
 
 	rows, err := r.db.QueryContext(timeoutCtx, query, parcelID)
@@ -231,6 +267,7 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 		var (
 			rec        domain.MilestoneRecord
 			fromStatus sql.NullString
+			actorID    sql.NullString
 		)
 
 		err := rows.Scan(
@@ -238,7 +275,8 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 			&rec.ParcelID,
 			&fromStatus,
 			&rec.ToStatus,
-			&rec.ActorID,
+			&actorID,
+			&rec.ActorType,
 			&rec.ActorRole,
 			&rec.Reason,
 			&rec.Timestamp,
@@ -250,6 +288,9 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 		if fromStatus.Valid {
 			statusVal := fromStatus.String
 			rec.FromStatus = &statusVal
+		}
+		if actorID.Valid {
+			rec.ActorID = actorID.String
 		}
 
 		records = append(records, rec)
@@ -290,7 +331,11 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 			id,
 			tracking_number,
 			status,
+			sender_id,
+			merchant_id,
 			COALESCE(dropoff_address->>'city', '') AS destination_city,
+			COALESCE(dropoff_address->>'postal_code', '') AS destination_postal_code,
+			COALESCE(dropoff_address->>'zone_id', '') AS destination_zone_id,
 			created_at,
 			updated_at
 		FROM parcels
@@ -299,19 +344,27 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 	`
 
 	var (
-		id        string
-		tnStr     string
-		statusStr string
-		destCity  sql.NullString
-		createdAt time.Time
-		updatedAt time.Time
+		id         string
+		tnStr      string
+		statusStr  string
+		senderID   sql.NullString
+		merchID    sql.NullString
+		destCity   sql.NullString
+		destPostal sql.NullString
+		destZone   sql.NullString
+		createdAt  time.Time
+		updatedAt  time.Time
 	)
 
 	err = tx.QueryRowContext(timeoutCtx, parcelQuery, trackingNumber).Scan(
 		&id,
 		&tnStr,
 		&statusStr,
+		&senderID,
+		&merchID,
 		&destCity,
+		&destPostal,
+		&destZone,
 		&createdAt,
 		&updatedAt,
 	)
@@ -330,18 +383,40 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 		return nil, nil, fmt.Errorf("corrupt tracking number in db: %w", err)
 	}
 
-	var city string
+	var senderPtr *string
+	if senderID.Valid && strings.TrimSpace(senderID.String) != "" {
+		s := strings.TrimSpace(senderID.String)
+		senderPtr = &s
+	}
+
+	var merchPtr *string
+	if merchID.Valid && strings.TrimSpace(merchID.String) != "" {
+		m := strings.TrimSpace(merchID.String)
+		merchPtr = &m
+	}
+
+	var city, postalCode, zoneID string
 	if destCity.Valid {
 		city = destCity.String
 	}
+	if destPostal.Valid {
+		postalCode = destPostal.String
+	}
+	if destZone.Valid {
+		zoneID = destZone.String
+	}
 
 	parcel := &domain.ParcelTrackingInfo{
-		ID:              id,
-		TrackingNumber:  tn,
-		Status:          domain.ParcelStatus(statusStr),
-		DestinationCity: city,
-		CreatedAt:       createdAt,
-		UpdatedAt:       updatedAt,
+		ID:                    id,
+		TrackingNumber:        tn,
+		Status:                domain.ParcelStatus(statusStr),
+		SenderID:              senderPtr,
+		MerchantID:            merchPtr,
+		DestinationCity:       city,
+		DestinationPostalCode: postalCode,
+		DestinationZoneID:     zoneID,
+		CreatedAt:             createdAt,
+		UpdatedAt:             updatedAt,
 	}
 
 	// 2. Query History
@@ -352,12 +427,13 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 			from_status,
 			to_status,
 			actor_id,
+			actor_type,
 			actor_role,
 			reason,
-			timestamp
+			occurred_at
 		FROM parcel_status_history
 		WHERE parcel_id = $1
-		ORDER BY timestamp ASC, id ASC;
+		ORDER BY occurred_at ASC, id ASC;
 	`
 
 	rows, err := tx.QueryContext(timeoutCtx, historyQuery, id)
@@ -374,6 +450,7 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 		var (
 			rec        domain.MilestoneRecord
 			fromStatus sql.NullString
+			actorID    sql.NullString
 		)
 
 		err := rows.Scan(
@@ -381,7 +458,8 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 			&rec.ParcelID,
 			&fromStatus,
 			&rec.ToStatus,
-			&rec.ActorID,
+			&actorID,
+			&rec.ActorType,
 			&rec.ActorRole,
 			&rec.Reason,
 			&rec.Timestamp,
@@ -393,6 +471,9 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 		if fromStatus.Valid {
 			statusVal := fromStatus.String
 			rec.FromStatus = &statusVal
+		}
+		if actorID.Valid {
+			rec.ActorID = actorID.String
 		}
 
 		records = append(records, rec)

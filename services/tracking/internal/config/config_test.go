@@ -238,6 +238,30 @@ func TestConfigValidationErrors(t *testing.T) {
 			},
 			wantErr: "cannot exceed DBMaxOpenConns",
 		},
+		{
+			name: "empty JWTSecret in production",
+			mutate: func(c *Config) {
+				c.AppEnv = "production"
+				c.JWTSecret = ""
+			},
+			wantErr: "JWTSecret must be explicitly configured in production and cannot use default dev secret",
+		},
+		{
+			name: "default dev JWTSecret in production",
+			mutate: func(c *Config) {
+				c.AppEnv = "production"
+				c.JWTSecret = DefaultDevJWTSecret
+			},
+			wantErr: "JWTSecret must be explicitly configured in production and cannot use default dev secret",
+		},
+		{
+			name: "short JWTSecret in production",
+			mutate: func(c *Config) {
+				c.AppEnv = "production"
+				c.JWTSecret = "too-short"
+			},
+			wantErr: "JWTSecret must be at least 32 characters in production",
+		},
 	}
 
 	for _, tt := range tests {
@@ -280,6 +304,7 @@ func TestConfigEnvOverrides(t *testing.T) {
 	os.Setenv("REDIS_URL", "redis://localhost:6379/1")
 	os.Setenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 	os.Setenv("SSE_HEARTBEAT_SECONDS", "30")
+	os.Setenv("TRACKING_JWT_SECRET", "super-secret-production-key-at-least-32-chars-long!")
 
 	defer func() {
 		os.Unsetenv("APP_ENV")
@@ -292,6 +317,7 @@ func TestConfigEnvOverrides(t *testing.T) {
 		os.Unsetenv("REDIS_URL")
 		os.Unsetenv("RABBITMQ_URL")
 		os.Unsetenv("SSE_HEARTBEAT_SECONDS")
+		os.Unsetenv("TRACKING_JWT_SECRET")
 	}()
 
 	cfg, err := Load()

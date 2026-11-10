@@ -123,6 +123,18 @@ func (rec *statusRecorder) WriteHeader(code int) {
 	rec.ResponseWriter.WriteHeader(code)
 }
 
+// Flush implements http.Flusher to pass through flush operations for SSE and chunked streaming.
+func (rec *statusRecorder) Flush() {
+	if flusher, ok := rec.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Unwrap exposes the underlying ResponseWriter for Go 1.20+ http.ResponseController unwrapping.
+func (rec *statusRecorder) Unwrap() http.ResponseWriter {
+	return rec.ResponseWriter
+}
+
 // AccessLog logs HTTP request completions using structured JSON logging.
 // It never logs query parameters, authorization tokens, or request bodies.
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {

@@ -27,3 +27,13 @@ type PublicMilestone struct {
 	Description string    `json:"description"`
 	Timestamp   time.Time `json:"timestamp"`
 }
+
+// PublicStatusUpdateEvent encapsulates an allowlisted real-time status update event for SSE streaming.
+// Strictly adheres to SEC-009 public privacy standards and Document 4 §5.2.
+// Sensitive fields (sender ID, recipient name/phone, street address, zone ID, actor ID, notes, fees) are strictly forbidden.
+type PublicStatusUpdateEvent struct {
+	TrackingNumber string    `json:"tracking_number"`
+	Status         string    `json:"status"`
+	Description    string    `json:"description"`
+	Timestamp      time.Time `json:"timestamp"`
+}
