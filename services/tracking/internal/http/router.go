@@ -9,16 +9,23 @@ import (
 )
 
 // NewRouter constructs and configures the HTTP request multiplexer with standard
-// platform middleware and endpoints for Phase 1.
-func NewRouter(cfg *config.Config, logger *slog.Logger, healthHandler *health.Handler) http.Handler {
+// platform middleware and endpoints.
+func NewRouter(
+	cfg *config.Config,
+	logger *slog.Logger,
+	healthHandler *health.Handler,
+	trackingHandlers ...*PublicTrackingHandler,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	// Register Kubernetes & Infrastructure Health Probes
 	mux.HandleFunc("GET /health/live", healthHandler.Live)
 	mux.HandleFunc("GET /health/ready", healthHandler.Ready)
 
-	// In Phase 1: Unimplemented tracking endpoints are NOT registered.
-	// They will be introduced in subsequent phases (Phase 2: DB queries, Phase 3: Auth, Phase 4: SSE).
+	// Phase 2: Public Tracking REST endpoint
+	if len(trackingHandlers) > 0 && trackingHandlers[0] != nil {
+		mux.HandleFunc("GET /api/v1/tracking/public/{tracking_number}", trackingHandlers[0].GetPublicTracking)
+	}
 
 	// Pipeline: RequestID -> Recover -> AccessLog -> Mux
 	return RequestID(

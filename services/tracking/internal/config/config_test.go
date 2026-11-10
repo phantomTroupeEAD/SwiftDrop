@@ -55,6 +55,21 @@ func TestConfigLoadDefaults(t *testing.T) {
 	if cfg.SSEHeartbeatSeconds != 15 {
 		t.Errorf("expected default SSEHeartbeatSeconds 15, got %d", cfg.SSEHeartbeatSeconds)
 	}
+	if cfg.DBMaxOpenConns != 5 {
+		t.Errorf("expected default DBMaxOpenConns 5 (Agreement D8), got %d", cfg.DBMaxOpenConns)
+	}
+	if cfg.DBMaxIdleConns != 2 {
+		t.Errorf("expected default DBMaxIdleConns 2 (Agreement D8), got %d", cfg.DBMaxIdleConns)
+	}
+	if cfg.DBConnMaxLifetime != 15*time.Minute {
+		t.Errorf("expected default DBConnMaxLifetime 15m, got %v", cfg.DBConnMaxLifetime)
+	}
+	if cfg.DBConnMaxIdleTime != 5*time.Minute {
+		t.Errorf("expected default DBConnMaxIdleTime 5m, got %v", cfg.DBConnMaxIdleTime)
+	}
+	if cfg.DBQueryTimeout != 3*time.Second {
+		t.Errorf("expected default DBQueryTimeout 3s, got %v", cfg.DBQueryTimeout)
+	}
 }
 
 func TestConfigAddrPrecedence(t *testing.T) {
@@ -180,6 +195,49 @@ func TestConfigValidationErrors(t *testing.T) {
 			},
 			wantErr: "SSEHeartbeatSeconds must be greater than zero",
 		},
+		{
+			name: "non-positive DBMaxOpenConns",
+			mutate: func(c *Config) {
+				c.DBMaxOpenConns = 0
+			},
+			wantErr: "DBMaxOpenConns must be greater than zero",
+		},
+		{
+			name: "non-positive DBMaxIdleConns",
+			mutate: func(c *Config) {
+				c.DBMaxIdleConns = 0
+			},
+			wantErr: "DBMaxIdleConns must be greater than zero",
+		},
+		{
+			name: "non-positive DBConnMaxLifetime",
+			mutate: func(c *Config) {
+				c.DBConnMaxLifetime = 0
+			},
+			wantErr: "DBConnMaxLifetime must be greater than zero",
+		},
+		{
+			name: "non-positive DBConnMaxIdleTime",
+			mutate: func(c *Config) {
+				c.DBConnMaxIdleTime = 0
+			},
+			wantErr: "DBConnMaxIdleTime must be greater than zero",
+		},
+		{
+			name: "non-positive DBQueryTimeout",
+			mutate: func(c *Config) {
+				c.DBQueryTimeout = 0
+			},
+			wantErr: "DBQueryTimeout must be greater than zero",
+		},
+		{
+			name: "DBMaxIdleConns exceeds DBMaxOpenConns",
+			mutate: func(c *Config) {
+				c.DBMaxOpenConns = 5
+				c.DBMaxIdleConns = 6
+			},
+			wantErr: "cannot exceed DBMaxOpenConns",
+		},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +251,11 @@ func TestConfigValidationErrors(t *testing.T) {
 				IdleTimeout:         60 * time.Second,
 				LogLevel:            "info",
 				SSEHeartbeatSeconds: 15,
+				DBMaxOpenConns:      5,
+				DBMaxIdleConns:      2,
+				DBConnMaxLifetime:   15 * time.Minute,
+				DBConnMaxIdleTime:   5 * time.Minute,
+				DBQueryTimeout:      3 * time.Second,
 			}
 			tt.mutate(cfg)
 			err := cfg.Validate()

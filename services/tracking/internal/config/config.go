@@ -33,6 +33,13 @@ type Config struct {
 	RedisURL            string
 	RabbitMQURL         string
 	SSEHeartbeatSeconds int
+
+	// Database Connection Pool (Phase 2)
+	DBMaxOpenConns    int
+	DBMaxIdleConns    int
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
+	DBQueryTimeout    time.Duration
 }
 
 // Load reads configuration from environment variables with sensible defaults
@@ -47,11 +54,18 @@ func Load() (*Config, error) {
 		IdleTimeout:     getDuration("IDLE_TIMEOUT", 60*time.Second),
 		LogLevel:        strings.ToLower(getString("LOG_LEVEL", "info")),
 
-		// Future contract fields — optional in Phase 1
+		// Integration contract fields
 		DatabaseURL:         getString("TRACKING_DATABASE_URL", getString("DATABASE_URL", "")),
 		RedisURL:            getString("REDIS_URL", ""),
 		RabbitMQURL:         getString("RABBITMQ_URL", ""),
 		SSEHeartbeatSeconds: getInt("SSE_HEARTBEAT_SECONDS", 15),
+
+		// Database Connection Pool (Agreement D8: max 5 connections per pod replica)
+		DBMaxOpenConns:    getInt("TRACKING_DB_MAX_OPEN_CONNS", getInt("DATABASE_MAX_OPEN_CONNS", 5)),
+		DBMaxIdleConns:    getInt("TRACKING_DB_MAX_IDLE_CONNS", getInt("DATABASE_MAX_IDLE_CONNS", 2)),
+		DBConnMaxLifetime: getDuration("TRACKING_DB_CONN_MAX_LIFETIME", 15*time.Minute),
+		DBConnMaxIdleTime: getDuration("TRACKING_DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
+		DBQueryTimeout:    getDuration("TRACKING_DB_QUERY_TIMEOUT", 3*time.Second),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -123,6 +137,26 @@ func (c *Config) Validate() error {
 	// Validate SSE Heartbeat
 	if c.SSEHeartbeatSeconds <= 0 {
 		return fmt.Errorf("%w: SSEHeartbeatSeconds must be greater than zero", ErrInvalidConfig)
+	}
+
+	// Validate DB Pool settings
+	if c.DBMaxOpenConns <= 0 {
+		return fmt.Errorf("%w: DBMaxOpenConns must be greater than zero", ErrInvalidConfig)
+	}
+	if c.DBMaxIdleConns <= 0 {
+		return fmt.Errorf("%w: DBMaxIdleConns must be greater than zero", ErrInvalidConfig)
+	}
+	if c.DBMaxIdleConns > c.DBMaxOpenConns {
+		return fmt.Errorf("%w: DBMaxIdleConns (%d) cannot exceed DBMaxOpenConns (%d)", ErrInvalidConfig, c.DBMaxIdleConns, c.DBMaxOpenConns)
+	}
+	if c.DBConnMaxLifetime <= 0 {
+		return fmt.Errorf("%w: DBConnMaxLifetime must be greater than zero", ErrInvalidConfig)
+	}
+	if c.DBConnMaxIdleTime <= 0 {
+		return fmt.Errorf("%w: DBConnMaxIdleTime must be greater than zero", ErrInvalidConfig)
+	}
+	if c.DBQueryTimeout <= 0 {
+		return fmt.Errorf("%w: DBQueryTimeout must be greater than zero", ErrInvalidConfig)
 	}
 
 	return nil
