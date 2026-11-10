@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/swiftdrop/core-api/internal/events"
 	"github.com/swiftdrop/core-api/internal/parcels/domain"
@@ -14,13 +15,15 @@ import (
 
 // BookParcelUseCase orchestrates parcel booking, atomic quote acceptance,
 // tracking number generation, aggregate persistence, status audit logging,
-// and transactional outbox event publication in one atomic database transaction.
+// transactional outbox event publication, and optional request idempotency in one atomic database transaction.
 type BookParcelUseCase struct {
 	txManager         TransactionManager
 	quoteConsumer     QuoteConsumer
 	parcelRepo        ParcelRepository
 	statusHistoryRepo StatusHistoryRepository
 	outboxWriter      events.OutboxWriter
+	idempotencyStore  IdempotencyStore
+	idempotencyTTL    time.Duration
 	trackingGen       TrackingNumberGenerator
 	idGen             IDGenerator
 	clock             Clock
@@ -68,10 +71,23 @@ func NewBookParcelUseCase(
 		parcelRepo:        parcelRepo,
 		statusHistoryRepo: statusHistoryRepo,
 		outboxWriter:      outboxWriter,
+		idempotencyTTL:    DefaultIdempotencyTTL,
 		trackingGen:       trackingGen,
 		idGen:             idGen,
 		clock:             clock,
 	}, nil
+}
+
+// WithIdempotency configures persistent request idempotency for BookParcelUseCase.
+// When ttl <= 0, DefaultIdempotencyTTL (24 hours) is used.
+func (uc *BookParcelUseCase) WithIdempotency(store IdempotencyStore, ttl time.Duration) *BookParcelUseCase {
+	uc.idempotencyStore = store
+	if ttl > 0 {
+		uc.idempotencyTTL = ttl
+	} else {
+		uc.idempotencyTTL = DefaultIdempotencyTTL
+	}
+	return uc
 }
 
 // Execute processes a parcel booking command.
@@ -81,6 +97,10 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		return BookParcelResult{}, domain.ErrInvalidQuoteID
 	}
 	senderID, merchantID, err := normalizeBookingOwners(cmd.SenderID, cmd.MerchantID)
+	if err != nil {
+		return BookParcelResult{}, err
+	}
+	idemInput, err := uc.validateIdempotencyCommand(cmd.Idempotency, senderID, merchantID)
 	if err != nil {
 		return BookParcelResult{}, err
 	}
@@ -136,17 +156,30 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		return BookParcelResult{}, fmt.Errorf("dropoff address: %w", err)
 	}
 
-	now := uc.clock.Now()
+	now := uc.clock.Now().UTC()
 	var result BookParcelResult
 
 	// 4. Execute atomic transaction encompassing:
+	//    0) Idempotency lock + lookup BEFORE quote consumption (if enabled)
 	//    a) Atomic quote consumption and ownership verification
 	//    b) Verification of route & weight invariants against the quote
 	//    c) Tracking number allocation with bounded collision retry
 	//    d) Parcel aggregate construction & persistence
 	//    e) Initial CREATED status-history audit record persistence
 	//    f) Transactional outbox event publication
+	//    g) Idempotency response snapshot persistence
 	err = uc.txManager.WithTx(ctx, func(tx *sql.Tx) error {
+		if idemInput != nil {
+			replayed, hit, err := uc.checkIdempotencyReplay(ctx, tx, *idemInput, now)
+			if err != nil {
+				return err
+			}
+			if hit {
+				result = replayed
+				return nil
+			}
+		}
+
 		// a. Atomic quote consumption
 		quote, err := uc.quoteConsumer.ConsumeQuote(ctx, tx, cmd.QuoteID, now)
 		if err != nil {
@@ -312,6 +345,14 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 			StatusHistory: historyEntry,
 		}
 
+		if idemInput != nil {
+			rec, err := uc.persistIdempotencyRecord(ctx, tx, *idemInput, result, now)
+			if err != nil {
+				return err
+			}
+			result.Idempotency = &rec
+		}
+
 		return nil
 	})
 
@@ -320,6 +361,91 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 	}
 
 	return result, nil
+}
+
+func (uc *BookParcelUseCase) validateIdempotencyCommand(in *IdempotencyInput, senderID, merchantID *string) (*IdempotencyInput, error) {
+	if in == nil {
+		return nil, nil
+	}
+	if uc.idempotencyStore == nil {
+		return nil, ErrNilIdempotencyStore
+	}
+	norm, err := in.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyCallerScopeMatchesOwners(norm.CallerScope, senderID, merchantID); err != nil {
+		return nil, err
+	}
+	return &norm, nil
+}
+
+func (uc *BookParcelUseCase) checkIdempotencyReplay(
+	ctx context.Context,
+	tx *sql.Tx,
+	idem IdempotencyInput,
+	now time.Time,
+) (BookParcelResult, bool, error) {
+	if err := uc.idempotencyStore.AcquireLock(ctx, tx, idem.Key, idem.CallerScope); err != nil {
+		return BookParcelResult{}, false, fmt.Errorf("acquire idempotency lock: %w", err)
+	}
+
+	existing, found, err := uc.idempotencyStore.Find(ctx, tx, idem.Key, idem.CallerScope)
+	if err != nil {
+		return BookParcelResult{}, false, fmt.Errorf("lookup idempotency record: %w", err)
+	}
+	if !found || existing.IsExpired(now) {
+		return BookParcelResult{}, false, nil
+	}
+
+	if existing.RequestHash != idem.RequestHash || existing.Operation != idem.Operation {
+		return BookParcelResult{}, false, ErrIdempotencyPayloadMismatch
+	}
+
+	replayed, err := decodeBookParcelSnapshot(existing.ResponseBody)
+	if err != nil {
+		return BookParcelResult{}, false, err
+	}
+	replayed.Replayed = true
+	replayed.Idempotency = &existing
+	return replayed, true, nil
+}
+
+func (uc *BookParcelUseCase) persistIdempotencyRecord(
+	ctx context.Context,
+	tx *sql.Tx,
+	idem IdempotencyInput,
+	result BookParcelResult,
+	now time.Time,
+) (IdempotencyRecord, error) {
+	body, err := encodeBookParcelSnapshot(result)
+	if err != nil {
+		return IdempotencyRecord{}, err
+	}
+
+	ttl := uc.idempotencyTTL
+	if ttl <= 0 {
+		ttl = DefaultIdempotencyTTL
+	}
+
+	parcelID := result.Parcel.ID
+	record := IdempotencyRecord{
+		Key:               idem.Key,
+		CallerScope:       idem.CallerScope,
+		Operation:         idem.Operation,
+		RequestHash:       idem.RequestHash,
+		ResponseStatus:    defaultBookingResponseStatus,
+		ResponseBody:      body,
+		CreatedResourceID: &parcelID,
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(ttl),
+	}
+
+	if err := uc.idempotencyStore.Save(ctx, tx, record); err != nil {
+		return IdempotencyRecord{}, fmt.Errorf("save idempotency record: %w", err)
+	}
+
+	return record, nil
 }
 
 func normalizeOptionalID(id *string, invalidErr error) (*string, error) {
