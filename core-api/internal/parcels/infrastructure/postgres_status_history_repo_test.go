@@ -182,6 +182,33 @@ func TestPostgresStatusHistoryRepository_Save_RejectsInvalidActorAndPropagatesDB
 	}
 }
 
+func TestPostgresStatusHistoryRepository_Save_RejectsEmptyID(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+
+	database := registerMockDB("save_history_empty_id", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+		t.Fatal("DB should not be called when status history ID is empty")
+		return nil, nil, nil
+	})
+	defer database.Close()
+
+	repo := NewPostgresStatusHistoryRepository(database)
+	for _, blankID := range []string{"", "   "} {
+		entry := domain.StatusHistoryEntry{
+			ID:         blankID,
+			ParcelID:   "parcel-uuid-001",
+			ToStatus:   domain.StatusCreated,
+			ActorID:    strPtr("usr-001"),
+			ActorType:  domain.ActorTypeUser,
+			ActorRole:  "CUSTOMER",
+			Reason:     "Initial booking",
+			OccurredAt: now,
+		}
+		if err := repo.Save(context.Background(), nil, entry); !errors.Is(err, domain.ErrInvalidStatusHistory) {
+			t.Fatalf("expected ErrInvalidStatusHistory for blank id %q, got: %v", blankID, err)
+		}
+	}
+}
+
 func TestPostgresStatusHistoryRepository_FindByParcelID(t *testing.T) {
 	t0 := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	t1 := t0.Add(15 * time.Minute)

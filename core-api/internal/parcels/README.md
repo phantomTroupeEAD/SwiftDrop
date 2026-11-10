@@ -3,7 +3,7 @@
 > **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking  
 > **Primary Owner:** Member 2 — Parcel Management & Pricing  
 > **Clean Architecture Boundary:** Modular Monolith Internal Module  
-> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment — Task 5 Lifecycle Complete)
+> **Status:** Aligned Specification (Post-Audit v2.0.0 Alignment — Task 8A Outbox Correlation Complete)
 
 ---
 
@@ -73,7 +73,8 @@ type ParcelLifecycleService interface {
 type TransitionParcelStatusCommand struct {
     ParcelID        string
     TargetStatus    domain.ParcelStatus
-    ActorID         string
+    ActorID         *string
+    ActorType       domain.ActorType
     ActorRole       string
     Reason          string
     ExpectedVersion *int
@@ -90,20 +91,20 @@ type TransitionParcelStatusResult struct {
 The lifecycle usecase guarantees strict consistency and prevents lost updates via optimistic concurrency control:
 1. **Load Current State:** Reads the parcel from PostgreSQL via `FindByID` using the active transaction.
 2. **Version Precondition Verification:** If the caller supplied `ExpectedVersion`, the usecase verifies that `parcel.Version == *cmd.ExpectedVersion`. Mismatches immediately return `ErrConcurrencyConflict`.
-3. **Domain Evaluation:** Invokes `parcel.TransitionTo(...)`, which evaluates transition legality, increments `delivery_attempts` on failure, advances `parcel.Version`, and updates `parcel.UpdatedAt`.
+3. **Domain Evaluation & History ID Allocation:** Invokes `parcel.TransitionTo(...)`, which evaluates transition legality, increments `AttemptCount` on failure, advances `parcel.Version`, and updates `parcel.UpdatedAt`; then generates and validates one UUIDv7 (`IDGenerator.GenerateID()`) assigned to `historyEntry.ID`.
 4. **Optimistic Database Mutation:**
    ```sql
    UPDATE parcels
    SET status = $1,
-       delivery_attempts = $2,
+       attempt_count = $2,
        version = version + 1,
        updated_at = $3
    WHERE id = $4
      AND version = $5;
    ```
    If zero rows are affected (indicating a concurrent modification occurred between read and write), the repository returns `ErrConcurrencyConflict`.
-5. **Status History Append:** Persists an immutable row to `parcel_status_history`.
-6. **Outbox Event Append:** Serializes and writes a versioned event envelope to `outbox_events`.
+5. **Status History Append:** Persists an immutable row to `parcel_status_history` with explicit `id = historyEntry.ID`.
+6. **Outbox Event Append:** Serializes `ParcelStatusChangedPayload` (including `"status_history_id": historyEntry.ID`) inside a new `events.EventEnvelope` (retaining its own independent envelope `event_id` and `schema_version: "1.0.0"`) and writes it to `outbox_events` within the exact same `*sql.Tx`.
 7. **Commit / Rollback:** If any step fails, the entire transaction rolls back cleanly.
 
 ---
@@ -184,19 +185,19 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, parcelID, courierID
 ---
 
 ## 8. Events Emitted (Transactional Outbox)
-Every state change commits a versioned event to `outbox_events` in the same transaction:
+Every state change commits a versioned event (`schema_version: "1.0.0"`) to `outbox_events` in the same `*sql.Tx` as the parcel update and `parcel_status_history` insert. For all 8 lifecycle transitions emitted via `TransitionParcelStatusUseCase`, `ParcelStatusChangedPayload.status_history_id` carries the exact UUID persisted to `parcel_status_history.id` while the enclosing envelope keeps its independent `event_id`:
 
 | Event Type | Triggering Transition | Aggregates & Routing Key | Payload Structure |
 | :--- | :--- | :--- | :--- |
 | `parcel.booked.v1` | Initial parcel booking | `aggregate_type: "parcel"` | `application.ParcelBookedPayload` |
-| `parcel.assigned.v1` | CREATED → ASSIGNED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.picked_up.v1` | ASSIGNED → PICKED_UP | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.in_transit.v1` | PICKED_UP → IN_TRANSIT | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.out_for_delivery.v1` | IN_TRANSIT / ATTEMPT_FAILED → OUT_FOR_DELIVERY | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.delivered.v1` | OUT_FOR_DELIVERY → DELIVERED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.delivery_failed.v1` | OUT_FOR_DELIVERY → ATTEMPT_FAILED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.returned.v1` | ATTEMPT_FAILED → RETURNED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
-| `parcel.cancelled.v1` | CREATED → CANCELLED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` |
+| `parcel.assigned.v1` | CREATED → ASSIGNED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.picked_up.v1` | ASSIGNED → PICKED_UP | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.in_transit.v1` | PICKED_UP → IN_TRANSIT | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.out_for_delivery.v1` | IN_TRANSIT / ATTEMPT_FAILED → OUT_FOR_DELIVERY | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.delivered.v1` | OUT_FOR_DELIVERY → DELIVERED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.delivery_failed.v1` | OUT_FOR_DELIVERY → ATTEMPT_FAILED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.returned.v1` | ATTEMPT_FAILED → RETURNED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
+| `parcel.cancelled.v1` | CREATED → CANCELLED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
 
 ---
 
@@ -210,3 +211,4 @@ Every state change commits a versioned event to `outbox_events` in the same tran
 | 2026-11-06 | Task 2: Implemented Parcel Management Domain Model (`internal/parcels/domain`). Added `Parcel` aggregate root, 9-state machine (`CREATED` through terminal states), Crockford Base32 tracking number format (`SD-YYYYMMDD-XXXXXX`), immutable address and accepted price snapshots, delivery attempt limit guards (max 3), and status history audit entries | Member 2 |
 | 2026-11-06 | Task 4: Implemented Parcel Booking Application and Quote Acceptance Integration (`internal/parcels/application`, `internal/parcels/infrastructure`). Added `BookParcelUseCase` orchestrating atomic quote consumption, tracking number generation with bounded retry, parcel creation, initial CREATED status-history logging, and transactional outbox publication (`parcel.booked.v1`) within a single atomic PostgreSQL transaction via `platform/db.WithTx` | Member 2 |
 | 2026-11-08 | Task 5: Implemented Parcel Lifecycle Application & Persistence Integration (`internal/parcels/application`, `internal/parcels/infrastructure`). Added `TransitionParcelStatusUseCase` and `ParcelLifecycleService` port for intra-monolith integration (Member 3 Dispatch & Delivery). Enforced optimistic concurrency control via version condition, audit trail logging in `parcel_status_history`, and atomic transactional outbox publication for all 8 status transition events (`parcel.assigned.v1`, `parcel.picked_up.v1`, `parcel.delivered.v1`, etc.) | Member 2 |
+| 2026-11-10 | Task 8A: Added `StatusHistoryID` (`status_history_id`) to `ParcelStatusChangedPayload` and populated it in `TransitionParcelStatusUseCase.ExecuteTx` with the exact validated UUID persisted to `parcel_status_history.id` in the same `*sql.Tx`, preserving envelope `event_id` and `schema_version` `1.0.0`; enforced non-blank `StatusHistoryEntry.ID` in domain validation. | Member 2 |

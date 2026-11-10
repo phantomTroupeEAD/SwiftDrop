@@ -105,6 +105,10 @@ func NewStatusHistoryEntry(
 
 // Validate ensures that the history record represents a valid, legal state transition.
 func (e StatusHistoryEntry) Validate(attemptCount int) error {
+	if strings.TrimSpace(e.ID) == "" {
+		return fmt.Errorf("%w: status history id is required", ErrInvalidStatusHistory)
+	}
+
 	if e.ParcelID == "" {
 		return fmt.Errorf("%w: parcel id is required", ErrInvalidStatusHistory)
 	}

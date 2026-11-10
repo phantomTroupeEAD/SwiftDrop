@@ -145,10 +145,14 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 		return TransitionParcelStatusResult{}, err
 	}
 
-	// 5. Generate status history unique ID.
+	// 5. Generate status history unique ID (UUIDv7) and validate before any writes.
 	historyID, err := uc.idGen.GenerateID()
 	if err != nil {
 		return TransitionParcelStatusResult{}, fmt.Errorf("failed to generate status history id: %w", err)
+	}
+	historyID = strings.TrimSpace(historyID)
+	if !events.IsValidUUID(historyID) {
+		return TransitionParcelStatusResult{}, fmt.Errorf("%w: invalid generated status history id %q", domain.ErrInvalidStatusHistory, historyID)
 	}
 	historyEntry.ID = historyID
 
@@ -174,15 +178,16 @@ func (uc *TransitionParcelStatusUseCase) ExecuteTx(ctx context.Context, tx *sql.
 	}
 
 	payload := ParcelStatusChangedPayload{
-		ParcelID:       parcel.ID,
-		TrackingNumber: parcel.TrackingNumber.String(),
-		PreviousStatus: fromStatusStr,
-		NewStatus:      string(historyEntry.ToStatus),
-		ActorID:        historyEntry.ActorID,
-		ActorRole:      historyEntry.ActorRole,
-		Reason:         historyEntry.Reason,
-		AttemptCount:   parcel.AttemptCount,
-		OccurredAt:     historyEntry.OccurredAt,
+		ParcelID:        parcel.ID,
+		TrackingNumber:  parcel.TrackingNumber.String(),
+		PreviousStatus:  fromStatusStr,
+		NewStatus:       string(historyEntry.ToStatus),
+		StatusHistoryID: historyEntry.ID,
+		ActorID:         historyEntry.ActorID,
+		ActorRole:       historyEntry.ActorRole,
+		Reason:          historyEntry.Reason,
+		AttemptCount:    parcel.AttemptCount,
+		OccurredAt:      historyEntry.OccurredAt,
 	}
 
 	corrID := strings.TrimSpace(cmd.CorrelationID)

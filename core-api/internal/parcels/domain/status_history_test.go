@@ -163,6 +163,25 @@ func TestStatusHistoryEntry_TransitionValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidStatusHistory for empty parcel id, got: %v", err)
 	}
 
+	// Empty or whitespace history ID
+	for _, badID := range []string{"", "   "} {
+		_, err = NewStatusHistoryEntry(
+			badID,
+			"parcel-001",
+			&fromStatus,
+			StatusAssigned,
+			strPtr("disp-001"),
+			ActorTypeUser,
+			"DISPATCHER",
+			"Missing history ID",
+			now,
+			0,
+		)
+		if !errors.Is(err, ErrInvalidStatusHistory) {
+			t.Fatalf("expected ErrInvalidStatusHistory for blank history id %q, got: %v", badID, err)
+		}
+	}
+
 	// Zero timestamp
 	_, err = NewStatusHistoryEntry(
 		"hist-006",

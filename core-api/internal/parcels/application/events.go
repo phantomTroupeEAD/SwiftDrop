@@ -33,15 +33,16 @@ type ParcelBookedPayload struct {
 // ParcelStatusChangedPayload represents the integration event payload published
 // to the transactional outbox upon any successful parcel lifecycle state transition.
 type ParcelStatusChangedPayload struct {
-	ParcelID       string    `json:"parcel_id"`
-	TrackingNumber string    `json:"tracking_number"`
-	PreviousStatus string    `json:"previous_status"`
-	NewStatus      string    `json:"new_status"`
-	ActorID        *string   `json:"actor_id,omitempty"`
-	ActorRole      string    `json:"actor_role,omitempty"`
-	Reason         string    `json:"reason,omitempty"`
-	AttemptCount   int       `json:"delivery_attempts"`
-	OccurredAt     time.Time `json:"occurred_at"`
+	ParcelID        string    `json:"parcel_id"`
+	TrackingNumber  string    `json:"tracking_number"`
+	PreviousStatus  string    `json:"previous_status"`
+	NewStatus       string    `json:"new_status"`
+	StatusHistoryID string    `json:"status_history_id"`
+	ActorID         *string   `json:"actor_id,omitempty"`
+	ActorRole       string    `json:"actor_role,omitempty"`
+	Reason          string    `json:"reason,omitempty"`
+	AttemptCount    int       `json:"delivery_attempts"`
+	OccurredAt      time.Time `json:"occurred_at"`
 }
 
 // EventTypeForStatus maps a target parcel status to its authoritative versioned event type.

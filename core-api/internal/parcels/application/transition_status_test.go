@@ -11,6 +11,7 @@ import (
 	"github.com/swiftdrop/core-api/internal/events"
 	"github.com/swiftdrop/core-api/internal/events/eventstest"
 	"github.com/swiftdrop/core-api/internal/parcels/domain"
+	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 func createTestParcel(t *testing.T, baseTime time.Time, status domain.ParcelStatus, attempts int, version int) domain.Parcel {
@@ -205,6 +206,12 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			}
 
 			// Verify status history entry
+			if !events.IsValidUUID(result.StatusHistory.ID) {
+				t.Errorf("expected valid UUID status history ID, got %q", result.StatusHistory.ID)
+			}
+			if len(result.StatusHistory.ID) == 36 && result.StatusHistory.ID[14] != '7' {
+				t.Errorf("expected UUIDv7 status history ID, got %q", result.StatusHistory.ID)
+			}
 			if result.StatusHistory.ToStatus != tc.targetStatus {
 				t.Errorf("expected history ToStatus %s, got %s", tc.targetStatus, result.StatusHistory.ToStatus)
 			}
@@ -232,6 +239,9 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if len(historyRepo.entries) != 1 {
 				t.Fatalf("expected 1 history entry, got %d", len(historyRepo.entries))
 			}
+			if historyRepo.entries[0].ID != result.StatusHistory.ID {
+				t.Errorf("persisted history ID mismatch: expected %s, got %s", result.StatusHistory.ID, historyRepo.entries[0].ID)
+			}
 
 			// Verify outbox integration event publication
 			envelopes := outbox.Events()
@@ -251,6 +261,12 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if env.GetAggregateVersion() != 2 {
 				t.Errorf("expected aggregate version 2, got %d", env.GetAggregateVersion())
 			}
+			if !events.IsValidUUID(env.GetEventID()) {
+				t.Errorf("expected valid UUID envelope event_id, got %q", env.GetEventID())
+			}
+			if env.GetEventID() == result.StatusHistory.ID {
+				t.Errorf("expected distinct envelope event_id and status_history_id, both were %s", env.GetEventID())
+			}
 
 			// Verify serialized payload contains required lifecycle fields and preserves JSON delivery_attempts key
 			payloadBytes, err := env.SerializePayload()
@@ -264,12 +280,18 @@ func TestTransitionParcelStatus_SuccessfulTransitions(t *testing.T) {
 			if rawMap["delivery_attempts"] == nil {
 				t.Errorf("expected backward-compatible JSON key delivery_attempts in payload, got %s", string(payloadBytes))
 			}
+			if rawMap["status_history_id"] != result.StatusHistory.ID {
+				t.Errorf("expected JSON key status_history_id=%q, got %v", result.StatusHistory.ID, rawMap["status_history_id"])
+			}
 			var parsedPayload ParcelStatusChangedPayload
 			if err := json.Unmarshal(payloadBytes, &parsedPayload); err != nil {
 				t.Fatalf("failed to parse payload JSON: %v", err)
 			}
 			if parsedPayload.ParcelID != parcel.ID {
 				t.Errorf("payload parcel_id mismatch: expected %s, got %s", parcel.ID, parsedPayload.ParcelID)
+			}
+			if parsedPayload.StatusHistoryID != result.StatusHistory.ID {
+				t.Errorf("payload status_history_id mismatch: expected %s, got %s", result.StatusHistory.ID, parsedPayload.StatusHistoryID)
 			}
 			if parsedPayload.PreviousStatus != string(tc.initialStatus) {
 				t.Errorf("payload previous_status mismatch: expected %s, got %s", tc.initialStatus, parsedPayload.PreviousStatus)
@@ -721,8 +743,12 @@ func TestTransitionParcelStatus_ExecuteTx_Integration(t *testing.T) {
 	txManager := NewDBTransactionManager(db)
 	uc, _ := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, idGen, clock)
 
+	var txResult TransitionParcelStatusResult
+	var usedTx *sql.Tx
+
 	// Caller (e.g. Member 3 dispatch) opens transaction and passes tx to ExecuteTx
 	err := txManager.WithTx(context.Background(), func(tx *sql.Tx) error {
+		usedTx = tx
 		cmd := TransitionParcelStatusCommand{
 			ParcelID:     parcel.ID,
 			TargetStatus: domain.StatusAssigned,
@@ -735,6 +761,7 @@ func TestTransitionParcelStatus_ExecuteTx_Integration(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		txResult = res
 		if res.Parcel.Status != domain.StatusAssigned {
 			t.Errorf("expected ASSIGNED, got %s", res.Parcel.Status)
 		}
@@ -745,14 +772,35 @@ func TestTransitionParcelStatus_ExecuteTx_Integration(t *testing.T) {
 	}
 
 	// Verify all changes persisted together
+	if usedTx == nil {
+		t.Fatal("expected non-nil transaction")
+	}
 	if parcelRepo.parcels[parcel.ID].Status != domain.StatusAssigned {
 		t.Errorf("expected parcel repo to reflect ASSIGNED")
 	}
 	if len(historyRepo.entries) != 1 {
-		t.Errorf("expected 1 history entry, got %d", len(historyRepo.entries))
+		t.Fatalf("expected 1 history entry, got %d", len(historyRepo.entries))
 	}
-	if len(outbox.Events()) != 1 {
-		t.Errorf("expected 1 outbox envelope, got %d", len(outbox.Events()))
+	if !events.IsValidUUID(txResult.StatusHistory.ID) || historyRepo.entries[0].ID != txResult.StatusHistory.ID {
+		t.Errorf("expected matching valid UUID status history ID, result=%q persisted=%q", txResult.StatusHistory.ID, historyRepo.entries[0].ID)
+	}
+	envelopes := outbox.Events()
+	if len(envelopes) != 1 {
+		t.Fatalf("expected 1 outbox envelope, got %d", len(envelopes))
+	}
+	payloadBytes, err := envelopes[0].SerializePayload()
+	if err != nil {
+		t.Fatalf("failed to serialize payload: %v", err)
+	}
+	var parsed ParcelStatusChangedPayload
+	if err := json.Unmarshal(payloadBytes, &parsed); err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+	if parsed.StatusHistoryID != txResult.StatusHistory.ID {
+		t.Errorf("expected payload status_history_id %q, got %q", txResult.StatusHistory.ID, parsed.StatusHistoryID)
+	}
+	if envelopes[0].GetEventID() == parsed.StatusHistoryID {
+		t.Errorf("expected distinct event_id and status_history_id, both were %s", envelopes[0].GetEventID())
 	}
 }
 
@@ -955,4 +1003,272 @@ func TestTransitionParcelStatus_ActorMetadataAndMerchantParcel(t *testing.T) {
 			})
 		}
 	})
+}
+
+type failingIDGen struct {
+	id  string
+	err error
+}
+
+func (f *failingIDGen) GenerateID() (string, error) {
+	return f.id, f.err
+}
+
+type countingIDGen struct {
+	calls int
+	inner IDGenerator
+}
+
+func (c *countingIDGen) GenerateID() (string, error) {
+	c.calls++
+	return c.inner.GenerateID()
+}
+
+type capturingOutboxWriter struct {
+	txs       []*sql.Tx
+	envelopes []events.AnyEnvelope
+}
+
+func (w *capturingOutboxWriter) Write(ctx context.Context, tx *sql.Tx, envelopes ...events.AnyEnvelope) error {
+	if tx == nil {
+		return events.ErrMissingTransaction
+	}
+	w.txs = append(w.txs, tx)
+	w.envelopes = append(w.envelopes, envelopes...)
+	return nil
+}
+
+type capturingParcelRepo struct {
+	*mockParcelRepo
+	updateQueriers []db.Querier
+}
+
+func (r *capturingParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error {
+	r.updateQueriers = append(r.updateQueriers, q)
+	return r.mockParcelRepo.UpdateStatus(ctx, q, parcel, expectedVersion)
+}
+
+type capturingStatusHistoryRepo struct {
+	*mockStatusHistoryRepo
+	saveQueriers []db.Querier
+}
+
+func (r *capturingStatusHistoryRepo) Save(ctx context.Context, q db.Querier, entry domain.StatusHistoryEntry) error {
+	r.saveQueriers = append(r.saveQueriers, q)
+	return r.mockStatusHistoryRepo.Save(ctx, q, entry)
+}
+
+func TestTransitionParcelStatus_StatusHistoryIDCorrelation(t *testing.T) {
+	now := time.Date(2026, 11, 10, 14, 0, 0, 0, time.UTC)
+
+	t.Run("generates one UUID persisted to history and payload status_history_id in same tx while preserving event_id", func(t *testing.T) {
+		database := getTestDB(t)
+		defer database.Close()
+
+		const expectedHistoryID = "01936f2e-1b2c-7a3d-8e4f-112233445566"
+
+		txManager := NewDBTransactionManager(database)
+		parcelRepo := &capturingParcelRepo{mockParcelRepo: newMockParcelRepo()}
+		historyRepo := &capturingStatusHistoryRepo{mockStatusHistoryRepo: newMockStatusHistoryRepo()}
+		outbox := &capturingOutboxWriter{}
+		idGen := &countingIDGen{inner: &mockIDGen{ids: []string{" " + expectedHistoryID + " "}}}
+
+		parcel := createTestParcel(t, now, domain.StatusCreated, 0, 1)
+		parcelRepo.parcels[parcel.ID] = parcel
+
+		uc, err := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, idGen, fixedClock{now: now})
+		if err != nil {
+			t.Fatalf("failed to construct use case: %v", err)
+		}
+
+		res, err := uc.Execute(context.Background(), TransitionParcelStatusCommand{
+			ParcelID:      parcel.ID,
+			TargetStatus:  domain.StatusAssigned,
+			ActorID:       strPtr("usr-disp-001"),
+			ActorType:     domain.ActorTypeUser,
+			CorrelationID: "corr-correlation-001",
+		})
+		if err != nil {
+			t.Fatalf("unexpected transition error: %v", err)
+		}
+
+		if idGen.calls != 1 {
+			t.Errorf("expected exactly 1 status history ID generation call, got %d", idGen.calls)
+		}
+		if res.StatusHistory.ID != expectedHistoryID {
+			t.Errorf("expected returned status history ID %q, got %q", expectedHistoryID, res.StatusHistory.ID)
+		}
+		if len(historyRepo.entries) != 1 || historyRepo.entries[0].ID != expectedHistoryID {
+			t.Fatalf("expected 1 persisted history row with ID %q, got %+v", expectedHistoryID, historyRepo.entries)
+		}
+		if len(outbox.envelopes) != 1 {
+			t.Fatalf("expected 1 outbox envelope, got %d", len(outbox.envelopes))
+		}
+
+		env := outbox.envelopes[0]
+		if !events.IsValidUUID(env.GetEventID()) {
+			t.Errorf("expected valid UUID envelope event_id, got %q", env.GetEventID())
+		}
+		if env.GetEventID() == expectedHistoryID {
+			t.Errorf("expected envelope event_id to remain independent from status_history_id %q", expectedHistoryID)
+		}
+		if env.GetSchemaVersion() != "1.0.0" {
+			t.Errorf("expected schema_version 1.0.0, got %q", env.GetSchemaVersion())
+		}
+
+		payloadBytes, err := env.SerializePayload()
+		if err != nil {
+			t.Fatalf("failed to serialize payload: %v", err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(payloadBytes, &raw); err != nil {
+			t.Fatalf("failed to unmarshal payload JSON: %v", err)
+		}
+		if raw["status_history_id"] != expectedHistoryID {
+			t.Errorf("expected serialized payload.status_history_id=%q, got %v", expectedHistoryID, raw["status_history_id"])
+		}
+
+		var parsed ParcelStatusChangedPayload
+		if err := json.Unmarshal(payloadBytes, &parsed); err != nil {
+			t.Fatalf("failed to unmarshal ParcelStatusChangedPayload: %v", err)
+		}
+		if parsed.StatusHistoryID != expectedHistoryID {
+			t.Errorf("expected ParcelStatusChangedPayload.StatusHistoryID=%q, got %q", expectedHistoryID, parsed.StatusHistoryID)
+		}
+
+		// Verify parcel update, history save, and outbox write all shared the exact same *sql.Tx
+		if len(parcelRepo.updateQueriers) != 1 || len(historyRepo.saveQueriers) != 1 || len(outbox.txs) != 1 {
+			t.Fatalf("expected 1 call each for update/history/outbox, got %d/%d/%d",
+				len(parcelRepo.updateQueriers), len(historyRepo.saveQueriers), len(outbox.txs))
+		}
+		tx := outbox.txs[0]
+		if tx == nil {
+			t.Fatal("expected non-nil transaction in outbox write")
+		}
+		if parcelRepo.updateQueriers[0] != tx {
+			t.Error("expected parcel UpdateStatus and OutboxWriter.Write to share the same *sql.Tx")
+		}
+		if historyRepo.saveQueriers[0] != tx {
+			t.Error("expected statusHistory Save and OutboxWriter.Write to share the same *sql.Tx")
+		}
+	})
+
+	t.Run("default UUIDv7 generator creates valid correlated UUIDv7 when idGen is nil", func(t *testing.T) {
+		database := getTestDB(t)
+		defer database.Close()
+
+		txManager := NewDBTransactionManager(database)
+		parcelRepo := newMockParcelRepo()
+		historyRepo := newMockStatusHistoryRepo()
+		outbox := eventstest.NewInMemoryWriter()
+
+		parcel := createTestParcel(t, now, domain.StatusAssigned, 0, 2)
+		parcelRepo.parcels[parcel.ID] = parcel
+
+		uc, err := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, nil, fixedClock{now: now})
+		if err != nil {
+			t.Fatalf("failed to construct use case with default idGen: %v", err)
+		}
+
+		res, err := uc.Execute(context.Background(), TransitionParcelStatusCommand{
+			ParcelID:     parcel.ID,
+			TargetStatus: domain.StatusPickedUp,
+			ActorID:      strPtr("usr-courier-001"),
+			ActorType:    domain.ActorTypeUser,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !events.IsValidUUID(res.StatusHistory.ID) || res.StatusHistory.ID[14] != '7' {
+			t.Errorf("expected RFC 9562 UUIDv7 status history ID, got %q", res.StatusHistory.ID)
+		}
+		if len(historyRepo.entries) != 1 || historyRepo.entries[0].ID != res.StatusHistory.ID {
+			t.Fatalf("persisted status history ID mismatch: %+v", historyRepo.entries)
+		}
+		env := outbox.Events()[0]
+		payloadBytes, err := env.SerializePayload()
+		if err != nil {
+			t.Fatalf("failed to serialize payload: %v", err)
+		}
+		var parsed ParcelStatusChangedPayload
+		if err := json.Unmarshal(payloadBytes, &parsed); err != nil {
+			t.Fatalf("failed to unmarshal payload: %v", err)
+		}
+		if parsed.StatusHistoryID != res.StatusHistory.ID {
+			t.Errorf("expected correlated status_history_id %q, got %q", res.StatusHistory.ID, parsed.StatusHistoryID)
+		}
+		if !events.IsValidUUID(env.GetEventID()) || env.GetEventID() == parsed.StatusHistoryID {
+			t.Errorf("expected distinct valid event_id (%q) != status_history_id (%q)", env.GetEventID(), parsed.StatusHistoryID)
+		}
+	})
+}
+
+func TestTransitionParcelStatus_InvalidGeneratedHistoryID(t *testing.T) {
+	now := time.Date(2026, 11, 10, 14, 0, 0, 0, time.UTC)
+	genErr := errors.New("entropy source unavailable")
+
+	tests := []struct {
+		name      string
+		idGen     IDGenerator
+		wantErrIs error
+	}{
+		{
+			name:      "generator error aborts transition before persistence",
+			idGen:     &failingIDGen{err: genErr},
+			wantErrIs: genErr,
+		},
+		{
+			name:      "blank generated id rejected",
+			idGen:     &failingIDGen{id: "   "},
+			wantErrIs: domain.ErrInvalidStatusHistory,
+		},
+		{
+			name:      "non-UUID generated id rejected",
+			idGen:     &failingIDGen{id: "hist-not-a-uuid"},
+			wantErrIs: domain.ErrInvalidStatusHistory,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			database := getTestDB(t)
+			defer database.Close()
+
+			txManager := NewDBTransactionManager(database)
+			parcelRepo := newMockParcelRepo()
+			historyRepo := newMockStatusHistoryRepo()
+			outbox := eventstest.NewInMemoryWriter()
+
+			parcel := createTestParcel(t, now, domain.StatusCreated, 0, 1)
+			parcelRepo.parcels[parcel.ID] = parcel
+
+			uc, err := NewTransitionParcelStatusUseCase(txManager, parcelRepo, historyRepo, outbox, tc.idGen, fixedClock{now: now})
+			if err != nil {
+				t.Fatalf("failed to construct use case: %v", err)
+			}
+
+			_, err = uc.Execute(context.Background(), TransitionParcelStatusCommand{
+				ParcelID:     parcel.ID,
+				TargetStatus: domain.StatusAssigned,
+				ActorID:      strPtr("usr-disp-001"),
+				ActorType:    domain.ActorTypeUser,
+			})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !errors.Is(err, tc.wantErrIs) {
+				t.Fatalf("expected error wrapping %v, got %v", tc.wantErrIs, err)
+			}
+			if parcelRepo.updateCalled || historyRepo.saveCalled || outbox.Count() > 0 {
+				t.Error("expected zero parcel/history/outbox writes when history ID generation is invalid")
+			}
+			testTxMu.Lock()
+			rolledBack := lastTxRolledBack
+			testTxMu.Unlock()
+			if !rolledBack {
+				t.Error("expected transaction rollback on invalid generated history ID")
+			}
+		})
+	}
 }
