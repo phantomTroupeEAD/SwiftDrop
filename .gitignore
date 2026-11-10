@@ -47,8 +47,11 @@ desktop.ini
 .vscode/
 *.swp
 *~
+.logs/
+*.log
 
 #graphify
+graphify-out
 graphify-out/
 
 # Kubernetes real secrets (never commit — only secrets.example.yaml is tracked)
