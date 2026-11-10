@@ -84,6 +84,10 @@ func newTestUseCase(
 	)
 }
 
+func ptrStr(s string) *string {
+	return &s
+}
+
 // validTestTariff creates a valid tariff for testing.
 func validTestTariff() domain.Tariff {
 	now := time.Date(
@@ -97,8 +101,8 @@ func validTestTariff() domain.Tariff {
 
 	return domain.Tariff{
 		ID:                "tariff-001",
-		OriginZoneID:      "MATARA",
-		DestinationZoneID: "COLOMBO",
+		OriginZoneID:      "ZONE_MATARA_01",
+		DestinationZoneID: "ZONE_COLOMBO_01",
 		BaseFee:           baseFee,
 		PerKgRate:         perKgRate,
 		EffectiveFrom:     now,
@@ -110,13 +114,14 @@ func validTestTariff() domain.Tariff {
 // validQuoteCommand creates valid parcel input.
 func validQuoteCommand() GenerateQuoteCommand {
 	return GenerateQuoteCommand{
-		OriginZoneID:      "MATARA",
-		DestinationZoneID: "COLOMBO",
+		OriginZoneID:      "ZONE_MATARA_01",
+		DestinationZoneID: "ZONE_COLOMBO_01",
 		ActualWeightKg:    2.5,
 		LengthCm:          10,
 		WidthCm:           10,
 		HeightCm:          10,
 		ServiceLevel:      domain.ServiceLevelStandard,
+		RequesterID:       ptrStr("018f4a7c-1005-7000-8000-000000000005"),
 	}
 }
 
@@ -161,12 +166,20 @@ func TestGenerateQuoteUseCase_Success(t *testing.T) {
 		t.Errorf("expected service level %s, got %s", domain.ServiceLevelStandard, quote.ServiceLevel)
 	}
 
-	if tariffRepo.originZoneID != "MATARA" {
-		t.Errorf("expected origin zone MATARA, got %s", tariffRepo.originZoneID)
+	if quote.RequesterID == nil || *quote.RequesterID != "018f4a7c-1005-7000-8000-000000000005" {
+		t.Errorf("expected requester ID preserved, got %v", quote.RequesterID)
 	}
 
-	if tariffRepo.destinationZoneID != "COLOMBO" {
-		t.Errorf("expected destination zone COLOMBO, got %s", tariffRepo.destinationZoneID)
+	if quote.MerchantID != nil {
+		t.Errorf("expected nil merchant ID, got %v", quote.MerchantID)
+	}
+
+	if tariffRepo.originZoneID != "ZONE_MATARA_01" {
+		t.Errorf("expected origin zone ZONE_MATARA_01, got %s", tariffRepo.originZoneID)
+	}
+
+	if tariffRepo.destinationZoneID != "ZONE_COLOMBO_01" {
+		t.Errorf("expected destination zone ZONE_COLOMBO_01, got %s", tariffRepo.destinationZoneID)
 	}
 
 	if quote.ChargeableWeightKg != 2.5 {
@@ -274,12 +287,37 @@ func TestGenerateQuoteUseCase_InvalidZone(t *testing.T) {
 		{
 			name:              "empty origin zone",
 			originZoneID:      "   ",
-			destinationZoneID: "COLOMBO",
+			destinationZoneID: "ZONE_COLOMBO_01",
 		},
 		{
 			name:              "empty destination zone",
-			originZoneID:      "MATARA",
+			originZoneID:      "ZONE_MATARA_01",
 			destinationZoneID: "   ",
+		},
+		{
+			name:              "invalid origin zone format (missing ZONE_ prefix)",
+			originZoneID:      "MATARA",
+			destinationZoneID: "ZONE_COLOMBO_01",
+		},
+		{
+			name:              "invalid destination zone format (missing ZONE_ prefix)",
+			originZoneID:      "ZONE_MATARA_01",
+			destinationZoneID: "COLOMBO",
+		},
+		{
+			name:              "invalid origin zone format (hyphenated legacy)",
+			originZoneID:      "ZONE-WESTERN-01",
+			destinationZoneID: "ZONE_COLOMBO_01",
+		},
+		{
+			name:              "invalid destination zone format (lowercase)",
+			originZoneID:      "ZONE_MATARA_01",
+			destinationZoneID: "zone_colombo_01",
+		},
+		{
+			name:              "invalid destination zone format (too short)",
+			originZoneID:      "ZONE_MATARA_01",
+			destinationZoneID: "ZONE_A",
 		},
 	}
 
@@ -298,6 +336,10 @@ func TestGenerateQuoteUseCase_InvalidZone(t *testing.T) {
 
 			_, err := useCase.Execute(context.Background(), cmd)
 
+			if !errors.Is(err, domain.ErrInvalidZoneID) {
+				t.Errorf("expected ErrInvalidZoneID, got %v", err)
+			}
+
 			if !errors.Is(err, domain.ErrInvalidTariff) {
 				t.Errorf("expected ErrInvalidTariff, got %v", err)
 			}
@@ -308,6 +350,144 @@ func TestGenerateQuoteUseCase_InvalidZone(t *testing.T) {
 
 			if quoteRepo.called {
 				t.Error("quote should not be saved for an invalid zone")
+			}
+		})
+	}
+}
+
+func TestGenerateQuoteUseCase_OwnershipModes(t *testing.T) {
+	tests := []struct {
+		name               string
+		requesterID        *string
+		merchantID         *string
+		expectedRequester  *string
+		expectedMerchantID *string
+	}{
+		{
+			name:               "customer-only quote generation",
+			requesterID:        ptrStr("  usr-cust-001  "),
+			merchantID:         nil,
+			expectedRequester:  ptrStr("usr-cust-001"),
+			expectedMerchantID: nil,
+		},
+		{
+			name:               "merchant-only quote generation",
+			requesterID:        nil,
+			merchantID:         ptrStr("  mrc-merch-001  "),
+			expectedRequester:  nil,
+			expectedMerchantID: ptrStr("mrc-merch-001"),
+		},
+		{
+			name:               "both requester and merchant IDs supplied",
+			requesterID:        ptrStr(" usr-cust-001 "),
+			merchantID:         ptrStr(" mrc-merch-001 "),
+			expectedRequester:  ptrStr("usr-cust-001"),
+			expectedMerchantID: ptrStr("mrc-merch-001"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tariffRepo := &fakeTariffRepository{
+				tariff: validTestTariff(),
+			}
+			quoteRepo := &fakeQuoteRepository{}
+
+			useCase := newTestUseCase(tariffRepo, quoteRepo)
+
+			cmd := validQuoteCommand()
+			cmd.RequesterID = tc.requesterID
+			cmd.MerchantID = tc.merchantID
+
+			quote, err := useCase.Execute(context.Background(), cmd)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !quoteRepo.called {
+				t.Fatal("expected quote repository to be called")
+			}
+
+			if (quote.RequesterID == nil) != (tc.expectedRequester == nil) ||
+				(quote.RequesterID != nil && *quote.RequesterID != *tc.expectedRequester) {
+				t.Errorf("expected requester %v, got %v", tc.expectedRequester, quote.RequesterID)
+			}
+
+			if (quote.MerchantID == nil) != (tc.expectedMerchantID == nil) ||
+				(quote.MerchantID != nil && *quote.MerchantID != *tc.expectedMerchantID) {
+				t.Errorf("expected merchant %v, got %v", tc.expectedMerchantID, quote.MerchantID)
+			}
+
+			if (quoteRepo.savedQuote.RequesterID == nil) != (tc.expectedRequester == nil) ||
+				(quoteRepo.savedQuote.RequesterID != nil && *quoteRepo.savedQuote.RequesterID != *tc.expectedRequester) {
+				t.Errorf("saved quote requester mismatch: expected %v, got %v", tc.expectedRequester, quoteRepo.savedQuote.RequesterID)
+			}
+
+			if (quoteRepo.savedQuote.MerchantID == nil) != (tc.expectedMerchantID == nil) ||
+				(quoteRepo.savedQuote.MerchantID != nil && *quoteRepo.savedQuote.MerchantID != *tc.expectedMerchantID) {
+				t.Errorf("saved quote merchant mismatch: expected %v, got %v", tc.expectedMerchantID, quoteRepo.savedQuote.MerchantID)
+			}
+		})
+	}
+}
+
+func TestGenerateQuoteUseCase_InvalidOwnership(t *testing.T) {
+	tests := []struct {
+		name        string
+		requesterID *string
+		merchantID  *string
+	}{
+		{
+			name:        "both owner IDs nil",
+			requesterID: nil,
+			merchantID:  nil,
+		},
+		{
+			name:        "empty requester ID with valid merchant ID",
+			requesterID: ptrStr(""),
+			merchantID:  ptrStr("mrc-001"),
+		},
+		{
+			name:        "whitespace-only requester ID with valid merchant ID",
+			requesterID: ptrStr("   \t"),
+			merchantID:  ptrStr("mrc-001"),
+		},
+		{
+			name:        "empty merchant ID with valid requester ID",
+			requesterID: ptrStr("usr-001"),
+			merchantID:  ptrStr(""),
+		},
+		{
+			name:        "whitespace-only merchant ID with valid requester ID",
+			requesterID: ptrStr("usr-001"),
+			merchantID:  ptrStr("   "),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tariffRepo := &fakeTariffRepository{
+				tariff: validTestTariff(),
+			}
+			quoteRepo := &fakeQuoteRepository{}
+
+			useCase := newTestUseCase(tariffRepo, quoteRepo)
+
+			cmd := validQuoteCommand()
+			cmd.RequesterID = tc.requesterID
+			cmd.MerchantID = tc.merchantID
+
+			_, err := useCase.Execute(context.Background(), cmd)
+			if !errors.Is(err, domain.ErrInvalidQuote) {
+				t.Fatalf("expected ErrInvalidQuote, got %v", err)
+			}
+
+			if tariffRepo.called {
+				t.Error("tariff repository should not be called for invalid ownership")
+			}
+
+			if quoteRepo.called {
+				t.Error("quote repository should not be called for invalid ownership")
 			}
 		})
 	}
