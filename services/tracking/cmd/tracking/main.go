@@ -8,17 +8,40 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/swiftdrop/tracking/internal/auth"
 	"github.com/swiftdrop/tracking/internal/config"
+	"github.com/swiftdrop/tracking/internal/domain"
+	"github.com/swiftdrop/tracking/internal/dto"
+	"github.com/swiftdrop/tracking/internal/events"
 	"github.com/swiftdrop/tracking/internal/health"
 	trackinghttp "github.com/swiftdrop/tracking/internal/http"
 	"github.com/swiftdrop/tracking/internal/logging"
 	"github.com/swiftdrop/tracking/internal/repository"
 	"github.com/swiftdrop/tracking/internal/service"
 )
+
+type localHubPublisher struct {
+	hub *events.EventHub
+}
+
+func (l *localHubPublisher) Publish(_ context.Context, ev events.RedisTrackingEvent) error {
+	if l.hub == nil {
+		return nil
+	}
+	l.hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  ev.TrackingNumber,
+		Status:          ev.Status,
+		Description:     domain.SafeStatusDescription(ev.Status),
+		Timestamp:       ev.OccurredAt.UTC(),
+		StatusHistoryID: ev.StatusHistoryID,
+	})
+	return nil
+}
 
 func main() {
 	// 1. Load and validate configuration
@@ -30,24 +53,24 @@ func main() {
 	// 2. Initialize structured logger
 	logger := logging.NewLogger(cfg.LogLevel)
 
-	// 3. Log service startup metadata (with credentials masked)
+	// 3. Log service startup metadata (with all connection credentials masked)
 	dbURL := "(unconfigured)"
 	if cfg.DatabaseURL != "" {
 		dbURL = logging.MaskURL(cfg.DatabaseURL)
 	}
 
-	redisURL := "(unconfigured - Phase 3/4)"
+	redisURL := "(unconfigured)"
 	if cfg.RedisURL != "" {
 		redisURL = logging.MaskURL(cfg.RedisURL)
 	}
 
-	rabbitmqURL := "(unconfigured - Phase 4)"
+	rabbitmqURL := "(unconfigured)"
 	if cfg.RabbitMQURL != "" {
 		rabbitmqURL = logging.MaskURL(cfg.RabbitMQURL)
 	}
 
 	fmt.Println("==================================================================")
-	fmt.Println("   SwiftDrop Tracking API — Phase 3: Authenticated Tracking REST")
+	fmt.Println("   SwiftDrop Tracking API — Phase 5: Production Event Pipeline")
 	fmt.Printf("   Service Address: %s | Environment: %s\n", cfg.HTTPAddr, cfg.AppEnv)
 	fmt.Println("==================================================================")
 
@@ -61,6 +84,8 @@ func main() {
 		"database_url", dbURL,
 		"redis_url", redisURL,
 		"rabbitmq_url", rabbitmqURL,
+		"rabbitmq_queue", cfg.RabbitMQQueue,
+		"redis_channel", cfg.RedisChannel,
 		"db_max_open_conns", cfg.DBMaxOpenConns,
 		"db_max_idle_conns", cfg.DBMaxIdleConns,
 		"db_query_timeout", cfg.DBQueryTimeout.String(),
@@ -93,7 +118,6 @@ func main() {
 			trackingRepo = repo
 
 			// Register truthful readiness probe check for PostgreSQL
-			// Task 5: CheckReadiness verifies connectivity, table existence, and SELECT permissions.
 			healthHandler.AddCheck("postgres", func(ctx context.Context) error {
 				return repo.CheckReadiness(ctx)
 			})
@@ -106,39 +130,116 @@ func main() {
 		})
 	}
 
-	// 6. Initialize application service and HTTP handlers
+	// 6. Initialize in-memory EventHub
+	eventHub := events.NewEventHub(events.WithLogger(logger))
+
+	// 7. Initialize Redis Pub/Sub (Phase 5: horizontal cross-pod fan-out)
+	var (
+		redisPubSub *events.RedisPubSub
+		publisher   events.TrackingEventPublisher
+	)
+
+	if strings.TrimSpace(cfg.RedisURL) != "" {
+		opt, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			logger.Error("Failed to parse REDIS_URL", "error", err)
+			healthHandler.AddCheck("redis", func(ctx context.Context) error {
+				return fmt.Errorf("malformed REDIS_URL: %w", err)
+			})
+		} else {
+			opt.DialTimeout = cfg.RedisDialTimeout
+			opt.ReadTimeout = cfg.RedisReadTimeout
+			opt.WriteTimeout = cfg.RedisWriteTimeout
+
+			redisClient := redis.NewClient(opt)
+			redisPubSub = events.NewRedisPubSub(redisClient, cfg.RedisChannel, eventHub, logger)
+			publisher = redisPubSub
+
+			// Register truthful readiness probe check for Redis
+			healthHandler.AddCheck("redis", func(ctx context.Context) error {
+				return redisPubSub.Ping(ctx)
+			})
+
+			// Launch background Redis subscription loop
+			_ = redisPubSub.StartListening(context.Background())
+			logger.Info("Redis Pub/Sub distributor initialized", "channel", cfg.RedisChannel)
+		}
+	} else {
+		publisher = &localHubPublisher{hub: eventHub}
+		if cfg.IsProduction() {
+			logger.Warn("REDIS_URL is unconfigured in production; multi-pod fan-out disabled")
+			healthHandler.AddCheck("redis", func(ctx context.Context) error {
+				return errors.New("redis unconfigured in production (REDIS_URL not set)")
+			})
+		} else {
+			logger.Info("REDIS_URL unconfigured; running in single-replica local hub mode")
+		}
+	}
+
+	// 8. Initialize RabbitMQ Consumer (Phase 5: production event ingestion)
+	var rabbitConsumer *events.RabbitMQConsumer
+
+	if strings.TrimSpace(cfg.RabbitMQURL) != "" {
+		rabbitConsumer = events.NewRabbitMQConsumer(
+			cfg.RabbitMQURL,
+			cfg.RabbitMQQueue,
+			cfg.RabbitMQPrefetch,
+			cfg.RabbitMQReconnectDelay,
+			trackingRepo,
+			publisher,
+			logger,
+		)
+
+		// Register truthful readiness probe check for RabbitMQ
+		healthHandler.AddCheck("rabbitmq", func(ctx context.Context) error {
+			return rabbitConsumer.Ping(ctx)
+		})
+
+		// Launch background RabbitMQ consumption loop
+		_ = rabbitConsumer.Start(context.Background())
+		logger.Info("RabbitMQ event consumer initialized",
+			"queue", cfg.RabbitMQQueue,
+			"prefetch", cfg.RabbitMQPrefetch,
+		)
+	} else {
+		if cfg.IsProduction() {
+			logger.Warn("RABBITMQ_URL is unconfigured in production; real-time event pipeline disabled")
+			healthHandler.AddCheck("rabbitmq", func(ctx context.Context) error {
+				return errors.New("rabbitmq unconfigured in production (RABBITMQ_URL not set)")
+			})
+		} else {
+			logger.Info("RABBITMQ_URL unconfigured; consumer idle (awaiting configuration)")
+		}
+	}
+
+	// 9. Initialize application service and HTTP handlers
 	publicTrackingSvc := service.NewPublicTrackingService(trackingRepo)
 	publicTrackingHandler := trackinghttp.NewPublicTrackingHandler(publicTrackingSvc, logger)
 
-	// Phase 4: Server-Sent Events (SSE) Streaming Infrastructure
-	// Per Phase 4 contract rules:
-	// - No mock parcel data or fake event publishers in the production runtime.
-	// - The service must not claim an active, functional parcel-update stream when the real event source is unavailable.
-	// - If the event source is not wired yet, choose an explicit, safe unavailable response (HTTP 503 DEPENDENCY_UNAVAILABLE).
-	// Real-time event broker integration (Redis Pub/Sub / RabbitMQ) is deferred to Phase 5.
+	// Phase 5: Wire EventHub into SSEHandler for real-time streaming
 	sseHandler := trackinghttp.NewSSEHandler(
 		publicTrackingSvc,
-		nil, // eventSource is nil until Phase 5 wires Redis/RabbitMQ
+		eventHub,
 		time.Duration(cfg.SSEHeartbeatSeconds)*time.Second,
 		logger,
 	)
 
-	// Phase 3: Authenticated Tracking REST Endpoint
+	// Authenticated Tracking REST Endpoint (Phase 3)
 	jwtVerifier := auth.NewJWTVerifier(cfg.JWTSecret, cfg.JWTIssuer)
 	authTrackingSvc := service.NewAuthenticatedTrackingService(trackingRepo)
 	authTrackingHandler := trackinghttp.NewAuthenticatedTrackingHandler(authTrackingSvc, jwtVerifier, logger)
 
-	// 7. Construct HTTP router with middleware pipeline
+	// 10. Construct HTTP router with middleware pipeline
 	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler, authTrackingHandler)
 
-	// 8. Initialize HTTP server
+	// 11. Initialize HTTP server
 	srv := trackinghttp.NewServer(cfg, router, logger)
 
-	// 9. Setup graceful shutdown listener for SIGINT and SIGTERM
+	// 12. Setup graceful shutdown listener for SIGINT and SIGTERM
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// 10. Start HTTP listener
+	// 13. Start HTTP listener
 	if err := srv.Start(); err != nil {
 		logger.Error("Failed to start HTTP server", "error", err)
 		os.Exit(1)
@@ -146,7 +247,7 @@ func main() {
 
 	logger.Info("Tracking API listening for incoming traffic", "addr", cfg.HTTPAddr)
 
-	// 11. Block until termination signal
+	// 14. Block until termination signal
 	sig := <-stop
 	logger.Info("Shutdown signal received, initiating graceful teardown", "signal", sig.String())
 
@@ -159,7 +260,28 @@ func main() {
 		logger.Info("HTTP server gracefully terminated")
 	}
 
-	// 12. Close database connection pool
+	// 15. Gracefully terminate RabbitMQ consumer and Redis Pub/Sub
+	if rabbitConsumer != nil {
+		if err := rabbitConsumer.Close(); err != nil {
+			logger.Error("Error closing RabbitMQ consumer", "error", err)
+		} else {
+			logger.Info("RabbitMQ consumer closed cleanly")
+		}
+	}
+
+	if redisPubSub != nil {
+		if err := redisPubSub.Close(); err != nil {
+			logger.Error("Error closing Redis Pub/Sub distributor", "error", err)
+		} else {
+			logger.Info("Redis Pub/Sub distributor closed cleanly")
+		}
+	}
+
+	if err := eventHub.Close(); err != nil {
+		logger.Error("Error closing EventHub", "error", err)
+	}
+
+	// 16. Close database connection pool
 	if trackingRepo != nil {
 		if err := trackingRepo.Close(); err != nil {
 			logger.Error("Error closing PostgreSQL connection pool", "error", err)
