@@ -34,8 +34,8 @@ func TestPostgresTariffRepository_FindApplicable_Success(t *testing.T) {
 	data := [][]driver.Value{
 		{
 			"rule-001",
-			"ZONE-WESTERN-01",
-			"ZONE-CENTRAL-01",
+			"ZONE_WESTERN_01",
+			"ZONE_CENTRAL_01",
 			int64(35000),
 			int64(8000),
 			effectiveFrom,
@@ -56,8 +56,8 @@ func TestPostgresTariffRepository_FindApplicable_Success(t *testing.T) {
 
 	tariff, err := repo.FindApplicable(
 		context.Background(),
-		"ZONE-WESTERN-01",
-		"ZONE-CENTRAL-01",
+		"ZONE_WESTERN_01",
+		"ZONE_CENTRAL_01",
 		evalTime,
 	)
 	if err != nil {
@@ -67,11 +67,11 @@ func TestPostgresTariffRepository_FindApplicable_Success(t *testing.T) {
 	if tariff.ID != "rule-001" {
 		t.Errorf("expected ID rule-001, got %s", tariff.ID)
 	}
-	if tariff.OriginZoneID != "ZONE-WESTERN-01" {
-		t.Errorf("expected origin zone ZONE-WESTERN-01, got %s", tariff.OriginZoneID)
+	if tariff.OriginZoneID != "ZONE_WESTERN_01" {
+		t.Errorf("expected origin zone ZONE_WESTERN_01, got %s", tariff.OriginZoneID)
 	}
-	if tariff.DestinationZoneID != "ZONE-CENTRAL-01" {
-		t.Errorf("expected destination zone ZONE-CENTRAL-01, got %s", tariff.DestinationZoneID)
+	if tariff.DestinationZoneID != "ZONE_CENTRAL_01" {
+		t.Errorf("expected destination zone ZONE_CENTRAL_01, got %s", tariff.DestinationZoneID)
 	}
 	if tariff.BaseFee.Amount != 35000 {
 		t.Errorf("expected base fee 35000, got %d", tariff.BaseFee.Amount)
@@ -98,7 +98,7 @@ func TestPostgresTariffRepository_FindApplicable_OptionAQueryContract(t *testing
 	}
 	data := [][]driver.Value{
 		{
-			"rule-001", "ZONE-A", "ZONE-B", int64(30000), int64(5000),
+			"rule-001", "ZONE_COLOMBO_01", "ZONE_GAMPAHA_01", int64(30000), int64(5000),
 			evalTime.Add(-time.Hour), evalTime.Add(time.Hour), int64(1), true, evalTime, evalTime,
 		},
 	}
@@ -111,7 +111,7 @@ func TestPostgresTariffRepository_FindApplicable_OptionAQueryContract(t *testing
 	defer database.Close()
 
 	repo := NewPostgresTariffRepository(database)
-	_, err := repo.FindApplicable(context.Background(), "ZONE-A", "ZONE-B", evalTime)
+	_, err := repo.FindApplicable(context.Background(), "ZONE_COLOMBO_01", "ZONE_GAMPAHA_01", evalTime)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,11 +147,11 @@ func TestPostgresTariffRepository_FindApplicable_OptionAQueryContract(t *testing
 	if len(capturedArgs) != 3 {
 		t.Fatalf("expected 3 arguments, got %d", len(capturedArgs))
 	}
-	if capturedArgs[0].Value != "ZONE-A" {
-		t.Errorf("expected arg 1 to be ZONE-A, got %v", capturedArgs[0].Value)
+	if capturedArgs[0].Value != "ZONE_COLOMBO_01" {
+		t.Errorf("expected arg 1 to be ZONE_COLOMBO_01, got %v", capturedArgs[0].Value)
 	}
-	if capturedArgs[1].Value != "ZONE-B" {
-		t.Errorf("expected arg 2 to be ZONE-B, got %v", capturedArgs[1].Value)
+	if capturedArgs[1].Value != "ZONE_GAMPAHA_01" {
+		t.Errorf("expected arg 2 to be ZONE_GAMPAHA_01, got %v", capturedArgs[1].Value)
 	}
 	if capturedArgs[2].Value != evalTime {
 		t.Errorf("expected arg 3 to be evalTime, got %v", capturedArgs[2].Value)
@@ -174,8 +174,8 @@ func TestPostgresTariffRepository_FindApplicable_NotFound(t *testing.T) {
 
 	_, err := repo.FindApplicable(
 		context.Background(),
-		"ZONE-WESTERN-01",
-		"ZONE-CENTRAL-01",
+		"ZONE_WESTERN_01",
+		"ZONE_CENTRAL_01",
 		evalTime,
 	)
 	if !errors.Is(err, domain.ErrTariffNotFound) {
@@ -196,8 +196,8 @@ func TestPostgresTariffRepository_FindApplicable_DatabaseError(t *testing.T) {
 
 	_, err := repo.FindApplicable(
 		context.Background(),
-		"ZONE-WESTERN-01",
-		"ZONE-CENTRAL-01",
+		"ZONE_WESTERN_01",
+		"ZONE_CENTRAL_01",
 		evalTime,
 	)
 	if err == nil || !errors.Is(err, dbErr) {
@@ -210,26 +210,26 @@ func TestPostgresTariffRepository_FindApplicable_InputValidation(t *testing.T) {
 	repo := NewPostgresTariffRepository(&sql.DB{})
 
 	// Empty origin zone
-	_, err := repo.FindApplicable(context.Background(), "", "ZONE-CENTRAL-01", evalTime)
+	_, err := repo.FindApplicable(context.Background(), "", "ZONE_CENTRAL_01", evalTime)
 	if !errors.Is(err, domain.ErrInvalidTariff) {
 		t.Errorf("expected ErrInvalidTariff for empty origin zone, got: %v", err)
 	}
 
 	// Empty destination zone
-	_, err = repo.FindApplicable(context.Background(), "ZONE-WESTERN-01", "   ", evalTime)
+	_, err = repo.FindApplicable(context.Background(), "ZONE_WESTERN_01", "   ", evalTime)
 	if !errors.Is(err, domain.ErrInvalidTariff) {
 		t.Errorf("expected ErrInvalidTariff for empty destination zone, got: %v", err)
 	}
 
 	// Zero timestamp
-	_, err = repo.FindApplicable(context.Background(), "ZONE-WESTERN-01", "ZONE-CENTRAL-01", time.Time{})
+	_, err = repo.FindApplicable(context.Background(), "ZONE_WESTERN_01", "ZONE_CENTRAL_01", time.Time{})
 	if !errors.Is(err, domain.ErrInvalidTariff) {
 		t.Errorf("expected ErrInvalidTariff for zero evaluation timestamp, got: %v", err)
 	}
 
 	// Nil querier
 	nilRepo := NewPostgresTariffRepository(nil)
-	_, err = nilRepo.FindApplicable(context.Background(), "ZONE-WESTERN-01", "ZONE-CENTRAL-01", evalTime)
+	_, err = nilRepo.FindApplicable(context.Background(), "ZONE_WESTERN_01", "ZONE_CENTRAL_01", evalTime)
 	if err == nil {
 		t.Error("expected error for nil querier, got nil")
 	}
