@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     SwiftDrop All-in-One Live Stack Launcher
 .DESCRIPTION
