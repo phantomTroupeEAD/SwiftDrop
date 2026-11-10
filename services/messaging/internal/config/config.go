@@ -43,8 +43,35 @@ type Config struct {
 	LogLevel                   string
 }
 
+// loadDotEnv attempts to read key-value pairs from local .env files if not already set in the environment.
+func loadDotEnv() {
+	candidates := []string{".env", "../.env", "../../.env"}
+	for _, path := range candidates {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					val := strings.TrimSpace(parts[1])
+					val = strings.Trim(val, `"'`)
+					if os.Getenv(key) == "" {
+						_ = os.Setenv(key, val)
+					}
+				}
+			}
+			return
+		}
+	}
+}
+
 // LoadConfig parses environment variables into Config with fail-fast validation.
 func LoadConfig(defaultProbePort int) (*Config, error) {
+	loadDotEnv()
 	appEnv := strings.ToLower(strings.TrimSpace(getEnv("APP_ENV", "local")))
 	if appEnv == "" {
 		appEnv = "local"
