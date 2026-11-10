@@ -46,20 +46,35 @@ deploy/
 │   └── traefik/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
 │       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
-└── kubernetes/                          # Kubernetes resource manifests (Member 9)
-    │                                    # Target layout (A8). Today the files are still flat:
-    │                                    # postgres-statefulset.yml, rabbitmq-statefulset.yml,
-    │                                    # cronjob-reconciliation.yml, autoscaling/*.yml (moved in one M9 PR)
+└── kubernetes/                          # Kubernetes resource manifests (Member 9 per Agreement A8)
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
-    ├── postgres/                        # PostgreSQL 16 StatefulSet, Service, PVC
-    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet, Service, PVC
-    ├── redis/                           # Ephemeral Redis StatefulSet / Deployment
-    ├── core-api/                        # Deployment, Service, ConfigMap, migrate-job.yaml
-    ├── tracking-api/                    # Deployment, Service, hpa.yaml
-    ├── messaging/                       # Relay Deployment, Worker Deployment, keda-scaledobject.yaml
-    ├── ai-assistant/                    # Deployment, Service, ConfigMap
-    ├── web/                             # Deployment, Service (Port 3000)
-    └── monitoring/                      # Prometheus & Grafana manifests
+    ├── secrets.example.yaml             # Template for all production cluster secrets
+    ├── postgres/                        # PostgreSQL 16 StatefulSet + headless Service + role bootstrap Job
+    │   ├── statefulset.yaml
+    │   └── bootstrap-job.yaml
+    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet + headless Service + 5Gi PVC
+    │   └── statefulset.yaml
+    ├── redis/                           # Ephemeral Redis Deployment & Service (port 6379)
+    │   └── deployment.yaml
+    ├── core-api/                        # Deployment (2-4 replicas), ClusterIP Service, HPA, migrate Job
+    │   └── deployment.yaml
+    ├── tracking-api/                    # Deployment (1-2 replicas), ClusterIP Service, HPA
+    │   └── deployment.yaml
+    ├── outbox-relay/                    # Deployment (STRICT SINGLETON replicas: 1, NO HPA)
+    │   └── deployment.yaml
+    ├── event-worker/                    # Deployment + KEDA ScaledObject (1-3 pods on queue backlog)
+    │   └── deployment.yaml
+    ├── ai-assistant/                    # Deployment, Service, ConfigMap, HPA (Member 10)
+    │   ├── deployment.yaml
+    │   ├── service.yaml
+    │   ├── configmap.yaml
+    │   └── hpa.yaml
+    ├── web/                             # Deployment (2-3 replicas, port 3000), ClusterIP Service, HPA
+    │   └── deployment.yaml
+    ├── reconciliation/                  # CronJob (*/10 * * * *, sweeps stale outbox rows)
+    │   └── cronjob.yaml
+    └── ingress/                         # Traefik IngressRoutes & Middlewares (CORS, RateLimit)
+        └── traefik-routes.yaml
 ```
 
 ---
