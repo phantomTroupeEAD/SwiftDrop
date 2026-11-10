@@ -13,8 +13,12 @@ var uuidv7FormatRegex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3
 
 func TestUUIDv7QuoteIDGenerator_ImplementsInterface(t *testing.T) {
 	var gen application.QuoteIDGenerator = NewUUIDv7QuoteIDGenerator()
-	if gen == nil {
-		t.Fatal("expected non-nil QuoteIDGenerator")
+	id, err := gen.NewID()
+	if err != nil {
+		t.Fatalf("QuoteIDGenerator.NewID() returned unexpected error: %v", err)
+	}
+	if !uuidv7FormatRegex.MatchString(id) {
+		t.Fatalf("QuoteIDGenerator.NewID() returned invalid UUIDv7: %q", id)
 	}
 }
 
@@ -81,10 +85,14 @@ func TestUUIDv7QuoteIDGenerator_ErrorPropagationAndGuards(t *testing.T) {
 	})
 
 	t.Run("rejects nil receiver", func(t *testing.T) {
-		var gen *UUIDv7QuoteIDGenerator
-		_, err := gen.NewID()
-		if err == nil {
-			t.Fatal("expected error for nil generator receiver, got nil")
+		var nilGen *UUIDv7QuoteIDGenerator
+		if _, err := nilGen.NewID(); err == nil {
+			t.Fatal("expected error for nil concrete generator receiver, got nil")
+		}
+
+		var ifaceGen application.QuoteIDGenerator = nilGen
+		if _, err := ifaceGen.NewID(); err == nil {
+			t.Fatal("expected error for typed-nil QuoteIDGenerator receiver, got nil")
 		}
 	})
 }

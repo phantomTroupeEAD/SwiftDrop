@@ -3,7 +3,12 @@ package domain
 import (
 	"math"
 	"math/big"
-	"strconv"
+)
+
+const (
+	// weightDecimalScale preserves six fractional decimal digits (1e-6 kg = 1 mg),
+	// covering both NUMERIC(8,4) persistence and volumetric weight calculations without float string parsing.
+	weightDecimalScale int64 = 1_000_000
 )
 
 // CalculateDeliveryFee calculates the final delivery fee using
@@ -22,16 +27,14 @@ func CalculateDeliveryFee(tariff Tariff, weight Weight, serviceLevel ServiceLeve
 	}
 
 	// The base fee covers the first 1 kg.
-	// Additional weight is charged proportionally.
-	extraKg := math.Max(0, weight.ChargeableKg-1)
-
-	// Convert the decimal weight representation into an exact rational.
-	extraWeight, ok := new(big.Rat).SetString(
-		strconv.FormatFloat(extraKg, 'f', -1, 64),
-	)
-	if !ok {
-		return Money{}, ErrInvalidWeight
+	// Derive an exact rational from the bounded decimal weight without string formatting/parsing.
+	// validateCalculatedWeight bounds ChargeableKg to (0, MaxChargeableWeightKg] (30 kg).
+	chargeableScaled := int64(math.Round(weight.ChargeableKg * float64(weightDecimalScale)))
+	var extraScaled int64
+	if chargeableScaled > weightDecimalScale {
+		extraScaled = chargeableScaled - weightDecimalScale
 	}
+	extraWeight := big.NewRat(extraScaled, weightDecimalScale)
 
 	// Calculate the additional weight fee.
 	perKgRate := new(big.Rat).SetInt64(tariff.PerKgRate.Amount)

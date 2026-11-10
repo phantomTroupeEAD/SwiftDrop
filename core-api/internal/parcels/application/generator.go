@@ -22,7 +22,7 @@ func NewCryptoTrackingNumberGenerator() *CryptoTrackingNumberGenerator {
 }
 
 // Generate creates a canonical tracking number in the format SD-YYYYMMDD-XXXXXX.
-func (g *CryptoTrackingNumberGenerator) Generate(ctx context.Context, date time.Time) (domain.TrackingNumber, error) {
+func (g *CryptoTrackingNumberGenerator) Generate(_ context.Context, date time.Time) (domain.TrackingNumber, error) {
 	const alphabet = domain.CrockfordBase32Alphabet
 	const suffixLen = 6
 

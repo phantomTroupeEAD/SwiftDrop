@@ -92,9 +92,7 @@ func (r *testRows) Next(dest []driver.Value) error {
 	if r.idx >= len(r.data) {
 		return io.EOF
 	}
-	for i, col := range r.data[r.idx] {
-		dest[i] = col
-	}
+	copy(dest, r.data[r.idx])
 	r.idx++
 	return nil
 }
