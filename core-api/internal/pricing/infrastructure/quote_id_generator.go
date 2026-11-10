@@ -45,4 +45,3 @@ func (g *UUIDv7QuoteIDGenerator) NewID() (string, error) {
 
 	return id, nil
 }
-

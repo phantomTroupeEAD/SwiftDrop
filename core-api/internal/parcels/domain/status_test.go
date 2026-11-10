@@ -227,4 +227,3 @@ func TestValidateTransition(t *testing.T) {
 		})
 	}
 }
-

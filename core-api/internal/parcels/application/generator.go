@@ -83,4 +83,3 @@ func (m *DBTransactionManager) WithTx(ctx context.Context, fn func(tx *sql.Tx) e
 	}
 	return db.WithTx(ctx, m.db, fn)
 }
-

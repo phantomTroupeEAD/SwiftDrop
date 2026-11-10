@@ -119,4 +119,3 @@ func registerMockDB(name string, h mockHandler) *sql.DB {
 	}
 	return database
 }
-

@@ -88,4 +88,3 @@ func TestUUIDv7QuoteIDGenerator_ErrorPropagationAndGuards(t *testing.T) {
 		}
 	})
 }
-

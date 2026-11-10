@@ -26,4 +26,3 @@ func TestMoney_Validate(t *testing.T) {
 		t.Fatalf("expected ErrInvalidDeliveryFee for unsupported currency, got: %v", err)
 	}
 }
-

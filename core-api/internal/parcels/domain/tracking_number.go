@@ -73,4 +73,3 @@ func (t TrackingNumber) Validate() error {
 
 	return nil
 }
-

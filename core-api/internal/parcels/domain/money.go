@@ -30,4 +30,3 @@ func (m Money) Validate() error {
 	}
 	return nil
 }
-

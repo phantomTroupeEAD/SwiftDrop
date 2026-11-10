@@ -31,4 +31,3 @@ func TestServiceLevel_Validate(t *testing.T) {
 		}
 	}
 }
-

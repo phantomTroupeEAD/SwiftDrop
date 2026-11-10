@@ -44,4 +44,3 @@ func (d Dimensions) Validate() error {
 
 	return nil
 }
-

@@ -108,4 +108,3 @@ func TestFormatTrackingNumber(t *testing.T) {
 		t.Errorf("expected ErrInvalidTrackingNumber for short suffix, got %v", err)
 	}
 }
-

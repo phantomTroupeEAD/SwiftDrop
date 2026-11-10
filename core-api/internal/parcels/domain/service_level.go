@@ -18,4 +18,3 @@ func (s ServiceLevel) Validate() error {
 		return ErrInvalidServiceLevel
 	}
 }
-

@@ -115,4 +115,3 @@ func ValidateTransition(from, to ParcelStatus, attemptCount int) error {
 
 	return fmt.Errorf("%w: cannot transition from %s to %s", ErrIllegalStateTransition, from, to)
 }
-
