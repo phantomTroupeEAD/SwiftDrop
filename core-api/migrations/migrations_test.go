@@ -102,4 +102,71 @@ func TestMigrationFiles_SanityAndRules(t *testing.T) {
 	if outboxIdx != -1 && workerIdx != -1 && outboxIdx >= workerIdx {
 		t.Errorf("outbox migration (20261101000050) must precede worker migration (20261101000500)")
 	}
+
+	// 4. Verify Member 2 pricing, parcels, and idempotency migration order
+	pricingIdx := -1
+	parcelsIdx := -1
+	idempotencyIdx := -1
+	for idx, v := range versions {
+		switch v {
+		case "20261110000001":
+			pricingIdx = idx
+		case "20261110000002":
+			parcelsIdx = idx
+		case "20261110000003":
+			idempotencyIdx = idx
+		}
+	}
+	if pricingIdx == -1 {
+		t.Errorf("missing pricing migration 20261110000001")
+	}
+	if parcelsIdx == -1 {
+		t.Errorf("missing parcel migration 20261110000002")
+	}
+	if idempotencyIdx == -1 {
+		t.Errorf("missing idempotency migration 20261110000003")
+	}
+	if pricingIdx != -1 && parcelsIdx != -1 && pricingIdx >= parcelsIdx {
+		t.Errorf("pricing migration (20261110000001) must precede parcel migration (20261110000002)")
+	}
+	if parcelsIdx != -1 && idempotencyIdx != -1 && parcelsIdx >= idempotencyIdx {
+		t.Errorf("parcel migration (20261110000002) must precede idempotency migration (20261110000003)")
+	}
+}
+
+func TestIdempotencyMigration_SchemaContract(t *testing.T) {
+	upBytes, err := os.ReadFile("20261110000003_create_idempotency_keys.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read idempotency up migration: %v", err)
+	}
+	upSQL := string(upBytes)
+
+	requiredUpTokens := []string{
+		"CREATE TABLE IF NOT EXISTS idempotency_keys",
+		"key",
+		"caller_scope",
+		"operation",
+		"request_hash",
+		"response_status",
+		"response_body",
+		"created_resource_id",
+		"created_at",
+		"expires_at",
+		"PRIMARY KEY (key, caller_scope)",
+		"idx_idempotency_keys_expires_at",
+	}
+	for _, token := range requiredUpTokens {
+		if !strings.Contains(upSQL, token) {
+			t.Errorf("idempotency up migration missing expected schema token %q", token)
+		}
+	}
+
+	downBytes, err := os.ReadFile("20261110000003_create_idempotency_keys.down.sql")
+	if err != nil {
+		t.Fatalf("failed to read idempotency down migration: %v", err)
+	}
+	downSQL := string(downBytes)
+	if !strings.Contains(downSQL, "DROP TABLE IF EXISTS idempotency_keys;") {
+		t.Errorf("idempotency down migration must drop table idempotency_keys")
+	}
 }

@@ -73,3 +73,10 @@ type Clock interface {
 type TransactionManager interface {
 	WithTx(ctx context.Context, fn func(tx *sql.Tx) error) error
 }
+
+// IdempotencyStore defines persistence and concurrency locking for caller-scoped request idempotency.
+type IdempotencyStore interface {
+	AcquireLock(ctx context.Context, q db.Querier, key, callerScope string) error
+	Find(ctx context.Context, q db.Querier, key, callerScope string) (IdempotencyRecord, bool, error)
+	Save(ctx context.Context, q db.Querier, record IdempotencyRecord) error
+}

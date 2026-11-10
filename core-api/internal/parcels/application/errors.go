@@ -23,4 +23,14 @@ var (
 	ErrNilParcelRepository        = errors.New("nil parcel repository provided")
 	ErrNilStatusHistoryRepository = errors.New("nil status history repository provided")
 	ErrNilOutboxWriter            = errors.New("nil outbox writer provided")
+
+	// Idempotency errors.
+	ErrIdempotencyPayloadMismatch  = errors.New("idempotency key reused with different request payload")
+	ErrIdempotencyConflict         = errors.New("idempotency key conflict")
+	ErrInvalidIdempotencyKey       = errors.New("invalid idempotency key")
+	ErrInvalidCallerScope          = errors.New("invalid idempotency caller scope")
+	ErrInvalidIdempotencyOperation = errors.New("invalid idempotency operation")
+	ErrInvalidRequestHash          = errors.New("invalid idempotency request hash")
+	ErrInvalidIdempotencyRecord    = errors.New("invalid idempotency record")
+	ErrNilIdempotencyStore         = errors.New("nil idempotency store provided")
 )
