@@ -126,3 +126,25 @@ To protect customer privacy and comply with security requirements:
 | **Recipient Phone** | Unmasked or partially masked | Completely Redacted |
 | **Proof of Delivery** | High-res photo / signature image | Status marked "Delivered - Proof Verified" (no image) |
 | **Internal Notes** | Visible to Courier / Dispatcher | Completely Redacted |
+
+---
+
+## 6. API Documentation Standard (OpenAPI & Swagger Annotations)
+
+All HTTP endpoints across Core API are automatically documented in a unified interactive Swagger UI interface served at `/swagger/`.
+
+### 6.1 Mandatory Annotation Rule
+Every Go HTTP handler must include standard `swag` docstring annotations directly above the handler function:
+- `@Summary`: Brief 1-line description of the operation.
+- `@Description`: Detailed explanation including authorization and business constraints.
+- `@Tags`: Module taxonomy (`identity`, `merchants`, `events`, `parcels`, `pricing`, `dispatch`, `delivery`, `admin`, `system`).
+- `@Accept` and `@Produce`: MIME types (typically `json`).
+- `@Param`: Input parameters (body schemas, path variables, query options).
+- `@Success`: Status code and response model struct.
+- `@Failure`: Handled error status codes and RFC-7807/httpx error envelopes.
+- `@Security`: `BearerAuth` for any authenticated or role-restricted endpoint.
+- `@Router`: Exact URI path and HTTP method in brackets (e.g. `/api/v1/auth/login [post]`).
+
+### 6.2 Generator Execution & Sync
+Developers and AI agents must run `make swagger` to regenerate `core-api/docs/swagger.json` synchronously whenever adding, editing, or deleting HTTP routes. See [`docs/contracts/swagger-guide.md`](file:///c:/Users/kesha/OneDrive/Documents/GitHub/SwiftDrop/docs/contracts/swagger-guide.md) for full syntax and conventions.
+

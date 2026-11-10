@@ -39,7 +39,7 @@ func (r *PostgresOutboxRepository) ClaimBatch(ctx context.Context, batchSize int
 
 	const selectQuery = `
 		SELECT
-			id, event_id, event_type, aggregate_type, aggregate_id, aggregate_version,
+			id, event_type, aggregate_type, aggregate_id, aggregate_version,
 			schema_version, occurred_at, correlation_id, producer, payload, attempt_count
 		FROM outbox_events
 		WHERE status = 'PENDING'
@@ -62,7 +62,6 @@ func (r *PostgresOutboxRepository) ClaimBatch(ctx context.Context, batchSize int
 		var rec EventRecord
 		if err := rows.Scan(
 			&rec.ID,
-			&rec.EventID,
 			&rec.EventType,
 			&rec.AggregateType,
 			&rec.AggregateID,
@@ -76,6 +75,7 @@ func (r *PostgresOutboxRepository) ClaimBatch(ctx context.Context, batchSize int
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan outbox record: %w", err)
 		}
+		rec.EventID = rec.ID
 		records = append(records, rec)
 		ids = append(ids, rec.ID)
 	}

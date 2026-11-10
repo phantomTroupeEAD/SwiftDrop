@@ -6,7 +6,7 @@
 
 param (
     [Parameter(Position=0)]
-    [ValidateSet("help", "up", "down", "restart", "ps", "logs", "migrate-up", "seed", "test", "test-e2e", "reset")]
+    [ValidateSet("help", "up", "down", "restart", "ps", "logs", "migrate-up", "seed", "test", "swagger", "test-e2e", "reset")]
     [string]$Target = "help"
 )
 
@@ -24,6 +24,7 @@ switch ($Target) {
         Write-Host ".\scripts\make.ps1 migrate-up  - Run database migrations"
         Write-Host ".\scripts\make.ps1 seed        - Seed mock users & roles"
         Write-Host ".\scripts\make.ps1 test        - Run Go test suite with race detector"
+        Write-Host ".\scripts\make.ps1 swagger     - Regenerate unified Swagger/OpenAPI docs in core-api"
         Write-Host ".\scripts\make.ps1 test-e2e    - Run Python Playwright E2E tests"
         Write-Host ".\scripts\make.ps1 reset       - Wipe volumes and stop containers"
     }
@@ -52,6 +53,15 @@ switch ($Target) {
         Push-Location core-api
         try {
             go test -v -race ./...
+        } finally {
+            Pop-Location
+        }
+    }
+    "swagger" {
+        Push-Location core-api
+        try {
+            go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
+            Copy-Item -Path "docs/swagger.json" -Destination "internal/events/swagger/swagger.json" -Force
         } finally {
             Pop-Location
         }

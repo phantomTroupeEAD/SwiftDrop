@@ -71,10 +71,14 @@ func NewNotificationHandler(repo delivery.Repository, idemp idempotency.Store, l
 				Recipient:        "-",
 				Channel:          "EMAIL",
 				TemplateName:     "milestone_notice",
+				Status:           "FAILED",
+				LastError:        "NO_RECIPIENT",
 			}
 			if err := repo.InsertNotification(ctx, task); err != nil {
 				return fmt.Errorf("failed to record no-recipient notification: %w", err)
 			}
+			_ = idemp.MarkDone(ctx, nil, "notifier", env.EventID)
+			metrics.NotificationAttemptsTotal.WithLabelValues("failed").Inc()
 			logger.Warn("event has no recipient email; marked notification as FAILED",
 				"event_id", env.EventID,
 				"event_type", env.EventType,

@@ -131,21 +131,38 @@ func TestSSRFTable(t *testing.T) {
 		targetIP  string
 		isBlocked bool
 	}{
+		// AI_HANDOFF_PLAN.md Rule 9 mandatory list:
+		{"This Network 0.0.0.0", "0.0.0.0", true},
+		{"This Network 0.1.2.3", "0.1.2.3", true},
+		{"RFC 1918 10.0.0.1", "10.0.0.1", true},
+		{"RFC 1918 10.255.255.254", "10.255.255.254", true},
+		{"Carrier Grade NAT 100.64.0.1", "100.64.0.1", true},
 		{"IPv4 Loopback 127.0.0.1", "127.0.0.1", true},
 		{"IPv4 Loopback 127.1.2.3", "127.1.2.3", true},
-		{"RFC 1918 10.0.0.1", "10.0.0.1", true},
-		{"RFC 1918 172.16.0.1", "172.16.0.1", true},
-		{"RFC 1918 192.168.1.1", "192.168.1.1", true},
 		{"Cloud Metadata 169.254.169.254", "169.254.169.254", true},
-		{"Carrier Grade NAT 100.64.0.1", "100.64.0.1", true},
-		{"Current Network 0.0.0.0", "0.0.0.0", true},
+		{"RFC 1918 172.16.0.1", "172.16.0.1", true},
+		{"RFC 1918 172.31.255.254", "172.31.255.254", true},
+		{"IETF Protocol Assignments 192.0.0.1", "192.0.0.1", true},
+		{"RFC 1918 192.168.0.1", "192.168.0.1", true},
+		{"RFC 1918 192.168.1.1", "192.168.1.1", true},
+		{"Benchmark Testing 198.18.0.1", "198.18.0.1", true},
+		{"Multicast 224.0.0.1", "224.0.0.1", true},
+		{"Reserved 240.0.0.1", "240.0.0.1", true},
 		{"IPv6 Loopback ::1", "::1", true},
+		{"IPv6 Link-Local fe80::1", "fe80::1", true},
 		{"IPv6 ULA fc00::1", "fc00::1", true},
-		{"IPv6 Link Local fe80::1", "fe80::1", true},
+		{"IPv6 ULA fd12:3456:789a::1", "fd12:3456:789a::1", true},
+		{"IPv6 Multicast ff02::1", "ff02::1", true},
+		{"IPv4/IPv6 translation 64:ff9b::1", "64:ff9b::1", true},
+		{"IPv4/IPv6 translation 64:ff9b::a00:1", "64:ff9b::a00:1", true},
 		{"IPv4-mapped IPv6 ::ffff:10.0.0.1", "::ffff:10.0.0.1", true},
-		{"Public IP 8.8.8.8", "8.8.8.8", false},
-		{"Public IP 1.1.1.1", "1.1.1.1", false},
-		{"Public IP 93.184.216.34", "93.184.216.34", false},
+		{"IPv4-mapped IPv6 ::ffff:127.0.0.1", "::ffff:127.0.0.1", true},
+		{"IPv4-mapped IPv6 ::ffff:192.168.1.1", "::ffff:192.168.1.1", true},
+		// Public non-blocked IPs:
+		{"Public IPv4 8.8.8.8", "8.8.8.8", false},
+		{"Public IPv4 1.1.1.1", "1.1.1.1", false},
+		{"Public IPv4 93.184.216.34", "93.184.216.34", false},
+		{"Public IPv6 2606:4700:4700::1111", "2606:4700:4700::1111", false},
 	}
 
 	for _, tc := range testCases {

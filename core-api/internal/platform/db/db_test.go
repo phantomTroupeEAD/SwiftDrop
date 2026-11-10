@@ -22,7 +22,7 @@ func init() {
 	sql.Register("test_platform_db_driver", testDriver)
 }
 
-func (d *mockDBDriver) Open(name string) (driver.Conn, error) {
+func (d *mockDBDriver) Open(_ string) (driver.Conn, error) {
 	return &mockDBConn{d: d}, nil
 }
 
@@ -30,7 +30,7 @@ type mockDBConn struct {
 	d *mockDBDriver
 }
 
-func (c *mockDBConn) Prepare(query string) (driver.Stmt, error) {
+func (c *mockDBConn) Prepare(_ string) (driver.Stmt, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -85,7 +85,7 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestWithTx_NilDB(t *testing.T) {
-	err := WithTx(context.Background(), nil, func(tx *sql.Tx) error {
+	err := WithTx(context.Background(), nil, func(_ *sql.Tx) error {
 		return nil
 	})
 	if !errors.Is(err, ErrNilDB) {
@@ -101,7 +101,7 @@ func TestWithTx_SuccessCommit(t *testing.T) {
 	}
 	defer db.Close()
 
-	err = WithTx(context.Background(), db, func(tx *sql.Tx) error {
+	err = WithTx(context.Background(), db, func(_ *sql.Tx) error {
 		return nil
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func TestWithTx_ErrorRollback(t *testing.T) {
 	defer db.Close()
 
 	expectedErr := errors.New("business error")
-	err = WithTx(context.Background(), db, func(tx *sql.Tx) error {
+	err = WithTx(context.Background(), db, func(_ *sql.Tx) error {
 		return expectedErr
 	})
 	if !errors.Is(err, expectedErr) {
@@ -180,7 +180,7 @@ func TestWithTx_PanicRollback(t *testing.T) {
 		}
 	}()
 
-	_ = WithTx(context.Background(), db, func(tx *sql.Tx) error {
+	_ = WithTx(context.Background(), db, func(_ *sql.Tx) error {
 		panic("fatal explosion")
 	})
 }
