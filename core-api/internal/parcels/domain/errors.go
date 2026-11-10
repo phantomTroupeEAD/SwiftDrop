@@ -7,6 +7,8 @@ var (
 	ErrInvalidParcelID       = errors.New("invalid parcel id")
 	ErrInvalidTrackingNumber = errors.New("invalid tracking number")
 	ErrInvalidSenderID       = errors.New("invalid sender id")
+	ErrInvalidMerchantID     = errors.New("invalid merchant id")
+	ErrInvalidOwner          = errors.New("at least one owner (sender or merchant) is required")
 	ErrInvalidRecipient      = errors.New("invalid recipient details")
 	ErrInvalidQuoteID        = errors.New("invalid quote id")
 	ErrInvalidPricingRule    = errors.New("invalid pricing rule reference")
@@ -27,5 +29,6 @@ var (
 	ErrMaxDeliveryAttemptsExceeded = errors.New("maximum delivery attempts (3) exceeded")
 	ErrTerminalState               = errors.New("cannot transition from terminal state")
 	ErrInvalidStatusHistory        = errors.New("invalid status history entry")
+	ErrInvalidActorType            = errors.New("invalid actor type")
+	ErrInvalidActorID              = errors.New("invalid actor id")
 )
-

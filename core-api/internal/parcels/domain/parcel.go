@@ -11,7 +11,7 @@ import (
 type CreateParcelParams struct {
 	ID                 string
 	TrackingNumber     TrackingNumber
-	SenderID           string
+	SenderID           *string
 	MerchantID         *string
 	RecipientName      string
 	RecipientPhone     string
@@ -34,7 +34,7 @@ type CreateParcelParams struct {
 type ReconstituteParcelParams struct {
 	ID                 string
 	TrackingNumber     TrackingNumber
-	SenderID           string
+	SenderID           *string
 	MerchantID         *string
 	RecipientName      string
 	RecipientPhone     string
@@ -50,7 +50,7 @@ type ReconstituteParcelParams struct {
 	PickupAddress      Address
 	DropoffAddress     Address
 	Status             ParcelStatus
-	DeliveryAttempts   int
+	AttemptCount       int
 	Version            int
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -61,7 +61,7 @@ type ReconstituteParcelParams struct {
 type Parcel struct {
 	ID             string
 	TrackingNumber TrackingNumber
-	SenderID       string
+	SenderID       *string
 	MerchantID     *string
 	RecipientName  string
 	RecipientPhone string
@@ -86,13 +86,39 @@ type Parcel struct {
 	DropoffAddress Address
 
 	// Lifecycle state machine and operational counters.
-	Status           ParcelStatus
-	DeliveryAttempts int
+	Status       ParcelStatus
+	AttemptCount int
 
 	// Optimistic concurrency control and audit timestamps.
 	Version   int
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+func normalizeOptionalID(id *string, invalidErr error) (*string, error) {
+	if id == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*id)
+	if trimmed == "" {
+		return nil, invalidErr
+	}
+	return &trimmed, nil
+}
+
+func normalizeParcelOwners(senderID, merchantID *string) (*string, *string, error) {
+	normalizedSenderID, err := normalizeOptionalID(senderID, ErrInvalidSenderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	normalizedMerchantID, err := normalizeOptionalID(merchantID, ErrInvalidMerchantID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if normalizedSenderID == nil && normalizedMerchantID == nil {
+		return nil, nil, ErrInvalidOwner
+	}
+	return normalizedSenderID, normalizedMerchantID, nil
 }
 
 // NewParcel creates a new Parcel aggregate root in the CREATED status.
@@ -104,8 +130,9 @@ func NewParcel(params CreateParcelParams) (Parcel, error) {
 	if err := params.TrackingNumber.Validate(); err != nil {
 		return Parcel{}, err
 	}
-	if strings.TrimSpace(params.SenderID) == "" {
-		return Parcel{}, ErrInvalidSenderID
+	senderID, merchantID, err := normalizeParcelOwners(params.SenderID, params.MerchantID)
+	if err != nil {
+		return Parcel{}, err
 	}
 	if strings.TrimSpace(params.RecipientName) == "" || strings.TrimSpace(params.RecipientPhone) == "" {
 		return Parcel{}, ErrInvalidRecipient
@@ -119,8 +146,11 @@ func NewParcel(params CreateParcelParams) (Parcel, error) {
 	if err := params.DeliveryFee.Validate(); err != nil {
 		return Parcel{}, err
 	}
-	if strings.TrimSpace(params.OriginZoneID) == "" || strings.TrimSpace(params.DestinationZoneID) == "" {
-		return Parcel{}, ErrInvalidZone
+	if err := ValidateZoneID(params.OriginZoneID); err != nil {
+		return Parcel{}, err
+	}
+	if err := ValidateZoneID(params.DestinationZoneID); err != nil {
+		return Parcel{}, err
 	}
 	if err := params.ServiceLevel.Validate(); err != nil {
 		return Parcel{}, err
@@ -152,18 +182,10 @@ func NewParcel(params CreateParcelParams) (Parcel, error) {
 		return Parcel{}, fmt.Errorf("%w: created_at timestamp is required", ErrInvalidTimestamp)
 	}
 
-	var merchantID *string
-	if params.MerchantID != nil {
-		trimmed := strings.TrimSpace(*params.MerchantID)
-		if trimmed != "" {
-			merchantID = &trimmed
-		}
-	}
-
 	return Parcel{
 		ID:                 strings.TrimSpace(params.ID),
 		TrackingNumber:     params.TrackingNumber,
-		SenderID:           strings.TrimSpace(params.SenderID),
+		SenderID:           senderID,
 		MerchantID:         merchantID,
 		RecipientName:      strings.TrimSpace(params.RecipientName),
 		RecipientPhone:     strings.TrimSpace(params.RecipientPhone),
@@ -171,15 +193,15 @@ func NewParcel(params CreateParcelParams) (Parcel, error) {
 		PricingRuleID:      strings.TrimSpace(params.PricingRuleID),
 		PricingRuleVersion: params.PricingRuleVersion,
 		DeliveryFee:        params.DeliveryFee,
-		OriginZoneID:       strings.TrimSpace(params.OriginZoneID),
-		DestinationZoneID:  strings.TrimSpace(params.DestinationZoneID),
+		OriginZoneID:       params.OriginZoneID,
+		DestinationZoneID:  params.DestinationZoneID,
 		ServiceLevel:       params.ServiceLevel,
 		Weight:             params.Weight,
 		Dimensions:         params.Dimensions,
 		PickupAddress:      params.PickupAddress,
 		DropoffAddress:     params.DropoffAddress,
 		Status:             StatusCreated,
-		DeliveryAttempts:   0,
+		AttemptCount:       0,
 		Version:            1,
 		CreatedAt:          params.CreatedAt,
 		UpdatedAt:          params.CreatedAt,
@@ -194,8 +216,9 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 	if err := params.TrackingNumber.Validate(); err != nil {
 		return Parcel{}, err
 	}
-	if strings.TrimSpace(params.SenderID) == "" {
-		return Parcel{}, ErrInvalidSenderID
+	senderID, merchantID, err := normalizeParcelOwners(params.SenderID, params.MerchantID)
+	if err != nil {
+		return Parcel{}, err
 	}
 	if strings.TrimSpace(params.RecipientName) == "" || strings.TrimSpace(params.RecipientPhone) == "" {
 		return Parcel{}, ErrInvalidRecipient
@@ -209,8 +232,11 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 	if err := params.DeliveryFee.Validate(); err != nil {
 		return Parcel{}, err
 	}
-	if strings.TrimSpace(params.OriginZoneID) == "" || strings.TrimSpace(params.DestinationZoneID) == "" {
-		return Parcel{}, ErrInvalidZone
+	if err := ValidateZoneID(params.OriginZoneID); err != nil {
+		return Parcel{}, err
+	}
+	if err := ValidateZoneID(params.DestinationZoneID); err != nil {
+		return Parcel{}, err
 	}
 	if err := params.ServiceLevel.Validate(); err != nil {
 		return Parcel{}, err
@@ -238,8 +264,8 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 	if err := params.Status.Validate(); err != nil {
 		return Parcel{}, err
 	}
-	if params.DeliveryAttempts < 0 {
-		return Parcel{}, fmt.Errorf("%w: delivery attempts cannot be negative (%d)", ErrInvalidParcel, params.DeliveryAttempts)
+	if params.AttemptCount < 0 {
+		return Parcel{}, fmt.Errorf("%w: attempt count cannot be negative (%d)", ErrInvalidParcel, params.AttemptCount)
 	}
 	if params.Version <= 0 {
 		return Parcel{}, fmt.Errorf("%w: version must be greater than zero (%d)", ErrInvalidParcel, params.Version)
@@ -251,18 +277,10 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 		return Parcel{}, fmt.Errorf("%w: updated_at cannot precede created_at", ErrInvalidTimestamp)
 	}
 
-	var merchantID *string
-	if params.MerchantID != nil {
-		trimmed := strings.TrimSpace(*params.MerchantID)
-		if trimmed != "" {
-			merchantID = &trimmed
-		}
-	}
-
 	return Parcel{
 		ID:                 strings.TrimSpace(params.ID),
 		TrackingNumber:     params.TrackingNumber,
-		SenderID:           strings.TrimSpace(params.SenderID),
+		SenderID:           senderID,
 		MerchantID:         merchantID,
 		RecipientName:      strings.TrimSpace(params.RecipientName),
 		RecipientPhone:     strings.TrimSpace(params.RecipientPhone),
@@ -270,15 +288,15 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 		PricingRuleID:      strings.TrimSpace(params.PricingRuleID),
 		PricingRuleVersion: params.PricingRuleVersion,
 		DeliveryFee:        params.DeliveryFee,
-		OriginZoneID:       strings.TrimSpace(params.OriginZoneID),
-		DestinationZoneID:  strings.TrimSpace(params.DestinationZoneID),
+		OriginZoneID:       params.OriginZoneID,
+		DestinationZoneID:  params.DestinationZoneID,
 		ServiceLevel:       params.ServiceLevel,
 		Weight:             params.Weight,
 		Dimensions:         params.Dimensions,
 		PickupAddress:      params.PickupAddress,
 		DropoffAddress:     params.DropoffAddress,
 		Status:             params.Status,
-		DeliveryAttempts:   params.DeliveryAttempts,
+		AttemptCount:       params.AttemptCount,
 		Version:            params.Version,
 		CreatedAt:          params.CreatedAt,
 		UpdatedAt:          params.UpdatedAt,
@@ -288,13 +306,13 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 // CanTransitionTo reports whether the parcel can transition to the given target status
 // under the current aggregate state and attempt count.
 func (p *Parcel) CanTransitionTo(target ParcelStatus) error {
-	return ValidateTransition(p.Status, target, p.DeliveryAttempts)
+	return ValidateTransition(p.Status, target, p.AttemptCount)
 }
 
 // TransitionTo validates and executes a legal status transition on the parcel aggregate.
 // It mutates aggregate state, increments Version and UpdatedAt, and returns an immutable
 // StatusHistoryEntry recording the event.
-func (p *Parcel) TransitionTo(target ParcelStatus, actorID, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
+func (p *Parcel) TransitionTo(target ParcelStatus, actorID *string, actorType ActorType, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
 	if at.IsZero() {
 		return StatusHistoryEntry{}, fmt.Errorf("%w: event timestamp cannot be zero", ErrInvalidTimestamp)
 	}
@@ -307,11 +325,16 @@ func (p *Parcel) TransitionTo(target ParcelStatus, actorID, actorRole, reason st
 		return StatusHistoryEntry{}, err
 	}
 
+	normalizedActorID, err := normalizeStatusActor(actorID, actorType)
+	if err != nil {
+		return StatusHistoryEntry{}, fmt.Errorf("%w: %w", ErrInvalidStatusHistory, err)
+	}
+
 	fromStatus := p.Status
 
 	// Increment attempt counter upon recording a delivery failure.
 	if target == StatusAttemptFailed {
-		p.DeliveryAttempts++
+		p.AttemptCount++
 	}
 
 	p.Status = target
@@ -322,10 +345,11 @@ func (p *Parcel) TransitionTo(target ParcelStatus, actorID, actorRole, reason st
 		ParcelID:   p.ID,
 		FromStatus: &fromStatus,
 		ToStatus:   target,
-		ActorID:    strings.TrimSpace(actorID),
+		ActorID:    normalizedActorID,
+		ActorType:  actorType,
 		ActorRole:  strings.TrimSpace(actorRole),
 		Reason:     strings.TrimSpace(reason),
-		Timestamp:  at,
+		OccurredAt: at,
 	}
 
 	return entry, nil
@@ -333,41 +357,41 @@ func (p *Parcel) TransitionTo(target ParcelStatus, actorID, actorRole, reason st
 
 // Assign transitions the parcel from CREATED to ASSIGNED upon courier dispatch.
 func (p *Parcel) Assign(courierID string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusAssigned, courierID, "DISPATCHER", "Courier assigned for pickup", at)
+	return p.TransitionTo(StatusAssigned, &courierID, ActorTypeUser, "DISPATCHER", "Courier assigned for pickup", at)
 }
 
 // Cancel cancels the parcel. Cancellation is permitted ONLY while the parcel is in CREATED status.
-func (p *Parcel) Cancel(actorID, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusCancelled, actorID, actorRole, reason, at)
+func (p *Parcel) Cancel(actorID *string, actorType ActorType, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
+	return p.TransitionTo(StatusCancelled, actorID, actorType, actorRole, reason, at)
 }
 
 // PickUp transitions the parcel from ASSIGNED to PICKED_UP upon courier collection.
 func (p *Parcel) PickUp(courierID string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusPickedUp, courierID, "COURIER", "Parcel collected from sender", at)
+	return p.TransitionTo(StatusPickedUp, &courierID, ActorTypeUser, "COURIER", "Parcel collected from sender", at)
 }
 
 // MarkInTransit transitions the parcel from PICKED_UP to IN_TRANSIT.
-func (p *Parcel) MarkInTransit(actorID, actorRole string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusInTransit, actorID, actorRole, "Parcel arrived at hub / vehicle in transit", at)
+func (p *Parcel) MarkInTransit(actorID *string, actorType ActorType, actorRole string, at time.Time) (StatusHistoryEntry, error) {
+	return p.TransitionTo(StatusInTransit, actorID, actorType, actorRole, "Parcel arrived at hub / vehicle in transit", at)
 }
 
 // DispatchForDelivery transitions the parcel to OUT_FOR_DELIVERY.
 func (p *Parcel) DispatchForDelivery(courierID string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusOutForDelivery, courierID, "DISPATCHER", "Dispatched for final-mile delivery", at)
+	return p.TransitionTo(StatusOutForDelivery, &courierID, ActorTypeUser, "DISPATCHER", "Dispatched for final-mile delivery", at)
 }
 
 // ConfirmDelivered transitions the parcel from OUT_FOR_DELIVERY to the terminal DELIVERED status.
 func (p *Parcel) ConfirmDelivered(courierID, reason string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusDelivered, courierID, "COURIER", reason, at)
+	return p.TransitionTo(StatusDelivered, &courierID, ActorTypeUser, "COURIER", reason, at)
 }
 
 // RecordFailedAttempt records an unsuccessful delivery attempt, incrementing attempt count
 // and setting the status to ATTEMPT_FAILED.
 func (p *Parcel) RecordFailedAttempt(courierID, reasonCode string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusAttemptFailed, courierID, "COURIER", reasonCode, at)
+	return p.TransitionTo(StatusAttemptFailed, &courierID, ActorTypeUser, "COURIER", reasonCode, at)
 }
 
 // ReturnToSender transitions the parcel from ATTEMPT_FAILED to the terminal RETURNED status.
-func (p *Parcel) ReturnToSender(actorID, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
-	return p.TransitionTo(StatusReturned, actorID, actorRole, reason, at)
+func (p *Parcel) ReturnToSender(actorID *string, actorType ActorType, actorRole, reason string, at time.Time) (StatusHistoryEntry, error) {
+	return p.TransitionTo(StatusReturned, actorID, actorType, actorRole, reason, at)
 }

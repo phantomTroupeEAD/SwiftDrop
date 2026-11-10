@@ -20,7 +20,8 @@ func validTestParcelParams() CreateParcelParams {
 		"Kollupitiya",
 		"Colombo",
 		"00300",
-		"ZONE-WESTERN-01",
+		"ZONE_WESTERN_01",
+		"Front reception desk",
 	)
 
 	dropoffAddr, _ := NewAddress(
@@ -30,15 +31,17 @@ func validTestParcelParams() CreateParcelParams {
 		"Peradeniya",
 		"Kandy",
 		"20400",
-		"ZONE-CENTRAL-01",
+		"ZONE_CENTRAL_01",
+		"Call receiver before arrival",
 	)
 
+	senderID := "customer-uuid-001"
 	merchantID := "merchant-999"
 
 	return CreateParcelParams{
 		ID:                 "parcel-uuid-001",
 		TrackingNumber:     tn,
-		SenderID:           "customer-uuid-001",
+		SenderID:           &senderID,
 		MerchantID:         &merchantID,
 		RecipientName:      "Nimali Silva",
 		RecipientPhone:     "+94719876543",
@@ -46,8 +49,8 @@ func validTestParcelParams() CreateParcelParams {
 		PricingRuleID:      "rule-uuid-001",
 		PricingRuleVersion: 2,
 		DeliveryFee:        fee,
-		OriginZoneID:       "ZONE-WESTERN-01",
-		DestinationZoneID:  "ZONE-CENTRAL-01",
+		OriginZoneID:       "ZONE_WESTERN_01",
+		DestinationZoneID:  "ZONE_CENTRAL_01",
 		ServiceLevel:       ServiceLevelStandard,
 		Weight:             weight,
 		Dimensions:         dims,
@@ -70,11 +73,17 @@ func TestNewParcel_Success(t *testing.T) {
 	if parcel.TrackingNumber != params.TrackingNumber {
 		t.Errorf("expected tracking number %s, got %s", params.TrackingNumber, parcel.TrackingNumber)
 	}
+	if parcel.SenderID == nil || *parcel.SenderID != "customer-uuid-001" {
+		t.Errorf("expected SenderID customer-uuid-001, got %v", parcel.SenderID)
+	}
+	if parcel.MerchantID == nil || *parcel.MerchantID != "merchant-999" {
+		t.Errorf("expected MerchantID merchant-999, got %v", parcel.MerchantID)
+	}
 	if parcel.Status != StatusCreated {
 		t.Errorf("expected initial status CREATED, got %s", parcel.Status)
 	}
-	if parcel.DeliveryAttempts != 0 {
-		t.Errorf("expected 0 delivery attempts, got %d", parcel.DeliveryAttempts)
+	if parcel.AttemptCount != 0 {
+		t.Errorf("expected 0 delivery attempts, got %d", parcel.AttemptCount)
 	}
 	if parcel.Version != 1 {
 		t.Errorf("expected initial version 1, got %d", parcel.Version)
@@ -94,6 +103,84 @@ func TestNewParcel_Success(t *testing.T) {
 	if parcel.PricingRuleVersion != 2 {
 		t.Errorf("expected rule version 2, got %d", parcel.PricingRuleVersion)
 	}
+}
+
+func TestNewParcel_OwnershipModes(t *testing.T) {
+	t.Run("sender-only parcel", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.SenderID = strPtr(" sender-001 ")
+		params.MerchantID = nil
+
+		parcel, err := NewParcel(params)
+		if err != nil {
+			t.Fatalf("expected sender-only parcel to succeed, got %v", err)
+		}
+		if parcel.SenderID == nil || *parcel.SenderID != "sender-001" {
+			t.Errorf("expected trimmed SenderID sender-001, got %v", parcel.SenderID)
+		}
+		if parcel.MerchantID != nil {
+			t.Errorf("expected nil MerchantID, got %v", parcel.MerchantID)
+		}
+	})
+
+	t.Run("merchant-only parcel keeps SenderID nil", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.SenderID = nil
+		params.MerchantID = strPtr(" merchant-001 ")
+
+		parcel, err := NewParcel(params)
+		if err != nil {
+			t.Fatalf("expected merchant-only parcel to succeed, got %v", err)
+		}
+		if parcel.SenderID != nil {
+			t.Errorf("expected nil SenderID without dummy value, got %v", *parcel.SenderID)
+		}
+		if parcel.MerchantID == nil || *parcel.MerchantID != "merchant-001" {
+			t.Errorf("expected trimmed MerchantID merchant-001, got %v", parcel.MerchantID)
+		}
+	})
+
+	t.Run("sender-plus-merchant parcel", func(t *testing.T) {
+		params := validTestParcelParams()
+		parcel, err := NewParcel(params)
+		if err != nil {
+			t.Fatalf("expected combined owner parcel to succeed, got %v", err)
+		}
+		if parcel.SenderID == nil || parcel.MerchantID == nil {
+			t.Errorf("expected both owners set, got sender=%v merchant=%v", parcel.SenderID, parcel.MerchantID)
+		}
+	})
+
+	t.Run("missing both owners fails", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.SenderID = nil
+		params.MerchantID = nil
+
+		_, err := NewParcel(params)
+		if !errors.Is(err, ErrInvalidOwner) {
+			t.Fatalf("expected ErrInvalidOwner, got %v", err)
+		}
+	})
+
+	t.Run("non-nil whitespace sender fails even when merchant set", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.SenderID = strPtr("   ")
+
+		_, err := NewParcel(params)
+		if !errors.Is(err, ErrInvalidSenderID) {
+			t.Fatalf("expected ErrInvalidSenderID, got %v", err)
+		}
+	})
+
+	t.Run("non-nil whitespace merchant fails even when sender set", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.MerchantID = strPtr("   ")
+
+		_, err := NewParcel(params)
+		if !errors.Is(err, ErrInvalidMerchantID) {
+			t.Fatalf("expected ErrInvalidMerchantID, got %v", err)
+		}
+	})
 }
 
 func TestNewParcel_ValidationErrors(t *testing.T) {
@@ -117,11 +204,26 @@ func TestNewParcel_ValidationErrors(t *testing.T) {
 			wantErr: ErrInvalidTrackingNumber,
 		},
 		{
-			name: "empty sender id",
+			name: "non-nil empty sender id",
 			mutate: func(p *CreateParcelParams) {
-				p.SenderID = ""
+				p.SenderID = strPtr("")
 			},
 			wantErr: ErrInvalidSenderID,
+		},
+		{
+			name: "missing both sender id and merchant id",
+			mutate: func(p *CreateParcelParams) {
+				p.SenderID = nil
+				p.MerchantID = nil
+			},
+			wantErr: ErrInvalidOwner,
+		},
+		{
+			name: "non-nil whitespace merchant id",
+			mutate: func(p *CreateParcelParams) {
+				p.MerchantID = strPtr("   ")
+			},
+			wantErr: ErrInvalidMerchantID,
 		},
 		{
 			name: "empty recipient name",
@@ -166,16 +268,30 @@ func TestNewParcel_ValidationErrors(t *testing.T) {
 			wantErr: ErrInvalidZone,
 		},
 		{
+			name: "invalid origin zone format",
+			mutate: func(p *CreateParcelParams) {
+				p.OriginZoneID = "ZONE-WESTERN-01"
+			},
+			wantErr: ErrInvalidZone,
+		},
+		{
+			name: "invalid destination zone format",
+			mutate: func(p *CreateParcelParams) {
+				p.DestinationZoneID = "zone_central_01"
+			},
+			wantErr: ErrInvalidZone,
+		},
+		{
 			name: "origin zone mismatch with pickup address",
 			mutate: func(p *CreateParcelParams) {
-				p.OriginZoneID = "ZONE-SOUTHERN-01"
+				p.OriginZoneID = "ZONE_SOUTHERN_01"
 			},
 			wantErr: ErrZoneMismatch,
 		},
 		{
 			name: "destination zone mismatch with dropoff address",
 			mutate: func(p *CreateParcelParams) {
-				p.DestinationZoneID = "ZONE-NORTHERN-01"
+				p.DestinationZoneID = "ZONE_NORTHERN_01"
 			},
 			wantErr: ErrZoneMismatch,
 		},
@@ -227,7 +343,7 @@ func TestReconstituteParcel(t *testing.T) {
 		PickupAddress:      params.PickupAddress,
 		DropoffAddress:     params.DropoffAddress,
 		Status:             StatusInTransit,
-		DeliveryAttempts:   1,
+		AttemptCount:       1,
 		Version:            4,
 		CreatedAt:          now,
 		UpdatedAt:          later,
@@ -244,12 +360,23 @@ func TestReconstituteParcel(t *testing.T) {
 	if parcel.Version != 4 {
 		t.Errorf("expected reconstituted version 4, got %d", parcel.Version)
 	}
-	if parcel.DeliveryAttempts != 1 {
-		t.Errorf("expected 1 delivery attempt, got %d", parcel.DeliveryAttempts)
+	if parcel.AttemptCount != 1 {
+		t.Errorf("expected 1 delivery attempt, got %d", parcel.AttemptCount)
+	}
+
+	// Reconstitute merchant-only parcel (SenderID == nil)
+	merchantOnlyParams := reconstituteParams
+	merchantOnlyParams.SenderID = nil
+	merchantParcel, err := ReconstituteParcel(merchantOnlyParams)
+	if err != nil {
+		t.Fatalf("unexpected reconstitution error for merchant-only parcel: %v", err)
+	}
+	if merchantParcel.SenderID != nil {
+		t.Errorf("expected nil SenderID for merchant-only reconstituted parcel, got %v", merchantParcel.SenderID)
 	}
 
 	// Reconstitution error on negative delivery attempts
-	reconstituteParams.DeliveryAttempts = -1
+	reconstituteParams.AttemptCount = -1
 	_, err = ReconstituteParcel(reconstituteParams)
 	if !errors.Is(err, ErrInvalidParcel) {
 		t.Errorf("expected ErrInvalidParcel for negative attempts, got: %v", err)
@@ -294,7 +421,7 @@ func TestParcel_LifecycleHappyPath(t *testing.T) {
 	}
 
 	// 3. PICKED_UP -> IN_TRANSIT
-	entry3, err := parcel.MarkInTransit("hub-op-001", "HUB_OPERATOR", t3)
+	entry3, err := parcel.MarkInTransit(strPtr("hub-op-001"), ActorTypeUser, "HUB_OPERATOR", t3)
 	if err != nil {
 		t.Fatalf("MarkInTransit failed: %v", err)
 	}
@@ -303,6 +430,9 @@ func TestParcel_LifecycleHappyPath(t *testing.T) {
 	}
 	if *entry3.FromStatus != StatusPickedUp || entry3.ToStatus != StatusInTransit {
 		t.Errorf("unexpected history entry 3: %+v", entry3)
+	}
+	if entry3.ActorType != ActorTypeUser || entry3.ActorID == nil || *entry3.ActorID != "hub-op-001" || !entry3.OccurredAt.Equal(t3) {
+		t.Errorf("unexpected history entry 3 actor/time metadata: %+v", entry3)
 	}
 
 	// 4. IN_TRANSIT -> OUT_FOR_DELIVERY
@@ -330,7 +460,7 @@ func TestParcel_LifecycleHappyPath(t *testing.T) {
 	}
 
 	// 6. Terminal state check: cannot transition from DELIVERED
-	_, err = parcel.TransitionTo(StatusInTransit, "courier-002", "COURIER", "Try reopen", t5.Add(time.Hour))
+	_, err = parcel.TransitionTo(StatusInTransit, strPtr("courier-002"), ActorTypeUser, "COURIER", "Try reopen", t5.Add(time.Hour))
 	if !errors.Is(err, ErrTerminalState) {
 		t.Fatalf("expected ErrTerminalState after DELIVERED, got: %v", err)
 	}
@@ -340,7 +470,7 @@ func TestParcel_CancellationRules(t *testing.T) {
 	// 1. Cancellation while CREATED is permitted
 	parcel1, _ := NewParcel(validTestParcelParams())
 	t1 := parcel1.CreatedAt.Add(5 * time.Minute)
-	entry, err := parcel1.Cancel("user-001", "CUSTOMER", "Customer changed mind", t1)
+	entry, err := parcel1.Cancel(strPtr("user-001"), ActorTypeUser, "CUSTOMER", "Customer changed mind", t1)
 	if err != nil {
 		t.Fatalf("Cancel failed while CREATED: %v", err)
 	}
@@ -357,10 +487,20 @@ func TestParcel_CancellationRules(t *testing.T) {
 		t.Fatalf("expected ErrTerminalState from CANCELLED, got: %v", err)
 	}
 
+	// Merchant API cancellation while CREATED is permitted
+	parcelMerchant, _ := NewParcel(validTestParcelParams())
+	merchantEntry, err := parcelMerchant.Cancel(strPtr("merchant-999"), ActorTypeMerchantAPI, "MERCHANT", "Order cancelled via webhook", parcelMerchant.CreatedAt.Add(5*time.Minute))
+	if err != nil {
+		t.Fatalf("Cancel via MERCHANT_API failed while CREATED: %v", err)
+	}
+	if merchantEntry.ActorType != ActorTypeMerchantAPI || merchantEntry.ActorID == nil || *merchantEntry.ActorID != "merchant-999" {
+		t.Errorf("unexpected merchant cancellation metadata: %+v", merchantEntry)
+	}
+
 	// 2. Cancellation once ASSIGNED is rejected
 	parcel2, _ := NewParcel(validTestParcelParams())
 	_, _ = parcel2.Assign("courier-001", parcel2.CreatedAt.Add(5*time.Minute))
-	_, err = parcel2.Cancel("user-001", "CUSTOMER", "Customer requested cancellation", parcel2.CreatedAt.Add(10*time.Minute))
+	_, err = parcel2.Cancel(strPtr("user-001"), ActorTypeUser, "CUSTOMER", "Customer requested cancellation", parcel2.CreatedAt.Add(10*time.Minute))
 	if !errors.Is(err, ErrCancellationNotAllowed) {
 		t.Fatalf("expected ErrCancellationNotAllowed while ASSIGNED, got: %v", err)
 	}
@@ -369,7 +509,7 @@ func TestParcel_CancellationRules(t *testing.T) {
 	parcel3, _ := NewParcel(validTestParcelParams())
 	_, _ = parcel3.Assign("courier-001", parcel3.CreatedAt.Add(5*time.Minute))
 	_, _ = parcel3.PickUp("courier-001", parcel3.CreatedAt.Add(10*time.Minute))
-	_, err = parcel3.Cancel("user-001", "CUSTOMER", "Customer requested cancellation", parcel3.CreatedAt.Add(15*time.Minute))
+	_, err = parcel3.Cancel(strPtr("user-001"), ActorTypeUser, "CUSTOMER", "Customer requested cancellation", parcel3.CreatedAt.Add(15*time.Minute))
 	if !errors.Is(err, ErrCancellationNotAllowed) {
 		t.Fatalf("expected ErrCancellationNotAllowed while PICKED_UP, got: %v", err)
 	}
@@ -382,7 +522,7 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 	// Advance to OUT_FOR_DELIVERY
 	_, _ = parcel.Assign("courier-001", now.Add(10*time.Minute))
 	_, _ = parcel.PickUp("courier-001", now.Add(20*time.Minute))
-	_, _ = parcel.MarkInTransit("hub-001", "HUB", now.Add(30*time.Minute))
+	_, _ = parcel.MarkInTransit(strPtr("hub-001"), ActorTypeUser, "HUB", now.Add(30*time.Minute))
 	_, _ = parcel.DispatchForDelivery("courier-002", now.Add(40*time.Minute))
 
 	// Attempt 1 fails
@@ -391,8 +531,8 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed attempt 1: %v", err)
 	}
-	if parcel.Status != StatusAttemptFailed || parcel.DeliveryAttempts != 1 {
-		t.Fatalf("expected ATTEMPT_FAILED with 1 attempt, got %s (%d)", parcel.Status, parcel.DeliveryAttempts)
+	if parcel.Status != StatusAttemptFailed || parcel.AttemptCount != 1 {
+		t.Fatalf("expected ATTEMPT_FAILED with 1 attempt, got %s (%d)", parcel.Status, parcel.AttemptCount)
 	}
 
 	// Reattempt 1 permitted (attempts = 1 < 3)
@@ -411,8 +551,8 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed attempt 2: %v", err)
 	}
-	if parcel.Status != StatusAttemptFailed || parcel.DeliveryAttempts != 2 {
-		t.Fatalf("expected ATTEMPT_FAILED with 2 attempts, got %s (%d)", parcel.Status, parcel.DeliveryAttempts)
+	if parcel.Status != StatusAttemptFailed || parcel.AttemptCount != 2 {
+		t.Fatalf("expected ATTEMPT_FAILED with 2 attempts, got %s (%d)", parcel.Status, parcel.AttemptCount)
 	}
 
 	// Reattempt 2 permitted (attempts = 2 < 3)
@@ -428,8 +568,8 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed attempt 3: %v", err)
 	}
-	if parcel.Status != StatusAttemptFailed || parcel.DeliveryAttempts != 3 {
-		t.Fatalf("expected ATTEMPT_FAILED with 3 attempts, got %s (%d)", parcel.Status, parcel.DeliveryAttempts)
+	if parcel.Status != StatusAttemptFailed || parcel.AttemptCount != 3 {
+		t.Fatalf("expected ATTEMPT_FAILED with 3 attempts, got %s (%d)", parcel.Status, parcel.AttemptCount)
 	}
 
 	// 4th reattempt MUST BE REJECTED (max 3 delivery attempts exceeded)
@@ -439,9 +579,9 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 		t.Fatalf("expected ErrMaxDeliveryAttemptsExceeded for 4th reattempt, got: %v", err)
 	}
 
-	// Eligible to transition to RETURNED after 3 failed attempts
+	// Eligible to transition to RETURNED via SYSTEM after 3 failed attempts
 	tReturn := now.Add(7 * time.Hour)
-	entryReturn, err := parcel.ReturnToSender("disp-001", "DISPATCHER", "Maximum delivery attempts exceeded; returning to sender", tReturn)
+	entryReturn, err := parcel.ReturnToSender(nil, ActorTypeSystem, "SYSTEM", "Maximum delivery attempts exceeded; returning to sender", tReturn)
 	if err != nil {
 		t.Fatalf("ReturnToSender failed: %v", err)
 	}
@@ -450,6 +590,9 @@ func TestParcel_DeliveryAttemptLimitsAndReturn(t *testing.T) {
 	}
 	if *entryReturn.FromStatus != StatusAttemptFailed || entryReturn.ToStatus != StatusReturned {
 		t.Errorf("unexpected return entry: %+v", entryReturn)
+	}
+	if entryReturn.ActorType != ActorTypeSystem || entryReturn.ActorID != nil || !entryReturn.OccurredAt.Equal(tReturn) {
+		t.Errorf("unexpected SYSTEM return actor metadata: %+v", entryReturn)
 	}
 
 	// Terminal check: cannot transition from RETURNED
@@ -510,3 +653,25 @@ func TestParcel_TimestampMonotonicity(t *testing.T) {
 	}
 }
 
+func TestParcel_TransitionTo_ActorValidationDoesNotMutateState(t *testing.T) {
+	parcel, err := NewParcel(validTestParcelParams())
+	if err != nil {
+		t.Fatalf("failed to create parcel: %v", err)
+	}
+
+	t1 := parcel.CreatedAt.Add(10 * time.Minute)
+	if _, err := parcel.Cancel(strPtr("SYSTEM"), ActorTypeSystem, "SYSTEM", "bad system id", t1); !errors.Is(err, ErrInvalidActorID) {
+		t.Fatalf("expected ErrInvalidActorID when passing literal SYSTEM with ActorTypeSystem, got %v", err)
+	}
+	if _, err := parcel.Cancel(nil, ActorTypeUser, "CUSTOMER", "missing actor id", t1); !errors.Is(err, ErrInvalidActorID) {
+		t.Fatalf("expected ErrInvalidActorID when passing nil actor id for USER, got %v", err)
+	}
+	if _, err := parcel.TransitionTo(StatusCancelled, strPtr("bot"), ActorType("UNKNOWN"), "BOT", "bad type", t1); !errors.Is(err, ErrInvalidActorType) {
+		t.Fatalf("expected ErrInvalidActorType, got %v", err)
+	}
+
+	if parcel.Status != StatusCreated || parcel.Version != 1 || !parcel.UpdatedAt.Equal(parcel.CreatedAt) {
+		t.Errorf("failed actor validation must not mutate parcel state: status=%s ver=%d updated=%v",
+			parcel.Status, parcel.Version, parcel.UpdatedAt)
+	}
+}
