@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Member 08 (Events & Messaging) Full Capability Verification Suite
 .DESCRIPTION
@@ -18,8 +18,10 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 Write-Host "==================================================================" -ForegroundColor Cyan
+
 Write-Host "  🧪 Member 08: Full Capability & Subsystem Verification Suite   " -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan
+
 
 # Load .env if present
 $envFile = Join-Path $ScriptDir ".env"
@@ -144,6 +146,7 @@ Write-Host "`n==================================================================
 Write-Host "                📊 Member 08 Verification Summary                 " -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan
 
+
 $allPassed = $true
 foreach ($k in $Results.Keys) {
     $res = $Results[$k]
@@ -156,9 +159,11 @@ foreach ($k in $Results.Keys) {
 }
 
 Write-Host "==================================================================" -ForegroundColor Cyan
+
 if ($allPassed) {
     Write-Host "  🎉 ALL 7 CAPABILITIES OF MEMBER 08 ARE FULLY OPERATIONAL!      " -ForegroundColor Green
 } else {
     Write-Host "  ⚠️  SOME TESTS FAILED - REVIEW OUTPUT ABOVE                    " -ForegroundColor Red
 }
 Write-Host "==================================================================" -ForegroundColor Cyan
+
