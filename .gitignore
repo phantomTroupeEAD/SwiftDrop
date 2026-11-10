@@ -47,6 +47,8 @@ desktop.ini
 .vscode/
 *.swp
 *~
+.logs/
+*.log
 
 #graphify
 graphify-out
