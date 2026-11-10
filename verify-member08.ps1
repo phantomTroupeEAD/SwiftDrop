@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Member 08 (Events & Messaging) Full Capability Verification Suite
 .DESCRIPTION
