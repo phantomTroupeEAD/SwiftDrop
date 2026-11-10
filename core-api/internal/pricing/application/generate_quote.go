@@ -18,6 +18,8 @@ type GenerateQuoteCommand struct {
 	WidthCm           float64
 	HeightCm          float64
 	ServiceLevel      domain.ServiceLevel
+	RequesterID       *string
+	MerchantID        *string
 }
 
 // GenerateQuoteUseCase coordinates the quote generation workflow.
@@ -55,9 +57,18 @@ func (uc *GenerateQuoteUseCase) Execute(
 	}
 
 	// 2. Validate the required location information.
-	if strings.TrimSpace(cmd.OriginZoneID) == "" ||
-		strings.TrimSpace(cmd.DestinationZoneID) == "" {
-		return domain.Quote{}, domain.ErrInvalidTariff
+	if err := domain.ValidateZoneID(cmd.OriginZoneID); err != nil {
+		return domain.Quote{}, fmt.Errorf("%w: origin zone %w", domain.ErrInvalidTariff, err)
+	}
+	if err := domain.ValidateZoneID(cmd.DestinationZoneID); err != nil {
+		return domain.Quote{}, fmt.Errorf("%w: destination zone %w", domain.ErrInvalidTariff, err)
+	}
+
+	// 2b. Validate quote requester/merchant ownership before querying persistence.
+	if (cmd.RequesterID == nil && cmd.MerchantID == nil) ||
+		(cmd.RequesterID != nil && strings.TrimSpace(*cmd.RequesterID) == "") ||
+		(cmd.MerchantID != nil && strings.TrimSpace(*cmd.MerchantID) == "") {
+		return domain.Quote{}, domain.ErrInvalidQuote
 	}
 
 	// 3. Calculate the parcel's chargeable weight.
@@ -122,6 +133,8 @@ func (uc *GenerateQuoteUseCase) Execute(
 		cmd.ServiceLevel,
 		fee,
 		now,
+		cmd.RequesterID,
+		cmd.MerchantID,
 	)
 	if err != nil {
 		return domain.Quote{}, err
