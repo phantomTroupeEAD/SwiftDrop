@@ -192,12 +192,12 @@ To preserve database capacity across all 10 microservices, Member 9 ratified con
 
 | Configuration Parameter | Value | Rationale |
 |---|---|---|
-| `DATABASE_URL` | `postgres://swiftdrop_tracking_ro:****@postgres.swiftdrop.svc:5432/swiftdrop_db?sslmode=require` | Secure service connection string. |
-| `MaxOpenConns` | **5** | Hard cap per pod. Across 2–4 pods, max total pool is 10–20 connections. |
+| `TRACKING_DATABASE_URL` / `DATABASE_URL` | `postgres://swiftdrop_tracking_ro:****@postgres.swiftdrop.svc.cluster.local:5432/swiftdrop_db?sslmode=disable` | Sourced from `postgres-secrets` under key `TRACKING_DATABASE_URL` and mapped to `DATABASE_URL` in the container. Uses `sslmode=disable` in-cluster per Agreement D11. |
+| `MaxOpenConns` | **5** | Hard cap per pod. Across 1–4 pods, max total pool is 5–20 connections (strictly within the 20-conn ceiling of Agreement D8). |
 | `MaxIdleConns` | **2** | Keeps connection churn low. |
 | `ConnMaxLifetime` | **15 minutes** | Prevents stale connections across pod recycles. |
 | `ConnMaxIdleTime` | **5 minutes** | Releases idle connections during off-peak hours. |
-| `statement_timeout` | **3000ms** (`3s`) | Prevents slow unindexed queries from hanging the pool. |
+| `statement_timeout` | **3000ms** (`3s`) | Prevents slow unindexed queries from hanging the pool (Agreement D9). |
 
 ---
 
