@@ -138,12 +138,12 @@ func (z *Zone) PullEvents() []Event {
 
 // changed raises the version once per save, however many fields one request changes,
 // so a PATCH with version N always leaves the zone at N+1.
-func (z *Zone) changed(t EventType, field string, old, new any) {
+func (z *Zone) changed(t EventType, field string, old, newValue any) {
 	if !z.bumped {
 		z.version++
 		z.bumped = true
 	}
-	z.record(t, map[string][2]any{field: {old, new}})
+	z.record(t, map[string][2]any{field: {old, newValue}})
 }
 
 func (z *Zone) record(t EventType, changes map[string][2]any) {
