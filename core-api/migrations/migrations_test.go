@@ -1,11 +1,16 @@
 package migrations
 
 import (
+	"context"
+	"database/sql"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+	"time"
+
+	_ "github.com/lib/pq"
 )
 
 var versionRegex = regexp.MustCompile(`^(\d{14})_([a-zA-Z0-9_]+)\.(up|down)\.sql$`)
@@ -168,5 +173,58 @@ func TestIdempotencyMigration_SchemaContract(t *testing.T) {
 	downSQL := string(downBytes)
 	if !strings.Contains(downSQL, "DROP TABLE IF EXISTS idempotency_keys;") {
 		t.Errorf("idempotency down migration must drop table idempotency_keys")
+	}
+}
+
+// TestMigrations_LiveLifecycle_UpDownUp verifies complete database migration reversibility.
+// It executes: Up (apply all) -> Down (roll back all in reverse order) -> Up (re-apply from scratch).
+// This guarantees that all .down.sql scripts execute cleanly and foreign key drop order is preserved.
+func TestMigrations_LiveLifecycle_UpDownUp(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set; skipping live migration rollback lifecycle test (runs in CI with postgres service)")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to test database: %v", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		t.Skipf("database ping failed: %v; skipping live migration test", err)
+	}
+
+	t.Log("=== Phase 1: Applying all UP migrations ===")
+	if err := RunMigrations(ctx, db); err != nil {
+		t.Fatalf("initial RunMigrations failed: %v", err)
+	}
+
+	t.Log("=== Phase 2: Rolling back all migrations (verifying .down.sql and reverse FK order) ===")
+	if err := RollbackMigrations(ctx, db); err != nil {
+		t.Fatalf("RollbackMigrations failed: %v", err)
+	}
+
+	// Verify all application tables were dropped cleanly
+	var remainingCount int
+	countQuery := `
+		SELECT COUNT(*) FROM information_schema.tables 
+		WHERE table_schema = 'public' 
+		  AND table_type = 'BASE TABLE' 
+		  AND table_name != 'schema_migrations';
+	`
+	if err := db.QueryRowContext(ctx, countQuery).Scan(&remainingCount); err != nil {
+		t.Fatalf("failed to query remaining table count: %v", err)
+	}
+	if remainingCount > 0 {
+		t.Errorf("expected 0 application tables remaining after rollback, found %d", remainingCount)
+	}
+
+	t.Log("=== Phase 3: Re-applying all UP migrations to restore schema ===")
+	if err := RunMigrations(ctx, db); err != nil {
+		t.Fatalf("re-application RunMigrations failed: %v", err)
 	}
 }
