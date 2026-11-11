@@ -107,7 +107,7 @@ services:
   # 5. Local S3 Object Storage (MinIO)
   # ----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    image: cgr.dev/chainguard/minio:latest
     container_name: swiftdrop-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
