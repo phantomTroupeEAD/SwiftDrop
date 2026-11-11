@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-assistant-config
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: ai-assistant
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: ai-service
+    app.kubernetes.io/managed-by: member-10
+data:
+  # Internal Upstream Service Endpoints (Strictly In-Cluster Read-Only REST)
+  CORE_API_URL: "http://core-api:8080"
+  TRACKING_API_URL: "http://tracking-api:8081"
+  
+  # Runtime Ports
+  PORT: "8000"
+  MCP_PORT: "8002"
+  
+  # LLM Engine & Logging
+  MOCK_LLM_MODE: "false"
+  USE_MOCK_UPSTREAM: "false"
+  LLM_MODEL: "meta-llama/llama-3.1-70b-instruct"
+  LLM_BASE_URL: "https://openrouter.ai/api/v1"
+  LLM_MAX_TOKENS: "1024"
+  LLM_TEMPERATURE: "0.2"
+  LOG_LEVEL: "info"
+  
+  # FastMCP Security
+  MCP_REQUIRE_AUTH: "false"
+  
+  # Role-Aware Dynamic Rate Limiting (SlowAPI)
+  RATE_LIMIT_ANONYMOUS_RPM: "20"
+  RATE_LIMIT_CUSTOMER_RPM: "60"
+  RATE_LIMIT_MERCHANT_RPM: "100"

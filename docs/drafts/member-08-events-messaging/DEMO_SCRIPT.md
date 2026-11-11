@@ -108,11 +108,12 @@ Test fault tolerance and poison message routing:
 
 ### Trigger HTTP 500 Failures on the Webhook Receiver:
 ```bash
-# In the fake-receiver window, simulate 500 Internal Server Errors
-go run ./cmd/fake-receiver --port 9090 --status 500
+# fake-receiver supports fault injection via ?status=<code query parameter in the webhook URL
+# (e.g. http://localhost:9090/webhook?status=500).
+go run ./cmd/fake-receiver --port 9090
 ```
 - Observe the Event Worker backing off exponentially (`0s, 30s, 2m, 10m, 30m`).
-- Inspect attempt audit log in PostgreSQL: `SELECT status_code, error_message, latency_ms FROM webhook_delivery_attempts ORDER BY created_at DESC LIMIT 5;`.
+- Inspect attempt audit log in PostgreSQL: `SELECT response_status_code, error_class, error_message FROM webhook_delivery_attempts ORDER BY created_at DESC LIMIT 5;`.
 
 ### Simulate Poison Message DLQ Quarantine:
 Publish a malformed, invalid JSON payload directly to the queue:

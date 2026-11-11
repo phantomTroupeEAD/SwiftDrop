@@ -3,34 +3,35 @@
 > **Domain:** Deterministic Fee Estimation, Tariffs & Volumetric Weight
 > **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
-> **Status:** Proposed Baseline (Pending Team Ratification vs `docs/contracts/pricing-rules.md`)
+> **Status:** HTTP Transport Implemented (`POST /api/v1/pricing/quotes`, Ready for Startup Wiring)
 
 ---
 
 ## 1. Module Overview & Responsibilities
-The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), pickup and destination zones, and chargeable weight bands. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
+The `pricing` module calculates delivery fees based on parcel weight, dimensions (volumetric weight), origin and destination zones, and requested service levels. It persists quotes in `pricing_quotes` with a 15-minute price freeze window.
 
 ### Key Responsibilities:
-- Complete tariff lookup and rule evaluation:
-  - $\text{Delivery Fee} = \text{Tariff}(\text{Pickup Zone}, \text{Destination Zone}, \text{Weight Band})$.
-  - Complete tariff represents the total fee; there is no separate base fee, per-kg charge, distance fee, or service multiplier (provisional proposal diverging from legacy `pricing-rules.md`).
-- Option A Volumetric Threshold Policy:
-  - Actual weight $\le 1.00\text{ kg}$: dimensions do not affect price; $\text{Chargeable Weight} = \text{Actual Weight}$.
-  - Actual weight $> 1.00\text{ kg}$: dimensions in cm are required; $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{6000}$; $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
-- Weight Band Selection (7 non-overlapping bands up to 30 kg):
-  - Band 1: $0 < W \le 0.5\text{ kg}$
-  - Band 2: $0.5 < W \le 1.0\text{ kg}$
-  - Band 3: $1.0 < W \le 2.0\text{ kg}$
-  - Band 4: $2.0 < W \le 5.0\text{ kg}$
-  - Band 5: $5.0 < W \le 10.0\text{ kg}$
-  - Band 6: $10.0 < W \le 20.0\text{ kg}$
-  - Band 7: $20.0 < W \le 30.0\text{ kg}$
-- Maximum limits: Proposed maximum actual weight and chargeable weight is 30.00 kg.
+- Geographic tariff lookup and rule evaluation:
+  - Tariffs represent geographic zone pricing (`OriginZoneID`, `DestinationZoneID`) independent of service level.
+  - Base fee covers the first 1 kg.
+  - Additional weight is charged proportionally: $\text{ExtraKg} = \max(0, \text{ChargeableWeightKg} - 1)$.
+  - $\text{WeightFee} = \text{ExtraKg} \times \text{PerKgRate}$.
+  - $\text{Subtotal} = \text{BaseFee} + \text{WeightFee}$.
+- Service Level Multipliers:
+  - Multipliers are applied separately by the pricing calculator.
+  - `STANDARD`: multiplier ratio 1/1 (1.0x).
+  - `EXPRESS`: multiplier ratio 3/2 (1.5x).
+  - `SAME_DAY`: multiplier ratio 2/1 (2.0x).
+  - $\text{FinalFee} = \text{Subtotal} \times \text{ServiceMultiplier}$ (rounded half-up to nearest LKR minor unit / cent).
+- Volumetric Divisor Policy:
+  - $\text{Volumetric Weight (kg)} = \frac{L \times W \times H \text{ (cm)}}{5000}$.
+  - $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$.
+  - Mandatory dimensions and actual weight; maximum chargeable weight is 30.00 kg.
 - Quote persistence in `pricing_quotes` with 15-minute expiration timestamp (`expires_at = created_at + 15m`).
 - Backend-enforced expiration check (`current_time >= expires_at` is expired).
-- Safe failure: Returns controlled `pricing_unavailable` if no tariff exists; fails safely on ambiguous multiple matches. Never fabricates a price.
+- Safe failure: Returns controlled `ErrTariffNotFound` if no tariff exists. Never fabricates a price.
 - In-process domain service interface consumed by `internal/parcels`.
-- Public/authenticated fee estimation endpoint `POST /api/v1/pricing/quotes`.
+- Authenticated fee estimation & quotation endpoint `POST /api/v1/pricing/quotes` (Bearer JWT required: `CUSTOMER`, `MERCHANT`, `ADMIN`).
 - Candidate REST CRUD endpoints for administrative tariff management (`/api/v1/admin/pricing-rules`) served for Member 7's Admin UI.
 
 ---
@@ -38,28 +39,38 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ## 2. Domain Invariants & Business Rules
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
-3. **Deterministic Complete Tariff:** Given identical zone pairs and weight band, tariff lookup returns the unique configured fee for that rule version — *Confirmed Project Standard*.
-4. **Option A Threshold & Volumetric Divisor (6000):** Actual weight $\le 1\text{ kg}$ uses actual weight only. Weight $> 1\text{ kg}$ requires dimensions and uses divisor 6000 cm³/kg: $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{6000}$ — *Proposed Baseline (Pending Team Ratification)*.
-5. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Proposed Baseline (Pending Team Ratification)*.
-6. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
+3. **Approved Option A Architecture:** `Tariff` represents geographic pricing only (`OriginZoneID`, `DestinationZoneID`, `BaseFee`, `PerKgRate`, `Version`, `IsActive`, `EffectiveFrom`, `EffectiveUntil`). Zone identifiers must follow Member 7's canonical `^ZONE_[A-Z0-9_]{2,27}$` format (validated via `domain.ValidateZoneID`). Service levels and multipliers are applied independently during calculation to eliminate duplicate pricing rules.
+4. **Quote Ownership Invariants:** `domain.Quote` and `application.GenerateQuoteCommand` track `RequesterID` (`*string`, customer/user ID) and `MerchantID` (`*string`, merchant tenant ID). HTTP transport (`transport/handler.go`) enforces Bearer JWT auth and resolves ownership strictly from the verified `Principal`: `CUSTOMER` and `ADMIN` bind `RequesterID = Principal.UserID` (`MerchantID = nil`); `MERCHANT` validates UUID `TenantID` (rejecting missing with `403 MISSING_TENANT_ID` and non-UUID with `403 TENANT_NOT_MERCHANT_UUID`), verifies the authoritative record via `application.MerchantReader` (`MerchantRepoAdapter`), confirms `OwnerUserID == Principal.UserID` and `Status == APPROVED`, and binds both `RequesterID` and `MerchantID`. Client-supplied owner or price fields are rejected (`DisallowUnknownFields`).
+5. **Volumetric Divisor (5000 cm³/kg):** Dimensions in cm are required for all parcels. $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$, capped at 30 kg — *Confirmed Project Standard*.
+6. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Project Standard*.
+7. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
 
 ---
 
 ## 3. Layer Breakdown
 ```
 internal/pricing/
-├── domain/                  # Money VO (LKR cents), Tariff entity, FeeCalculationPolicy, domain errors
-├── application/             # CalculateQuote use case & PricingCalculator interface
-├── infrastructure/          # PostgresTariffRepository & PostgresQuoteRepository
-└── transport/               # HTTP handler (/api/v1/pricing/quotes) and request/response DTOs
+├── domain/                  # Money VO (LKR cents), Tariff entity, ServiceLevel VO, Quote aggregate, Calculator, domain errors
+├── application/             # GenerateQuoteUseCase, SystemClock, ports (TariffRepository, QuoteRepository, MerchantReader, Clock, QuoteIDGenerator), ErrMerchantNotFound
+├── infrastructure/          # PostgresTariffRepository, PostgresQuoteRepository, MerchantRepoAdapter (adapts merchantsapp.MerchantRepo), UUIDv7QuoteIDGenerator
+└── transport/               # HTTP handler (POST /api/v1/pricing/quotes), DTOs, role/ownership resolution, RegisterRoutes, httptest unit tests
 ```
 
 ---
 
 ## 4. Database Ownership & Migrations
-- `000004_create_pricing_rules.up.sql`:
-  - `pricing_rules`: Tariff configuration (ID, version, pickup/destination zones, weight_band_id, min/max weight bounds, fee_cents, currency, effective dates, active flag).
-  - `pricing_quotes`: Pre-booking quotation cache (ID, rule ID/version, fee in cents, input snapshot JSONB, 15m expiration timestamp, optional accepted_parcel_id).
+- **Canonical Migration Directory:** `core-api/migrations/`
+- **Migration Authoring Ownership:** Member 9 (DevOps / Database Migrations)
+- **File Naming Convention:** 14-digit UTC timestamp format `YYYYMMDDHHMMSS_name.up.sql` (e.g., `20261106000001_create_pricing_rules.up.sql`), matching existing migrations in the repository:
+  - `20261021000001_create_identity_tables.up.sql`
+  - `20261021000002_seed_mock_users.up.sql`
+  - `20261101000050_create_outbox_events.up.sql`
+  - `20261101000500_create_worker_dedup_and_webhooks.up.sql`
+- **Proposed Pricing Migrations (Member 9):**
+  - `pricing_rules`: Geographic base tariffs (composite PK `(id, version)`, `origin_zone_id`, `destination_zone_id`, `base_fee_cents`, `per_kg_rate_cents`, `effective_from`, `effective_until`, `version`, `is_active`, `created_at`, `updated_at`).
+  - `pricing_quotes`: Pre-booking quotation cache (PK `id` UUID, `tariff_id`, `tariff_version`, `requester_id` UUID NULL, `merchant_id` UUID NULL, `chargeable_weight_kg`, `service_level`, `fee_cents`, `currency`, `created_at`, `expires_at`, `used_at`).
+  - *Insert-Only Semantics:* `QuoteRepository.Save` performs strict `INSERT` without `ON CONFLICT DO UPDATE`. Duplicate IDs are rejected with `ErrDuplicateQuote`.
+  - *Atomic Single-Use Quote Consumption:* Quote consumption during parcel booking must be executed via an atomic conditional SQL update (`UPDATE pricing_quotes SET used_at = $2 WHERE id = $1 AND used_at IS NULL AND expires_at > $2`).
 
 ---
 
@@ -70,6 +81,13 @@ internal/pricing/
 | 2026-10-25 | Aligned with Audit v2.0.0: Standardized on POST /api/v1/pricing/quotes, integer LKR cents, 15-minute quote validity, and migration 000004 | Member 2 |
 | 2026-10-26 | Integrated Member 2 pricing decisions: Complete tariff model, Option A threshold (1 kg), divisor 6000 cm³/kg, 7 weight bands up to 30 kg, backend quote expiry | Member 2 |
 | 2026-10-26 | Reconciliation: Clarified provisional proposal status vs pricing-rules.md, explained 55000 vs 51000 arithmetic discrepancy, added candidate admin tariff CRUD APIs | Member 2 |
+| 2026-11-06 | Task 1: Refactored Tariff domain model to Option A architecture. Removed ServiceLevel from Tariff; renamed Pickup/DestinationZone to Origin/DestinationZoneID; added IsActive, CreatedAt, UpdatedAt; moved multipliers to ServiceLevel; updated Calculator and GenerateQuoteUseCase to support independent service level pricing | Member 2 |
+| 2026-11-06 | Task 3: Implemented and refined Pricing PostgreSQL Repositories (`PostgresTariffRepository`, `PostgresQuoteRepository`). Enforced Option A geographic tariff lookup with version and temporal window queries, strictly insert-only quote persistence (`ErrDuplicateQuote` on duplicate ID; no `ON CONFLICT DO UPDATE` overwriting `used_at`), and comprehensive in-memory test suite via standard `database/sql/driver` test mock | Member 2 |
+| 2026-11-10 | Task 6 (Step 1): Added canonical `ValidateZoneID` (`^ZONE_[A-Z0-9_]{2,27}$`) in `domain/tariff.go` and quote requester/merchant ownership (`RequesterID`, `MerchantID`) in `domain/quote.go` | Member 2 |
+| 2026-11-10 | Task 6 (Step 2): Updated `GenerateQuoteCommand` and `GenerateQuoteUseCase.Execute` to validate zone IDs via `domain.ValidateZoneID` and validate/forward requester & merchant ownership before tariff lookup | Member 2 |
+| 2026-11-10 | Task 6 (Step 3): Updated `PostgresQuoteRepository` (`Save`, `FindByID`) to persist and scan nullable `requester_id` and `merchant_id` columns via `sql.NullString`, updated mock repository tests and `ZONE_` tariff fixtures | Member 2 |
+| 2026-11-10 | Task 7C: Added production `UUIDv7QuoteIDGenerator` implementing `application.QuoteIDGenerator` via shared `events.GenerateUUIDv7` and `events.IsValidUUID` | Member 2 |
+| 2026-11-11 | Implemented Pricing HTTP Transport (`POST /api/v1/pricing/quotes` in `transport/`), `SystemClock`, `MerchantReader` port + `MerchantRepoAdapter`, `httpx` envelopes, `swag` annotations, `httptest` suite, and updated `API.md`/`README.md` | Member 2 |
 
 ---
 

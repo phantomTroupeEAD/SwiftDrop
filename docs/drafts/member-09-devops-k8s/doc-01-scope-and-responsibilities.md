@@ -137,7 +137,7 @@ Without a platform module:
 | **Tables** | none of the business tables. `schema_migrations` (golang-migrate) and the DB roles are mine | `docs/architecture/database-schema.md` (each owner edits their table; I review) | every business table (see Doc 5 §2) |
 | **APIs** | no business API. I define the health/metrics contract (Doc 4) | — | all `/api/v1/*` |
 | **Queues** | none | RabbitMQ broker deployment (me) vs topology (M8) | exchanges, queues, DLQ |
-| **Configuration** | `.env.example` (root), Secret/ConfigMap templates, Postgres/RabbitMQ container config, Traefik Helm values | `traefik.yml` / `dynamic-routes.yml` (M7) | app-level business settings (pricing etc.) |
+| **Configuration** | `deploy/.env.example` (Compose overrides), Secret/ConfigMap templates, Postgres/RabbitMQ container config, Traefik Helm values | `traefik.yml` / `dynamic-routes.yml` (M7) | app-level business settings (pricing etc.) |
 
 ### RACI (R = does it, A = accountable, C = consulted, I = informed)
 

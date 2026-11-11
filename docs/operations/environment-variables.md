@@ -2,6 +2,8 @@
 
 > **Authority:** Fulfills SRS §11.3 (Environment Variables) and Engineering Standards §11 (Configuration Management).  
 > **Rule:** Never commit production values, passwords, or private keys to the repository. Use `.env.example` templates and Kubernetes Secrets.
+>
+> **Where templates live:** `deploy/.env.example` holds only the values `deploy/docker-compose.yml` substitutes (copy it to `deploy/.env`; Compose does not read a root `.env`). Each service keeps its own `.env.example` in its folder for running it alone. Kubernetes never reads `.env` files; it uses the ConfigMaps and Secrets in §7. The names in all three places must be the exact names the code reads.
 
 ---
 

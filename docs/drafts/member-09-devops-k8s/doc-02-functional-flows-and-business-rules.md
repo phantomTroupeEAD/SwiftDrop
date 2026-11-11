@@ -38,7 +38,7 @@
 
 ## F1 — Start the local stack
 
-**Precondition:** Docker Desktop running, `make` installed, `.env` copied from `.env.example`.
+**Precondition:** Docker Desktop running, `make` installed (or `scripts/make.ps1`); optional overrides in `deploy/.env` (from `deploy/.env.example`).
 **Postcondition:** infra healthy, schema at the latest version, demo data loaded, gateway on `http://localhost`.
 
 ```mermaid
