@@ -24,6 +24,20 @@ jobs:
   go-checks:
     name: Go Quality & Architecture Verification
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: swiftdrop_user
+          POSTGRES_PASSWORD: swiftdrop_password
+          POSTGRES_DB: swiftdrop_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,6 +69,8 @@ jobs:
         if: hashFiles('core-api/go.mod') != ''
 
       - name: Run Tests (-race)
+        env:
+          INTEGRATION: "1"
         run: cd core-api && go test -v -race ./...
         if: hashFiles('core-api/go.mod') != ''
 
