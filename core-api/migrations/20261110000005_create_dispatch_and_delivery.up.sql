@@ -1,8 +1,8 @@
 -- ============================================================================
--- SwiftDrop Core API: Migration 20261110000004 - Dispatch Assignments & Delivery Attempts
+-- SwiftDrop Core API: Migration 20261110000005 - Dispatch Assignments & Delivery Attempts
 -- Author: Member 03 (Dispatch, Couriers & Proof of Delivery)
--- Canonical Sequence: 000004
--- Dependencies: 20261021000001_create_identity_tables, 20261110000003_create_couriers, parcels
+-- Canonical Sequence: 000005
+-- Dependencies: 20261021000001_create_identity_tables, 20261110000004_create_couriers, parcels
 -- Standards: AGENTS.md §7.2, ADR-004, database-schema.md
 -- ============================================================================
 

@@ -74,8 +74,8 @@ internal/dispatch/
 ---
 
 ## 4. Database Ownership
-- `couriers`: Courier ID, user ID reference (`users.id`), vehicle type, max capacity, active shift status, `current_zone_id` (`delivery_zones.id`). Migrated via `20261110000003_create_couriers.up.sql` (Canonical Sequence 000003).
-- `courier_assignments`: Courier ID, parcel ID, assigned by, status (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`), assigned at, ended at. Concurrency-guarded via partial unique index `idx_assignments_parcel_single_active`. Migrated via `20261110000004_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000004).
+- `couriers`: Courier ID, user ID reference (`users.id`), vehicle type, max capacity, active shift status, `current_zone_id` (`delivery_zones.id`). Migrated via `20261110000004_create_couriers.up.sql` (Canonical Sequence 000004).
+- `courier_assignments`: Courier ID, parcel ID, assigned by, status (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`), assigned at, ended at. Concurrency-guarded via partial unique index `idx_assignments_parcel_single_active`. Migrated via `20261110000005_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000005).
 
 ---
 

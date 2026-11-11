@@ -75,7 +75,7 @@ internal/delivery/
 ---
 
 ## 4. Database Ownership
-- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), outcome (`SUCCESS`, `FAILED`), failure reason code, proof type (`PHOTO`, `SIGNATURE`, `RECIPIENT_CONFIRMATION`), proof attachment URL / storage path, signature data, received by name, GPS coordinates, notes, attempted_at timestamp. Migrated via `20261110000004_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000004).
+- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), outcome (`SUCCESS`, `FAILED`), failure reason code, proof type (`PHOTO`, `SIGNATURE`, `RECIPIENT_CONFIRMATION`), proof attachment URL / storage path, signature data, received by name, GPS coordinates, notes, attempted_at timestamp. Migrated via `20261110000005_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000005).
 
 ---
 
