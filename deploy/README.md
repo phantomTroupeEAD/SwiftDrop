@@ -138,6 +138,11 @@ PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling), set by
 
 Each workload logs in with its own role (D6). `postgres-secrets` holds one key per role, and the manifest maps that key into the `DATABASE_URL` env var the service reads: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL`, `RELAY_DATABASE_URL`, `WORKER_DATABASE_URL`, `RECONCILER_DATABASE_URL`. The migrate Job uses `postgres-migrator-secrets`.
 
+### 6.1 Role Privileges & Automated Default Permissions
+During initial bootstrap (`deploy/postgres/bootstrap-roles.sql` and `deploy/kubernetes/postgres/bootstrap-job.yaml`), PostgreSQL's default privileges are configured for the schema owner `swiftdrop_migrator`:
+- **`swiftdrop_app`:** Receives default `SELECT, INSERT, UPDATE` on all future tables and `USAGE, SELECT` on sequences.
+- **`swiftdrop_tracking_ro`:** Receives default `SELECT` on all future tables and `USAGE, SELECT` on sequences, enforcing read-only projection queries (`default_transaction_read_only = on`) across all domain models (including `parcels` and `parcel_status_history`).
+
 Connection budgets are strictly enforced per pod ConfigMap:
 - `core-api`: 12 conns/pod $\times$ 4 replicas = 48
 - `tracking-api`: 5 conns/pod $\times$ 4 replicas = 20
@@ -218,6 +223,7 @@ make reset
 | `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
 | `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
 | `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
+| `swiftdrop-tracking-api` | 8081 | `8081` | `GET /health/live`, `/health/ready` | Tracking API & SSE projections service |
 | `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
 | `swiftdrop-event-worker` | 8083 | `8083` | `GET /health/live`, `/metrics` | Asynchronous consumer worker (KEDA scaled) |
 | `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
