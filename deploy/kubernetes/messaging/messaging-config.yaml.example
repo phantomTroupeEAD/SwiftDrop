@@ -1,0 +1,79 @@
+# ==============================================================================
+# SwiftDrop Messaging Subsystem — Kubernetes ConfigMap & Secrets Template
+# Owner: Member 08 (Event-Driven Backend & Messaging)
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: messaging-config
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: messaging-config
+    app.kubernetes.io/part-of: swiftdrop
+data:
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+  OUTBOX_POLL_INTERVAL_MS: "500"
+  OUTBOX_BATCH_SIZE: "50"
+  OUTBOX_STALE_SECONDS: "300"
+  OUTBOX_LEASE_SECONDS: "60"
+  WORKER_CONCURRENCY: "10"
+  WEBHOOK_HTTP_TIMEOUT_SECONDS: "5"
+  WEBHOOK_RETRY_SCHEDULE: "0s,30s,2m,10m,30m"
+  WEBHOOK_ALLOW_PRIVATE_HOSTS: "false"
+  DELIVERY_LEASE_SECONDS: "120"
+  SMTP_HOST: "mail.swiftdrop.internal"
+  SMTP_PORT: "587"
+  SMTP_SECURITY: "starttls"
+  SMTP_FROM_EMAIL: "notifications@swiftdrop.com"
+  SMTP_FROM_NAME: "SwiftDrop Courier"
+
+---
+# Secret: Outbox Relay Database Connection (swiftdrop_relay role)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: outbox-relay-secrets
+  namespace: swiftdrop
+type: Opaque
+stringData:
+  DATABASE_URL: "postgres://swiftdrop_relay:REPLACE_WITH_SECURE_PASSWORD@postgres.swiftdrop.svc.cluster.local:5432/swiftdrop_db?sslmode=disable"
+
+---
+# Secret: Event Worker Database Connection (swiftdrop_worker role)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: event-worker-secrets
+  namespace: swiftdrop
+type: Opaque
+stringData:
+  DATABASE_URL: "postgres://swiftdrop_worker:REPLACE_WITH_SECURE_PASSWORD@postgres.swiftdrop.svc.cluster.local:5432/swiftdrop_db?sslmode=disable"
+
+---
+# Secret: RabbitMQ Broker URL
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rabbitmq-secrets
+  namespace: swiftdrop
+type: Opaque
+stringData:
+  RABBITMQ_URL: "amqp://swiftdrop:REPLACE_WITH_SECURE_PASSWORD@rabbitmq.swiftdrop.svc.cluster.local:5672/"
+
+---
+# Secret: Integrations Credentials (AES-256-GCM Key & SMTP Auth)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: integrations-secrets
+  namespace: swiftdrop
+type: Opaque
+stringData:
+  # 64 hex characters (32 bytes AES-256-GCM primary key)
+  WEBHOOK_SECRET_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  # Fallbacks for zero-downtime rotation (optional): "1=old_hex_key_32bytes"
+  WEBHOOK_SECRET_ENCRYPTION_KEY_FALLBACKS: ""
+  SMTP_USERNAME: "notifications@swiftdrop.com"
+  SMTP_PASSWORD: "REPLACE_WITH_SMTP_PASSWORD"
+

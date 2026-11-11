@@ -68,7 +68,7 @@ These are the variables the **platform itself** needs. Each service's variables 
 ```bash
 git clone https://github.com/phantomTroupeEAD/SwiftDrop.git
 cd SwiftDrop
-cp .env.example .env          # then put local-only values in .env
+cp deploy/.env.example deploy/.env   # optional overrides; Compose reads .env from deploy/, not the root
 make up                       # start the stack (Compose in deploy/)
 make migrate-up               # usually automatic: the migrate one-shot runs before core-api
 make seed                     # demo data
@@ -213,6 +213,6 @@ This follows `deployment-guide.md` §3 with the decided names.
 ## 10. Deliverables checklist (template Document 8)
 
 - [ ] `deploy/README.md` updated: architecture, commands, troubleshooting (living doc)
-- [ ] Root `.env.example` with safe placeholders
+- [x] `deploy/.env.example` with safe placeholders (Compose values only; per-service templates stay in each service folder)
 - [ ] Operational notes: `runbook.md`, `deployment-guide.md` updated with the decided names (C1, C3, C4, C12)
 - [ ] A **demonstrable local setup**: `make up && make migrate-up && make seed` works from a clean clone (PLT-010)

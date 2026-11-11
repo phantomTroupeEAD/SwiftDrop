@@ -49,6 +49,12 @@ spec:
             - name: mcp-sse
               containerPort: 8002
               protocol: TCP
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: JWT_SECRET
           envFrom:
             - configMapRef:
                 name: ai-assistant-config

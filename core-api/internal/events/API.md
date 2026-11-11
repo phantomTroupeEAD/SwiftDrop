@@ -45,7 +45,7 @@ Retrieves outbox events staged in PostgreSQL.
 {
   "data": [
     {
-      "id": "0192e2b3-7c8a-7890-a123-456789abcdef",
+      "id": "0192e2b3-7c8a-7890-a123-456789abcdef",
       "event_id": "0192e2b3-7c8a-7890-a123-456789abcdef",
       "event_type": "parcel.booked.v1",
       "aggregate_type": "PARCEL",

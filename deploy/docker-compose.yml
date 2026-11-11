@@ -5,6 +5,8 @@
 # Usage:
 #   docker compose -f deploy/docker-compose.yml up -d
 #   or via root Makefile: make up
+# Config: optional overrides go in deploy/.env (copy deploy/.env.example).
+#   Compose reads .env from this deploy/ folder, never from the repo root.
 # ==============================================================================
 
 services:
@@ -25,6 +27,7 @@ services:
       - ./gateway/traefik/dynamic-routes.yml:/etc/traefik/dynamic/dynamic-routes.yml:ro
     depends_on:
       - core-api
+      - tracking-api
       - ai-assistant
       - web
     networks:
@@ -174,8 +177,8 @@ services:
       - MERCHANT_API_KEY_PEPPER=${MERCHANT_API_KEY_PEPPER:-swiftdrop-merchant-pepper-secret-32-chars}
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=swiftdrop-pod-attachments
-      - S3_ACCESS_KEY_ID=minioadmin
-      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
     depends_on:
       postgres:
         condition: service_healthy
@@ -185,6 +188,43 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # Tracking API (Go 1.22 SSE Projection Service - Member 5)
+  # ----------------------------------------------------------------------------
+  tracking-api:
+    build:
+      context: ../services/tracking
+      dockerfile: Dockerfile
+    image: swiftdrop/tracking-api:dev
+    container_name: swiftdrop-tracking-api
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TRACKING_HTTP_ADDR=:8081
+      - DATABASE_URL=postgres://swiftdrop_tracking_ro:swiftdrop_tracking_dev@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-api-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health/live"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -276,7 +316,8 @@ services:
       - MOCK_LLM_MODE=true
       - USE_MOCK_UPSTREAM=true
       - SWIFTDROP_API_KEY=sd_live_demo_merchant_123
-      - LOG_LEVEL=INFO
+      - JWT_SECRET=${JWT_SECRET:-swiftdrop-development-secret-key-change-in-production-32chars}  # must match core-api
+      - LOG_LEVEL=info               # lowercase only (src/core/config.py pattern)
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
