@@ -15,6 +15,7 @@ All internal Member 08 files, migrations (`000008`, `000009`) and reference code
 | ID | Recipient | Subject | Status |
 | :--- | :--- | :--- | :--- |
 | CR-M01-01 | M1 | `X-Request-ID` sanitising, actor-neutral envelopes | Proposed |
+| CR-M01-02 | M1 | Regenerate seed password hashes with StandardPasswordHasher | Proposed |
 | CR-M02-01 | M2 | `notify` block, `merchant_id`, `recipient_email` | Proposed (M2 `doc-04` has no email field today) |
 | CR-M02-02 | M2 | Optional `RABBITMQ_URL` in Core API | Proposed |
 | CR-M03-01 | M3 | `OutboxWriter` signature, UUID IDs, `correlation_id`, exchange name | Proposed |
@@ -58,6 +59,14 @@ All internal Member 08 files, migrations (`000008`, `000009`) and reference code
   2. In Core API middleware, validate it against `^[a-zA-Z0-9_\-]{1,128}$`, generate a fresh UUIDv7 if missing or invalid, and put it in `context.Context`.
   3. Aggregate use cases pass this value into `EventEnvelope.CorrelationID` when calling `OutboxWriter.Write`.
   4. Envelopes stay actor-neutral: `actor_id` / `actor_role` may appear in the payload for audit, never raw JWTs.
+
+---
+
+### CR-M01-02: Regenerate Seed User Password Hashes with StandardPasswordHasher
+- **Recipient Domain:** Member 01 (Identity, Access & Security)
+- **Affected Documentation & Code:** `core-api/migrations/20261021000002_seed_mock_users.up.sql`
+- **Current State:** Seeded password hashes in migration `20261021000002` were placeholder values rather than outputs of `StandardPasswordHasher` (iterative 10,000-round salted SHA-256). Consequently, HTTP authentication against PostgreSQL fails with `AUTH_INVALID_CREDENTIALS`.
+- **Requested Action:** Member 01 must update migration `20261021000002_seed_mock_users.up.sql` with real hashes generated via `StandardPasswordHasher.HashPassword(...)` for all 5 canonical seeded accounts (`admin@swiftdrop.local` with `AdminPassword123!`, etc.).
 
 ---
 

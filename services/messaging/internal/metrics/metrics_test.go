@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestMetricsRegistered(t *testing.T) {
+func TestMetricsRegistered(_ *testing.T) {
 	// Assert metrics can be mutated without panic
 	OutboxPendingEvents.Set(15)
 	OutboxOldestPendingAgeSeconds.Set(120.5)

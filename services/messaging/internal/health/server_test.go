@@ -57,7 +57,7 @@ func TestHealthServer(t *testing.T) {
 	})
 
 	t.Run("GET /health/ready with failing check returns 503", func(t *testing.T) {
-		srv.AddReadyCheck("db", func(ctx context.Context) error {
+		srv.AddReadyCheck("db", func(_ context.Context) error {
 			return errors.New("connection refused")
 		})
 
@@ -84,7 +84,7 @@ func TestHealthServer(t *testing.T) {
 	})
 
 	t.Run("GET /health/ready with passing check returns 200", func(t *testing.T) {
-		srv.AddReadyCheck("db", func(ctx context.Context) error {
+		srv.AddReadyCheck("db", func(_ context.Context) error {
 			return nil
 		})
 

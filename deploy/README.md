@@ -40,26 +40,42 @@ SwiftDrop Kubernetes Cluster (Namespace: `swiftdrop`)
 ```
 deploy/
 ├── README.md                            # Living deployment documentation (This file)
+├── .env.example                         # Optional Compose overrides → copy to deploy/.env (gitignored)
 ├── docker-compose.yml                   # Unified local development stack (make up)
 ├── gateway/                             # Edge gateway and reverse proxy (Member 7)
 │   ├── README.md                        # Gateway architecture and local Docker run guide
 │   └── traefik/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
 │       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
-└── kubernetes/                          # Kubernetes resource manifests (Member 9)
-    │                                    # Target layout (A8). Today the files are still flat:
-    │                                    # postgres-statefulset.yml, rabbitmq-statefulset.yml,
-    │                                    # cronjob-reconciliation.yml, autoscaling/*.yml (moved in one M9 PR)
+└── kubernetes/                          # Kubernetes resource manifests (Member 9 per Agreement A8)
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
-    ├── postgres/                        # PostgreSQL 16 StatefulSet, Service, PVC
-    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet, Service, PVC
-    ├── redis/                           # Ephemeral Redis StatefulSet / Deployment
-    ├── core-api/                        # Deployment, Service, ConfigMap, migrate-job.yaml
-    ├── tracking-api/                    # Deployment, Service, hpa.yaml
-    ├── messaging/                       # Relay Deployment, Worker Deployment, keda-scaledobject.yaml
-    ├── ai-assistant/                    # Deployment, Service, ConfigMap
-    ├── web/                             # Deployment, Service (Port 3000)
-    └── monitoring/                      # Prometheus & Grafana manifests
+    ├── secrets.example.yaml             # Template for all production cluster secrets
+    ├── postgres/                        # PostgreSQL 16 StatefulSet + headless Service + role bootstrap Job
+    │   ├── statefulset.yaml
+    │   └── bootstrap-job.yaml
+    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet + headless Service + 5Gi PVC
+    │   └── statefulset.yaml
+    ├── redis/                           # Ephemeral Redis Deployment & Service (port 6379)
+    │   └── deployment.yaml
+    ├── core-api/                        # Deployment (2-4 replicas), ClusterIP Service, HPA, migrate Job
+    │   └── deployment.yaml
+    ├── tracking-api/                    # Deployment (1-2 replicas), ClusterIP Service, HPA
+    │   └── deployment.yaml
+    ├── outbox-relay/                    # Deployment (STRICT SINGLETON replicas: 1, NO HPA)
+    │   └── deployment.yaml
+    ├── event-worker/                    # Deployment + KEDA ScaledObject (1-3 pods on queue backlog)
+    │   └── deployment.yaml
+    ├── ai-assistant/                    # Deployment, Service, ConfigMap, HPA (Member 10)
+    │   ├── deployment.yaml
+    │   ├── service.yaml
+    │   ├── configmap.yaml
+    │   └── hpa.yaml
+    ├── web/                             # Deployment (2-3 replicas, port 3000), ClusterIP Service, HPA
+    │   └── deployment.yaml
+    ├── reconciliation/                  # CronJob (*/10 * * * *, sweeps stale outbox rows)
+    │   └── cronjob.yaml
+    └── ingress/                         # Traefik IngressRoutes & Middlewares (CORS, RateLimit)
+        └── traefik-routes.yaml
 ```
 
 ---
@@ -122,6 +138,11 @@ PostgreSQL 16 is tuned with `max_connections = 150` (1Gi memory ceiling), set by
 
 Each workload logs in with its own role (D6). `postgres-secrets` holds one key per role, and the manifest maps that key into the `DATABASE_URL` env var the service reads: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL`, `RELAY_DATABASE_URL`, `WORKER_DATABASE_URL`, `RECONCILER_DATABASE_URL`. The migrate Job uses `postgres-migrator-secrets`.
 
+### 6.1 Role Privileges & Automated Default Permissions
+During initial bootstrap (`deploy/postgres/bootstrap-roles.sql` and `deploy/kubernetes/postgres/bootstrap-job.yaml`), PostgreSQL's default privileges are configured for the schema owner `swiftdrop_migrator`:
+- **`swiftdrop_app`:** Receives default `SELECT, INSERT, UPDATE` on all future tables and `USAGE, SELECT` on sequences.
+- **`swiftdrop_tracking_ro`:** Receives default `SELECT` on all future tables and `USAGE, SELECT` on sequences, enforcing read-only projection queries (`default_transaction_read_only = on`) across all domain models (including `parcels` and `parcel_status_history`).
+
 Connection budgets are strictly enforced per pod ConfigMap:
 - `core-api`: 12 conns/pod $\times$ 4 replicas = 48
 - `tracking-api`: 5 conns/pod $\times$ 4 replicas = 20
@@ -135,6 +156,17 @@ Connection budgets are strictly enforced per pod ConfigMap:
 
 ## 7. Local & Cluster Deployment Commands
 
+### 7.0 Where configuration lives
+
+| Running | Config source |
+| :--- | :--- |
+| Full stack (`make up`) | Compose defaults. To override: `cp deploy/.env.example deploy/.env` and edit it. Compose reads `.env` from `deploy/`, **not** the repo root |
+| One service on its own | That service's own template, e.g. `services/ai-assistant/.env.example`, `services/messaging/.env.example` (owned by the service owner) |
+| Kubernetes | ConfigMaps and Secrets only (`deploy/kubernetes/`). Kubernetes never reads `.env` files |
+
+Every Dockerfile that copies its whole folder (`COPY . .`) needs a `.dockerignore` excluding `.env*`, so a developer's local `.env` is never baked into an image.
+
+### 7.1 Using GNU Make (Linux / macOS / Git Bash)
 ```bash
 # 1. Start unified local Docker Compose stack
 make up
@@ -145,7 +177,55 @@ make migrate-up
 # 3. Seed demonstration data (refuses in production)
 make seed
 
-# 4. Run automated test suites
+# 4. Check status and follow logs
+make ps
+make logs
+
+# 5. Run automated test suites
 make test
 make test-e2e
+
+# 6. Stop containers / reset volumes
+make down
+make reset
 ```
+
+### 7.2 Native Windows PowerShell (No Make installation required)
+```powershell
+# 1. Start stack
+.\scripts\make.ps1 up
+
+# 2. Run migrations
+.\scripts\make.ps1 migrate-up
+
+# 3. Seed demo accounts
+.\scripts\make.ps1 seed
+
+# 4. Check status & logs
+.\scripts\make.ps1 ps
+.\scripts\make.ps1 logs
+
+# 5. Stop stack
+.\scripts\make.ps1 down
+```
+
+---
+
+## 8. Service Port & Health Probe Inventory
+
+| Container Name | Internal Port | Host Port | Health Check / Probe | Purpose |
+| :--- | :---: | :---: | :--- | :--- |
+| `swiftdrop-traefik` | 80, 8090 | `80`, `127.0.0.1:8090` | Traefik `/ping` | Edge ingress gateway & reverse proxy |
+| `swiftdrop-postgres` | 5432 | `5432` | `pg_isready -U swiftdrop -d swiftdrop_db` | Authoritative PostgreSQL 16 store |
+| `swiftdrop-rabbitmq` | 5672, 15672 | `5672`, `15672` | `rabbitmq-diagnostics -q ping` | AMQP 0-9-1 broker & management UI |
+| `swiftdrop-redis` | 6379 | `6379` | `redis-cli ping` | Ephemeral cache & SSE pub/sub fan-out |
+| `swiftdrop-minio` | 9000, 9001 | `9000`, `9001` | S3 API endpoint | Local S3 object store for proof-of-delivery |
+| `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
+| `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
+| `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
+| `swiftdrop-tracking-api` | 8081 | `8081` | `GET /health/live`, `/health/ready` | Tracking API & SSE projections service |
+| `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
+| `swiftdrop-event-worker` | 8083 | `8083` | `GET /health/live`, `/metrics` | Asynchronous consumer worker (KEDA scaled) |
+| `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
+| `swiftdrop-web` | 3000 | `3000` | `GET /healthz` | React/TypeScript SPA served by Nginx |
+

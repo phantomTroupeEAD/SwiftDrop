@@ -41,7 +41,8 @@ func NewRelay(repo OutboxRepository, publisher Publisher, cfg *config.Config, lo
 		publisher: publisher,
 		cfg:       cfg,
 		logger:    logger,
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		//nolint:gosec // poller jitter does not require cryptographic randomness
+		rng: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-worker
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: event-worker
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: background-worker
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: event-worker
+  template:
+    metadata:
+      labels:
+        app: event-worker
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: event-worker
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/worker"]
+          ports:
+            - containerPort: 8083
+              name: metrics
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: WORKER_DATABASE_URL
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secrets
+                  key: RABBITMQ_URL
+            - name: METRICS_PORT
+              value: "8083"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: event-worker-scaler
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: event-worker
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: keda-autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event-worker
+  pollingInterval: 15
+  cooldownPeriod: 30
+  minReplicaCount: 1
+  maxReplicaCount: 3 # Micro-scaling limit safe for single-node VPS (ADR-002 §7.1)
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.notifications.worker
+        mode: QueueLength
+        value: "10" # Scale up when notification queue backlog exceeds 10 messages
+      authenticationRef:
+        name: keda-rabbitmq-auth
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.webhooks.dispatcher
+        mode: QueueLength
+        value: "10" # Scale up when webhook queue backlog exceeds 10 messages
+      authenticationRef:
+        name: keda-rabbitmq-auth
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq-auth
+  namespace: swiftdrop
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: rabbitmq-secrets
+      key: RABBITMQ_URL

@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: api-monolith
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: core-api
+  template:
+    metadata:
+      labels:
+        app: core-api
+        app.kubernetes.io/name: core-api
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: core-api
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: APP_DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: JWT_SECRET
+            - name: API_KEY_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: API_KEY_PEPPER
+            # Connection budget D8: 4 pods * 20 conns = 80 <= 100 max allocated to app
+            - name: DB_MAX_OPEN_CONNS
+              value: "20"
+            - name: DB_MAX_IDLE_CONNS
+              value: "10"
+            - name: DB_CONN_MAX_LIFETIME
+              value: "5m"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api
+  namespace: swiftdrop
+  labels:
+    app: core-api
+spec:
+  type: ClusterIP
+  selector:
+    app: core-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: core-api-hpa
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: core-api
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: core-api-migrate
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/component: db-migrator
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: core-api-migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: migrator
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/core-api", "--migrate-only"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: ADMIN_DATABASE_URL
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

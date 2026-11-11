@@ -1,0 +1,366 @@
+# ==============================================================================
+# SwiftDrop Unified Local Development Stack
+# Orchestrated by Member 9 (DevOps, Kubernetes & Database Coordinator)
+# Service definitions aligned with Members 1-10 (SRS §11.1 & ADR-001/002)
+# Usage:
+#   docker compose -f deploy/docker-compose.yml up -d
+#   or via root Makefile: make up
+# Config: optional overrides go in deploy/.env (copy deploy/.env.example).
+#   Compose reads .env from this deploy/ folder, never from the repo root.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Edge Gateway & Reverse Proxy (Traefik v3.1)
+  # ----------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.1.7
+    container_name: swiftdrop-traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"                    # Public HTTP Ingress
+      - "127.0.0.1:8090:8090"      # Traefik Admin Dashboard (Localhost only)
+    volumes:
+      - ./gateway/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./gateway/traefik/dynamic-routes.yml:/etc/traefik/dynamic/dynamic-routes.yml:ro
+    depends_on:
+      - core-api
+      - tracking-api
+      - ai-assistant
+      - web
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 2. Authoritative Database (PostgreSQL 16)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: swiftdrop-postgres
+    restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=150"
+      - "-c"
+      - "shared_buffers=256MB"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-swiftdrop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-swiftdrop_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/bootstrap-roles.sql:/docker-entrypoint-initdb.d/01-bootstrap-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swiftdrop} -d ${POSTGRES_DB:-swiftdrop_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 3. Message Broker (RabbitMQ 3.13)
+  # ----------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: swiftdrop-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-swiftdrop}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-swiftdrop_dev}
+    ports:
+      - "5672:5672"                # AMQP protocol
+      - "15672:15672"              # Web Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 4. Ephemeral Cache & SSE Pub/Sub (Redis 7)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: swiftdrop-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 5. Local S3 Object Storage (MinIO)
+  # ----------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    container_name: swiftdrop-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"                # S3 API
+      - "9001:9001"                # Web Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 6. Local Transactional Email Sandbox (Mailpit)
+  # ----------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:v1.18
+    container_name: swiftdrop-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"                # SMTP server
+      - "8025:8025"                # Web UI
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 7. Database Migration Runner (One-Shot Container)
+  # ----------------------------------------------------------------------------
+  core-api-migrate:
+    image: migrate/migrate:v4.17.1
+    container_name: swiftdrop-core-api-migrate
+    volumes:
+      - ../core-api/migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 8. Core API Modular Monolith (Go 1.22)
+  # ----------------------------------------------------------------------------
+  core-api:
+    build:
+      context: ../core-api
+      dockerfile: Dockerfile
+    image: swiftdrop/core-api:dev
+    container_name: swiftdrop-core-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - HTTP_ADDR=:8080
+      - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
+      - JWT_SECRET=${JWT_SECRET:-swiftdrop-development-secret-key-change-in-production-32chars}
+      - COOKIE_SECURE=false
+      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - MERCHANT_API_KEY_PEPPER=${MERCHANT_API_KEY_PEPPER:-swiftdrop-merchant-pepper-secret-32-chars}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=swiftdrop-pod-attachments
+      - S3_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-api-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # Tracking API (Go 1.22 SSE Projection Service - Member 5)
+  # ----------------------------------------------------------------------------
+  tracking-api:
+    build:
+      context: ../services/tracking
+      dockerfile: Dockerfile
+    image: swiftdrop/tracking-api:dev
+    container_name: swiftdrop-tracking-api
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TRACKING_HTTP_ADDR=:8081
+      - DATABASE_URL=postgres://swiftdrop_tracking_ro:swiftdrop_tracking_dev@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-api-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 9. Transactional Outbox Relay Daemon (Go 1.22)
+  # ----------------------------------------------------------------------------
+  outbox-relay:
+    build:
+      context: ../services/messaging
+      dockerfile: Dockerfile
+    image: swiftdrop/messaging:dev
+    container_name: swiftdrop-outbox-relay
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/relay"]
+    ports:
+      - "8082:8082"                # Metrics & health
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
+      - OUTBOX_POLL_INTERVAL_MS=500
+      - OUTBOX_BATCH_SIZE=50
+      - OUTBOX_STALE_SECONDS=60
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-api-migrate:
+        condition: service_completed_successfully
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 10. Asynchronous Event & Webhook Worker (Go 1.22)
+  # ----------------------------------------------------------------------------
+  event-worker:
+    build:
+      context: ../services/messaging
+      dockerfile: Dockerfile
+    image: swiftdrop/messaging:dev
+    container_name: swiftdrop-event-worker
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/worker"]
+    ports:
+      - "8083:8083"                # Metrics & health
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
+      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - NOTIFICATION_PROVIDER=mock
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-api-migrate:
+        condition: service_completed_successfully
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 11. AI Assistant & FastMCP Service (Python 3.11 / FastAPI)
+  # ----------------------------------------------------------------------------
+  ai-assistant:
+    build:
+      context: ../services/ai-assistant
+      dockerfile: Dockerfile
+    image: swiftdrop/ai-assistant:latest
+    container_name: swiftdrop-ai-assistant
+    restart: unless-stopped
+    ports:
+      - "8000:8000"                # REST API & Chat SSE streaming
+      - "8002:8002"                # FastMCP Remote SSE Gateway
+    environment:
+      - PORT=8000
+      - MCP_PORT=8002
+      - CORE_API_URL=http://core-api:8080
+      - TRACKING_API_URL=http://tracking-api:8081
+      - MOCK_LLM_MODE=true
+      - USE_MOCK_UPSTREAM=true
+      - SWIFTDROP_API_KEY=sd_live_demo_merchant_123
+      - JWT_SECRET=${JWT_SECRET:-swiftdrop-development-secret-key-change-in-production-32chars}  # must match core-api
+      - LOG_LEVEL=info               # lowercase only (src/core/config.py pattern)
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - swiftdrop-network
+
+  # ----------------------------------------------------------------------------
+  # 12. Frontend Web Portal (React / TypeScript / Nginx)
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    image: swiftdrop/web:dev
+    container_name: swiftdrop-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks:
+      - swiftdrop-network
+
+volumes:
+  postgres_data:
+    name: swiftdrop_postgres_data
+  rabbitmq_data:
+    name: swiftdrop_rabbitmq_data
+  minio_data:
+    name: swiftdrop_minio_data
+
+networks:
+  swiftdrop-network:
+    name: swiftdrop-network
+    driver: bridge

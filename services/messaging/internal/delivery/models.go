@@ -17,6 +17,8 @@ type NotificationTask struct {
 	Channel          string          `json:"channel"`
 	TemplateName     string          `json:"template_name"`
 	AttemptCount     int             `json:"attempt_count"`
+	Status           string          `json:"status,omitempty"`
+	LastError        string          `json:"last_error,omitempty"`
 }
 
 // WebhookTask represents a claimed merchant webhook delivery row.

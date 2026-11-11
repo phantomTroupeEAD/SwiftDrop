@@ -117,7 +117,7 @@ func main() {
 
 	const insertQuery = `
 		INSERT INTO outbox_events (
-			event_id, event_type, aggregate_type, aggregate_id, aggregate_version,
+			id, event_type, aggregate_type, aggregate_id, aggregate_version,
 			schema_version, occurred_at, correlation_id, producer, payload, status
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'PENDING'
