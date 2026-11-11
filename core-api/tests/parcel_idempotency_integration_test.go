@@ -19,11 +19,20 @@ import (
 )
 
 type fixedPricingClock struct {
+	mu  sync.Mutex
 	now time.Time
 }
 
-func (c fixedPricingClock) Now() time.Time {
+func (c *fixedPricingClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.now
+}
+
+func (c *fixedPricingClock) Set(t time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = t
 }
 
 type fixedParcelClock struct {
@@ -83,10 +92,11 @@ func TestBookParcelIdempotency_PostgreSQLIntegration(t *testing.T) {
 	// Wire real PostgreSQL repositories and use cases.
 	tariffRepo := pricinginfra.NewPostgresTariffRepository(database)
 	quoteRepo := pricinginfra.NewPostgresQuoteRepository(database)
+	pricingClock := &fixedPricingClock{now: now}
 	quoteUC := pricingapp.NewGenerateQuoteUseCase(
 		tariffRepo,
 		quoteRepo,
-		fixedPricingClock{now: now},
+		pricingClock,
 		pricinginfra.NewUUIDv7QuoteIDGenerator(),
 	)
 
@@ -108,6 +118,7 @@ func TestBookParcelIdempotency_PostgreSQLIntegration(t *testing.T) {
 	bookUC.WithIdempotency(idemRepo, 24*time.Hour)
 
 	generateQuoteForUser := func(userID string) string {
+		pricingClock.Set(parcelClock.Now())
 		q, qErr := quoteUC.Execute(ctx, pricingapp.GenerateQuoteCommand{
 			OriginZoneID:      "ZONE_WESTERN_01",
 			DestinationZoneID: "ZONE_CENTRAL_01",
