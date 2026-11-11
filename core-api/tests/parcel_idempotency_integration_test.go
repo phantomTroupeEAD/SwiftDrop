@@ -321,8 +321,8 @@ func TestBookParcelIdempotency_PostgreSQLIntegration(t *testing.T) {
 
 	t.Run("concurrent duplicate requests produce single parcel", func(t *testing.T) {
 		concurrentKey := "7f91e0b1-1234-4a56-9876-aabbccddeeff"
-		concurrentQuote := generateQuoteForUser(customer1ID)
 		parcelClock.Set(now)
+		concurrentQuote := generateQuoteForUser(customer1ID)
 
 		const workers = 5
 		var wg sync.WaitGroup
