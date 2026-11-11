@@ -38,12 +38,16 @@ type BookParcelCommand struct {
 	ItemDescription     string
 	SpecialInstructions string
 	CorrelationID       string
+	Idempotency         *IdempotencyInput
 }
 
-// BookParcelResult returns the resulting domain aggregate root and initial audit trail.
+// BookParcelResult returns the resulting domain aggregate root, initial audit trail,
+// and idempotency metadata when request idempotency is enabled.
 type BookParcelResult struct {
 	Parcel        domain.Parcel
 	StatusHistory domain.StatusHistoryEntry
+	Replayed      bool
+	Idempotency   *IdempotencyRecord
 }
 
 // TransitionParcelStatusCommand contains all inputs required to execute a validated parcel lifecycle status transition.
