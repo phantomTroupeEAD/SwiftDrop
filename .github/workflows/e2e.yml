@@ -1,0 +1,100 @@
+name: SwiftDrop Tier 2 Gateway System Release Gate
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway-system-verification:
+    name: Live Gateway & OpenAPI System Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Start Full Docker Compose Cluster
+        env:
+          JWT_SECRET: dev_jwt_secret_key_for_testing_minimum_32_bytes_long!
+          POSTGRES_PASSWORD: swiftdrop_dev_password
+          RABBITMQ_URL: amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d --build
+
+      - name: Wait for Services & Gateway Readiness
+        run: |
+          echo "Waiting for Traefik Ingress Gateway and backend services to become healthy..."
+          timeout 180s bash -c '
+            until curl -sf http://localhost:80/api/v1/health; do
+              echo "Waiting for Core API via Traefik Gateway..."
+              sleep 4
+            done
+          '
+          echo "Core API is reachable via Traefik Gateway!"
+
+      - name: Live Gateway Cross-Service Smoke Verification
+        run: |
+          echo "=== 1. Testing Core API Health through Traefik Gateway ==="
+          curl -sf http://localhost:80/api/v1/health || (echo "Core API gateway routing failed" && exit 1)
+
+          echo "=== 2. Testing AI Assistant through Traefik Gateway ==="
+          timeout 60s bash -c '
+            until curl -sf http://localhost:80/api/v1/ai/health; do
+              echo "Waiting for AI Assistant via Traefik Gateway..."
+              sleep 3
+            done
+          '
+          echo "AI Assistant is reachable via Traefik Gateway!"
+
+          echo "=== 3. Testing Tracking API through Traefik Gateway ==="
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/v1/tracking/public/test-tracking-number || true)
+          echo "Tracking API HTTP code: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 404 ]; then
+            echo "Unexpected tracking response code: $HTTP_CODE" && exit 1
+          fi
+
+          echo "=== All Direct Gateway Routes Verified Cleanly ==="
+
+      - name: Run Schemathesis OpenAPI Contract Fuzzing
+        run: |
+          pip install schemathesis
+          st run core-api/docs/swagger.json \
+            --url http://localhost:80/api/v1 \
+            --checks not_a_server_error,status_code_conformance \
+            --max-examples 10 \
+            --exclude-checks unsupported_regex \
+            --suppress-health-check all \
+            --validate-schema true
+
+      - name: Dump Container Logs on Failure
+        if: failure()
+        run: |
+          mkdir -p test-artifacts
+          docker compose -f deploy/docker-compose.yml logs > test-artifacts/docker-compose.log
+
+      - name: Upload System Logs Artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-system-logs
+          path: test-artifacts/
+
+      - name: Teardown Docker Compose Cluster
+        if: always()
+        run: |
+          docker compose -f deploy/docker-compose.yml down -v
