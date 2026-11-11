@@ -287,6 +287,15 @@ func TestConfigValidationErrors(t *testing.T) {
 			wantErr: "JWTSecret must be at least 32 characters in production",
 		},
 		{
+			name: "empty JWTIssuer in production",
+			mutate: func(c *Config) {
+				c.AppEnv = "production"
+				c.JWTSecret = "valid-production-secret-key-that-is-32-chars-long"
+				c.JWTIssuer = ""
+			},
+			wantErr: "JWTIssuer must be explicitly configured in production",
+		},
+		{
 			name: "empty RabbitMQQueue",
 			mutate: func(c *Config) {
 				c.RabbitMQQueue = ""

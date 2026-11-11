@@ -106,3 +106,37 @@ func TestDeduplicator_Concurrent(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestDeduplicator_NoOrderDuplicationOnReinsertion(t *testing.T) {
+	d := NewDeduplicator(10, 10*time.Millisecond)
+
+	d.SeenOrAdd("k-1")
+	time.Sleep(20 * time.Millisecond) // expire k-1
+	d.SeenOrAdd("k-1")                // re-insert after expiration
+
+	d.mu.Lock()
+	orderLen := len(d.order)
+	d.mu.Unlock()
+
+	if orderLen != 1 {
+		t.Errorf("expected order slice length 1 after re-inserting existing key, got %d", orderLen)
+	}
+}
+
+func BenchmarkDeduplicator_SeenOrAdd(b *testing.B) {
+	d := NewDeduplicator(10000, 15*time.Minute)
+	keys := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		keys[i] = fmt.Sprintf("bench-key-%04d", i)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		idx := 0
+		for pb.Next() {
+			d.SeenOrAdd(keys[idx%1000])
+			idx++
+		}
+	})
+}

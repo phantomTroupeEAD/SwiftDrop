@@ -81,6 +81,8 @@ type TrackingEventPublisher interface {
 type AMQPDelivery interface {
 	GetBody() []byte
 	GetDeliveryTag() uint64
+	GetHeaders() amqp.Table
+	IsRedelivered() bool
 	Ack(multiple bool) error
 	Nack(multiple, requeue bool) error
 }
@@ -91,6 +93,8 @@ type realAMQPDelivery struct {
 
 func (r realAMQPDelivery) GetBody() []byte                   { return r.d.Body }
 func (r realAMQPDelivery) GetDeliveryTag() uint64            { return r.d.DeliveryTag }
+func (r realAMQPDelivery) GetHeaders() amqp.Table            { return r.d.Headers }
+func (r realAMQPDelivery) IsRedelivered() bool               { return r.d.Redelivered }
 func (r realAMQPDelivery) Ack(multiple bool) error           { return r.d.Ack(multiple) }
 func (r realAMQPDelivery) Nack(multiple, requeue bool) error { return r.d.Nack(multiple, requeue) }
 
@@ -104,6 +108,9 @@ type RabbitMQConsumer struct {
 	publisher     TrackingEventPublisher
 	dedup         *Deduplicator
 	logger        *slog.Logger
+	maxRetries    int
+	retryMu       sync.Mutex
+	retryCounts   map[string]int
 
 	mu       sync.RWMutex
 	conn     *amqp.Connection
@@ -146,7 +153,143 @@ func NewRabbitMQConsumer(
 		dedup:         NewDeduplicator(10000, 15*time.Minute),
 		logger:        logger,
 		stopChan:      make(chan struct{}),
+		maxRetries:    3,
+		retryCounts:   make(map[string]int),
 	}
+}
+
+// SetMaxRetries overrides the maximum transient failure retry attempts (default: 3).
+func (c *RabbitMQConsumer) SetMaxRetries(max int) {
+	c.retryMu.Lock()
+	defer c.retryMu.Unlock()
+	if max > 0 {
+		c.maxRetries = max
+	}
+}
+
+func (c *RabbitMQConsumer) incrementRetry(eventID string) int {
+	c.retryMu.Lock()
+	defer c.retryMu.Unlock()
+	if c.retryCounts == nil {
+		c.retryCounts = make(map[string]int)
+	}
+	c.retryCounts[eventID]++
+	return c.retryCounts[eventID]
+}
+
+func (c *RabbitMQConsumer) clearRetry(eventID string) {
+	c.retryMu.Lock()
+	defer c.retryMu.Unlock()
+	if c.retryCounts != nil {
+		delete(c.retryCounts, eventID)
+	}
+}
+
+func extractDeliveryCount(headers amqp.Table) int64 {
+	if headers == nil {
+		return 0
+	}
+	val, ok := headers["x-delivery-count"]
+	if !ok || val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case int64:
+		return v
+	case int32:
+		return int64(v)
+	case int:
+		return int64(v)
+	case uint64:
+		return int64(v)
+	case uint32:
+		return int64(v)
+	default:
+		return 0
+	}
+}
+
+func extractDeathCount(headers amqp.Table) int64 {
+	if headers == nil {
+		return 0
+	}
+	val, ok := headers["x-death"]
+	if !ok || val == nil {
+		return 0
+	}
+	deaths, ok := val.([]interface{})
+	if !ok {
+		return 0
+	}
+	var total int64
+	for _, item := range deaths {
+		tbl, ok := item.(amqp.Table)
+		if !ok {
+			continue
+		}
+		if countVal, found := tbl["count"]; found {
+			switch cv := countVal.(type) {
+			case int64:
+				total += cv
+			case int32:
+				total += int64(cv)
+			case int:
+				total += int64(cv)
+			}
+		}
+	}
+	return total
+}
+
+func (c *RabbitMQConsumer) handleTransientError(d AMQPDelivery, eventID string, reason string, err error) {
+	// 1. Inspect broker-level delivery metadata (authoritative across multiple replicas)
+	headers := d.GetHeaders()
+	brokerDeliveries := extractDeliveryCount(headers)
+	brokerDeaths := extractDeathCount(headers)
+
+	// In RabbitMQ Quorum Queues, x-delivery-count records delivery attempts across all pod replicas.
+	if brokerDeliveries >= int64(c.maxRetries) || brokerDeaths >= int64(c.maxRetries) {
+		c.logger.Error("broker delivery count exceeded retry ceiling across replicas; routing poison message to DLQ",
+			"event_id", eventID,
+			"broker_deliveries", brokerDeliveries,
+			"broker_deaths", brokerDeaths,
+			"max_retries", c.maxRetries,
+			"reason", reason,
+			"error", err.Error(),
+		)
+		c.clearRetry(eventID)
+		_ = d.Nack(false, false) // Requeue=false sends to DLQ
+		return
+	}
+
+	// 2. Process-local retry ceiling
+	attempts := c.incrementRetry(eventID)
+	if attempts > c.maxRetries {
+		c.logger.Error("replica retry limit exceeded; routing poison message to DLQ",
+			"event_id", eventID,
+			"attempts", attempts,
+			"max_retries", c.maxRetries,
+			"reason", reason,
+			"error", err.Error(),
+		)
+		c.clearRetry(eventID)
+		_ = d.Nack(false, false) // requeue=false routes to DLQ
+		return
+	}
+
+	c.logger.Warn("transient failure encountered; requeueing event for bounded retry",
+		"event_id", eventID,
+		"attempt", attempts,
+		"broker_deliveries", brokerDeliveries,
+		"max_retries", c.maxRetries,
+		"reason", reason,
+		"error", err.Error(),
+	)
+
+	// 3. Apply backoff throttle to prevent high-frequency busy-looping during broker or database outages
+	time.Sleep(50 * time.Millisecond)
+
+	_ = d.Nack(false, true) // requeue=true
 }
 
 // Start launches the consumer reconnection and ingestion loop in the background.
@@ -217,7 +360,8 @@ func (c *RabbitMQConsumer) runLoop(ctx context.Context) {
 
 		c.logger.Info("connected to RabbitMQ; consuming events", "queue", c.queueName)
 
-		notifyClose := conn.NotifyClose(make(chan *amqp.Error, 1))
+		notifyConnClose := conn.NotifyClose(make(chan *amqp.Error, 1))
+		notifyChanClose := ch.NotifyClose(make(chan *amqp.Error, 1))
 
 		active := true
 		for active {
@@ -226,8 +370,11 @@ func (c *RabbitMQConsumer) runLoop(ctx context.Context) {
 				active = false
 			case <-c.stopChan:
 				active = false
-			case amqpErr := <-notifyClose:
+			case amqpErr := <-notifyConnClose:
 				c.logger.Warn("RabbitMQ connection dropped", "error", fmt.Sprintf("%v", amqpErr))
+				active = false
+			case chErr := <-notifyChanClose:
+				c.logger.Warn("RabbitMQ channel dropped", "error", fmt.Sprintf("%v", chErr))
 				active = false
 			case d, ok := <-deliveries:
 				if !ok {
@@ -469,6 +616,7 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 			"event_id", env.EventID,
 			"dedup_key", dedupKey,
 		)
+		c.clearRetry(env.EventID)
 		_ = d.Ack(false)
 		return
 	}
@@ -480,20 +628,10 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 			record, err := c.repo.FindStatusHistoryByID(ctx, statusHistoryID)
 			if err != nil {
 				if errors.Is(err, domain.ErrTrackingNotFound) {
-					// Record not yet found in history: possible replication delay
-					c.logger.Warn("status_history_id not found in postgres; requeueing event for retry",
-						"event_id", env.EventID,
-						"status_history_id", statusHistoryID,
-					)
-					_ = d.Nack(false, true) // Requeue=true for transient replication retry
+					c.handleTransientError(d, env.EventID, "status_history_id not found in postgres (replication delay)", err)
 					return
 				}
-				// Database connectivity error
-				c.logger.Error("database query error correlating status history; requeueing",
-					"event_id", env.EventID,
-					"error", err.Error(),
-				)
-				_ = d.Nack(false, true)
+				c.handleTransientError(d, env.EventID, "database query error correlating status history", err)
 				return
 			}
 
@@ -504,6 +642,7 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 					"record_parcel_id", record.ParcelID,
 					"event_parcel_id", parcelID,
 				)
+				c.clearRetry(env.EventID)
 				_ = d.Nack(false, false)
 				return
 			}
@@ -512,18 +651,10 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 			_, err := c.repo.FindParcelByTrackingNumber(ctx, tn.String())
 			if err != nil {
 				if errors.Is(err, domain.ErrTrackingNotFound) {
-					c.logger.Warn("booked parcel not yet in postgres; requeueing event for retry",
-						"event_id", env.EventID,
-						"tracking_number", tn.String(),
-					)
-					_ = d.Nack(false, true)
+					c.handleTransientError(d, env.EventID, "booked parcel not yet in postgres (replication delay)", err)
 					return
 				}
-				c.logger.Error("database error verifying booked parcel; requeueing",
-					"event_id", env.EventID,
-					"error", err.Error(),
-				)
-				_ = d.Nack(false, true)
+				c.handleTransientError(d, env.EventID, "database error verifying booked parcel", err)
 				return
 			}
 		}
@@ -542,20 +673,18 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 		}
 
 		if err := c.publisher.Publish(ctx, redisEvent); err != nil {
-			c.logger.Error("failed to publish event to Redis pubsub; requeueing message",
-				"event_id", env.EventID,
-				"error", err.Error(),
-			)
-			_ = d.Nack(false, true) // Requeue=true so message is not lost while Redis recovers
+			c.handleTransientError(d, env.EventID, "failed to publish event to Redis pubsub", err)
 			return
 		}
 	}
 
-	// 8. Mark seen in deduplicator and explicitly ACK
+	// 8. Mark seen in deduplicator, clear transient retries, and explicitly ACK
 	if c.dedup != nil {
 		c.dedup.SeenOrAdd(dedupKey)
 		c.dedup.SeenOrAdd(env.EventID)
 	}
+
+	c.clearRetry(env.EventID)
 
 	if err := d.Ack(false); err != nil {
 		c.logger.Error("failed to ACK delivery", "event_id", env.EventID, "error", err.Error())

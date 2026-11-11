@@ -112,6 +112,9 @@ func main() {
 		dbConn, err := repository.OpenPostgresDB(cfg.DatabaseURL, poolCfg)
 		if err != nil {
 			logger.Error("Failed to initialize PostgreSQL connection pool", "error", err)
+			healthHandler.AddCheck("postgres", func(ctx context.Context) error {
+				return fmt.Errorf("postgres connection pool initialization failed: %w", err)
+			})
 		} else {
 			sqlDB = dbConn
 			repo := repository.NewPostgresTrackingRepository(sqlDB, poolCfg)

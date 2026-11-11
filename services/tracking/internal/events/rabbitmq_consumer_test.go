@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/swiftdrop/tracking/internal/domain"
 )
 
 type mockAMQPDeliveryImpl struct {
 	body        []byte
 	deliveryTag uint64
+	headers     amqp.Table
+	redelivered bool
 	acked       bool
 	nacked      bool
 	requeued    bool
@@ -19,6 +22,8 @@ type mockAMQPDeliveryImpl struct {
 
 func (m *mockAMQPDeliveryImpl) GetBody() []byte         { return m.body }
 func (m *mockAMQPDeliveryImpl) GetDeliveryTag() uint64  { return m.deliveryTag }
+func (m *mockAMQPDeliveryImpl) GetHeaders() amqp.Table  { return m.headers }
+func (m *mockAMQPDeliveryImpl) IsRedelivered() bool     { return m.redelivered }
 func (m *mockAMQPDeliveryImpl) Ack(multiple bool) error { m.acked = true; return nil }
 func (m *mockAMQPDeliveryImpl) Nack(multiple, requeue bool) error {
 	m.nacked = true
@@ -428,4 +433,161 @@ func TestRabbitMQConsumer_TransientErrorsRequeued(t *testing.T) {
 			t.Errorf("expected requeue=true for Redis failure retry")
 		}
 	})
+}
+
+func TestRabbitMQConsumer_BoundedTransientRetriesDeadLettersToDLQ(t *testing.T) {
+	rawJSON := `{
+		"event_id": "0192e2b3-7c8a-7890-a123-000000000099",
+		"event_type": "parcel.delivered.v1",
+		"aggregate_type": "parcel",
+		"aggregate_id": "0192e2b3-7c8a-7890-a123-000000000090",
+		"aggregate_version": 5,
+		"schema_version": "1.0.0",
+		"occurred_at": "2026-11-10T15:00:00Z",
+		"correlation_id": "corr-bounded-retry",
+		"producer": "core-api.parcels",
+		"payload": {
+			"parcel_id": "0192e2b3-7c8a-7890-a123-000000000090",
+			"tracking_number": "SD-20261110-000099",
+			"new_status": "DELIVERED",
+			"status_history_id": "0192e2b3-7c8a-7890-a123-000000000098",
+			"occurred_at": "2026-11-10T15:00:00Z"
+		}
+	}`
+
+	mockPub := &mockPublisherImpl{}
+	// Persistent replication delay or non-existent status_history_id
+	mockRepo := &mockRepoForConsumer{
+		findHistoryFn: func(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+			return nil, domain.ErrTrackingNotFound
+		},
+	}
+
+	consumer := NewRabbitMQConsumer("amqp://localhost", "q.tracking.updates", 10, time.Second, mockRepo, mockPub, nil)
+
+	// Attempts 1, 2, 3: requeue=true
+	for i := 1; i <= 3; i++ {
+		d := &mockAMQPDeliveryImpl{body: []byte(rawJSON), deliveryTag: uint64(i)}
+		consumer.ProcessDelivery(context.Background(), d)
+		if !d.nacked {
+			t.Fatalf("attempt %d: expected message NACKed", i)
+		}
+		if !d.requeued {
+			t.Fatalf("attempt %d: expected requeue=true for bounded transient retry", i)
+		}
+	}
+
+	// Attempt 4 (exceeds maxTransientRetries=3): MUST dead-letter with requeue=false
+	d4 := &mockAMQPDeliveryImpl{body: []byte(rawJSON), deliveryTag: 4}
+	consumer.ProcessDelivery(context.Background(), d4)
+
+	if !d4.nacked {
+		t.Fatalf("attempt 4: expected message NACKed")
+	}
+	if d4.requeued {
+		t.Fatalf("attempt 4: expected requeue=false (routed to DLQ), but was requeued (uncontrolled redelivery loop!)")
+	}
+}
+
+func TestRabbitMQConsumer_BrokerDeliveryCountExceeded_DeadLettersToDLQ(t *testing.T) {
+	rawJSON := `{
+		"event_id": "0192e2b3-7c8a-7890-a123-000000000077",
+		"event_type": "parcel.delivered.v1",
+		"aggregate_type": "parcel",
+		"aggregate_id": "0192e2b3-7c8a-7890-a123-000000000070",
+		"aggregate_version": 5,
+		"schema_version": "1.0.0",
+		"occurred_at": "2026-11-10T15:00:00Z",
+		"correlation_id": "corr-quorum-delivery-count",
+		"producer": "core-api.parcels",
+		"payload": {
+			"parcel_id": "0192e2b3-7c8a-7890-a123-000000000070",
+			"tracking_number": "SD-20261110-000077",
+			"new_status": "DELIVERED",
+			"status_history_id": "0192e2b3-7c8a-7890-a123-000000000078",
+			"occurred_at": "2026-11-10T15:00:00Z"
+		}
+	}`
+
+	mockPub := &mockPublisherImpl{}
+	mockRepo := &mockRepoForConsumer{
+		findHistoryFn: func(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+			return nil, domain.ErrTrackingNotFound
+		},
+	}
+
+	consumer := NewRabbitMQConsumer("amqp://localhost", "q.tracking.updates", 10, time.Second, mockRepo, mockPub, nil)
+
+	// Simulate Quorum Queue header x-delivery-count = 3 (reached max retries across replicas)
+	d := &mockAMQPDeliveryImpl{
+		body:        []byte(rawJSON),
+		deliveryTag: 10,
+		headers: amqp.Table{
+			"x-delivery-count": int64(3),
+		},
+		redelivered: true,
+	}
+
+	consumer.ProcessDelivery(context.Background(), d)
+
+	if !d.nacked {
+		t.Fatalf("expected message to be NACKed")
+	}
+	if d.requeued {
+		t.Fatalf("expected requeue=false (routed to DLQ via broker x-delivery-count metadata), got requeue=true")
+	}
+}
+
+func TestRabbitMQConsumer_BrokerDeathCountExceeded_DeadLettersToDLQ(t *testing.T) {
+	rawJSON := `{
+		"event_id": "0192e2b3-7c8a-7890-a123-000000000088",
+		"event_type": "parcel.delivered.v1",
+		"aggregate_type": "parcel",
+		"aggregate_id": "0192e2b3-7c8a-7890-a123-000000000080",
+		"aggregate_version": 5,
+		"schema_version": "1.0.0",
+		"occurred_at": "2026-11-10T15:00:00Z",
+		"correlation_id": "corr-dlx-death-count",
+		"producer": "core-api.parcels",
+		"payload": {
+			"parcel_id": "0192e2b3-7c8a-7890-a123-000000000080",
+			"tracking_number": "SD-20261110-000088",
+			"new_status": "DELIVERED",
+			"status_history_id": "0192e2b3-7c8a-7890-a123-000000000089",
+			"occurred_at": "2026-11-10T15:00:00Z"
+		}
+	}`
+
+	mockPub := &mockPublisherImpl{}
+	mockRepo := &mockRepoForConsumer{
+		findHistoryFn: func(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+			return nil, domain.ErrTrackingNotFound
+		},
+	}
+
+	consumer := NewRabbitMQConsumer("amqp://localhost", "q.tracking.updates", 10, time.Second, mockRepo, mockPub, nil)
+
+	// Simulate x-death header from DLX retry loop
+	d := &mockAMQPDeliveryImpl{
+		body:        []byte(rawJSON),
+		deliveryTag: 20,
+		headers: amqp.Table{
+			"x-death": []interface{}{
+				amqp.Table{
+					"count": int64(4),
+					"queue": "q.tracking.updates",
+				},
+			},
+		},
+		redelivered: true,
+	}
+
+	consumer.ProcessDelivery(context.Background(), d)
+
+	if !d.nacked {
+		t.Fatalf("expected message to be NACKed")
+	}
+	if d.requeued {
+		t.Fatalf("expected requeue=false (routed to DLQ via broker x-death count), got requeue=true")
+	}
 }

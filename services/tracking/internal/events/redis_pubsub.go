@@ -105,18 +105,18 @@ func (r *RedisPubSub) Publish(ctx context.Context, event RedisTrackingEvent) err
 		return fmt.Errorf("failed to marshal redis tracking event: %w", err)
 	}
 
-	// Mark in local dedup so publishing pod does not redundantly process it twice
+	cmd := r.client.Publish(ctx, r.channelName, payloadBytes)
+	if err := cmd.Err(); err != nil {
+		return fmt.Errorf("%w: failed to publish to channel %s: %v", ErrRedisUnavailable, r.channelName, err)
+	}
+
+	// Mark in local dedup ONLY after publication actually succeeds
 	dedupKey := event.StatusHistoryID
 	if dedupKey == "" {
 		dedupKey = event.EventID
 	}
 	if dedupKey != "" {
 		r.dedup.SeenOrAdd(dedupKey)
-	}
-
-	cmd := r.client.Publish(ctx, r.channelName, payloadBytes)
-	if err := cmd.Err(); err != nil {
-		return fmt.Errorf("%w: failed to publish to channel %s: %v", ErrRedisUnavailable, r.channelName, err)
 	}
 
 	// If the publishing pod has local SSE subscribers for this parcel, deliver directly to local hub
@@ -233,6 +233,12 @@ func (r *RedisPubSub) handleRedisMessage(payload string) {
 	status := domain.ParcelStatus(strings.TrimSpace(event.Status))
 	if err := status.Validate(); err != nil {
 		r.logger.Warn("invalid status in Redis message", "status", event.Status)
+		return
+	}
+
+	// Instance loopback suppression: if published by this pod instance,
+	// it was already delivered directly to local subscribers during Publish().
+	if event.SourceInstance != "" && event.SourceInstance == r.instanceID {
 		return
 	}
 

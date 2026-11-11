@@ -224,6 +224,9 @@ func (c *Config) Validate() error {
 		if len(c.JWTSecret) < 32 {
 			return fmt.Errorf("%w: JWTSecret must be at least 32 characters in production", ErrInvalidConfig)
 		}
+		if strings.TrimSpace(c.JWTIssuer) == "" {
+			return fmt.Errorf("%w: JWTIssuer must be explicitly configured in production", ErrInvalidConfig)
+		}
 	}
 
 	return nil

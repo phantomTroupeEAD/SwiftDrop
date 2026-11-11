@@ -216,6 +216,7 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 
 	// Manage connection write deadlines via Go 1.20+ http.ResponseController:
 	// Clear the server's global WriteTimeout on this long-lived connection so heartbeats can stream indefinitely.
@@ -226,8 +227,21 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 	var lastEmittedStatus string
 	var lastEmittedTime time.Time
 	var lastEmittedHistoryID string
+	emittedHistoryIDs := make(map[string]struct{})
+
+	// Pre-populate emitted history IDs from initial state milestones to guard against delayed redeliveries
+	for _, m := range initialState.Milestones {
+		if m.StatusHistoryID != "" {
+			emittedHistoryIDs[m.StatusHistoryID] = struct{}{}
+		}
+	}
 
 	if parsedLastID != nil && !parsedLastID.IsOpaque {
+		// Initialize baseline tracking state from client's Last-Event-ID
+		lastEmittedStatus = parsedLastID.Status
+		lastEmittedTime = parsedLastID.Timestamp.UTC()
+		lastEmittedHistoryID = parsedLastID.TieBreaker
+
 		// Deterministic milestone replay:
 		// Locate the milestone the client last acknowledged in the chronological milestone slice.
 		matchedIdx := -1
@@ -283,6 +297,9 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 			lastEmittedStatus = m.Status
 			lastEmittedTime = m.Timestamp.UTC()
 			lastEmittedHistoryID = m.StatusHistoryID
+			if m.StatusHistoryID != "" {
+				emittedHistoryIDs[m.StatusHistoryID] = struct{}{}
+			}
 		}
 
 		// If no replayed milestones and current parcel status differs from client's last seen,
@@ -305,6 +322,19 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 			lastEmittedStatus = currentEvent.Status
 			lastEmittedTime = currentEvent.Timestamp
 			lastEmittedHistoryID = currentHistoryID
+			if currentHistoryID != "" {
+				emittedHistoryIDs[currentHistoryID] = struct{}{}
+			}
+		} else if len(replayedMilestones) == 0 && initialState.Status == parsedLastID.Status {
+			// Client is up to date; align lastEmittedTime with latest milestone time to prevent
+			// older delayed events from bypassing chronological checks.
+			latestTime := latestMilestoneTime(initialState)
+			if latestTime.After(lastEmittedTime) {
+				lastEmittedTime = latestTime
+			}
+			if lastEmittedHistoryID == "" && len(initialState.Milestones) > 0 {
+				lastEmittedHistoryID = initialState.Milestones[len(initialState.Milestones)-1].StatusHistoryID
+			}
 		}
 	} else {
 		// New connection (or opaque/unrecognized Last-Event-ID): Push initial parcel status frame
@@ -325,6 +355,9 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 		lastEmittedStatus = initialEvent.Status
 		lastEmittedTime = initialEvent.Timestamp
 		lastEmittedHistoryID = initialHistoryID
+		if initialHistoryID != "" {
+			emittedHistoryIDs[initialHistoryID] = struct{}{}
+		}
 	}
 
 	// 11. Start 15-second heartbeat keepalive ticker (Agreement A2)
@@ -355,14 +388,67 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Deduplicate events that were already transmitted during initial state hydration/replay
-			// (handles events queued during the subscription-to-hydration race gap)
-			if update.StatusHistoryID != "" && lastEmittedHistoryID != "" {
-				if update.StatusHistoryID == lastEmittedHistoryID {
+			// 1. Deduplicate events that were already transmitted during initial state hydration/replay
+			// (handles events queued during the subscription-to-hydration race gap or replayed from history)
+			if update.StatusHistoryID != "" {
+				if _, seen := emittedHistoryIDs[update.StatusHistoryID]; seen {
 					continue
 				}
-			} else {
-				if update.Status == lastEmittedStatus && !update.Timestamp.UTC().After(lastEmittedTime) {
+			}
+
+			// 2. Terminal state immutability: once delivered, returned, or cancelled,
+			// parcel lifecycle is final. Delayed or out-of-order events cannot regress terminal status.
+			if domain.ParcelStatus(lastEmittedStatus).IsTerminal() {
+				if h.logger != nil {
+					h.logger.Debug("ignoring live event for parcel already in terminal status",
+						"tracking_number", tn.String(),
+						"terminal_status", lastEmittedStatus,
+						"ignored_status", update.Status,
+					)
+				}
+				continue
+			}
+
+			// 3. Repeated status suppression:
+			// If status is identical and there is no new status_history_id, suppress duplicate transmission.
+			if update.Status == lastEmittedStatus && (update.StatusHistoryID == "" || update.StatusHistoryID == lastEmittedHistoryID) {
+				continue
+			}
+
+			// 4. Chronological timestamp ordering check:
+			// If update.Timestamp is strictly before lastEmittedTime, this is an out-of-order delayed delivery.
+			if update.Timestamp.UTC().Before(lastEmittedTime) {
+				if h.logger != nil {
+					h.logger.Debug("ignoring out-of-order delayed live event to prevent status regression",
+						"tracking_number", tn.String(),
+						"update_status", update.Status,
+						"update_time", update.Timestamp.UTC(),
+						"last_emitted_status", lastEmittedStatus,
+						"last_emitted_time", lastEmittedTime,
+					)
+				}
+				continue
+			}
+
+			// 5. State machine transition legality check (Member 2 canonical 9-state machine):
+			// Prefer persisted status-history ordering and verified transition identity over
+			// arbitrary numerical status rankings. When transitioning to a different status,
+			// verify that update.Status is legally reachable from lastEmittedStatus, safely permitting
+			// valid non-linear transitions:
+			// OUT_FOR_DELIVERY -> ATTEMPT_FAILED, ATTEMPT_FAILED -> OUT_FOR_DELIVERY (rescheduling),
+			// ATTEMPT_FAILED -> RETURNED, and CREATED -> CANCELLED, while strictly blocking
+			// backwards regressions (e.g. OUT_FOR_DELIVERY -> IN_TRANSIT).
+			if lastEmittedStatus != "" && update.Status != lastEmittedStatus {
+				fromStatus := domain.ParcelStatus(lastEmittedStatus)
+				toStatus := domain.ParcelStatus(update.Status)
+				if !domain.CanReach(fromStatus, toStatus) {
+					if h.logger != nil {
+						h.logger.Warn("ignoring illegal or regressive state machine transition",
+							"tracking_number", tn.String(),
+							"from_status", lastEmittedStatus,
+							"to_status", update.Status,
+						)
+					}
 					continue
 				}
 			}
@@ -382,6 +468,9 @@ func (h *SSEHandler) StreamTracking(w http.ResponseWriter, r *http.Request) {
 			lastEmittedStatus = sanitized.Status
 			lastEmittedTime = sanitized.Timestamp
 			lastEmittedHistoryID = sanitized.StatusHistoryID
+			if sanitized.StatusHistoryID != "" {
+				emittedHistoryIDs[sanitized.StatusHistoryID] = struct{}{}
+			}
 		}
 	}
 }

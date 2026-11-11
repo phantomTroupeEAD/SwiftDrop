@@ -57,8 +57,10 @@ func (d *Deduplicator) SeenOrAdd(key string) bool {
 		d.evictOldest()
 	}
 
+	if _, exists := d.entries[key]; !exists {
+		d.order = append(d.order, key)
+	}
 	d.entries[key] = now
-	d.order = append(d.order, key)
 	return false
 }
 

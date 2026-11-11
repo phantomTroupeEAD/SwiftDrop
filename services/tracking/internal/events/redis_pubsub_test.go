@@ -257,3 +257,38 @@ func TestRedisPubSub_MultipleLocalSubscribers(t *testing.T) {
 		t.Errorf("expected both subscribers to receive OUT_FOR_DELIVERY, got %s and %s", ev1.Status, ev2.Status)
 	}
 }
+
+func TestRedisPubSub_FailedPublishDoesNotMarkDeduplicator(t *testing.T) {
+	mockClient := &mockRedisClient{
+		publishFunc: func(ctx context.Context, channel string, message interface{}) *redis.IntCmd {
+			cmd := redis.NewIntCmd(ctx)
+			cmd.SetErr(errors.New("redis connection refused"))
+			return cmd
+		},
+	}
+
+	hub := NewEventHub()
+	rps := NewRedisPubSub(mockClient, "tracking:updates", hub, nil)
+
+	tn := "SD-20261110-000004"
+	dedupKey := "0192e2b3-7c8a-7890-a123-000000000055"
+	event := RedisTrackingEvent{
+		EventID:         "0192e2b3-7c8a-7890-a123-000000000004",
+		EventType:       "parcel.delivered.v1",
+		TrackingNumber:  tn,
+		ParcelID:        "0192e2b3-7c8a-7890-a123-000000000040",
+		Status:          "DELIVERED",
+		StatusHistoryID: dedupKey,
+		OccurredAt:      time.Now().UTC(),
+	}
+
+	err := rps.Publish(context.Background(), event)
+	if err == nil {
+		t.Fatalf("expected error from failed publish, got nil")
+	}
+
+	// The event publication failed! The event MUST NOT be marked as seen in the deduplicator.
+	if rps.dedup.Seen(dedupKey) {
+		t.Fatalf("CRITICAL BUG: Failed Redis publication prematurely marked event in deduplicator, suppressing necessary retries!")
+	}
+}
