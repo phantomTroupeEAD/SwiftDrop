@@ -77,7 +77,7 @@ jobs:
         env:
           INTEGRATION: "1"
           DATABASE_URL: "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable"
-        run: cd core-api && go test -v -race ./...
+        run: cd core-api && go test -v -race -ldflags="-w -s" ./...
         if: hashFiles('core-api/go.mod') != ''
 
       - name: Verify Swagger Documentation Sync

@@ -148,6 +148,7 @@ async def unhandled_server_exception_handler(
 
 # Mount Subsystem Routers
 app.include_router(health_router, prefix="/health", tags=["Health & Monitoring"])
+app.include_router(health_router, prefix="/api/v1/ai/health", tags=["Health & Monitoring"])
 app.include_router(chat_router, prefix="/api/v1/ai", tags=["Conversational Assistant"])
 
 
