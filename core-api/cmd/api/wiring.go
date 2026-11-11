@@ -181,6 +181,9 @@ func BuildAppContainer() *AppContainer {
 		log.Println("[NOTICE] Member 04 Merchant Integration not fully active: PostgreSQL connection (*sql.DB) is required")
 	}
 
+	// 10. Register Member 03 Dispatch & Delivery Modules
+	registerDispatchAndDeliveryModules(mux, dbConn, security)
+
 	return &AppContainer{
 		Mux:         mux,
 		AuthSvc:     authService,
@@ -335,21 +338,5 @@ func handleHealthReady(dbConn *sql.DB) http.HandlerFunc {
 			"status":   "ok",
 			"database": "connected",
 		})
-	})
-
-	// 8. Register Member 08 Events & Messaging Operations & Swagger UI
-	registerEventsModules(mux, dbConn, security)
-
-	// 9. Register Member 03 Dispatch & Delivery Modules
-	registerDispatchAndDeliveryModules(mux, dbConn, security)
-
-	return &AppContainer{
-		Mux:         mux,
-		AuthSvc:     authService,
-		UserRepo:    userRepo,
-		Security:    security,
-		TokenProv:   tokenProvider,
-		DB:          dbConn,
-		StorageType: storageType,
 	}
 }
