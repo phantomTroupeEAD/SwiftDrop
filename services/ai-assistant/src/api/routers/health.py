@@ -17,6 +17,21 @@ _START_TIME = time.time()
 
 
 @router.get(
+    "",
+    summary="Health Overview",
+    description="Verifies the service process and asyncio event loop are responsive.",
+    response_model=Dict[str, Any],
+)
+async def get_health_overview() -> Dict[str, Any]:
+    """Return 200 UP indicating that the service event loop is healthy."""
+    return {
+        "status": "UP",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "service": "ai-assistant",
+    }
+
+
+@router.get(
     "/live",
     summary="Liveness Probe",
     description="Verifies the service process and asyncio event loop are responsive.",

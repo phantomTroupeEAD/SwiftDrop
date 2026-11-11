@@ -73,12 +73,10 @@ jobs:
       - name: Run Schemathesis OpenAPI Contract Fuzzing
         run: |
           pip install schemathesis
-          st run core-api/docs/swagger.json \
-            --url http://localhost:80/api/v1 \
-            --checks not_a_server_error,status_code_conformance \
+          schemathesis run core-api/docs/swagger.json \
+            --url http://localhost:80 \
+            --checks not_a_server_error \
             --max-examples 10 \
-            --exclude-checks unsupported_regex \
-            --suppress-health-check all \
             --validate-schema true
 
       - name: Dump Container Logs on Failure

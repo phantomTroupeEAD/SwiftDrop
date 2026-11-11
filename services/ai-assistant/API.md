@@ -17,9 +17,10 @@
 | `GET` | `/openapi.json` | Canonical OpenAPI Schema Specification | None (Public) |
 | `POST` | `/api/v1/ai/chat` | Natural language chat endpoint with automatic tool invocation and grounded responses | Optional (Public for tracking & quotes; Bearer JWT for customer parcel lookup) |
 | `POST` | `/api/v1/ai/chat/stream` | Real-time Server-Sent Events (SSE) token and tool event streaming endpoint | Optional (Public for tracking & quotes; Bearer JWT for customer parcel lookup) |
-| `GET` | `/health/live` | Kubernetes Liveness Probe: confirms FastAPI event loop responsiveness | None (Public) |
-| `GET` | `/health/ready` | Kubernetes Readiness Probe: verifies local LLM config & memory cache sanity | None (Public) |
-| `GET` | `/health/metrics` | Prometheus & runtime metrics endpoint for active sessions, uptime, and capacity | None (Public) |
+| `GET` | `/health` / `/api/v1/ai/health` | Health Overview Probe: confirms FastAPI event loop responsiveness | None (Public) |
+| `GET` | `/health/live` / `/api/v1/ai/health/live` | Kubernetes Liveness Probe: confirms FastAPI event loop responsiveness | None (Public) |
+| `GET` | `/health/ready` / `/api/v1/ai/health/ready` | Kubernetes Readiness Probe: verifies local LLM config & memory cache sanity | None (Public) |
+| `GET` | `/health/metrics` / `/api/v1/ai/health/metrics` | Prometheus & runtime metrics endpoint for active sessions, uptime, and capacity | None (Public) |
 
 ---
 
