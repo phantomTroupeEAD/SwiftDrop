@@ -95,3 +95,49 @@ jobs:
       - name: Run Tests (-race)
         run: |
           cd services/messaging && go test -v -race ./...
+
+  tracking-checks:
+    name: Tracking Service Quality & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'services/tracking/go.mod'
+          check-latest: true
+
+      - name: Run Tests (-race)
+        run: cd services/tracking && go test -v -race ./...
+
+  ai-assistant-checks:
+    name: AI Assistant Quality & Tests (Unit, API & E2E)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'services/ai-assistant/requirements.txt'
+
+      - name: Install Dependencies & Run All Tests
+        run: |
+          pip install -r services/ai-assistant/requirements.txt
+          cd services/ai-assistant && python -m pytest tests -v
+
+  web-checks:
+    name: Web Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+
+      - name: Install & Build
+        run: cd web && npm ci && npm run build
