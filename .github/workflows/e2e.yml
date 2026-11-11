@@ -63,11 +63,18 @@ jobs:
           echo "AI Assistant is reachable via Traefik Gateway!"
 
           echo "=== 3. Testing Tracking API through Traefik Gateway ==="
+          timeout 60s bash -c '
+            until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/v1/tracking/public/SD-20261111-ABC123 || true)" -ne 503 ]; do
+              echo "Waiting for Tracking API via Traefik Gateway..."
+              sleep 3
+            done
+          '
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/v1/tracking/public/SD-20261111-ABC123 || true)
           echo "Tracking API HTTP code: $HTTP_CODE"
           if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 404 ] && [ "$HTTP_CODE" -ne 400 ]; then
             echo "Unexpected tracking response code: $HTTP_CODE" && exit 1
           fi
+          echo "Tracking API is reachable via Traefik Gateway!"
 
           echo "=== All Direct Gateway Routes Verified Cleanly ==="
 
