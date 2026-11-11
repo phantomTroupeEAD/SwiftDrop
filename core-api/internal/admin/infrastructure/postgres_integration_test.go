@@ -28,6 +28,7 @@ import (
 // then this module's tables.
 var adminMigrations = []string{
 	"20261021000001_create_identity_tables.up.sql",
+	"20261109000001_create_audit_logs.up.sql",
 	"20261109000100_admin_create_delivery_zones.up.sql",
 	"20261109000200_admin_create_audit_logs.up.sql",
 }
