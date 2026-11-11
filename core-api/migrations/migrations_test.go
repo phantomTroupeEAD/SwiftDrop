@@ -198,6 +198,11 @@ func TestMigrations_LiveLifecycle_UpDownUp(t *testing.T) {
 		t.Skipf("database ping failed: %v; skipping live migration test", err)
 	}
 
+	// Ensure a pristine schema state before testing full Up -> Down -> Up lifecycle
+	if _, err := db.ExecContext(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"); err != nil {
+		_ = RollbackMigrations(ctx, db)
+	}
+
 	t.Log("=== Phase 1: Applying all UP migrations ===")
 	if err := RunMigrations(ctx, db); err != nil {
 		t.Fatalf("initial RunMigrations failed: %v", err)

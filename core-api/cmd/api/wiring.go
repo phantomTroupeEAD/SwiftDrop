@@ -36,6 +36,8 @@ type AppContainer struct {
 // It prioritizes PostgreSQL if running, automatically applies migrations,
 // and gracefully falls back to mock storage if PostgreSQL is not yet started.
 func BuildAppContainer() *AppContainer {
+	config.LoadEnv(".env", "../.env", "../../.env")
+
 	// 1. Password Hasher & JWT Token Provider
 	hasher := infrastructure.NewStandardPasswordHasher()
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -55,7 +57,7 @@ func BuildAppContainer() *AppContainer {
 	// 2. Attempt PostgreSQL Connection
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable"
+		dbURL = "postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable"
 	}
 
 	db, err := sql.Open("postgres", dbURL)
@@ -178,6 +180,9 @@ func BuildAppContainer() *AppContainer {
 	} else {
 		log.Println("[NOTICE] Member 04 Merchant Integration not fully active: PostgreSQL connection (*sql.DB) is required")
 	}
+
+	// 10. Register Member 03 Dispatch & Delivery Modules
+	registerDispatchAndDeliveryModules(mux, dbConn, security)
 
 	return &AppContainer{
 		Mux:         mux,
