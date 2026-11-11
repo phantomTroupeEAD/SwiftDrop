@@ -1030,6 +1030,87 @@
                 }
             }
         },
+        "/api/v1/pricing/quotes": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Evaluates geographic tariffs, volumetric weight, and service level multipliers to generate a 15-minute price-frozen quote scoped to the authenticated customer, merchant, or admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Calculate and persist a delivery pricing quote",
+                "parameters": [
+                    {
+                        "description": "Pricing quote request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/transport.CreateQuoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Generated pricing quote wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed JSON body or disallowed fields",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role, missing/invalid tenant UUID, owner mismatch, or unapproved merchant",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request body exceeds size limit",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Content-Type",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Semantic validation failure or no applicable tariff available",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal quote generation or verification failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/health/live": {
             "get": {
                 "description": "Probes whether the Core API service process is alive.",
@@ -1136,12 +1217,6 @@
                     "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address"
                 },
                 "businessName": {
-                    "type": "string"
-                },
-                "contactEmail": {
-                    "type": "string"
-                },
-                "contactPhone": {
                     "type": "string"
                 }
             }
@@ -1361,6 +1436,40 @@
             "type": "object",
             "properties": {
                 "data": {}
+            }
+        },
+        "transport.CreateQuoteRequest": {
+            "type": "object",
+            "properties": {
+                "actual_weight_kg": {
+                    "type": "number"
+                },
+                "destination_zone_id": {
+                    "type": "string"
+                },
+                "dimensions": {
+                    "$ref": "#/definitions/transport.DimensionsRequest"
+                },
+                "origin_zone_id": {
+                    "type": "string"
+                },
+                "service_level": {
+                    "type": "string"
+                }
+            }
+        },
+        "transport.DimensionsRequest": {
+            "type": "object",
+            "properties": {
+                "height_cm": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
+                }
             }
         }
     },
