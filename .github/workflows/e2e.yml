@@ -46,6 +46,7 @@ jobs:
             done
           '
           echo "Core API is reachable via Traefik Gateway!"
+          docker compose -f deploy/docker-compose.yml ps
 
       - name: Live Gateway Cross-Service Smoke Verification
         run: |

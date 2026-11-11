@@ -107,10 +107,9 @@ services:
   # 5. Local S3 Object Storage (MinIO)
   # ----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    image: bitnami/minio:latest
     container_name: swiftdrop-minio
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
@@ -118,7 +117,7 @@ services:
       - "9000:9000"                # S3 API
       - "9001:9001"                # Web Console
     volumes:
-      - minio_data:/data
+      - minio_data:/bitnami/minio/data
     networks:
       - swiftdrop-network
 
