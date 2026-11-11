@@ -84,8 +84,7 @@ jobs:
           schemathesis run core-api/docs/swagger.json \
             --url http://localhost:80 \
             --checks not_a_server_error \
-            --max-examples 10 \
-            --hypothesis-deadline=None
+            --max-examples 10
 
       - name: Dump Container Logs on Failure
         if: failure()
