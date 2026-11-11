@@ -74,8 +74,8 @@ internal/dispatch/
 ---
 
 ## 4. Database Ownership
-- `couriers`: Courier ID, user ID reference (`users.id`), vehicle type, max capacity, active shift status, `current_zone_id` (`delivery_zones.id`). Migrated via `20261021000006_create_couriers.up.sql` (Canonical Sequence 000006).
-- `courier_assignments`: Courier ID, parcel ID, assigned by, status (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`), assigned at, ended at. Concurrency-guarded via partial unique index `idx_assignments_parcel_single_active`. Migrated via `20261021000007_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000007).
+- `couriers`: Courier ID, user ID reference (`users.id`), vehicle type, max capacity, active shift status, `current_zone_id` (`delivery_zones.id`). Migrated via `20261110000003_create_couriers.up.sql` (Canonical Sequence 000003).
+- `courier_assignments`: Courier ID, parcel ID, assigned by, status (`ACTIVE`, `COMPLETED`, `REASSIGNED`, `CANCELLED`), assigned at, ended at. Concurrency-guarded via partial unique index `idx_assignments_parcel_single_active`. Migrated via `20261110000004_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000004).
 
 ---
 
@@ -113,4 +113,5 @@ All dispatch components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-03 | Phase 8 living documentation alignment: zero-drift contract verification against API.md, synchronized tests/README.md, and finalized roadmap sign-off | Member 3 (Antigravity) |
 | 2026-11-09 | Eliminated in-memory mock fallback from runtime wiring; enforced ACID atomicity and durability by failing queries with 503 DATABASE_UNAVAILABLE when PostgreSQL is disconnected | Member 3 (Antigravity) |
 | 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for Courier capacity [1, 200] and zone trimming, assignment reassignment error paths, AssignmentStatus enum validation, transport negative tests for malformed JSON and payload bounds, and mapped ErrParcelNotEligibleForAssignment to 409 Conflict. | Member 3 (Antigravity) |
+| 2026-11-10 | Resequenced migrations to 20261110000003_create_couriers and 20261110000004_create_dispatch_and_delivery, removed stub parcels table to sequence cleanly after Member 2 parcels | Member 3 (Antigravity) |
 | 2026-11-10 | Enforced BR-FLT-001 role validation & uniqueness in RegisterCourierUseCase: rejects non-courier user accounts with 422 USER_NOT_A_COURIER, non-existent users with 404 USER_NOT_FOUND, and duplicate profiles with 409 COURIER_PROFILE_EXISTS. | Member 3 (Antigravity) |

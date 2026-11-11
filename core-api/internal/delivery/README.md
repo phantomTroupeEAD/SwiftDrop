@@ -75,7 +75,7 @@ internal/delivery/
 ---
 
 ## 4. Database Ownership
-- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), outcome (`SUCCESS`, `FAILED`), failure reason code, proof type (`PHOTO`, `SIGNATURE`, `RECIPIENT_CONFIRMATION`), proof attachment URL / storage path, signature data, received by name, GPS coordinates, notes, attempted_at timestamp. Migrated via `20261021000007_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000007).
+- `delivery_attempts`: Attempt ID, parcel ID, courier ID, attempt number (1-3), outcome (`SUCCESS`, `FAILED`), failure reason code, proof type (`PHOTO`, `SIGNATURE`, `RECIPIENT_CONFIRMATION`), proof attachment URL / storage path, signature data, received by name, GPS coordinates, notes, attempted_at timestamp. Migrated via `20261110000004_create_dispatch_and_delivery.up.sql` (Canonical Sequence 000004).
 
 ---
 
@@ -116,3 +116,4 @@ All delivery components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-03 | Phase 8 living documentation alignment: zero-drift contract verification against API.md, synchronized tests/README.md, and finalized roadmap sign-off | Member 3 (Antigravity) |
 | 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for GeoCoordinates (-90..90, -180..180 boundaries), DeliveryAttempt entity cross-field consistency, Signature stroke validation, Manifest batch run limits (1..100) & malformed JSON checks, and manifest data minimization assertions (redaction of wholesale pricing and customer financial PII). | Member 3 (Antigravity) |
 | 2026-11-05 | Hardened storage factory environment resolution: Added Cloudflare R2 automatic endpoint resolution via Account ID, dual support for OBJECT_STORAGE_* and S3_* aliases, and updated .env and documentation. | Member 3 (Antigravity) |
+| 2026-11-10 | Resequenced delivery migration to 20261110000004_create_dispatch_and_delivery, removed stub parcels table to sequence cleanly after Member 2 parcels | Member 3 (Antigravity) |

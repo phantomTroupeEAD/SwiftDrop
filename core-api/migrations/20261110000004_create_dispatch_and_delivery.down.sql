@@ -1,6 +1,6 @@
 -- ============================================================================
--- SwiftDrop Core API: Rollback 20261021000007 - Dispatch Assignments & Delivery Attempts
--- Canonical Sequence: 000007
+-- SwiftDrop Core API: Rollback 20261110000004 - Dispatch Assignments & Delivery Attempts
+-- Canonical Sequence: 000004
 -- ============================================================================
 
 DROP TABLE IF EXISTS delivery_attempts CASCADE;

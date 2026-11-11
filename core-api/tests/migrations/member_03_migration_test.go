@@ -16,10 +16,10 @@ func TestMember03_MigrationFiles_Structure(t *testing.T) {
 	migrationsDir := filepath.Join("..", "..", "migrations")
 
 	requiredFiles := []string{
-		"20261021000006_create_couriers.up.sql",
-		"20261021000006_create_couriers.down.sql",
-		"20261021000007_create_dispatch_and_delivery.up.sql",
-		"20261021000007_create_dispatch_and_delivery.down.sql",
+		"20261110000003_create_couriers.up.sql",
+		"20261110000003_create_couriers.down.sql",
+		"20261110000004_create_dispatch_and_delivery.up.sql",
+		"20261110000004_create_dispatch_and_delivery.down.sql",
 	}
 
 	for _, fileName := range requiredFiles {
@@ -35,8 +35,8 @@ func TestMember03_MigrationFiles_Structure(t *testing.T) {
 		assert.NotContains(t, contentUpper, "CONCURRENTLY", "File %s must not contain CONCURRENTLY", fileName)
 	}
 
-	// Verify required check constraints in 20261021000006_create_couriers.up.sql
-	c06Bytes, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000006_create_couriers.up.sql"))
+	// Verify required check constraints in 20261110000003_create_couriers.up.sql
+	c06Bytes, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000003_create_couriers.up.sql"))
 	require.NoError(t, err)
 	c06 := string(c06Bytes)
 	assert.Contains(t, c06, "chk_couriers_vehicle_type")
@@ -44,8 +44,8 @@ func TestMember03_MigrationFiles_Structure(t *testing.T) {
 	assert.Contains(t, c06, "chk_couriers_status")
 	assert.Contains(t, c06, "idx_couriers_zone_status")
 
-	// Verify required constraints and partial unique index in 20261021000007_create_dispatch_and_delivery.up.sql
-	c07Bytes, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000007_create_dispatch_and_delivery.up.sql"))
+	// Verify required constraints and partial unique index in 20261110000004_create_dispatch_and_delivery.up.sql
+	c07Bytes, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000004_create_dispatch_and_delivery.up.sql"))
 	require.NoError(t, err)
 	c07 := string(c07Bytes)
 	assert.Contains(t, c07, "chk_assignments_status")

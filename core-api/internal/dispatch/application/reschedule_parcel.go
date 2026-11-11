@@ -85,13 +85,27 @@ func (uc *RescheduleParcelUseCase) Execute(ctx context.Context, cmd ReschedulePa
 			return err
 		}
 
-		// 4. Create new active assignment
+		// 4. If an active assignment exists for this parcel (from previous attempt), mark it REASSIGNED
+		existingAsgn, err := uc.assignmentRepo.GetActiveByParcelID(ctx, tx, parcelUUID)
+		if err != nil {
+			return fmt.Errorf("failed to check existing assignment: %w", err)
+		}
+		if existingAsgn != nil {
+			if err := existingAsgn.Reassign("Rescheduled for reattempt"); err != nil {
+				return fmt.Errorf("failed to reassign previous assignment: %w", err)
+			}
+			if err := uc.assignmentRepo.Update(ctx, tx, existingAsgn); err != nil {
+				return fmt.Errorf("failed to update previous assignment: %w", err)
+			}
+		}
+
+		// 5. Create new active assignment
 		asgn := domain.NewCourierAssignment(parcelUUID, courierUUID, dispatcherUUID, cmd.Notes)
 		if err := uc.assignmentRepo.Create(ctx, tx, asgn); err != nil {
 			return fmt.Errorf("failed to persist assignment: %w", err)
 		}
 
-		// 5. Transition parcel status from ATTEMPT_FAILED to ASSIGNED
+		// 6. Transition parcel status from ATTEMPT_FAILED to ASSIGNED
 		err = uc.parcelUpdater.TransitionStatus(
 			ctx,
 			tx,

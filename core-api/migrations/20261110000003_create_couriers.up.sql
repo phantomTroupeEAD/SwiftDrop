@@ -1,7 +1,7 @@
 -- ============================================================================
--- SwiftDrop Core API: Migration 20261021000006 - Courier Operational Profiles
+-- SwiftDrop Core API: Migration 20261110000003 - Courier Operational Profiles
 -- Author: Member 03 (Dispatch, Couriers & Proof of Delivery)
--- Canonical Sequence: 000006
+-- Canonical Sequence: 000003
 -- Dependencies: 20261021000001_create_identity_tables, delivery_zones
 -- Standards: AGENTS.md §7.2, database-schema.md
 -- ============================================================================
