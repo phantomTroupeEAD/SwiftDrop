@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,8 @@ import (
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	identityinfra "github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	identitytransport "github.com/swiftdrop/core-api/internal/identity/transport"
+	merchantsapp "github.com/swiftdrop/core-api/internal/merchants/application"
+	merchantstransport "github.com/swiftdrop/core-api/internal/merchants/transport"
 	pricingapp "github.com/swiftdrop/core-api/internal/pricing/application"
 	pricinginfra "github.com/swiftdrop/core-api/internal/pricing/infrastructure"
 	pricingtransport "github.com/swiftdrop/core-api/internal/pricing/transport"
@@ -49,6 +52,26 @@ func (f *fakeMerchantReader) FindByID(_ context.Context, merchantID string) (pri
 	return pricingapp.MerchantProfile{ID: merchantID, Status: "ACTIVE"}, nil
 }
 
+type merchantVerifierAdapter struct {
+	prov *identityinfra.JWTTokenProvider
+}
+
+func (v *merchantVerifierAdapter) Verify(tok string) (merchantstransport.Claims, error) {
+	principal, err := v.prov.ValidateAccessToken(tok)
+	if err != nil {
+		return merchantstransport.Claims{}, err
+	}
+	var tenantID string
+	if principal.TenantID != nil {
+		tenantID = *principal.TenantID
+	}
+	return merchantstransport.Claims{
+		Sub:      principal.UserID,
+		Role:     string(principal.Role),
+		TenantID: tenantID,
+	}, nil
+}
+
 func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenProvider) {
 	mux := http.NewServeMux()
 	tokenProv := identityinfra.NewJWTTokenProvider("test-contract-smoke-secret-key-32chars")
@@ -73,7 +96,15 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 	eventsHandler := eventstransport.NewHandler(nil)
 	eventstransport.RegisterRoutes(mux, eventsHandler, security)
 
-	// 3. Pricing Routes
+	// 3. Merchants Routes
+	merchantHandler := &merchantstransport.Handler{
+		Svc:      merchantsapp.NewService(merchantsapp.Deps{}, merchantsapp.Config{}),
+		Verifier: &merchantVerifierAdapter{prov: tokenProv},
+		Log:      slog.Default(),
+	}
+	merchantHandler.Register(mux)
+
+	// 4. Pricing Routes
 	now := time.Now().UTC()
 	var tariffRepo pricingapp.TariffRepository
 	var quoteRepo pricingapp.QuoteRepository
