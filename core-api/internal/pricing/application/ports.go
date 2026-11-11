@@ -32,3 +32,19 @@ type Clock interface {
 type QuoteIDGenerator interface {
 	NewID() (string, error)
 }
+
+// MerchantStatusApproved indicates an approved merchant permitted to create merchant-scoped quotes.
+const MerchantStatusApproved = "APPROVED"
+
+// MerchantProfile holds authoritative merchant identity and approval metadata needed
+// to verify merchant-scoped pricing requests without coupling pricing to merchant internals.
+type MerchantProfile struct {
+	ID          string
+	OwnerUserID string
+	Status      string
+}
+
+// MerchantReader retrieves authoritative merchant records for tenant ownership verification.
+type MerchantReader interface {
+	FindByID(ctx context.Context, merchantID string) (MerchantProfile, error)
+}

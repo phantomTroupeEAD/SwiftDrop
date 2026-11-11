@@ -3,7 +3,7 @@
 > **Domain:** Deterministic Fee Estimation, Tariffs & Volumetric Weight
 > **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
-> **Status:** Proposed Baseline (Pending Team Ratification vs `docs/contracts/pricing-rules.md`)
+> **Status:** HTTP Transport Implemented (`POST /api/v1/pricing/quotes`, Ready for Startup Wiring)
 
 ---
 
@@ -31,7 +31,7 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 - Backend-enforced expiration check (`current_time >= expires_at` is expired).
 - Safe failure: Returns controlled `ErrTariffNotFound` if no tariff exists. Never fabricates a price.
 - In-process domain service interface consumed by `internal/parcels`.
-- Public/authenticated fee estimation endpoint `POST /api/v1/pricing/quotes`.
+- Authenticated fee estimation & quotation endpoint `POST /api/v1/pricing/quotes` (Bearer JWT required: `CUSTOMER`, `MERCHANT`, `ADMIN`).
 - Candidate REST CRUD endpoints for administrative tariff management (`/api/v1/admin/pricing-rules`) served for Member 7's Admin UI.
 
 ---
@@ -40,7 +40,7 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 1. **Server Authority:** The frontend must NEVER calculate authoritative delivery fees. All fees must be calculated and validated by the backend — *Confirmed Project Standard*.
 2. **Exact Integer Monetary Units:** Money values are represented strictly using exact integer minor units (`BIGINT` in SQL, `int64` in Go) with currency `LKR` (cents). Binary floating-point types (`float32`/`float64`) are strictly prohibited in financial logic — *Confirmed Project Standard*.
 3. **Approved Option A Architecture:** `Tariff` represents geographic pricing only (`OriginZoneID`, `DestinationZoneID`, `BaseFee`, `PerKgRate`, `Version`, `IsActive`, `EffectiveFrom`, `EffectiveUntil`). Zone identifiers must follow Member 7's canonical `^ZONE_[A-Z0-9_]{2,27}$` format (validated via `domain.ValidateZoneID`). Service levels and multipliers are applied independently during calculation to eliminate duplicate pricing rules.
-4. **Quote Ownership Invariants:** `domain.Quote` and `application.GenerateQuoteCommand` track `RequesterID` (`*string`, customer/user ID) and `MerchantID` (`*string`, merchant tenant ID). At least one owner must be supplied (supporting customer-only, merchant-only, and customer-plus-merchant quotes), valid identifiers are trimmed, and non-nil empty/whitespace-only pointers are rejected before tariff repository lookup.
+4. **Quote Ownership Invariants:** `domain.Quote` and `application.GenerateQuoteCommand` track `RequesterID` (`*string`, customer/user ID) and `MerchantID` (`*string`, merchant tenant ID). HTTP transport (`transport/handler.go`) enforces Bearer JWT auth and resolves ownership strictly from the verified `Principal`: `CUSTOMER` and `ADMIN` bind `RequesterID = Principal.UserID` (`MerchantID = nil`); `MERCHANT` validates UUID `TenantID` (rejecting missing with `403 MISSING_TENANT_ID` and non-UUID with `403 TENANT_NOT_MERCHANT_UUID`), verifies the authoritative record via `application.MerchantReader` (`MerchantRepoAdapter`), confirms `OwnerUserID == Principal.UserID` and `Status == APPROVED`, and binds both `RequesterID` and `MerchantID`. Client-supplied owner or price fields are rejected (`DisallowUnknownFields`).
 5. **Volumetric Divisor (5000 cm³/kg):** Dimensions in cm are required for all parcels. $\text{Volumetric Weight (kg)} = \frac{L \times W \times H}{5000}$. $\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$, capped at 30 kg — *Confirmed Project Standard*.
 6. **Quote Validity Window (15m):** Quotes freeze prices for 15 minutes (`expires_at = created_at + 15m`). Enforced strictly by the backend (`current_time >= expires_at`) — *Confirmed Project Standard*.
 7. **Administrative Boundary:** Member 7 owns admin UI and tariff-administration workflow; Member 2 owns calculation engine behavior, lookup interface, and candidate REST CRUD endpoints.
@@ -51,9 +51,9 @@ The `pricing` module calculates delivery fees based on parcel weight, dimensions
 ```
 internal/pricing/
 ├── domain/                  # Money VO (LKR cents), Tariff entity, ServiceLevel VO, Quote aggregate, Calculator, domain errors
-├── application/             # GenerateQuoteUseCase, ports (TariffRepository, QuoteRepository, Clock, QuoteIDGenerator)
-├── infrastructure/          # PostgresTariffRepository, PostgresQuoteRepository, & UUIDv7QuoteIDGenerator (db.Querier / UUIDv7 backed)
-└── transport/               # HTTP handler (/api/v1/pricing/quotes) and request/response DTOs
+├── application/             # GenerateQuoteUseCase, SystemClock, ports (TariffRepository, QuoteRepository, MerchantReader, Clock, QuoteIDGenerator), ErrMerchantNotFound
+├── infrastructure/          # PostgresTariffRepository, PostgresQuoteRepository, MerchantRepoAdapter (adapts merchantsapp.MerchantRepo), UUIDv7QuoteIDGenerator
+└── transport/               # HTTP handler (POST /api/v1/pricing/quotes), DTOs, role/ownership resolution, RegisterRoutes, httptest unit tests
 ```
 
 ---
@@ -87,6 +87,7 @@ internal/pricing/
 | 2026-11-10 | Task 6 (Step 2): Updated `GenerateQuoteCommand` and `GenerateQuoteUseCase.Execute` to validate zone IDs via `domain.ValidateZoneID` and validate/forward requester & merchant ownership before tariff lookup | Member 2 |
 | 2026-11-10 | Task 6 (Step 3): Updated `PostgresQuoteRepository` (`Save`, `FindByID`) to persist and scan nullable `requester_id` and `merchant_id` columns via `sql.NullString`, updated mock repository tests and `ZONE_` tariff fixtures | Member 2 |
 | 2026-11-10 | Task 7C: Added production `UUIDv7QuoteIDGenerator` implementing `application.QuoteIDGenerator` via shared `events.GenerateUUIDv7` and `events.IsValidUUID` | Member 2 |
+| 2026-11-11 | Implemented Pricing HTTP Transport (`POST /api/v1/pricing/quotes` in `transport/`), `SystemClock`, `MerchantReader` port + `MerchantRepoAdapter`, `httpx` envelopes, `swag` annotations, `httptest` suite, and updated `API.md`/`README.md` | Member 2 |
 
 ---
 
