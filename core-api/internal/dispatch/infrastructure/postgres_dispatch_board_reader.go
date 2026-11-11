@@ -22,7 +22,7 @@ func NewPostgresDispatchBoardReader(db *sql.DB) *PostgresDispatchBoardReader {
 }
 
 // GetUnassignedParcels queries eligible unassigned parcels for a target delivery zone.
-func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zoneID string) ([]application.UnassignedParcelDTO, error) {
+func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, _ string) ([]application.UnassignedParcelDTO, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("failed to get unassigned parcels: %w", db.ErrNilDB)
 	}

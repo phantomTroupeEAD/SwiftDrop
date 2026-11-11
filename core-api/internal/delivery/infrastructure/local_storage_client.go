@@ -40,7 +40,7 @@ func NewLocalStorageClient(baseDir, baseURL string) (*LocalStorageClient, error)
 }
 
 // UploadProofPhoto streams binary image data to disk under the configured base directory.
-func (c *LocalStorageClient) UploadProofPhoto(ctx context.Context, key string, data io.Reader, contentType string) (string, error) {
+func (c *LocalStorageClient) UploadProofPhoto(ctx context.Context, key string, data io.Reader, _ string) (string, error) {
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -73,7 +73,7 @@ func (c *LocalStorageClient) UploadProofPhoto(ctx context.Context, key string, d
 }
 
 // GeneratePresignedURL returns an HTTP URL endpoint where the proof photo can be viewed.
-func (c *LocalStorageClient) GeneratePresignedURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+func (c *LocalStorageClient) GeneratePresignedURL(ctx context.Context, key string, _ time.Duration) (string, error) {
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
