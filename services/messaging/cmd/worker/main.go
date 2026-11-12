@@ -89,6 +89,15 @@ func main() {
 	backoffCalc := delivery.NewBackoffCalculator(cfg.WebhookRetrySchedule, nil)
 
 	// 6. Start AMQP Queue Consumers
+	if err := brokerMgr.WaitForConnection(ctx); err != nil {
+		if errors.Is(err, context.Canceled) {
+			logger.Info("context canceled while waiting for broker connection")
+			return
+		}
+		logger.Error("failed waiting for broker connection", "error", err.Error())
+		os.Exit(1)
+	}
+
 	notifCh, err := brokerMgr.OpenConsumerChannel(cfg.WorkerConcurrency)
 	if err != nil {
 		logger.Error("failed to open notification consumer channel", "error", err.Error())
