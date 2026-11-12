@@ -39,7 +39,7 @@ Primary backend modular monolith (HTTP Port `8080`, Probes at `/health/live`, `/
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret. | `GOCSPX-abc123xyz...` | **Yes** | **Yes** |
 | `GOOGLE_REDIRECT_URI` | Authorized OAuth redirect callback URL, through the gateway. The path `/api/v1/auth/google/callback` follows SRS §6.2 (confirmed by Member 1, 2026-11-01). It must match the URI registered in Google Cloud Console exactly, or sign-in fails with `redirect_uri_mismatch`. | `http://localhost/api/v1/auth/google/callback` (production: `https://swiftdrop.example.com/api/v1/auth/google/callback`) | **Yes** | No |
 | `IDEMPOTENCY_EXPIRY_HOURS`| Lifetime before stored idempotency cache rows expire. | `24` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, **base64-encoded** (core-api rejects anything that does not decode to 32 bytes). Must be the same bytes as the worker's hex key. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, **base64-encoded** (core-api rejects anything that does not decode to 32 bytes). Same value as the Event Worker. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
 | `MERCHANT_API_KEY_PEPPER`| Server-side pepper string for merchant API key HMAC hashing. | *(Secret pepper string)* | **Yes** | **Yes** |
 | `OBJECT_STORAGE_DRIVER` / `STORAGE_DRIVER` | Storage driver selection (`local`, `r2`, `minio`, `s3`). | `local` | No | No |
 | `LOCAL_STORAGE_PATH` | Local disk folder path when `OBJECT_STORAGE_DRIVER=local`. | `./data/proofs` | No | No |
@@ -81,7 +81,7 @@ Read-optimized public milestone and SSE projection service (HTTP Port `8081`, Pr
 | :--- | :--- | :--- | :--- | :--- |
 | `WORKER_CONCURRENCY` | Number of parallel worker goroutines per pod. | `10` | No | No |
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS` | Socket timeout for outbound merchant webhooks. | `5` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key as **64 hex characters** (same bytes as core-api's base64 key). In Compose it is filled from `WEBHOOK_SECRET_ENCRYPTION_KEY_HEX`. | `3031323334353637383930313233343536373839303132333435363738393031` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, base64 (64 hex characters also accepted). Same value as Core API. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
 | `NOTIFICATION_PROVIDER` | Notification provider backend (`mock`, `smtp`, `twilio`, `sendgrid`). | `mock` (local) or `smtp` | **Yes** | No |
 | `SMTP_HOST` | SMTP server hostname (e.g. `mailpit` locally). | `mailpit` | No | No |
 | `SMTP_PORT` | SMTP server port (e.g. `1025` for Mailpit). | `1025` | No | No |

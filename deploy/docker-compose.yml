@@ -79,7 +79,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"] # AMQP 5672 must accept connections, not just the node
       interval: 10s
       timeout: 5s
       retries: 5
@@ -119,6 +119,11 @@ services:
       - "9001:9001"                # Web Console
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - swiftdrop-network
 
@@ -138,15 +143,17 @@ services:
   # ----------------------------------------------------------------------------
   # 7. Database Migration Runner (One-Shot Container)
   # ----------------------------------------------------------------------------
+  # Runs core-api's own migrator (/app/migrate, embedded migrations, schema_migrations ledger).
+  # Same binary as the K8s migrate Job; golang-migrate is not used (its ledger clashes).
   core-api-migrate:
-    image: migrate/migrate:v4.17.1
+    build:
+      context: ../core-api
+      dockerfile: Dockerfile
+    image: swiftdrop/core-api:dev
     container_name: swiftdrop-core-api-migrate
-    volumes:
-      - ../core-api/migrations:/migrations:ro
-    command:
-      - "-path=/migrations"
-      - "-database=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable"
-      - "up"
+    entrypoint: ["/app/migrate"]
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -260,6 +267,12 @@ services:
         condition: service_healthy
       core-api-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8082/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
     networks:
       - swiftdrop-network
 
@@ -281,7 +294,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
-      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY_HEX:-3031323334353637383930313233343536373839303132333435363738393031}
+      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=}
       - NOTIFICATION_PROVIDER=mock
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
@@ -292,6 +305,12 @@ services:
         condition: service_healthy
       core-api-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8083/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
     networks:
       - swiftdrop-network
 
@@ -345,7 +364,7 @@ services:
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/healthz"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/healthz"] # IPv4: nginx listens on 0.0.0.0 only
       interval: 15s
       timeout: 3s
       retries: 3

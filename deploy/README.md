@@ -221,7 +221,7 @@ make reset
 | `swiftdrop-redis` | 6379 | `6379` | `redis-cli ping` | Ephemeral cache & SSE pub/sub fan-out |
 | `swiftdrop-minio` | 9000, 9001 | `9000`, `9001` | S3 API endpoint | Local S3 object store for proof-of-delivery |
 | `swiftdrop-mailpit` | 1025, 8025 | `1025`, `8025` | Mailpit HTTP API | Transactional email & SMS development sandbox |
-| `swiftdrop-core-api-migrate` | — | — | One-shot completion | Executes migrations via `migrate/migrate:v4.17.1` |
+| `swiftdrop-core-api-migrate` | — | — | One-shot completion | Runs core-api `/app/migrate` (embedded migrations, `schema_migrations` ledger) |
 | `swiftdrop-core-api` | 8080 | `8080` | `GET /health/live`, `/health/ready` | Core modular monolith |
 | `swiftdrop-tracking-api` | 8081 | `8081` | `GET /health/live`, `/health/ready` | Tracking API & SSE projections service |
 | `swiftdrop-outbox-relay` | 8082 | `8082` | `GET /health/live`, `/metrics` | Transactional outbox publisher (singleton) |
