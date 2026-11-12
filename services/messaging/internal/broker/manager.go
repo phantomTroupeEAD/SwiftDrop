@@ -390,7 +390,7 @@ func (m *Manager) CheckHealth(_ context.Context) error {
 	if m.closed {
 		return errors.New("amqp broker manager is closed")
 	}
-	if m.conn == nil || m.conn.IsClosed() {
+	if m.reconnecting || m.conn == nil || m.conn.IsClosed() || m.pubCh == nil || m.pubCh.IsClosed() {
 		return ErrNotConnected
 	}
 	return nil
