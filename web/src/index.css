@@ -122,12 +122,14 @@
   [data-role="MERCHANT"] {
     --primary: #0b5955;
     --primary-hover: #08433f;
+    --primary-foreground: #ffffff;
     --primary-tint: rgba(11, 89, 85, 0.08);
     --ring: #0b5955;
   }
   [data-theme="dark"][data-role="MERCHANT"] {
     --primary: #85d4b5;
     --primary-hover: #a3e3cb;
+    --primary-foreground: #092622;
     --primary-tint: rgba(133, 212, 181, 0.15);
     --ring: #85d4b5;
   }
@@ -135,12 +137,14 @@
   [data-role="DISPATCHER"] {
     --primary: #1e40af;
     --primary-hover: #1e3a8a;
+    --primary-foreground: #ffffff;
     --primary-tint: rgba(30, 64, 175, 0.08);
     --ring: #1e40af;
   }
   [data-theme="dark"][data-role="DISPATCHER"] {
     --primary: #60a5fa;
     --primary-hover: #93c5fd;
+    --primary-foreground: #ffffff;
     --primary-tint: rgba(96, 165, 250, 0.15);
     --ring: #60a5fa;
   }
@@ -148,12 +152,14 @@
   [data-role="COURIER"] {
     --primary: #b45309;
     --primary-hover: #92400e;
+    --primary-foreground: #ffffff;
     --primary-tint: rgba(180, 83, 9, 0.08);
     --ring: #b45309;
   }
   [data-theme="dark"][data-role="COURIER"] {
     --primary: #fbbf24;
     --primary-hover: #fcd34d;
+    --primary-foreground: #451a03;
     --primary-tint: rgba(251, 191, 36, 0.15);
     --ring: #fbbf24;
   }
@@ -161,12 +167,14 @@
   [data-role="ADMIN"] {
     --primary: #18181b;
     --primary-hover: #27272a;
+    --primary-foreground: #ffffff;
     --primary-tint: rgba(24, 24, 27, 0.08);
     --ring: #18181b;
   }
   [data-theme="dark"][data-role="ADMIN"] {
     --primary: #f4f4f5;
     --primary-hover: #e4e4e7;
+    --primary-foreground: #18181b;
     --primary-tint: rgba(244, 244, 245, 0.15);
     --ring: #f4f4f5;
   }

@@ -144,8 +144,8 @@ export const DesignSystemPage: React.FC = () => {
       <Toaster position="bottom-right" />
       <div data-role={currentRole} className="min-h-screen bg-canvas text-text transition-colors duration-200">
         {/* Top Control Bar */}
-        <header className="sticky top-0 z-40 border-b border-border bg-surface px-6 py-3.5 backdrop-blur-md">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+        <header className="sticky top-0 z-40 border-b border-border bg-surface px-4 sm:px-8 lg:px-12 py-3.5 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-primary-foreground font-semibold text-sm">
                 SD
@@ -188,7 +188,7 @@ export const DesignSystemPage: React.FC = () => {
         </header>
 
         {/* Main Content Showcase */}
-        <main className="mx-auto max-w-7xl space-y-12 px-6 py-8">
+        <main className="mx-auto max-w-[1600px] space-y-12 px-4 sm:px-8 lg:px-12 py-8">
           {/* Banner: Active Role Context */}
           <Card className="border-border bg-surface">
             <CardHeader className="pb-2">

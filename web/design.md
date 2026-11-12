@@ -278,4 +278,10 @@ Any pull request containing the following patterns is subject to immediate rejec
 - **APPROVED Motion Standards:**
   - `@media (prefers-reduced-motion: reduce)` block added to `index.css` forcing animation and transition durations to 0.01ms.
 
+### 2026-11-12 — Studio Visual Parity & Contrast Refinements (Design Owner)
+- **Input Text High Contrast:** Added explicit `text-text` class to `Input` and `Textarea` primitives, and `DialogContent` container to guarantee full contrast across light and dark modes regardless of user-agent input styling defaults.
+- **Admin & Role Dark Mode `--primary-foreground`:** Scoped `--primary-foreground` to `#18181b` for Admin in dark mode (and high-contrast inks for Merchant `#092622` and Courier `#451a03`) eliminating low contrast / invisible text on default primary buttons.
+- **Fluid Layout Expansion:** Extended max container width to `1600px` (`max-w-[1600px]`) with responsive horizontal padding (`px-4 sm:px-8 lg:px-12`) to eliminate excessive gutter margins on desktop viewports.
+
+
 
