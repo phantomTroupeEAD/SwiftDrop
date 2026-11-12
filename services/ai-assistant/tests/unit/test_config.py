@@ -87,6 +87,17 @@ def test_service_role_token_fallback():
     assert s2.effective_service_role_token == "legacy-fallback-key-456"
 
 
+def test_log_level_normalization_and_validation():
+    """Verify log level normalization to lowercase and rejection of invalid values."""
+    assert Settings(LOG_LEVEL="INFO").LOG_LEVEL == "info"
+    assert Settings(LOG_LEVEL="debug").LOG_LEVEL == "debug"
+    assert Settings(LOG_LEVEL="Warning").LOG_LEVEL == "warning"
+    assert Settings(LOG_LEVEL="  ERROR  ").LOG_LEVEL == "error"
+
+    with pytest.raises(ValidationError):
+        Settings(LOG_LEVEL="verbose")
+
+
 def test_get_settings_singleton():
     """Verify that get_settings() returns the same cached instance."""
     s1 = get_settings()

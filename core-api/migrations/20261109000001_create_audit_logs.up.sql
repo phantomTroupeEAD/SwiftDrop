@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE audit_logs
+    ADD COLUMN IF NOT EXISTS entity_type VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS entity_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50);
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs (actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action);

@@ -82,6 +82,31 @@ func TestEventsReadRepository_Integration(t *testing.T) {
 	notifID := "0192e2b3-7c8a-7890-a123-000000000021"
 	hookID := "0192e2b3-7c8a-7890-a123-000000000022"
 	endpointID := "0192e2b3-7c8a-7890-a123-000000000088"
+	testMerchantID := "0192e2b3-7c8a-7890-a123-000000000077"
+	adminUserID := "018f4a7c-1001-7000-8000-000000000001"
+	merchantUserID := "018f4a7c-1004-7000-8000-000000000004"
+
+	insertMerchant := `
+		INSERT INTO merchants (
+			id, owner_user_id, business_name, status, contact_email, contact_phone, address, version, created_at, updated_at
+		) VALUES (
+			$1, $2, 'Test Merchant', 'PENDING', 'merchant@vendor.com', '+94770000004', '{"line1":"123 Main","city":"Colombo","country":"LK"}'::jsonb, 1, NOW(), NOW()
+		) ON CONFLICT (id) DO NOTHING;
+	`
+	if _, err := db.ExecContext(ctx, insertMerchant, testMerchantID, merchantUserID); err != nil {
+		t.Fatalf("failed to insert test merchant: %v", err)
+	}
+
+	insertEndpoint := `
+		INSERT INTO webhook_endpoints (
+			id, merchant_id, url, secret_ciphertext, secret_key_version, secret_last4, subscribed_event_types, enabled, created_by, created_at, updated_at
+		) VALUES (
+			$1, $2, 'https://example.com/webhook', decode('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c', 'hex'), 1, 'abcd', '{"parcel.booked.v1"}', true, $3, NOW(), NOW()
+		) ON CONFLICT (id) DO NOTHING;
+	`
+	if _, err := db.ExecContext(ctx, insertEndpoint, endpointID, testMerchantID, adminUserID); err != nil {
+		t.Fatalf("failed to insert test webhook endpoint: %v", err)
+	}
 
 	insertNotif := `
 		INSERT INTO notification_deliveries (

@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -159,6 +159,14 @@ class Settings(BaseSettings):
         le=1440,
         description="In-memory cache TTL for company policy overrides",
     )
+
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def normalize_log_level(cls, v: Any) -> Any:
+        """Normalize log level string to lowercase for case-insensitive configuration."""
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
     @field_validator(
         "LLM_BASE_URL",

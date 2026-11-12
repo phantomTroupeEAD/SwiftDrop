@@ -1,0 +1,32 @@
+# Ignore local environment files containing secrets
+.env*
+
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing, typing, and coverage artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Git metadata
+.git/
+.gitignore
+.gitattributes
+
+# IDE, OS, and local editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

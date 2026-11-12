@@ -392,7 +392,7 @@ To satisfy SRS §7.2 and §9.1 query performance targets (<200 ms p95 response t
 | `delivery_attempts` | `idx_attempts_parcel_id` | `parcel_id, attempt_number ASC` | Attempt history verification |
 | `outbox_events` | `idx_outbox_pending` | `status, created_at ASC` WHERE `status = 'PENDING'` | Fast polling for Outbox Relay poller |
 | `webhook_deliveries` | `idx_webhook_retry_queue` | `status, next_attempt_at ASC` WHERE `status = 'PENDING'` | Webhook worker retry polling |
-| `idempotency_keys` | `idx_idempotency_lookup` | `key, caller_scope` | Idempotency middleware verification |
+| `idempotency_keys` | `idempotency_keys_pkey` / `idx_idempotency_keys_expires_at` | `(key, caller_scope)` PK; `expires_at ASC` | Caller-scoped lookup (`20261110000003_create_idempotency_keys.up.sql`) and 24h TTL cleanup |
 
 ---
 

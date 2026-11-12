@@ -192,10 +192,13 @@ docker run -d -p 8000:8000 -p 8002:8002 --env-file .env --name swiftdrop-ai swif
 ```
 
 ### Kubernetes Manifests (`deploy/kubernetes/ai-assistant/`)
-- `deployment.yaml` — 2 replicas, `RollingUpdate`, `readOnlyRootFilesystem: true`, non-root `appuser` (UID 10001), 20s termination grace.
+- `deployment.yaml` — 2 replicas, `RollingUpdate`, `readOnlyRootFilesystem: true`, non-root `appuser` (UID 10001), 20s termination grace, mounts `JWT_SECRET` from `core-api-secrets`.
 - `service.yaml` — Dual-port `ClusterIP` exposing `http-api` (8000) and `mcp-sse` (8002).
-- `configmap.yaml` & `secret.yaml.example` — Cluster environment configuration.
+- `configmap.yaml` & `secret.yaml.example` — Cluster environment configuration (`LOG_LEVEL: "info"`).
 - `hpa.yaml` — Horizontal Pod Autoscaler (1 to 3 replicas).
+
+### Container Build Hygiene (`.dockerignore`)
+- `.dockerignore` blocks `.env*`, `.venv/`, `__pycache__/`, test caches, and coverage artifacts from being baked into production container layers, preventing API key exposure and image bloat.
 
 ---
 
@@ -206,6 +209,8 @@ Key environment variables in [`.env.example`](./.env.example):
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `PORT` | `8000` | Microservice listening port |
+| `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warning`, `error`; case-normalized) |
+| `JWT_SECRET` | *(Dev default)* | Shared HMAC-SHA256 secret key matching Core API (`core-api-secrets`) |
 | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | OpenAI-compatible inference endpoint |
 | `LLM_API_KEY` | *(Secret)* | Secret API key for chosen LLM provider |
 | `LLM_MODEL` | `meta-llama/llama-3.1-70b-instruct` | LLM model identifier |

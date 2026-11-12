@@ -49,6 +49,26 @@ ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO swiftdrop_app;
 
+-- Set default table & sequence privileges for swiftdrop_tracking_ro (read-only)
+ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
+  GRANT SELECT ON TABLES TO swiftdrop_tracking_ro;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE swiftdrop_migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO swiftdrop_tracking_ro;
+
+-- Also set default privileges for tables created by the default superuser (POSTGRES_USER)
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE ON TABLES TO swiftdrop_app;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO swiftdrop_app;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO swiftdrop_tracking_ro;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO swiftdrop_tracking_ro;
+
 -- Per-role execution timeouts & read-only enforcement (Agreement D9)
 ALTER ROLE swiftdrop_app         SET statement_timeout = '5s';
 ALTER ROLE swiftdrop_app         SET lock_timeout = '2s';

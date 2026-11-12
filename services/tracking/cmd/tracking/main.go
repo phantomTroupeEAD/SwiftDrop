@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/swiftdrop/tracking/internal/auth"
 	"github.com/swiftdrop/tracking/internal/config"
 	"github.com/swiftdrop/tracking/internal/health"
 	trackinghttp "github.com/swiftdrop/tracking/internal/http"
@@ -45,7 +47,7 @@ func main() {
 	}
 
 	fmt.Println("==================================================================")
-	fmt.Println("   SwiftDrop Tracking API — Phase 2: Public Tracking & PostgreSQL")
+	fmt.Println("   SwiftDrop Tracking API — Phase 3: Authenticated Tracking REST")
 	fmt.Printf("   Service Address: %s | Environment: %s\n", cfg.HTTPAddr, cfg.AppEnv)
 	fmt.Println("==================================================================")
 
@@ -104,12 +106,30 @@ func main() {
 		})
 	}
 
-	// 6. Initialize application service and HTTP handler
+	// 6. Initialize application service and HTTP handlers
 	publicTrackingSvc := service.NewPublicTrackingService(trackingRepo)
 	publicTrackingHandler := trackinghttp.NewPublicTrackingHandler(publicTrackingSvc, logger)
 
+	// Phase 4: Server-Sent Events (SSE) Streaming Infrastructure
+	// Per Phase 4 contract rules:
+	// - No mock parcel data or fake event publishers in the production runtime.
+	// - The service must not claim an active, functional parcel-update stream when the real event source is unavailable.
+	// - If the event source is not wired yet, choose an explicit, safe unavailable response (HTTP 503 DEPENDENCY_UNAVAILABLE).
+	// Real-time event broker integration (Redis Pub/Sub / RabbitMQ) is deferred to Phase 5.
+	sseHandler := trackinghttp.NewSSEHandler(
+		publicTrackingSvc,
+		nil, // eventSource is nil until Phase 5 wires Redis/RabbitMQ
+		time.Duration(cfg.SSEHeartbeatSeconds)*time.Second,
+		logger,
+	)
+
+	// Phase 3: Authenticated Tracking REST Endpoint
+	jwtVerifier := auth.NewJWTVerifier(cfg.JWTSecret, cfg.JWTIssuer)
+	authTrackingSvc := service.NewAuthenticatedTrackingService(trackingRepo)
+	authTrackingHandler := trackinghttp.NewAuthenticatedTrackingHandler(authTrackingSvc, jwtVerifier, logger)
+
 	// 7. Construct HTTP router with middleware pipeline
-	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler)
+	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler, authTrackingHandler)
 
 	// 8. Initialize HTTP server
 	srv := trackinghttp.NewServer(cfg, router, logger)
