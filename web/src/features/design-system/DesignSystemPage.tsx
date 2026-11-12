@@ -135,6 +135,11 @@ export const DesignSystemPage: React.FC = () => {
     }
   }, [isDark]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-role', currentRole);
+  }, [currentRole]);
+
   const toggleTheme = () => {
     setIsDark((prev) => !prev);
   };

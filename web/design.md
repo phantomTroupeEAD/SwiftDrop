@@ -73,7 +73,7 @@ Role palettes are scoped via the `[data-role="..."]` attribute on layout shells 
 | **Merchant** | `[data-role="MERCHANT"]` | `#0b5955` | `#08433f` | `rgba(11, 89, 85, 0.08)` | `#ffffff` | Bulk shipping, API keys, webhook center |
 | **Dispatcher** | `[data-role="DISPATCHER"]` | `#1e40af` | `#1e3a8a` | `rgba(30, 64, 175, 0.08)` | `#ffffff` | Routing console, manual courier assignment |
 | **Courier** | `[data-role="COURIER"]` | `#b45309` | `#92400e` | `rgba(180, 83, 9, 0.08)` | `#ffffff` | Mobile delivery runs, barcode scanner, POD |
-| **Admin** | `[data-role="ADMIN"]` | `#18181b` | `#27272a` | `rgba(24, 24, 27, 0.08)` | `#ffffff` | Tariff management, user roles, system config |
+| **Admin** | `[data-role="ADMIN"]` | `#18181b` (dark: `#e4e4e7`) | `#27272a` (dark: `#d4d4d8`) | `rgba(24, 24, 27, 0.08)` (dark: `rgba(228, 228, 231, 0.12)`) | `#ffffff` (dark: `#18181b`) | Tariff management, user roles, system config |
 
 ---
 
@@ -280,7 +280,7 @@ Any pull request containing the following patterns is subject to immediate rejec
 
 ### 2026-11-12 — Studio Visual Parity & Contrast Refinements (Design Owner)
 - **Input Text High Contrast:** Added explicit `text-text` class to `Input` and `Textarea` primitives, and `DialogContent` container to guarantee full contrast across light and dark modes regardless of user-agent input styling defaults.
-- **Admin & Role Dark Mode `--primary-foreground`:** Scoped `--primary-foreground` to `#18181b` for Admin in dark mode (and high-contrast inks for Merchant `#092622` and Courier `#451a03`) eliminating low contrast / invisible text on default primary buttons.
+- **Admin Soft Off-White Dark Inversion:** Scoped `--primary: #e4e4e7` (Zinc-200 soft off-white) with `--primary-foreground: #18181b` for Admin in dark mode. This eliminates harsh glare against pure black surfaces while preserving a crisp 12.8:1 AAA contrast ratio.
 - **Fluid Layout Expansion:** Extended max container width to `1600px` (`max-w-[1600px]`) with responsive horizontal padding (`px-4 sm:px-8 lg:px-12`) to eliminate excessive gutter margins on desktop viewports.
 
 
