@@ -16,6 +16,79 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/api/v1/admin/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-audit"
+                ],
+                "summary": "List audit log rows, newest first (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page, from 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page, 1-100",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.AuditRow"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: bad page or per_page",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/dashboard": {
             "get": {
                 "security": [
@@ -322,6 +395,612 @@
                         "description": "Delivery not in FAILED state",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/reports/deliveries": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-reports"
+                ],
+                "summary": "Delivery report for a date range (admin, dispatcher)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date, YYYY-MM-DD",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date, YYYY-MM-DD",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.DeliveryReport"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN or DISPATCHER",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: bad dates or range too long",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-settings"
+                ],
+                "summary": "List system settings (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.Setting"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/settings/{key}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-settings"
+                ],
+                "summary": "Change one system setting (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "reports.max_range_days, ops.board_refresh_seconds, ops.maintenance_banner, parcels.max_weight_kg or parcels.max_cod_cents",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "value, current version and a 10-500 char reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.SettingInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.Setting"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "BAD_REQUEST: malformed JSON",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "CONCURRENT_MODIFICATION",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "SETTING_UNKNOWN, REASON_REQUIRED or VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/zones": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-zones"
+                ],
+                "summary": "List delivery zones (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page, from 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page, 1-100",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: bad page or per_page",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-zones"
+                ],
+                "summary": "Create a delivery zone (admin)",
+                "parameters": [
+                    {
+                        "description": "New zone",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.CreateZoneInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "BAD_REQUEST: malformed JSON",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/zones/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-zones"
+                ],
+                "summary": "Get one delivery zone (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Zone id, e.g. ZONE_COLOMBO_01",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-zones"
+                ],
+                "summary": "Edit a delivery zone (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Zone id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change plus current version",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.UpdateZoneInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "BAD_REQUEST: malformed JSON",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "CONCURRENT_MODIFICATION, ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/zones/{id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-zones"
+                ],
+                "summary": "Enable or disable a delivery zone (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Zone id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "enabled, current version and a 10-500 char reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.StatusInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "BAD_REQUEST: malformed JSON",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Role is not ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "CONCURRENT_MODIFICATION",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED or REASON_REQUIRED",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1111,6 +1790,60 @@
                 }
             }
         },
+        "/api/v1/zones": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "zones"
+                ],
+                "summary": "List enabled zones, or find the zone of a postal code (public)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "5-digit postal code; returns the one matching zone",
+                        "name": "postal_code",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.PublicZone"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "ZONE_NOT_FOUND: no zone covers this postal code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: postal_code must be 5 digits",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health/live": {
             "get": {
                 "description": "Probes whether the Core API service process is alive.",
@@ -1168,6 +1901,244 @@
         }
     },
     "definitions": {
+        "github_com_swiftdrop_core-api_internal_admin_application.AuditRow": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor_id": {
+                    "type": "string"
+                },
+                "actor_role": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "new_state": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "previous_state": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.CreateZoneInput": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postal_prefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.DeliveryDay": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "description": "Asia/Colombo day, YYYY-MM-DD",
+                    "type": "string"
+                },
+                "delivered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "returned": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.DeliveryReport": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_admin_application.DeliveryDay"
+                    }
+                },
+                "delivered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "success_rate": {
+                    "description": "null when there were no attempts",
+                    "type": "number"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.PublicZone": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.Setting": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "value_type": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.SettingInput": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.StatusInput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.UpdateZoneInput": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postal_prefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_admin_application.ZoneView": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postal_prefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail": {
             "type": "object",
             "properties": {
