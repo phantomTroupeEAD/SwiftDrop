@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run lint:ui && tsc && vite build",
-    "lint:ui": "node scripts/lint-ui.mjs && eslint \"src/**/*.{ts,tsx}\"",
+    "lint:ui": "node scripts/lint-ui.mjs && eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {

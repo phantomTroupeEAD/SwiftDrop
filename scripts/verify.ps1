@@ -1,4 +1,4 @@
-# SwiftDrop — Local Verification Script (PowerShell for Windows)
+﻿# SwiftDrop — Local Verification Script (PowerShell for Windows)
 $ErrorActionPreference = "Continue"
 
 Write-Host "=================================================" -ForegroundColor Cyan
@@ -107,6 +107,15 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
     }
 } else {
     Write-Host "[4/4] Skipping Go test execution (go not found in PATH)." -ForegroundColor Gray
+}
+
+# 5. Web Frontend Quality Gate (lint:ui + build)
+if (Test-Path "web") {
+    Write-Host "[5/5] Running web quality verification (npm run build)..." -ForegroundColor Yellow
+    Push-Location "web"
+    npm run build
+    if ($LASTEXITCODE -ne 0) { $Failed = $true }
+    Pop-Location
 }
 
 Write-Host "=================================================" -ForegroundColor Cyan

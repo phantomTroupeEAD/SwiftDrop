@@ -85,6 +85,15 @@ else
     echo "[4/4] Skipping Go test execution (go not installed)."
 fi
 
+# 5. Web Frontend Quality Gate (lint:ui + build)
+if [ -d "web" ] && command -v npm >/dev/null 2>&1; then
+    echo "[5/5] Running web quality verification (npm run build)..."
+    (cd web && npm run build) || FAILED=1
+    if [ $FAILED -eq 0 ]; then
+        echo "  [PASS] Web build and UI guardrails passed."
+    fi
+fi
+
 echo "================================================="
 if [ $FAILED -ne 0 ]; then
     echo "  [FAILED] Verification failed. Address errors before opening a PR."

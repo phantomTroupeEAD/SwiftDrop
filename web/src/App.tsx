@@ -13,6 +13,7 @@ import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
 import { RegisterPage as PortalRegisterPage } from '@/features/customer-merchant/portal/RegisterPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
+import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: 'CUSTOMER' | 'MERCHANT' }> = ({ children, role }) => {
@@ -61,6 +62,11 @@ export const AppRoutes: React.FC = () => {
       {/* Visual Foundation & Design Preview (Unauthenticated evaluation studio) */}
       <Route path="/design-preview" element={<DesignPreviewPage />} />
       <Route path="/preview/design" element={<DesignPreviewPage />} />
+
+      {/* Dev-Only Design System Parity Studio (Gated out of production) */}
+      {import.meta.env.DEV && (
+        <Route path="/design-system" element={<DesignSystemPage />} />
+      )}
 
       {/* 5 Distinct Mock Pages for Each Role */}
       <Route

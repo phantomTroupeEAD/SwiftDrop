@@ -242,6 +242,7 @@ If a module or service exposes any HTTP/REST endpoints, it MUST maintain a co-lo
 - **Rule 6 — Mandatory `[data-role]` Scoping:** Feature layouts and dashboard shells must set the appropriate `data-role="..."` attribute on their root wrapper so role-based accent palettes automatically cascade.
 - **Rule 7 — Prohibition of `shadcn add`:** Coding agents must never run `npx shadcn add` or dynamically pull unapproved primitives. The component substrate is strictly pre-installed and curated.
 - **Rule 8 — Enforcement via `lint:ui` in CI:** All frontend code must pass UI linting checks (`npm run lint:ui`, wired directly into `npm run build`). Any raw element substitution, arbitrary hex code, rogue radix import, or dependency addition will fail CI validation.
+- **Rule 9 — Frozen Legacy Ledger Immutability:** The legacy exemption ledger in `scripts/lint-ui.mjs` and `.eslintrc.cjs` is strictly **FROZEN** against additions. Entries may **only be removed** via migration PRs that refactor legacy screens to use `@/shared/components/ui/` primitives. Under no circumstances may a coding agent or developer add new or existing files to the legacy ledger.
 
 ### Python AI Service
 - Use type hints, explicit Pydantic schemas, and structured error responses.

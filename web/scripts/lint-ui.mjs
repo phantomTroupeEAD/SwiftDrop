@@ -80,7 +80,7 @@ const LEGACY_PRE_SHADCN_FILES = new Set([
 const RAW_PALETTE_REGEX = /\b(?:[a-z0-9-]+:)*(?:bg|text|border|ring|fill|stroke|from|to|via)-(?:red|rose|pink|fuchsia|purple|violet|indigo|blue|sky|cyan|teal|emerald|green|lime|amber|yellow|orange)(?:-\d+)?\b/i;
 const ARBITRARY_BRACKET_REGEX = /\b(?:[a-z0-9-]+:)*(?:bg|text|border|ring|shadow)-\[[^\]]+\]/i;
 const RAW_HEX_REGEX = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
-const INLINE_STYLE_COLOR_REGEX = /style=\{\{[^}]*?(?:color|backgroundColor|borderColor|background)\s*:\s*['"][^'"]+['"][^}]*?\}\}/i;
+const INLINE_STYLE_COLOR_REGEX = /style=\{\{[^}]*?(?:color|backgroundColor|borderColor|background|border|boxShadow)\s*:\s*['"][^'"]+['"][^}]*?\}\}/i;
 const RAW_ELEMENT_REGEX = /<(?:button|input|select|textarea|table|dialog)\b/;
 const RADIX_IMPORT_REGEX = /from\s+['"]@radix-ui\/[^'"]+['"]/;
 

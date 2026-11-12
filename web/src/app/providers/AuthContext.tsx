@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { User, LoginResponseData, GoogleLoginResponseData } from '@/shared/types/auth';
 
+interface ApiResponseEnvelope<T = unknown> {
+  error?: { message?: string };
+  data?: T;
+}
+
 interface AuthContextType {
   user: User | null;
   accessToken: string | null;
@@ -29,7 +34,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       const text = await res.text();
-      let data: any = null;
+      let data: ApiResponseEnvelope<LoginResponseData> | null = null;
       try {
         data = text ? JSON.parse(text) : null;
       } catch {
@@ -54,8 +59,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAccessToken(loginData.access_token);
       setUser(loginData.user);
       return loginData.user;
-    } catch (err: any) {
-      if (err.message && err.message.includes('Failed to fetch')) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
         throw new Error('Network error: Unable to reach Core API server at port 8080.');
       }
       throw err;
@@ -73,7 +78,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       const text = await res.text();
-      let data: any = null;
+      let data: ApiResponseEnvelope<GoogleLoginResponseData> | null = null;
       try {
         data = text ? JSON.parse(text) : null;
       } catch {}
@@ -97,8 +102,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isNewUser: googleData.is_new_user,
         requiresPhone: googleData.requires_phone,
       };
-    } catch (err: any) {
-      if (err.message && err.message.includes('Failed to fetch')) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
         throw new Error('Network error: Unable to reach Core API server at port 8080.');
       }
       throw err;
@@ -119,7 +124,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     const text = await res.text();
-    let data: any = null;
+    let data: ApiResponseEnvelope<User> | null = null;
     try {
       data = text ? JSON.parse(text) : null;
     } catch {}
@@ -129,6 +134,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error(data.error.message);
       }
       throw new Error(`Profile update failed (${res.status})`);
+    }
+
+    if (!data?.data) {
+      throw new Error('Invalid profile update response from server');
     }
 
     const updatedUser: User = data.data;
