@@ -21,3 +21,15 @@ images:
   - name: ghcr.io/phantomtroupeead/swiftdrop/ai-assistant
     newTag: dev
 # imagePullPolicy stays IfNotPresent, so the imported :dev images are used without a registry.
+
+patches:
+  # k3d has no Cloudflare origin certificate: serve Member 7's IngressRoute over plain HTTP (port 80).
+  - target:
+      kind: IngressRoute
+      name: swiftdrop
+    patch: |-
+      - op: replace
+        path: /spec/entryPoints
+        value: ["web"]
+      - op: remove
+        path: /spec/tls
