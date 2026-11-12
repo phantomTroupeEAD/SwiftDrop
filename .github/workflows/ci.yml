@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, dev ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   secret-scan:
     name: Secret & Credential Scan
@@ -24,6 +28,20 @@ jobs:
   go-checks:
     name: Go Quality & Architecture Verification
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: swiftdrop_user
+          POSTGRES_PASSWORD: swiftdrop_password
+          POSTGRES_DB: swiftdrop_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -33,7 +51,8 @@ jobs:
         with:
           go-version: '1.22'
           check-latest: true
-          cache: false
+          cache: true
+          cache-dependency-path: core-api/go.sum
 
       # Go jobs key on core-api/go.mod only: the draft go.mod files under docs/drafts/ must not trigger them
       - name: Check Formatting (gofmt)
@@ -55,8 +74,25 @@ jobs:
         if: hashFiles('core-api/go.mod') != ''
 
       - name: Run Tests (-race)
-        run: cd core-api && go test -v -race ./...
+        env:
+          INTEGRATION: "1"
+          DATABASE_URL: "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable"
+        run: cd core-api && go test -v -race -ldflags="-w -s" ./...
         if: hashFiles('core-api/go.mod') != ''
+
+      - name: Verify Swagger Documentation Sync
+        if: hashFiles('core-api/go.mod') != ''
+        run: |
+          cd core-api
+          go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
+          cp docs/swagger.json internal/events/swagger/swagger.json
+          if [ -n "$(git status --porcelain docs/ internal/events/swagger/)" ]; then
+            echo "Error: Swagger documentation is out of sync with code changes."
+            echo "Please run 'make swagger' and commit the generated swagger files."
+            git status --porcelain docs/ internal/events/swagger/
+            git diff docs/ internal/events/swagger/
+            exit 1
+          fi
 
   messaging-checks:
     name: Messaging Service Quality & Verification
@@ -70,7 +106,8 @@ jobs:
         with:
           go-version-file: 'services/messaging/go.mod'
           check-latest: true
-          cache: false
+          cache: true
+          cache-dependency-path: services/messaging/go.sum
 
       - name: Check Formatting (gofmt)
         run: |
@@ -95,3 +132,91 @@ jobs:
       - name: Run Tests (-race)
         run: |
           cd services/messaging && go test -v -race ./...
+
+  tracking-checks:
+    name: Tracking Service Quality & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'services/tracking/go.mod'
+          check-latest: true
+          cache: true
+          cache-dependency-path: services/tracking/go.sum
+
+      - name: Run Tests (-race)
+        run: cd services/tracking && go test -v -race ./...
+
+  ai-assistant-checks:
+    name: AI Assistant Quality & Tests (Unit, API & E2E)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'services/ai-assistant/requirements.txt'
+
+      - name: Install Dependencies & Run All Tests
+        run: |
+          pip install -r services/ai-assistant/requirements.txt
+          cd services/ai-assistant && python -m pytest tests -v
+
+  web-checks:
+    name: Web Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+
+      - name: Install & Build
+        run: cd web && npm ci && npm run build
+
+  docker-build-verification:
+    name: Docker Build (${{ matrix.service.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: core-api
+            context: core-api
+            file: core-api/Dockerfile
+          - name: tracking-api
+            context: services/tracking
+            file: services/tracking/Dockerfile
+          - name: messaging
+            context: services/messaging
+            file: services/messaging/Dockerfile
+          - name: ai-assistant
+            context: services/ai-assistant
+            file: services/ai-assistant/Dockerfile
+          - name: web
+            context: web
+            file: web/Dockerfile
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Verify Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.file }}
+          push: false
+          tags: ${{ matrix.service.name }}:test
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}

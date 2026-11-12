@@ -358,11 +358,19 @@ func (r *PostgresDeliveryRepository) RecordWebhookTerminalFailure(ctx context.Co
 
 // InsertNotification stages a new customer notification task with ON CONFLICT DO NOTHING.
 func (r *PostgresDeliveryRepository) InsertNotification(ctx context.Context, task NotificationTask) error {
+	status := task.Status
+	if status == "" {
+		status = "PENDING"
+	}
+	var lastErr *string
+	if task.LastError != "" {
+		lastErr = &task.LastError
+	}
 	const query = `
 		INSERT INTO notification_deliveries (
-			event_id, event_type, aggregate_id, aggregate_version, payload, recipient, channel, template_name, status
+			event_id, event_type, aggregate_id, aggregate_version, payload, recipient, channel, template_name, status, last_error
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, 'PENDING'
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)
 		ON CONFLICT (event_id, channel, recipient) DO NOTHING;
 	`
@@ -375,6 +383,8 @@ func (r *PostgresDeliveryRepository) InsertNotification(ctx context.Context, tas
 		task.Recipient,
 		task.Channel,
 		task.TemplateName,
+		status,
+		lastErr,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert notification delivery: %w", err)

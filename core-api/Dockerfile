@@ -27,6 +27,8 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 WORKDIR /app
 
+RUN mkdir -p /app/data/proofs && chown -R swiftdrop:swiftdrop /app/data
+
 COPY --from=builder /bin/core-api /app/core-api
 COPY --from=builder /bin/migrate /app/migrate
 COPY migrations /app/migrations

@@ -88,6 +88,10 @@ func main() {
 	// Run relay in separate goroutine
 	relayErrCh := make(chan error, 1)
 	go func() {
+		if err := brokerMgr.WaitForConnection(ctx); err != nil {
+			relayErrCh <- err
+			return
+		}
 		relayErrCh <- outboxRelay.Run(ctx)
 	}()
 

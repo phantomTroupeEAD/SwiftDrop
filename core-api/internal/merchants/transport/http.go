@@ -212,6 +212,19 @@ func webhookDTO(v application.WebhookView) map[string]any {
 
 // ---------------- self-service handlers ----------------
 
+// submitApplication godoc
+// @Summary      Submit a new merchant onboarding application
+// @Description  Submits a merchant profile for review and tenant onboarding.
+// @Tags         merchants
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body application.ApplicationInput true "Merchant Application"
+// @Success      201 {object} httpx.DataEnvelope
+// @Failure      400 {object} httpx.ErrorResponse "Malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Failure      409 {object} httpx.ErrorResponse "Merchant already exists"
+// @Router       /api/v1/merchants/applications [post]
 func (h *Handler) submitApplication(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -236,6 +249,16 @@ func (h *Handler) submitApplication(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusCreated, merchantDTO(v))
 }
 
+// getMe godoc
+// @Summary      Get current merchant profile
+// @Description  Returns the profile of the merchant tenant tied to the authenticated user.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Failure      404 {object} httpx.ErrorResponse "Merchant not found"
+// @Router       /api/v1/merchants/me [get]
 func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -249,6 +272,14 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, merchantDTO(v))
 }
 
+// eventTypes godoc
+// @Summary      List supported webhook event types
+// @Description  Returns the catalog of event types merchants can subscribe to.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope
+// @Router       /api/v1/merchants/webhook-event-types [get]
 func (h *Handler) eventTypes(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.jwtActor(w, r); !ok {
 		return
@@ -260,6 +291,15 @@ func (h *Handler) eventTypes(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, out)
 }
 
+// listKeys godoc
+// @Summary      List active merchant API keys
+// @Description  Returns all API credentials for the authenticated merchant tenant.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Router       /api/v1/merchants/me/api-keys [get]
 func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -278,6 +318,17 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, out)
 }
 
+// createKey godoc
+// @Summary      Generate a new merchant API key
+// @Description  Generates an API credential with scoped permissions. Key secret is returned once only.
+// @Tags         merchants
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      201 {object} httpx.DataEnvelope
+// @Failure      400 {object} httpx.ErrorResponse "Malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Router       /api/v1/merchants/me/api-keys [post]
 func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -304,6 +355,17 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusCreated, d)
 }
 
+// revokeKey godoc
+// @Summary      Revoke an active merchant API key
+// @Description  Immediately invalidates the specified API key credential.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Param        key_id path string true "API Key ID"
+// @Success      204 "No Content"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Failure      404 {object} httpx.ErrorResponse "API key not found"
+// @Router       /api/v1/merchants/me/api-keys/{key_id} [delete]
 func (h *Handler) revokeKey(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -321,6 +383,15 @@ func (h *Handler) revokeKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// listWebhooks godoc
+// @Summary      List registered webhooks
+// @Description  Returns all registered webhook subscriptions for the authenticated merchant.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Router       /api/v1/merchants/me/webhooks [get]
 func (h *Handler) listWebhooks(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -338,6 +409,17 @@ func (h *Handler) listWebhooks(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, out)
 }
 
+// registerWebhook godoc
+// @Summary      Register a new webhook subscription
+// @Description  Configures a webhook endpoint to receive domain notification events.
+// @Tags         merchants
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      201 {object} httpx.DataEnvelope
+// @Failure      400 {object} httpx.ErrorResponse "Malformed JSON or user-supplied secret forbidden"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Router       /api/v1/merchants/me/webhooks [post]
 func (h *Handler) registerWebhook(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -369,6 +451,17 @@ func (h *Handler) registerWebhook(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusCreated, d)
 }
 
+// deleteWebhook godoc
+// @Summary      Delete a webhook subscription
+// @Description  Removes an existing webhook subscription by its ID.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Param        webhook_id path string true "Webhook ID"
+// @Success      204 "No Content"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Failure      404 {object} httpx.ErrorResponse "Webhook not found"
+// @Router       /api/v1/merchants/me/webhooks/{webhook_id} [delete]
 func (h *Handler) deleteWebhook(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -388,6 +481,19 @@ func (h *Handler) deleteWebhook(w http.ResponseWriter, r *http.Request) {
 
 // ---------------- merchant orders (API key or JWT) ----------------
 
+// createOrder godoc
+// @Summary      Create a new parcel delivery order
+// @Description  Creates an order using API Key or JWT authentication. Requires Idempotency-Key.
+// @Tags         merchants
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        Idempotency-Key header string true "UUID v4 Idempotency Key"
+// @Param        request body application.OrderRequest true "Order details"
+// @Success      201 {object} httpx.DataEnvelope
+// @Failure      400 {object} httpx.ErrorResponse "Validation error or missing idempotency key"
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized or missing credentials"
+// @Router       /api/v1/merchant/orders [post]
 func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 	p, ok := h.merchantPrincipal(w, r)
 	if !ok {
@@ -428,6 +534,15 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusCreated, res)
 }
 
+// listOrders godoc
+// @Summary      List merchant parcel delivery orders
+// @Description  Returns orders submitted by the authenticated merchant tenant.
+// @Tags         merchants
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.PaginatedEnvelope
+// @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
+// @Router       /api/v1/merchant/orders [get]
 func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	p, ok := h.merchantPrincipal(w, r)
 	if !ok {

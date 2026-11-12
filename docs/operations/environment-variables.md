@@ -2,6 +2,8 @@
 
 > **Authority:** Fulfills SRS §11.3 (Environment Variables) and Engineering Standards §11 (Configuration Management).  
 > **Rule:** Never commit production values, passwords, or private keys to the repository. Use `.env.example` templates and Kubernetes Secrets.
+>
+> **Where templates live:** `deploy/.env.example` holds only the values `deploy/docker-compose.yml` substitutes (copy it to `deploy/.env`; Compose does not read a root `.env`). Each service keeps its own `.env.example` in its folder for running it alone. Kubernetes never reads `.env` files; it uses the ConfigMaps and Secrets in §7. The names in all three places must be the exact names the code reads.
 
 ---
 
@@ -37,9 +39,15 @@ Primary backend modular monolith (HTTP Port `8080`, Probes at `/health/live`, `/
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret. | `GOCSPX-abc123xyz...` | **Yes** | **Yes** |
 | `GOOGLE_REDIRECT_URI` | Authorized OAuth redirect callback URL, through the gateway. The path `/api/v1/auth/google/callback` follows SRS §6.2 (confirmed by Member 1, 2026-11-01). It must match the URI registered in Google Cloud Console exactly, or sign-in fails with `redirect_uri_mismatch`. | `http://localhost/api/v1/auth/google/callback` (production: `https://swiftdrop.example.com/api/v1/auth/google/callback`) | **Yes** | No |
 | `IDEMPOTENCY_EXPIRY_HOURS`| Lifetime before stored idempotency cache rows expire. | `24` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for encrypting merchant webhook secrets (shared with Event Worker). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, **base64-encoded** (core-api rejects anything that does not decode to 32 bytes). Must be the same bytes as the worker's hex key. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
 | `MERCHANT_API_KEY_PEPPER`| Server-side pepper string for merchant API key HMAC hashing. | *(Secret pepper string)* | **Yes** | **Yes** |
-| `OBJECT_STORAGE_ENDPOINT` / `S3_ENDPOINT` | S3-compatible storage endpoint URL. | `http://minio:9000` (local) or Cloudflare R2 | No | No |
+| `OBJECT_STORAGE_DRIVER` / `STORAGE_DRIVER` | Storage driver selection (`local`, `r2`, `minio`, `s3`). | `local` | No | No |
+| `LOCAL_STORAGE_PATH` | Local disk folder path when `OBJECT_STORAGE_DRIVER=local`. | `./data/proofs` | No | No |
+| `LOCAL_STORAGE_BASE_URL` | Base URL path for serving local proofs. | `/api/v1/deliveries/proofs` | No | No |
+| `OBJECT_STORAGE_ACCOUNT_ID` / `R2_ACCOUNT_ID` | Cloudflare 32-character hexadecimal Account ID (for auto endpoint generation). | *(Account ID)* | No | No |
+| `OBJECT_STORAGE_ENDPOINT` / `S3_ENDPOINT` | S3-compatible storage endpoint URL. Auto-derived if Account ID provided for R2. | `http://minio:9000` (local) or `https://<account_id>.r2.cloudflarestorage.com` | No | No |
+| `OBJECT_STORAGE_REGION` / `S3_REGION` | Storage region (`auto` for Cloudflare R2). | `auto` | No | No |
+| `OBJECT_STORAGE_PUBLIC_URL` / `S3_PUBLIC_BASE_URL` | Optional custom CDN base URL for public attachments. | `https://media.swiftdrop.example.com` | No | No |
 | `OBJECT_STORAGE_BUCKET` / `S3_BUCKET` | Bucket name for proof-of-delivery attachments. | `swiftdrop-pod-attachments` | No | No |
 | `OBJECT_STORAGE_ACCESS_KEY` / `S3_ACCESS_KEY_ID`| S3 access key ID. | `minioadmin` | No | **Yes** |
 | `OBJECT_STORAGE_SECRET_KEY` / `S3_SECRET_ACCESS_KEY`| S3 secret access key. | `minioadmin` | No | **Yes** |
@@ -73,7 +81,7 @@ Read-optimized public milestone and SSE projection service (HTTP Port `8081`, Pr
 | :--- | :--- | :--- | :--- | :--- |
 | `WORKER_CONCURRENCY` | Number of parallel worker goroutines per pod. | `10` | No | No |
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS` | Socket timeout for outbound merchant webhooks. | `5` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for decrypting merchant webhook signing secrets (shared with Core API). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key as **64 hex characters** (same bytes as core-api's base64 key). In Compose it is filled from `WEBHOOK_SECRET_ENCRYPTION_KEY_HEX`. | `3031323334353637383930313233343536373839303132333435363738393031` | **Yes** | **Yes** |
 | `NOTIFICATION_PROVIDER` | Notification provider backend (`mock`, `smtp`, `twilio`, `sendgrid`). | `mock` (local) or `smtp` | **Yes** | No |
 | `SMTP_HOST` | SMTP server hostname (e.g. `mailpit` locally). | `mailpit` | No | No |
 | `SMTP_PORT` | SMTP server port (e.g. `1025` for Mailpit). | `1025` | No | No |

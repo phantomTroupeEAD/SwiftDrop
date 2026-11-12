@@ -88,6 +88,23 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
         go test -v ./...
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
     }
+
+    # 5. Swagger Specification Verification
+    if (Test-Path "core-api/docs/swagger.json") {
+        Write-Host "  Verifying core-api Swagger specification..." -ForegroundColor Yellow
+        try {
+            $swaggerContent = Get-Content "core-api/docs/swagger.json" -Raw | ConvertFrom-Json
+            if ($swaggerContent.swagger -or $swaggerContent.openapi) {
+                Write-Host "  [PASS] Unified Swagger specification is valid JSON." -ForegroundColor Green
+            } else {
+                Write-Host "  [ERROR] core-api/docs/swagger.json is missing 'swagger' or 'openapi' root field." -ForegroundColor Red
+                $Failed = $true
+            }
+        } catch {
+            Write-Host "  [ERROR] Failed to parse core-api/docs/swagger.json as JSON: $_" -ForegroundColor Red
+            $Failed = $true
+        }
+    }
 } else {
     Write-Host "[4/4] Skipping Go test execution (go not found in PATH)." -ForegroundColor Gray
 }

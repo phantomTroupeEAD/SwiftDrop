@@ -90,3 +90,40 @@ func TestConfigHelpers(t *testing.T) {
 		t.Error("expected IsLocal() to be true")
 	}
 }
+
+func TestLoadEnv(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_env_*.env")
+	if err != nil {
+		t.Fatalf("failed to create temp env file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := `
+# Comment line
+TEST_LOAD_ENV_A=hello_world
+TEST_LOAD_ENV_B="quoted_string"
+TEST_LOAD_ENV_C='single_quoted'
+`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("failed to write temp env file: %v", err)
+	}
+	_ = tmpFile.Close()
+
+	os.Setenv("TEST_LOAD_ENV_EXISTING", "original")
+	defer os.Unsetenv("TEST_LOAD_ENV_EXISTING")
+	defer os.Unsetenv("TEST_LOAD_ENV_A")
+	defer os.Unsetenv("TEST_LOAD_ENV_B")
+	defer os.Unsetenv("TEST_LOAD_ENV_C")
+
+	LoadEnv(tmpFile.Name())
+
+	if val := os.Getenv("TEST_LOAD_ENV_A"); val != "hello_world" {
+		t.Errorf("expected 'hello_world', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOAD_ENV_B"); val != "quoted_string" {
+		t.Errorf("expected 'quoted_string', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOAD_ENV_C"); val != "single_quoted" {
+		t.Errorf("expected 'single_quoted', got %q", val)
+	}
+}
