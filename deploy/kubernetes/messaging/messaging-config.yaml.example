@@ -30,6 +30,7 @@ data:
 
 ---
 # Secret: Outbox Relay Database Connection (swiftdrop_relay role)
+# The password must equal RELAY_PASSWORD in postgres-secrets (the bootstrap Job sets it from there).
 apiVersion: v1
 kind: Secret
 metadata:
@@ -41,6 +42,7 @@ stringData:
 
 ---
 # Secret: Event Worker Database Connection (swiftdrop_worker role)
+# The password must equal WORKER_PASSWORD in postgres-secrets.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -51,15 +53,8 @@ stringData:
   DATABASE_URL: "postgres://swiftdrop_worker:REPLACE_WITH_SECURE_PASSWORD@postgres.swiftdrop.svc.cluster.local:5432/swiftdrop_db?sslmode=disable"
 
 ---
-# Secret: RabbitMQ Broker URL
-apiVersion: v1
-kind: Secret
-metadata:
-  name: rabbitmq-secrets
-  namespace: swiftdrop
-type: Opaque
-stringData:
-  RABBITMQ_URL: "amqp://swiftdrop:REPLACE_WITH_SECURE_PASSWORD@rabbitmq.swiftdrop.svc.cluster.local:5672/"
+# Secret rabbitmq-secrets (RABBITMQ_URL plus the broker's own user/password) is defined ONCE,
+# in deploy/kubernetes/secrets.example.yaml. A second copy here would overwrite it.
 
 ---
 # Secret: Integrations Credentials (AES-256-GCM Key & SMTP Auth)

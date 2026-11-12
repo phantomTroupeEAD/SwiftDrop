@@ -49,6 +49,7 @@ deploy/
 │       ├── dynamic-routes.yml           # Compose routing, CORS, upload limits & rate limits
 │       └── kubernetes/                  # Same routes as IngressRoute + Middleware CRDs (the K8s ingress)
 ├── seeds/                               # Idempotent seed SQL, loaded by `make seed` after migrations
+├── scripts/smoke-test.py                # Gateway smoke test: python deploy/scripts/smoke-test.py [base URL]
 ├── observability/                       # Prometheus, Grafana, alerts (Compose profile + K8s, section 9)
 ├── overlays/                            # Kustomize overlays: kubectl apply -k deploy/overlays/<env>
 │   ├── dev/                             # k3d: :dev images, ingress over plain HTTP
@@ -57,7 +58,8 @@ deploy/
     ├── kustomization.yaml               # Lists every manifest below + ../observability
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
     ├── secrets.example.yaml             # Template for cluster secrets (not applied; create real ones with kubectl)
-    ├── postgres/                        # PostgreSQL 16 StatefulSet + headless Service + role bootstrap Job
+    ├── traefik/helmchartconfig.yaml     # K3s Traefik: Cloudflare real IPs, https redirect (Azure only, applied separately)
+    ├── postgres/                        # PostgreSQL 16 StatefulSet + Service + role bootstrap Job (passwords from Secret)
     ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet + Service (metrics on 15692)
     ├── redis/                           # Ephemeral Redis Deployment & Service (port 6379)
     ├── core-api/                        # Deployment (2-4 replicas), ClusterIP Service, HPA, migrate Job (/app/migrate)
