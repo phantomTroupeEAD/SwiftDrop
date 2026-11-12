@@ -4,57 +4,205 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem;
+    /* Fonts */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+    /* Apple Cupertino Archetype Tokens (L105-113) */
+    --canvas: #f5f5f7;
+    --surface: #ffffff;
+    --surface-subtle: #fbfbfd;
+    --surface-active: #e2e8f0;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-subtle: #edf2f7;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --text-subtle: #94a3b8;
+
+    /* Reconciled Radii (Apple Archetype L110-112 + L58) */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+
+    /* Default Primary (Apple Blue L36) */
+    --primary: #0071e3;
+    --primary-hover: #0077ed;
+    --primary-foreground: #ffffff;
+    --primary-tint: rgba(0, 113, 227, 0.08);
+    --ring: #0071e3;
+
+    /* Semantic Status Tints (L44-53) */
+    --status-success-ink: #047857;
+    --status-success-bg: #ecfdf5;
+    --status-success-border: #a7f3d0;
+    --status-warning-ink: #b45309;
+    --status-warning-bg: #fffbeb;
+    --status-warning-border: #fde68a;
+    --status-error-ink: #b91c1c;
+    --status-error-bg: #fef2f2;
+    --status-error-border: #fecaca;
+
+    /* Motion Tokens (L63-67) */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --duration-fast: 150ms;
+    --duration-normal: 220ms;
+    --duration-slow: 350ms;
+
+    /* shadcn/ui Variable Retheme Layer */
+    --background: var(--canvas);
+    --foreground: var(--text);
+    --card: var(--surface);
+    --card-foreground: var(--text);
+    --popover: var(--surface);
+    --popover-foreground: var(--text);
+    --secondary: var(--surface-subtle);
+    --secondary-foreground: var(--text);
+    --muted: var(--surface-subtle);
+    --muted-foreground: var(--text-muted);
+    --accent: var(--surface-active);
+    --accent-foreground: var(--text);
+    --destructive: var(--status-error-bg);
+    --destructive-foreground: var(--status-error-ink);
+    --input: var(--border);
+    --radius: var(--radius-md);
+
+    color-scheme: light;
   }
 
   [data-theme="dark"] {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    /* Apple Cupertino Dark Mode Tokens (L114-119) */
+    --canvas: #000000;
+    --surface: #1c1c1e;
+    --surface-subtle: #2c2c2e;
+    --surface-active: #27272e;
+    --border: rgba(255, 255, 255, 0.10);
+    --border-subtle: #1e1e24;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-subtle: #64748b;
+
+    --primary: #2997ff;
+    --primary-hover: #40a9ff;
+    --primary-foreground: #ffffff;
+    --primary-tint: rgba(41, 151, 255, 0.14);
+    --ring: #2997ff;
+
+    --status-success-ink: #34d399;
+    --status-success-bg: #064e3b;
+    --status-success-border: #047857;
+    --status-warning-ink: #fbbf24;
+    --status-warning-bg: #451a03;
+    --status-warning-border: #78350f;
+    --status-error-ink: #f87171;
+    --status-error-bg: #450a0a;
+    --status-error-border: #7f1d1d;
+
+    color-scheme: dark;
+  }
+
+  /* Role Scoped Accent Overrides (L1724-1732) */
+  [data-role="PUBLIC"],
+  [data-role="CUSTOMER"] {
+    --primary: #0071e3;
+    --primary-hover: #0077ed;
+    --primary-tint: rgba(0, 113, 227, 0.08);
+    --ring: #0071e3;
+  }
+  [data-theme="dark"][data-role="PUBLIC"],
+  [data-theme="dark"][data-role="CUSTOMER"] {
+    --primary: #2997ff;
+    --primary-hover: #40a9ff;
+    --primary-tint: rgba(41, 151, 255, 0.14);
+    --ring: #2997ff;
+  }
+
+  [data-role="MERCHANT"] {
+    --primary: #0b5955;
+    --primary-hover: #08433f;
+    --primary-tint: rgba(11, 89, 85, 0.08);
+    --ring: #0b5955;
+  }
+  [data-theme="dark"][data-role="MERCHANT"] {
+    --primary: #85d4b5;
+    --primary-hover: #a3e3cb;
+    --primary-tint: rgba(133, 212, 181, 0.15);
+    --ring: #85d4b5;
+  }
+
+  [data-role="DISPATCHER"] {
+    --primary: #1e40af;
+    --primary-hover: #1e3a8a;
+    --primary-tint: rgba(30, 64, 175, 0.08);
+    --ring: #1e40af;
+  }
+  [data-theme="dark"][data-role="DISPATCHER"] {
+    --primary: #60a5fa;
+    --primary-hover: #93c5fd;
+    --primary-tint: rgba(96, 165, 250, 0.15);
+    --ring: #60a5fa;
+  }
+
+  [data-role="COURIER"] {
+    --primary: #b45309;
+    --primary-hover: #92400e;
+    --primary-tint: rgba(180, 83, 9, 0.08);
+    --ring: #b45309;
+  }
+  [data-theme="dark"][data-role="COURIER"] {
+    --primary: #fbbf24;
+    --primary-hover: #fcd34d;
+    --primary-tint: rgba(251, 191, 36, 0.15);
+    --ring: #fbbf24;
+  }
+
+  [data-role="ADMIN"] {
+    --primary: #18181b;
+    --primary-hover: #27272a;
+    --primary-tint: rgba(24, 24, 27, 0.08);
+    --ring: #18181b;
+  }
+  [data-theme="dark"][data-role="ADMIN"] {
+    --primary: #f4f4f5;
+    --primary-hover: #e4e4e7;
+    --primary-tint: rgba(244, 244, 245, 0.15);
+    --ring: #f4f4f5;
+  }
+
+  /* Dual Focus Ring Implementation (L224 & L645) */
+  :focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring) !important;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-@layer base {
+/* Reduced Motion Enforcement (L1037-1042) */
+@media (prefers-reduced-motion: reduce) {
   * {
-    @apply border-border;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
-  body {
-    @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@layer utilities {
+  /* Explicit Focus Ring Utility */
+  .focus-ring {
+    outline: none !important;
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring) !important;
   }
 }

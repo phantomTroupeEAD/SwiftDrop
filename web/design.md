@@ -12,10 +12,11 @@
 2. **Color Budget $\le$ 3%:** Color is strictly reserved for actionable primary controls, data status indicators, and active selection state. Page canvases and card surfaces remain pure neutrals.
 3. **Zero-Elevation Invariant:** No component or overlay possesses rest blur shadows (no `shadow-sm`, `shadow-md`, `shadow-lg`, or blur radius $> 0\text{px}$). Depth is achieved exclusively via 1px hairline borders (`var(--border)`) and tone steps (`var(--surface-subtle)`). All shadcn/ui default drop-shadows are strictly stripped.
 4. **Canonical Archetype:** **Apple Cupertino Precision** (`[data-style="apple"]`). All other archetypes in `scratch-apple.html` (`linear`, `framed`, `swiftsig`) and demo palette swatches (`Emerald Green`, `Crimson Rose` outside errors) are demo-only and **strictly forbidden** in product code.
-5. **Reconciled Effective Radii:** The product ships with Apple HIG radii:
-   - Controls / Badges / Tags / Inner Affixes: `8px` (`--radius-sm`)
-   - Inputs / Cards / Buttons / Tables: `12px` (`--radius-md` / `--radius`)
-   - Modals / Sheets / Dialogs / Popovers: `16px` (`--radius-lg`)
+5. **Reconciled Effective Radii:** The product ships with verified Apple HIG radii per the design owner's §6.0 disposition:
+   - Controls / Badges / Tags / Inputs / Textarea / Buttons (default & sm) / Select / Tabs Bar: `8px` (`--radius-sm`)
+   - Cards / Data Tables / Popovers / Dropdowns: `12px` (`--radius-md`)
+   - Modals / Sheets / Dialogs: `16px` (`--radius-lg`)
+   - Inner Tabs Trigger & Tooltips: `4px` (scratch L449, L1016)
    - Pills / Status Dots / Avatars: `9999px` (`--radius-full`)
 6. **Missing-Component Protocol:** If a required component, variant, or state is missing from `@/shared/components/ui/`, **stop and flag it in the pull request description**. Never improvise, never inline-style a substitute, and never execute `shadcn add` without explicit permission.
 
@@ -117,11 +118,22 @@ Dark mode automatically swaps ink and background variables per `scratch-apple.ht
 
 All components reside in `@/shared/components/ui/`. Feature code imports from this directory only.
 
+### 6.0 Effective Radii Allocation Matrix (Apple Archetype Overrides)
+Per the canonical Apple Cupertino archetype (`[data-style="apple"]`, L110–L112) and the Design Owner Dispositions (2026-11-12), components must never use generic radii shorthands. All mappings below are verified from scratch or approved by kin derivation:
+
+| Token | Exact Value | Scratch Source & Kin Derivation | Applied Primitive Categories (100% Canonical) |
+| :--- | :--- | :--- | :--- |
+| `--radius-sm` | `8px` | • `.status-badge`: L602<br>• `.input-field`: L636<br>• `.btn` / `.btn-sm`: L531, L589 (scratch 8px retained)<br>• `.callout`: L845 (scratch 8px retained)<br>• `.toast-card`: L986<br>• `.skeleton-box`: L870<br>• `.segmented-bar` (tabs list): L440<br>• Signature / camera proof: L1656, L1670<br>• `.input-affix-box`: L649 (frames L636 8px)<br>• `select` triggers & `textarea`: kin to `.input-field` (L636) | • `badge`<br>• `button` (all variants & sizes: default and sm)<br>• `input`, `textarea`, `select` triggers, `affix` containers<br>• `skeleton`<br>• `toast`<br>• `callout` containers<br>• `tabs` list container (`.segmented-bar`)<br>• signature & camera proof boxes |
+| `--radius-md` | `12px` | • `.card-panel`: L502<br>• `.card-panel-flat`: L510<br>• `.data-table-wrap`: L700<br>• `.kpi-block`: L734<br>• `popover` + `dropdown-menu`: kin to `.card-panel` (L502) | • `card` panels & KPI summary blocks<br>• `table` wrappers (`.data-table-wrap`)<br>• `popover` cards<br>• `dropdown-menu` surface |
+| `--radius-lg` | `16px` | • `.dialog-card`: L946 (canonical Apple override L112)<br>• `sheet drawers`: kin to `.dialog-card` (L946)<br>• `destructive dialogs`: canonical dialog tier | • `dialog` modal cards<br>• `sheet` drawers & slide-overs<br>• destructive confirmation dialog cards |
+| `--radius-full` | `9999px` | • `.nav-pill`: L318<br>• Circular 50% elements: `.status-dot` (L610), `.swatch-dot` (L413), `.step-dot` (L782), `.milestone-pin` (L828)<br>• `.toggle-track`: L682 (pill track)<br>• `avatar`: circular kin | • `status-dot` indicators<br>• `switch` track & thumb<br>• stepper dots, milestone pins, navigation pills<br>• `avatar` |
+| *Explicit Sub-Tokens* | `4px` | • `.tooltip-bubble`: L1016 (scratch 4px retained)<br>• `.segmented-btn`: L449 (scratch 4px retained) | • `tooltip` bubble<br>• `tabs` inner trigger buttons (`.segmented-btn`) |
+
 ### 6.1 Button (`@/shared/components/ui/button.tsx`)
 - **Base shadcn:** Radix Slot wrapper with class-variance-authority.
 - **Exact Overrides from Scratch:**
   - Active press compression: `active:scale-[0.98] transition-transform duration-100 ease-out`
-  - Default radius: `rounded-[12px]` (sm: `rounded-[8px]`)
+  - Default & Small radius: `rounded-[8px]` (`var(--radius-sm)` per L531; 12px proposal rejected)
   - Min heights: Default `38px` (desktop) / `44px` (touch targets), Small `30px`.
   - Zero shadows: replace `shadow` / `shadow-sm` with `border border-transparent`.
 - **Variants:**
@@ -229,3 +241,41 @@ Any pull request containing the following patterns is subject to immediate rejec
 - ❌ **NO Raw Hex / Arbitrary CSS Values:** Classes like `bg-[#0071e3]` or `text-[#123456]` are prohibited in feature code. Use token classes (`bg-[var(--primary)]` or `bg-surface`).
 - ❌ **NO Unchecked Mobile Tap Targets:** Primary action controls with heights $< 44\text{px}$ on mobile viewports are prohibited.
 - ❌ **NO Ad-Hoc Empty State Art:** Cartoon SVG vectors, emojis, or external illustrations are strictly forbidden. Use standard Lucide icons with muted typography.
+
+---
+
+## Appendix: Decision Log
+
+### 2026-11-12 — §6.0 Effective Radii Dispositions (Design Owner)
+- **APPROVED (Integrated with canonical kin citations):**
+  - `select triggers` → `8px` (kin: `.input-field` L636)
+  - `affix containers` → `8px` (`.input-affix-box` L649 verified no explicit radius; frames `.input-field` L636 8px)
+  - `popover` + `dropdown-menu` → `12px` (kin: `.card-panel` L502)
+  - `sheet drawers` → `16px` (kin: `.dialog-card` L946)
+  - `destructive dialogs` → `16px` (canonical dialog tier: `.dialog-card` L946)
+  - `avatar` → `9999px` (circular kin: `.swatch-dot` L413, `.status-dot` L610)
+- **REJECTED (Scratch values retained):**
+  - `tooltip bubble` → stays `4px` (scratch `.tooltip-bubble` L1016 retained; proposed 8px rejected)
+  - `default button` → stays `8px` (scratch `.btn` L531 retained; proposed 12px rejected)
+  - `textarea` → `8px` (kin: `.input-field` L636 control kin; proposed 12px rejected)
+  - `callout containers` → stay `8px` (scratch `.callout` L845 retained; proposed 16px rejected)
+- **CONDITIONAL (Verified from scratch):**
+  - `tabs list` container (`.segmented-bar` L440) → explicit scratch radius `8px` verified (`var(--radius-sm)`). Inner trigger button (`.segmented-btn` L449) → explicit scratch radius `4px` verified.
+
+### 2026-11-12 — Role Palettes & Architecture Decisions (Design Owner)
+- **APPROVED Role Assignments:**
+  - `MERCHANT` → Swift Teal (`#0b5955` light / `#85d4b5` dark)
+  - `DISPATCHER` → Oxford Navy (`#1e40af` light / `#60a5fa` dark)
+  - `COURIER` → Logistics Amber (`#b45309` light / `#fbbf24` dark). *Conscious Collision Approved:* Amber `#b45309` matches warning status ink (L47 in scratch); intentionally accepted per scratch archetype.
+  - `ADMIN` → Zinc Monochrome (`#18181b` light / `#f4f4f5` dark). *Dark-mode low contrast consciously accepted.*
+  - `PUBLIC` / `CUSTOMER` → Apple Blue (`#0071e3` light / `#2997ff` dark).
+- **APPROVED 44px Touch Targets:**
+  - Enforced via `@media (pointer: coarse)` utility `touch:min-h-[44px]` and `touch:h-[44px]` across interactive controls.
+- **APPROVED Focus Ring Architecture:**
+  - Dual accessibility focus ring (`0 0 0 2px var(--surface), 0 0 0 4px var(--ring)`) implemented as `:focus-visible` global standard in `index.css` and `.focus-ring` utility.
+- **APPROVED Opacity Slash Replacement:**
+  - All `/NN` opacity color classes across `ui/*.tsx` replaced with exact hover and surface tokens (`var(--primary-hover)`, `var(--surface-active)`, `var(--status-error-bg)`).
+- **APPROVED Motion Standards:**
+  - `@media (prefers-reduced-motion: reduce)` block added to `index.css` forcing animation and transition durations to 0.01ms.
+
+
