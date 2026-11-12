@@ -173,7 +173,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
       - JWT_SECRET=${JWT_SECRET:-swiftdrop-development-secret-key-change-in-production-32chars}
       - COOKIE_SECURE=false
-      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=}
       - MERCHANT_API_KEY_PEPPER=${MERCHANT_API_KEY_PEPPER:-swiftdrop-merchant-pepper-secret-32-chars}
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=swiftdrop-pod-attachments
@@ -281,7 +281,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgres://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/}
-      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - WEBHOOK_SECRET_ENCRYPTION_KEY=${WEBHOOK_SECRET_ENCRYPTION_KEY_HEX:-3031323334353637383930313233343536373839303132333435363738393031}
       - NOTIFICATION_PROVIDER=mock
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
