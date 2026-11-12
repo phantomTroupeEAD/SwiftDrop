@@ -39,14 +39,6 @@ func main() {
 		"concurrency", cfg.WorkerConcurrency,
 	)
 
-	// 1. Start HTTP Health & Metrics Probe Server First
-	healthServer := health.NewServer(cfg.ProbePort)
-	if err := healthServer.Start(); err != nil {
-		logger.Error("failed to start health probe server", "error", err.Error())
-		os.Exit(1)
-	}
-	logger.Info("health and metrics server listening", "port", cfg.ProbePort)
-
 	// Root context with termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -63,10 +55,25 @@ func main() {
 	db.SetMaxIdleConns(cfg.WorkerConcurrency)
 	db.SetConnMaxLifetime(15 * time.Minute)
 
-	// 3. Connect to RabbitMQ & Declare Topology
+	// 2. Connect to RabbitMQ & Declare Topology
 	brokerMgr := broker.NewManager(cfg.RabbitMQURL, logger)
 	defer brokerMgr.Close()
 
+	// 3. Start HTTP Health & Metrics Probe Server with registered readiness checks
+	healthServer := health.NewServer(cfg.ProbePort)
+	healthServer.AddReadyCheck("database", func(checkCtx context.Context) error {
+		return db.PingContext(checkCtx)
+	})
+	healthServer.AddReadyCheck("broker", func(checkCtx context.Context) error {
+		return brokerMgr.CheckHealth(checkCtx)
+	})
+	if err := healthServer.Start(); err != nil {
+		logger.Error("failed to start health probe server", "error", err.Error())
+		os.Exit(1)
+	}
+	logger.Info("health and metrics server listening", "port", cfg.ProbePort)
+
+	// 4. Connect to RabbitMQ (with backoff & background retry)
 	connectCtx, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
 	if err := brokerMgr.Connect(connectCtx); err != nil {
 		cancelConnect()
@@ -74,14 +81,6 @@ func main() {
 	} else {
 		cancelConnect()
 	}
-
-	// 4. Register Readiness Probes
-	healthServer.AddReadyCheck("database", func(checkCtx context.Context) error {
-		return db.PingContext(checkCtx)
-	})
-	healthServer.AddReadyCheck("broker", func(checkCtx context.Context) error {
-		return brokerMgr.CheckHealth(checkCtx)
-	})
 
 	// 5. Initialize Repositories
 	idempStore := idempotency.NewPostgresStore(db)
