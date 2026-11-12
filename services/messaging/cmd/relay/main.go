@@ -35,19 +35,11 @@ func main() {
 		"poll_interval", cfg.OutboxPollInterval,
 	)
 
-	// 1. Start HTTP Health & Metrics Probe Server First
-	healthServer := health.NewServer(cfg.ProbePort)
-	if err := healthServer.Start(); err != nil {
-		logger.Error("failed to start health probe server", "error", err.Error())
-		os.Exit(1)
-	}
-	logger.Info("health and metrics server listening", "port", cfg.ProbePort)
-
 	// Root context with graceful termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	// 2. Connect to PostgreSQL
+	// 1. Connect to PostgreSQL
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("failed to open postgres connection", "error", err.Error())
@@ -60,11 +52,25 @@ func main() {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(15 * time.Minute)
 
-	// 3. Connect to RabbitMQ & Declare Topology
+	// 2. Initialize RabbitMQ Manager
 	brokerMgr := broker.NewManager(cfg.RabbitMQURL, logger)
 	defer brokerMgr.Close()
 
-	// Attempt connection with retry in background or blocking connect with timeout
+	// 3. Start HTTP Health & Metrics Probe Server with registered readiness checks
+	healthServer := health.NewServer(cfg.ProbePort)
+	healthServer.AddReadyCheck("database", func(checkCtx context.Context) error {
+		return db.PingContext(checkCtx)
+	})
+	healthServer.AddReadyCheck("broker", func(checkCtx context.Context) error {
+		return brokerMgr.CheckHealth(checkCtx)
+	})
+	if err := healthServer.Start(); err != nil {
+		logger.Error("failed to start health probe server", "error", err.Error())
+		os.Exit(1)
+	}
+	logger.Info("health and metrics server listening", "port", cfg.ProbePort)
+
+	// 4. Connect to RabbitMQ & Declare Topology (with backoff & background retry)
 	connectCtx, cancelConnect := context.WithTimeout(ctx, 10*time.Second)
 	if err := brokerMgr.Connect(connectCtx); err != nil {
 		cancelConnect()
@@ -73,14 +79,6 @@ func main() {
 		cancelConnect()
 	}
 
-	// 4. Register Readiness Probes
-	healthServer.AddReadyCheck("database", func(checkCtx context.Context) error {
-		return db.PingContext(checkCtx)
-	})
-	healthServer.AddReadyCheck("broker", func(checkCtx context.Context) error {
-		return brokerMgr.CheckHealth(checkCtx)
-	})
-
 	// 5. Initialize Outbox Relay
 	outboxRepo := relay.NewPostgresOutboxRepository(db)
 	outboxRelay := relay.NewRelay(outboxRepo, brokerMgr, cfg, logger)
@@ -88,6 +86,10 @@ func main() {
 	// Run relay in separate goroutine
 	relayErrCh := make(chan error, 1)
 	go func() {
+		if err := brokerMgr.WaitForConnection(ctx); err != nil {
+			relayErrCh <- err
+			return
+		}
 		relayErrCh <- outboxRelay.Run(ctx)
 	}()
 

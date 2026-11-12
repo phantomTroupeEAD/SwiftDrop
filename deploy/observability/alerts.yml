@@ -1,0 +1,48 @@
+# SwiftDrop alert rules. Shared by Compose and Kubernetes (copied into the K8s ConfigMap).
+groups:
+  - name: swiftdrop
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} metrics endpoint is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 2 minutes."
+
+      # The reconciler re-queues events older than 5 minutes; a backlog older than that means the relay is stuck.
+      - alert: OutboxBacklogStale
+        expr: max(swiftdrop_outbox_oldest_pending_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox events are waiting more than 5 minutes"
+          description: "Oldest pending outbox event is {{ $value | humanizeDuration }} old. Check outbox-relay and RabbitMQ."
+
+      - alert: OutboxPublishFailures
+        expr: sum(rate(swiftdrop_outbox_publish_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox relay is failing to publish to RabbitMQ"
+
+      - alert: DeadLetterQueueNotEmpty
+        expr: max(swiftdrop_dlq_depth_gauge) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Messages are sitting in the dead-letter queue (swiftdrop.dlq)"
+          description: "{{ $value }} message(s) in the DLQ. Inspect and replay or discard them (runbook)."
+
+      # Postgres max_connections is 150 (connection budget, ADR-002). Warn at 80%.
+      - alert: PostgresConnectionsHigh
+        expr: sum(pg_stat_database_numbackends) / max(pg_settings_max_connections) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres is using more than 80% of max_connections"

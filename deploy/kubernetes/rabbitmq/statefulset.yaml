@@ -17,6 +17,11 @@ spec:
     metadata:
       labels:
         app: rabbitmq
+      annotations:
+        # rabbitmq_prometheus plugin is enabled by default in this image
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "15692"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: rabbitmq
@@ -27,6 +32,8 @@ spec:
               name: amqp
             - containerPort: 15672
               name: management
+            - containerPort: 15692
+              name: metrics
           envFrom:
             - secretRef:
                 name: rabbitmq-secrets

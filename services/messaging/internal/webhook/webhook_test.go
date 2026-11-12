@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -72,6 +73,21 @@ func TestDecryptor(t *testing.T) {
 
 	t.Run("Valid decryption succeeds", func(t *testing.T) {
 		decrypted, err := decryptor.Decrypt(validEncrypted, endpointID, 1)
+		if err != nil {
+			t.Fatalf("unexpected decryption error: %v", err)
+		}
+		if string(decrypted) != string(plaintextSecret) {
+			t.Errorf("expected %s, got %s", plaintextSecret, decrypted)
+		}
+	})
+
+	t.Run("Valid decryption with Base64 key succeeds", func(t *testing.T) {
+		keyB64 := base64.StdEncoding.EncodeToString(keyBytes)
+		decB64, err := NewDecryptor(keyB64)
+		if err != nil {
+			t.Fatalf("failed to create decryptor with base64 key: %v", err)
+		}
+		decrypted, err := decB64.Decrypt(validEncrypted, endpointID, 1)
 		if err != nil {
 			t.Fatalf("unexpected decryption error: %v", err)
 		}
