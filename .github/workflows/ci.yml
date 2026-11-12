@@ -239,4 +239,4 @@ jobs:
 
       # CRDs (KEDA ScaledObject, Traefik IngressRoute) have no built-in schema, so they are skipped.
       - name: Validate Kubernetes manifests
-        run: kubeconform -strict -summary -ignore-missing-schemas deploy/kubernetes
+        run: kubeconform -strict -summary -ignore-missing-schemas deploy/kubernetes deploy/observability/kubernetes

@@ -229,3 +229,32 @@ make reset
 | `swiftdrop-ai-assistant` | 8000, 8002 | `8000`, `8002` | `GET /health/live` | Python LLM assistant & FastMCP gateway |
 | `swiftdrop-web` | 3000 | `3000` | `GET /healthz` | React/TypeScript SPA served by Nginx |
 
+---
+
+## 9. Observability (Prometheus & Grafana)
+
+All files live in `deploy/observability/`. Compose and Kubernetes share the same alert rules (`alerts.yml`) and dashboard (`grafana/dashboards/swiftdrop-overview.json`), so there is one copy.
+
+**Local (Compose profile, off by default):**
+```bash
+docker compose -f deploy/docker-compose.yml --profile observability up -d
+```
+- Prometheus: http://localhost:9090 (targets, alerts)
+- Grafana: http://localhost:3001 (user `admin`, password `GRAFANA_ADMIN_PASSWORD` from `deploy/.env`, default `admin`). Opens on the **SwiftDrop Overview** dashboard.
+
+**Kubernetes:** included in the base Kustomization (`deploy/observability/kustomization.yaml`). Create the Grafana secret first, then reach both with port-forward (they are never exposed by the ingress):
+```bash
+kubectl create secret generic grafana-admin -n swiftdrop --from-literal=GF_SECURITY_ADMIN_PASSWORD=<strong password>
+kubectl port-forward -n swiftdrop svc/grafana 3001:3000
+kubectl port-forward -n swiftdrop svc/prometheus 9090
+```
+Prometheus discovers pods with `prometheus.io/scrape: "true"` plus `prometheus.io/port` and `prometheus.io/path` annotations.
+
+| Target | Metrics | Status |
+| :--- | :--- | :--- |
+| outbox-relay `:8082`, event-worker `:8083` | Outbox backlog and age, publish rate and failures, DLQ depth (`swiftdrop_*`) | Scraped |
+| RabbitMQ `:15692` | Queue depth, connections (`rabbitmq_prometheus` plugin) | Scraped |
+| Postgres (via `postgres-exporter :9187`) | Connections against the 150 budget, database stats | Scraped |
+| core-api, tracking-api, ai-assistant | None yet: `/metrics` returns 404 (ai-assistant returns JSON) | Shown as DOWN until their owners add a Prometheus endpoint |
+
+**Alerts** (`alerts.yml`): `ServiceDown` (2 min), `OutboxBacklogStale` (oldest pending event > 5 min), `OutboxPublishFailures`, `DeadLetterQueueNotEmpty`, `PostgresConnectionsHigh` (> 80% of `max_connections`).

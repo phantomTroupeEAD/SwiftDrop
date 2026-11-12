@@ -371,6 +371,73 @@ services:
     networks:
       - swiftdrop-network
 
+  # ----------------------------------------------------------------------------
+  # 13. Observability (optional profile; Member 9)
+  #   docker compose -f deploy/docker-compose.yml --profile observability up -d
+  #   Prometheus http://localhost:9090   Grafana http://localhost:3001
+  # ----------------------------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: swiftdrop-postgres-exporter
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-swiftdrop}:${POSTGRES_PASSWORD:-swiftdrop_dev_password}@postgres:5432/${POSTGRES_DB:-swiftdrop_db}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - swiftdrop-network
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: swiftdrop-prometheus
+    profiles: ["observability"]
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks:
+      - swiftdrop-network
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: swiftdrop-grafana
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/swiftdrop-overview.json
+    ports:
+      - "3001:3000"                # 3000 is the web SPA
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks:
+      - swiftdrop-network
+
 volumes:
   postgres_data:
     name: swiftdrop_postgres_data
@@ -378,6 +445,10 @@ volumes:
     name: swiftdrop_rabbitmq_data
   minio_data:
     name: swiftdrop_minio_data
+  prometheus_data:
+    name: swiftdrop_prometheus_data
+  grafana_data:
+    name: swiftdrop_grafana_data
 
 networks:
   swiftdrop-network:

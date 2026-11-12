@@ -26,6 +26,8 @@ resources:
   - ai-assistant/hpa.yaml
   - web/deployment.yaml
   - ingress/traefik-routes.yaml
+  # Prometheus, Grafana, postgres-exporter (shares alert rules and dashboard with Compose)
+  - ../observability
 
 # One registry path per image. Overlays set newTag (the 7-char git SHA from release-images.yml).
 images:
