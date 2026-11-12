@@ -1,0 +1,37 @@
+# Base for all SwiftDrop Kubernetes resources. Deploy through an overlay:
+#   kubectl apply -k deploy/overlays/dev     (local k3d)
+#   kubectl apply -k deploy/overlays/prod   (Azure K3s)
+# Secrets are NOT here: create them from secrets.example.yaml and
+# messaging/messaging-config.yaml.example (see docs/operations/deployment-guide.md).
+# KEDA must be installed in the cluster for messaging/keda.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - postgres/statefulset.yaml
+  - postgres/bootstrap-job.yaml
+  - rabbitmq/statefulset.yaml
+  - redis/deployment.yaml
+  - core-api/deployment.yaml
+  - tracking-api/deployment.yaml
+  - messaging/serviceaccounts.yaml
+  - messaging/outbox-relay.yaml
+  - messaging/event-worker.yaml
+  - messaging/keda.yaml
+  - reconciliation/cronjob.yaml
+  - ai-assistant/configmap.yaml
+  - ai-assistant/deployment.yaml
+  - ai-assistant/service.yaml
+  - ai-assistant/hpa.yaml
+  - web/deployment.yaml
+  - ingress/traefik-routes.yaml
+
+# One registry path per image. Overlays set newTag (the 7-char git SHA from release-images.yml).
+images:
+  - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
+  - name: ghcr.io/phantomtroupeead/swiftdrop/tracking-api
+  - name: ghcr.io/phantomtroupeead/swiftdrop/messaging
+  - name: ghcr.io/phantomtroupeead/swiftdrop/web
+  - name: swiftdrop/ai-assistant
+    newName: ghcr.io/phantomtroupeead/swiftdrop/ai-assistant

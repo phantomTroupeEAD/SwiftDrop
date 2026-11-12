@@ -33,7 +33,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: outbox-relay
-          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest # tag set by the Kustomize overlay (deploy/overlays)
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/relay"]
           ports:
