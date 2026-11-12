@@ -46,36 +46,29 @@ deploy/
 │   ├── README.md                        # Gateway architecture and local Docker run guide
 │   └── traefik/
 │       ├── traefik.yml                  # Static configuration (Cloudflare trusted IPs, entrypoints)
-│       └── dynamic-routes.yml           # Dynamic routing, CORS, upload limits & rate limits
-└── kubernetes/                          # Kubernetes resource manifests (Member 9 per Agreement A8)
+│       ├── dynamic-routes.yml           # Compose routing, CORS, upload limits & rate limits
+│       └── kubernetes/                  # Same routes as IngressRoute + Middleware CRDs (the K8s ingress)
+├── seeds/                               # Idempotent seed SQL, loaded by `make seed` after migrations
+├── scripts/smoke-test.py                # Gateway smoke test: python deploy/scripts/smoke-test.py [base URL]
+├── observability/                       # Prometheus, Grafana, alerts (Compose profile + K8s, section 9)
+├── overlays/                            # Kustomize overlays: kubectl apply -k deploy/overlays/<env>
+│   ├── dev/                             # k3d: :dev images, ingress over plain HTTP
+│   └── prod/                            # Azure K3s: git-SHA images, swiftdrop.work CORS, ghcr pull secret
+└── kubernetes/                          # Kustomize base (Member 9 per Agreement A8)
+    ├── kustomization.yaml               # Lists every manifest below + ../observability
     ├── namespace.yaml                   # Namespace definition (swiftdrop)
-    ├── secrets.example.yaml             # Template for all production cluster secrets
-    ├── postgres/                        # PostgreSQL 16 StatefulSet + headless Service + role bootstrap Job
-    │   ├── statefulset.yaml
-    │   └── bootstrap-job.yaml
-    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet + headless Service + 5Gi PVC
-    │   └── statefulset.yaml
+    ├── secrets.example.yaml             # Template for cluster secrets (not applied; create real ones with kubectl)
+    ├── traefik/helmchartconfig.yaml     # K3s Traefik: Cloudflare real IPs, https redirect (Azure only, applied separately)
+    ├── postgres/                        # PostgreSQL 16 StatefulSet + Service + role bootstrap Job (passwords from Secret)
+    ├── rabbitmq/                        # RabbitMQ 3.13 StatefulSet + Service (metrics on 15692)
     ├── redis/                           # Ephemeral Redis Deployment & Service (port 6379)
-    │   └── deployment.yaml
-    ├── core-api/                        # Deployment (2-4 replicas), ClusterIP Service, HPA, migrate Job
-    │   └── deployment.yaml
-    ├── tracking-api/                    # Deployment (1-2 replicas), ClusterIP Service, HPA
-    │   └── deployment.yaml
-    ├── outbox-relay/                    # Deployment (STRICT SINGLETON replicas: 1, NO HPA)
-    │   └── deployment.yaml
-    ├── event-worker/                    # Deployment + KEDA ScaledObject (1-3 pods on queue backlog)
-    │   └── deployment.yaml
+    ├── core-api/                        # Deployment (2-4 replicas), ClusterIP Service, HPA, migrate Job (/app/migrate)
+    ├── tracking-api/                    # Deployment, ClusterIP Service
+    ├── messaging/                       # outbox-relay (STRICT SINGLETON), event-worker, KEDA ScaledObject,
+    │                                    #   ServiceAccounts, messaging-config.yaml.example
     ├── ai-assistant/                    # Deployment, Service, ConfigMap, HPA (Member 10)
-    │   ├── deployment.yaml
-    │   ├── service.yaml
-    │   ├── configmap.yaml
-    │   └── hpa.yaml
-    ├── web/                             # Deployment (2-3 replicas, port 3000), ClusterIP Service, HPA
-    │   └── deployment.yaml
-    ├── reconciliation/                  # CronJob (*/10 * * * *, sweeps stale outbox rows)
-    │   └── cronjob.yaml
-    └── ingress/                         # Traefik IngressRoutes & Middlewares (CORS, RateLimit)
-        └── traefik-routes.yaml
+    ├── web/                             # Deployment (port 3000), ClusterIP Service
+    └── reconciliation/                  # CronJob (*/10 * * * *, sweeps stale outbox rows)
 ```
 
 ---

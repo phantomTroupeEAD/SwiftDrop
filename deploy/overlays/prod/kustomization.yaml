@@ -1,7 +1,8 @@
 # Azure K3s. Before applying, pin every image to the commit that was pushed to ghcr:
 #   cd deploy/overlays/prod
 #   kustomize edit set image ghcr.io/phantomtroupeead/swiftdrop/core-api=ghcr.io/phantomtroupeead/swiftdrop/core-api:<sha>   (repeat per image)
-# and set the real public origin in the CORS patch below.
+# Public domain: https://swiftdrop.work behind Cloudflare (Full strict). TLS uses the Cloudflare
+# Origin CA certificate as secret traefik-origin-tls (create it with kubectl, never commit it).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -22,15 +23,15 @@ images:
     newTag: REPLACE_WITH_GIT_SHA
 
 patches:
-  # Only the real public origin may call the API cross-origin.
+  # Only the real public origin may call the API cross-origin (Member 7's cors-middleware).
   - target:
       kind: Middleware
-      name: cors-headers
+      name: cors-middleware
     patch: |-
       - op: replace
         path: /spec/headers/accessControlAllowOriginList
         value:
-          - "https://REPLACE_WITH_PUBLIC_HOST"
+          - "https://swiftdrop.work"
   # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
   # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
   - target:

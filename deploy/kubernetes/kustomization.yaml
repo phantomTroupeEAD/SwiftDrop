@@ -25,7 +25,8 @@ resources:
   - ai-assistant/service.yaml
   - ai-assistant/hpa.yaml
   - web/deployment.yaml
-  - ingress/traefik-routes.yaml
+  # Ingress: Member 7's IngressRoute + Middlewares (owned by M7; patch per environment in overlays)
+  - ../gateway/traefik/kubernetes
   # Prometheus, Grafana, postgres-exporter (shares alert rules and dashboard with Compose)
   - ../observability
 

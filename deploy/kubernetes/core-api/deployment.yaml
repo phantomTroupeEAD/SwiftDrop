@@ -144,6 +144,32 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+      # The bootstrap Job runs in one transaction: once swiftdrop_migrator can log in, all roles and
+      # default privileges exist. Migrations need that (they GRANT to roles only IF they exist), and
+      # backoffLimit is 0, so wait here instead of failing the race against postgres-bootstrap-roles.
+      initContainers:
+        - name: wait-for-roles
+          image: postgres:16-alpine
+          command: ["sh", "-c"]
+          args:
+            - |
+              until psql "$DATABASE_URL" -tAc "select 1" >/dev/null 2>&1; do
+                echo "Waiting for postgres-bootstrap-roles (swiftdrop_migrator login)..."
+                sleep 3
+              done
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: MIGRATOR_DATABASE_URL
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"
       containers:
         - name: migrator
           image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
