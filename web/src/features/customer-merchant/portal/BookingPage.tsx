@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
+import { Input } from '@/shared/components/ui/input';
 import { errorMessage, PortalError, portalRequest } from './api';
 import { PortalErrorMessage, PortalLayout } from './PortalLayout';
 
@@ -10,20 +11,25 @@ const contacts = [
 ] as const;
 const fields = [
   ['name', 'Full name', 'text'], ['phone', 'Phone', 'tel'],
-  ['address', 'Street address', 'text'], ['city', 'City', 'text'], ['zone', 'Zone ID', 'text'],
+  ['address', 'Street address', 'text'], ['city', 'City', 'text'],
+  ['postal', 'Postal code', 'text'], ['zone', 'Zone ID', 'text'],
 ] as const;
 const parcelFields = [
   ['weight', 'Weight (kg)', 30], ['length', 'Length (cm)', 150],
   ['width', 'Width (cm)', 150], ['height', 'Height (cm)', 150],
 ] as const;
 
-type Quote = { quote_id: string; total_fee_cents: number; currency: string; expires_at: string };
+type Quote = { quote_id: string; fee_cents: number; currency: string; expires_at: string };
 type Booking = { tracking_number: string; status: string };
 
 export function BookingPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Record<string, string>>({ service: 'STANDARD' });
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    service: 'STANDARD',
+    'pickup-name': user?.display_name?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' '),
+    'pickup-phone': user?.phone ?? '',
+  }));
   const [quote, setQuote] = useState<Quote>();
   const [booking, setBooking] = useState<Booking>();
   const [pending, setPending] = useState(false);
@@ -31,7 +37,7 @@ export function BookingPage() {
   const bookingKey = useRef<string>();
   const requestPending = useRef(false);
   const money = quote && new Intl.NumberFormat('en-LK', { style: 'currency', currency: quote.currency })
-    .format(quote.total_fee_cents / 100);
+    .format(quote.fee_cents / 100);
 
   const value = (key: string) => draft[key]?.trim() ?? '';
   function change(key: string, input: string) {
@@ -41,8 +47,12 @@ export function BookingPage() {
   }
   function contact(prefix: string) {
     return {
-      name: value(prefix + '-name'), phone: value(prefix + '-phone'),
-      address_lines: [value(prefix + '-address')], city: value(prefix + '-city'), zone_id: value(prefix + '-zone'),
+      contact_name: value(prefix + '-name'),
+      contact_phone: value(prefix + '-phone'),
+      address_line1: value(prefix + '-address'),
+      city: value(prefix + '-city'),
+      postal_code: value(prefix + '-postal'),
+      zone_id: value(prefix + '-zone'),
     };
   }
 
@@ -65,17 +75,27 @@ export function BookingPage() {
     const pickup = contact('pickup');
     const dropoff = contact('dropoff');
     const weight = Number(value('weight'));
-    const dimensions = { length: Number(value('length')), width: Number(value('width')), height: Number(value('height')) };
+    const dimensions = {
+      length_cm: Number(value('length')),
+      width_cm: Number(value('width')),
+      height_cm: Number(value('height')),
+    };
+    const serviceLevel = value('service');
     requestPending.current = true;
     setPending(true);
     try {
       if (step < 3) {
         const next = await portalRequest<Quote>('/pricing/quotes', {
           token: accessToken, method: 'POST',
-          body: { pickup_zone_id: pickup.zone_id, dropoff_zone_id: dropoff.zone_id, weight_kg: weight,
-            length_cm: dimensions.length, width_cm: dimensions.width, height_cm: dimensions.height, service_level: value('service') },
+          body: {
+            origin_zone_id: pickup.zone_id,
+            destination_zone_id: dropoff.zone_id,
+            actual_weight_kg: weight,
+            dimensions,
+            service_level: serviceLevel,
+          },
         });
-        if (!next?.quote_id || !Number.isFinite(next.total_fee_cents) || !/^[A-Z]{3}$/.test(next.currency)
+        if (!next?.quote_id || !Number.isSafeInteger(next.fee_cents) || next.fee_cents < 0 || !/^[A-Z]{3}$/.test(next.currency)
           || !(Date.parse(next.expires_at) > Date.now())) {
           setError('The pricing service did not return a valid quote.');
           return;
@@ -91,9 +111,16 @@ export function BookingPage() {
         bookingKey.current ??= crypto.randomUUID();
         const result = await portalRequest<Booking>('/parcels', {
           token: accessToken, method: 'POST', idempotencyKey: bookingKey.current,
-          body: { quote_id: quote.quote_id, pickup, dropoff, parcel: {
-            weight_kg: weight, dimensions_cm: dimensions, description: value('description'),
-          } },
+          body: {
+            quote_id: quote.quote_id,
+            recipient_name: dropoff.contact_name,
+            recipient_phone: dropoff.contact_phone,
+            weight_kg: weight,
+            dimensions,
+            pickup,
+            dropoff,
+            item_description: value('description'),
+          },
         });
         if (!result?.tracking_number) {
           setError('No tracking number was returned. Retry this submission to check the booking.');
@@ -131,7 +158,7 @@ export function BookingPage() {
               {fields.map(([field, name, type]) => {
                 const key = prefix + '-' + field;
                 return <label className="m6-field" key={key}>{name}
-                  <input required type={type} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                  <Input required type={type} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
                     onChange={event => change(key, event.target.value)} />
                 </label>;
               })}
@@ -154,7 +181,7 @@ export function BookingPage() {
           </fieldset>}
           {step === 2 && quote && <>
             <h2>Delivery quote</h2>
-            <p className="m6-quote-total" data-testid="quote-price-cents" data-amount-cents={quote.total_fee_cents}>{money}</p>
+            <p className="m6-quote-total" data-testid="quote-price-cents" data-amount-cents={quote.fee_cents}>{money}</p>
             <p className="m6-muted">Valid until {new Date(quote.expires_at).toLocaleString()}</p>
           </>}
           {step === 3 && <><h2>Review your booking</h2>

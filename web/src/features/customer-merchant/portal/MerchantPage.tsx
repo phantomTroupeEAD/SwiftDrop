@@ -160,7 +160,7 @@ export function MerchantPage({ section }: { section: Section }) {
             <th role="columnheader" scope="col">Reference</th><th role="columnheader" scope="col">Created</th>
           </tr></thead><tbody role="rowgroup">
             {filtered.map(order => <tr key={order.parcel_id} role="row">
-              <td role="cell"><Link to={`/track/${encodeURIComponent(order.tracking_number)}`}>{order.tracking_number}</Link></td>
+              <td role="cell"><Link to={`/portal/tracking/${encodeURIComponent(order.tracking_number)}`}>{order.tracking_number}</Link></td>
               <td role="cell"><PortalStatus status={order.status} /></td>
               <td role="cell" className="m6-order-meta"><span aria-hidden="true">Reference </span>{order.merchant_reference || '—'}</td>
               <td role="cell" className="m6-order-meta"><span aria-hidden="true">Created </span>{new Date(order.created_at).toLocaleDateString('en-LK')}</td>

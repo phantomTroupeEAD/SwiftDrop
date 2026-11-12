@@ -11,8 +11,15 @@ Public tracking and registration use the centered blue profile. Customer booking
 - **Customer:** Four-step quote and booking flow, server-issued tracking number, and merchant application/status.
 - **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, and webhook registration and removal.
 - **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
+- **Signed-in tracking:** Customers and merchants can open `/portal/tracking` to look up parcels they can access. Merchant tracking numbers link directly to this view.
 
 Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status and [test-ids.md](test-ids.md) for active selectors.
+
+For local integration, Vite forwards tracking requests to the tracking service on port 8081 and the remaining API requests to Core API on port 8080. A real booking test needs a customer session and active pickup and delivery zones with a pricing rule.
+
+Reloading a protected page restores a real session using the server-issued refresh cookie. Local demo sign-ins last until reload.
+
+Booking prefills the sender's name and phone from the signed-in profile. The sender can edit both fields and enter the pickup address.
 
 Clean UI update (6 November 2026): the design-preview routes now render the teal/ivory shipping UI directly. Removed theme-selection chrome, palette specifications, coordination notes, technical banners, reviewer state controls and simulated SSE connectivity. Sidebar navigation, forms, orders filters and the appearance toggle remain. A small **Sample data** label and action-specific feedback preserve honesty about incomplete integration. This change is presentation-only; real APIs and shared M7/auth code are not changed.
 

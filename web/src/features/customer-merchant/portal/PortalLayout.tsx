@@ -22,7 +22,9 @@ export function PortalLayout({ title, profile, children }: { title: string; prof
             <NavLink to="/portal/merchants/api-keys">API keys</NavLink>
             <NavLink to="/portal/merchants/webhooks">Webhooks</NavLink>
           </>}
-          <NavLink to="/track">Track a parcel</NavLink>
+          {profile === 'public'
+            ? <NavLink to="/track">Track a parcel</NavLink>
+            : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
           {user
             ? <button type="button" className="m6-quiet" onClick={() => { logout(); navigate('/auth/login'); }}>Sign out</button>
