@@ -17,10 +17,10 @@ help:
 	@echo "make ps          - Display container health and status"
 	@echo "make logs        - Follow logs across all containers"
 	@echo "make migrate-up  - Run database migrations via one-shot container"
-	@echo "make seed        - Execute mock accounts & test data seed"
+	@echo "make seed        - Load deploy/seeds/*.sql into the running database"
 	@echo "make test        - Run Go unit & race tests in core-api"
 	@echo "make swagger     - Regenerate unified Swagger/OpenAPI docs in core-api"
-	@echo "make test-e2e    - Run Python Playwright end-to-end smoke tests"
+	@echo "make test-e2e    - Run the Playwright (TypeScript) end-to-end suite"
 	@echo "make reset       - Stop containers and purge all database/message volumes"
 
 up:
@@ -41,8 +41,9 @@ logs:
 migrate-up:
 	docker compose -f $(COMPOSE_FILE) run --rm core-api-migrate
 
+# Loads every deploy/seeds/*.sql (after migrations) into the running postgres container. Seeds are idempotent.
 seed:
-	docker compose -f $(COMPOSE_FILE) exec core-api /app/migrate
+	@for f in deploy/seeds/*.sql; do 		echo "Seeding $$f"; 		docker compose -f $(COMPOSE_FILE) exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < $$f || exit 1; 	done
 
 test:
 	cd core-api && go test -v -race ./...
@@ -52,7 +53,7 @@ swagger:
 	cp core-api/docs/swagger.json core-api/internal/events/swagger/swagger.json
 
 test-e2e:
-	pytest tests/e2e/ -v
+	cd tests/e2e && npx playwright test
 
 reset:
 	docker compose -f $(COMPOSE_FILE) down -v

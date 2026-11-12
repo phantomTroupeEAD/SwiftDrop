@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.99.8
         with:
           extra_args: --only-verified
 
@@ -68,7 +68,7 @@ jobs:
       - name: Run golangci-lint (with depguard)
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
           working-directory: core-api
           args: --timeout=5m
         if: hashFiles('core-api/go.mod') != ''
@@ -125,7 +125,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
           working-directory: services/messaging
           args: --timeout=5m
 
