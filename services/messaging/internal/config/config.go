@@ -276,4 +276,3 @@ func DecodeAES256Key(raw string) ([]byte, error) {
 
 	return nil, fmt.Errorf("encryption key must decode to exactly 32 bytes (AES-256) via 64-character hex or base64 (got length %d)", len(raw))
 }
-
