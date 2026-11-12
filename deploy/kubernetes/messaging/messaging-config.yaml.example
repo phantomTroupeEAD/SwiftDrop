@@ -70,8 +70,8 @@ metadata:
   namespace: swiftdrop
 type: Opaque
 stringData:
-  # 64 hex characters (32 bytes AES-256-GCM primary key)
-  WEBHOOK_SECRET_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  # 64 hex characters = the SAME 32 bytes as core-api-secrets WEBHOOK_SECRET_ENCRYPTION_KEY (which is base64)
+  WEBHOOK_SECRET_ENCRYPTION_KEY: "3031323334353637383930313233343536373839303132333435363738393031"
   # Fallbacks for zero-downtime rotation (optional): "1=old_hex_key_32bytes"
   WEBHOOK_SECRET_ENCRYPTION_KEY_FALLBACKS: ""
   SMTP_USERNAME: "notifications@swiftdrop.com"
