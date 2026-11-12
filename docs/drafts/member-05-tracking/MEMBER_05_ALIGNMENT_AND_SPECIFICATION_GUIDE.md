@@ -57,12 +57,13 @@ flowchart TD
 - **The Problem:** Repository architecture (`AGENTS.md` §4 and Member 9's Agreement A1) ratifies dedicated services inside `services/<service-name>/`. Placing it at the root breaks Docker Compose contexts, Kubernetes Helm charts, and CI/CD pipelines.
 - **The Fix:** Standardize root path strictly as **`services/tracking/`** (matching `core-api/`, `services/messaging/`, `services/ai-assistant/`, `web/`).
 
-### 3.2 Contradiction 2: SSE Stream Endpoint Path
+### 3.2 Contradiction 2: SSE Stream Endpoint Path (Conflict C18)
 - **The Inconsistency:**
-  - In `doc-04` Section 6.1, Member 5 defines `GET /api/v1/tracking/public/{trackingNumber}/stream`.
-  - In `services/tracking/API.md` and `MEMBER_05_ALIGNMENT_AND_SPECIFICATION_GUIDE.md` v1.0.0, the path is `GET /api/v1/tracking/{trackingNumber}/stream`.
-- **The Fix:** Standardize canonical SSE streaming route as:
-  **`GET /api/v1/tracking/{trackingNumber}/stream`**, while supporting alias `/api/v1/tracking/public/{trackingNumber}/stream` for public clients. Public stream delivers strictly sanitized milestone events.
+  - In `doc-04` Section 2, Member 5 defines `GET /api/v1/tracking/public/{trackingNumber}/stream`.
+  - In `services/tracking/API.md` and initial drafts, the path was `GET /api/v1/tracking/{trackingNumber}/stream`.
+  - Member 6's web frontend (`useSSE.ts`) targets `/api/v1/tracking/public/{trackingNumber}/stream`.
+- **The Fix:** Standardize canonical public SSE streaming route as:
+  **`GET /api/v1/tracking/public/{trackingNumber}/stream`** (matching Member 6 `useSSE.ts` and public privacy expectations), while supporting alias **`GET /api/v1/tracking/{trackingNumber}/stream`** for backward compatibility. Traefik routes all paths matching `PathPrefix('/api/v1/tracking')` to `tracking-api:8081`. Public stream delivers strictly sanitized milestone events.
 
 ### 3.3 Contradiction 3: Port Allocation & Environment Configuration
 - **The Inconsistency:** In `doc-08` Section 4, Member 5 leaves port and variable names as unconfirmed open decisions.
@@ -95,11 +96,22 @@ flowchart TD
     end
 ```
 
-### 4.1 M5 vs M9: DevOps, Ports, Probes & Database Roles (Agreements A1, A2, A9, D6)
-- **Container Deployment:** Deployable Go service located at `services/tracking/`, binding to internal port `:8081`.
-- **Health Probes:** Liveness: **`/health/live`**, Readiness: **`/health/ready`** (verifies PostgreSQL read connectivity), Metrics: **`/metrics`**.
+### 4.1 M5 vs M9: DevOps, Ports, Probes, HPA (C8), Redis (C26) & Database Roles (Agreements A1, A2, A5, A9, D6, D8)
+- **Container Deployment:** Deployable Go service located at `services/tracking/`, binding to internal port `:8081` (`PORT=8081`). Image tag: `ghcr.io/phantomtroupeead/swiftdrop/tracking-api:<git-sha>`.
+- **Health Probes:** Liveness: **`/health/live`**, Readiness: **`/health/ready`** (verifies PostgreSQL read connectivity and Redis ping), Metrics: **`/metrics`**.
 - **Execution User:** `USER 10001:10001`.
-- **Database Privileges:** Dedicated PostgreSQL role **`swiftdrop_tracking_ro`** with read-only `SELECT` grants on `parcels`, `parcel_status_history`, and `delivery_zones`. Zero write or DDL privileges.
+- **Database Role & Secrets (Agreement A5, D6):** Dedicated PostgreSQL role **`swiftdrop_tracking_ro`** with read-only `SELECT` grants on `parcels`, `parcel_addresses`, `parcel_status_history`, and `delivery_zones`. Credentials provisioned via key **`TRACKING_DATABASE_URL`** in Kubernetes secret **`postgres-secrets`**, mapped into the container environment variable `DATABASE_URL`. In-cluster connection string uses `sslmode=disable` per Agreement D11.
+- **Connection Pool Ceiling (Agreement D8):** Maximum 5 open connections per pod (`DATABASE_MAX_OPEN_CONNS=5`). Across a maximum of 4 replicas, total connection demand is capped at $5 \times 4 = \mathbf{20\text{ connections}}$.
+- **HPA Scaling Envelope (Conflict C8):**
+  - **High-Availability Production:** `minReplicas: 2`, `maxReplicas: 4` (target CPU utilization: 70%, scale-up window 15s, scale-down 60s).
+  - **Single-Node VPS Demonstration:** `minReplicas: 1`, `maxReplicas: 4` (or `2`), target CPU: 50%–70%.
+  - The maximum replica ceiling is strictly bounded at **4 pods** by the 20-connection database budget.
+- **Redis Requirement (Conflict C26):** **Mandatory.** Whenever `tracking-api` operates with $> 1$ replica, an active Redis instance (`redis:6379`) is required for cross-pod Server-Sent Events fan-out on channel `tracking:updates`.
+- **SSE Stream Paths (Conflict C18):**
+  - Canonical Public SSE Stream: **`GET /api/v1/tracking/public/{trackingNumber}/stream`** (consumed directly by Member 6's `useSSE` hook).
+  - Canonical Public REST Lookup: **`GET /api/v1/tracking/public/{trackingNumber}`**.
+  - Stream Alias: **`GET /api/v1/tracking/{trackingNumber}/stream`** (supported for backward compatibility).
+  - Both endpoints are proxied via Traefik under `PathPrefix('/api/v1/tracking')` with unbuffered streaming (`buffering.maxResponseBodyBytes: 0`) and 15-second `:keepalive\n\n` heartbeat frames.
 
 ### 4.2 M5 vs M2: Authoritative Persistence & Status Harmonization
 - **Single Source of Truth:** PostgreSQL is authoritative. Redis Pub/Sub and SSE streams are ephemeral transport channels, never systems of record.
@@ -484,10 +496,13 @@ Before Team Meeting 2 sign-off, Member 5 must verify the following items:
 - [x] **Root Directory Standardized:** Codepath pinned to `services/tracking/` matching system topology.
 - [x] **Port Allocation Ratified:** Standalone service configured on port `:8081` (`PORT=8081`).
 - [x] **Probes Standardized:** Liveness `/health/live`, Readiness `/health/ready`, Metrics `/metrics` aligned with Agreement A2.
-- [x] **Database Role Configured:** Dedicated read-only role `swiftdrop_tracking_ro` with `SELECT` permissions on `parcels` and `parcel_status_history`.
-- [x] **Strict PII Redaction Enforced:** Public endpoints masked; zero recipient phone, street address, proof photos, or internal notes exposed.
+- [x] **Database Role & Secret Ratified:** Dedicated read-only role `swiftdrop_tracking_ro` with credentials provisioned via key `TRACKING_DATABASE_URL` in `postgres-secrets`, mapped to `DATABASE_URL` in container env (Agreement A5, D6).
+- [x] **Connection Pool Ceiling Bounded:** 5 conns/pod × max 4 pods = 20 connections max (Agreement D8).
+- [x] **HPA Range & Scaling Envelope Ratified (Conflict C8):** `minReplicas: 1` (VPS demonstration) / `2` (HA production target), `maxReplicas: 4` (strictly capped by 20 DB connections), CPU target 70%.
+- [x] **Redis StatefulSet Active (Conflict C26):** Ephemeral Redis instance provisioned for multi-replica SSE fan-out on channel `tracking:updates` whenever replicas ≥ 2.
+- [x] **Canonical SSE Stream Path Ratified (Conflict C18):** Canonical public path `GET /api/v1/tracking/public/{trackingNumber}/stream` (matching Member 6 `useSSE`) with alias `GET /api/v1/tracking/{trackingNumber}/stream` under Traefik `PathPrefix('/api/v1/tracking')`.
+- [x] **Strict PII Redaction Enforced:** Public endpoints masked; zero recipient phone, street address, proof photos, or internal notes exposed (SEC-009).
 - [x] **15-Second Keepalive Implemented:** Heartbeat comment frames (`:keepalive\n\n`) prevent proxy connection drops.
-- [x] **Redis Fan-Out Integrated:** Horizontal multi-replica scaling decoupled via Redis channel `tracking:updates`.
 
 ---
 *End of Member 05 Comprehensive Audit, Review & Alignment Guide.*

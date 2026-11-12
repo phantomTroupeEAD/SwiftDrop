@@ -38,7 +38,7 @@
 | PLT-007 | Migrations apply from zero | migration | AGENTS.md §7; SRS §7.3 | fresh Postgres → `migrate up` | exit 0, `dirty = false` | CI | ⏳ |
 | PLT-008 | Migrations roll back and re-apply | migration | SRS §7.3 | `up` → `down -all` → `up` | all succeed | CI | ⏳ |
 | PLT-009 | No duplicate migration numbers; every `.up` has a `.down` | migration | DB coordinator rule | shell check (duplicate-number script in CI) | no output | CI | ⏳ |
-| PLT-010 | Clean clone starts the stack | integration | Work Division M9 acceptance 1 | fresh clone → `cp .env.example .env` → `make up` | all healthy | manual | ⏳ |
+| PLT-010 | Clean clone starts the stack | integration | Work Division M9 acceptance 1 | fresh clone → `make up` (defaults; overrides optional via `deploy/.env`) | all healthy | manual | ⏳ |
 | PLT-011 | Migrations run before core-api | integration | C22 | `docker compose ps -a`, logs order | migrate `exited (0)` before core-api starts | manual | ⏳ |
 | PLT-012 | Gateway routes reach each service | integration | ADR-001; C17 | `curl localhost/api/v1/tracking/x`, `/api/v1/ai/x`, `/api/v1/x`, `/` | each hits the right stub/service | script | ⏳ |
 | PLT-013 | Health and metrics are not public | security | C1; SRS §11.4 | `curl localhost/health/live` via the gateway | not routed to a backend (404 or the web app) | script | ⏳ |

@@ -96,6 +96,11 @@ func RequireTenant() func(http.Handler) http.Handler {
 
 // Context Helpers
 
+// WithPrincipal injects a Principal into the context (useful for testing and programmatic auth).
+func WithPrincipal(ctx context.Context, p *application.Principal) context.Context {
+	return context.WithValue(ctx, principalContextKey, p)
+}
+
 // GetPrincipal extracts the authenticated Principal from the context.
 func GetPrincipal(ctx context.Context) (*application.Principal, bool) {
 	p, ok := ctx.Value(principalContextKey).(*application.Principal)

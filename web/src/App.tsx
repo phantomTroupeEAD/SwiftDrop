@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { RegisterPage } from '@/features/auth/RegisterPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
@@ -10,7 +11,7 @@ import { CustomerDashboard } from '@/features/dashboards/CustomerDashboard';
 import { DesignPreviewPage } from '@/features/customer-merchant/preview/DesignPreviewPage';
 import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
-import { RegisterPage } from '@/features/customer-merchant/portal/RegisterPage';
+import { RegisterPage as PortalRegisterPage } from '@/features/customer-merchant/portal/RegisterPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 
 // Protected Route Guard
@@ -47,6 +48,8 @@ export const AppRoutes: React.FC = () => {
     <Routes>
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/register" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/portal/register" element={<PortalRegisterPage />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />

@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: swiftdrop-outbox-reconciler
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: swiftdrop-outbox-reconciler
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: background-worker
+spec:
+  # Run every 10 minutes (satisfies SRS §11.2 & §15.3 and Member 8/9 work division)
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: swiftdrop-outbox-reconciler
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          containers:
+            - name: reconciler
+              image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest
+              imagePullPolicy: IfNotPresent
+              command: ["/usr/local/bin/reconcile", "--stale-threshold=5m", "--batch-size=50"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secrets
+                      key: RECONCILER_DATABASE_URL
+                - name: LOG_LEVEL
+                  value: "info"
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"

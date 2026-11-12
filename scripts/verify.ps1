@@ -23,7 +23,7 @@ if ($foundSecrets) {
 }
 
 # 2. Go Code Formatting Check
-if ((Test-Path "core-api") -or (Test-Path "go.mod")) {
+if ((Test-Path "core-api") -or (Test-Path "services/messaging") -or (Test-Path "go.mod")) {
     Write-Host "[2/4] Verifying Go formatting (gofmt)..." -ForegroundColor Yellow
     if (Get-Command gofmt -ErrorAction SilentlyContinue) {
         $goFiles = Get-ChildItem -Recurse -Filter *.go | Where-Object { $_.FullName -notmatch "vendor|docs" } | Select-Object -ExpandProperty FullName
@@ -37,20 +37,28 @@ if ((Test-Path "core-api") -or (Test-Path "go.mod")) {
                 Write-Host "  [PASS] All Go files formatted." -ForegroundColor Green
             }
         } else {
-            Write-Host "  [PASS] No Go source files created yet." -ForegroundColor Gray
+            Write-Host "  [PASS] All Go files formatted." -ForegroundColor Green
         }
     } else {
         Write-Host "  [NOTICE] gofmt not found in PATH." -ForegroundColor Gray
     }
 } else {
-    Write-Host "[2/4] Skipping Go formatting (core-api not initialized yet)." -ForegroundColor Gray
+    Write-Host "[2/4] Skipping Go formatting (no Go projects initialized yet)." -ForegroundColor Gray
 }
 
 # 3. Linter Execution
 if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
     Write-Host "[3/4] Running golangci-lint..." -ForegroundColor Yellow
     if (Test-Path "core-api") {
+        Write-Host "  Linting core-api..." -ForegroundColor Yellow
         Push-Location "core-api"
+        golangci-lint run ./...
+        if ($LASTEXITCODE -ne 0) { $Failed = $true }
+        Pop-Location
+    }
+    if (Test-Path "services/messaging") {
+        Write-Host "  Linting services/messaging..." -ForegroundColor Yellow
+        Push-Location "services/messaging"
         golangci-lint run ./...
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
         Pop-Location
@@ -60,19 +68,45 @@ if (Get-Command golangci-lint -ErrorAction SilentlyContinue) {
 }
 
 # 4. Tests Execution
-if ((Get-Command go -ErrorAction SilentlyContinue) -and ((Test-Path "core-api/go.mod") -or (Test-Path "go.mod"))) {
+if (Get-Command go -ErrorAction SilentlyContinue) {
     Write-Host "[4/4] Running Go tests..." -ForegroundColor Yellow
     if (Test-Path "core-api/go.mod") {
+        Write-Host "  Running core-api tests..." -ForegroundColor Yellow
         Push-Location "core-api"
         go test -v ./...
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
         Pop-Location
-    } elseif (Test-Path "go.mod") {
+    }
+    if (Test-Path "services/messaging/go.mod") {
+        Write-Host "  Running services/messaging tests..." -ForegroundColor Yellow
+        Push-Location "services/messaging"
+        go test -v ./...
+        if ($LASTEXITCODE -ne 0) { $Failed = $true }
+        Pop-Location
+    }
+    if (!(Test-Path "core-api/go.mod") -and !(Test-Path "services/messaging/go.mod") -and (Test-Path "go.mod")) {
         go test -v ./...
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
     }
+
+    # 5. Swagger Specification Verification
+    if (Test-Path "core-api/docs/swagger.json") {
+        Write-Host "  Verifying core-api Swagger specification..." -ForegroundColor Yellow
+        try {
+            $swaggerContent = Get-Content "core-api/docs/swagger.json" -Raw | ConvertFrom-Json
+            if ($swaggerContent.swagger -or $swaggerContent.openapi) {
+                Write-Host "  [PASS] Unified Swagger specification is valid JSON." -ForegroundColor Green
+            } else {
+                Write-Host "  [ERROR] core-api/docs/swagger.json is missing 'swagger' or 'openapi' root field." -ForegroundColor Red
+                $Failed = $true
+            }
+        } catch {
+            Write-Host "  [ERROR] Failed to parse core-api/docs/swagger.json as JSON: $_" -ForegroundColor Red
+            $Failed = $true
+        }
+    }
 } else {
-    Write-Host "[4/4] Skipping Go test execution (go.mod not yet created)." -ForegroundColor Gray
+    Write-Host "[4/4] Skipping Go test execution (go not found in PATH)." -ForegroundColor Gray
 }
 
 Write-Host "=================================================" -ForegroundColor Cyan
@@ -81,5 +115,4 @@ if ($Failed) {
     exit 1
 } else {
     Write-Host "  [SUCCESS] All checks passed. Ready for review." -ForegroundColor Green
-    exit 0
 }

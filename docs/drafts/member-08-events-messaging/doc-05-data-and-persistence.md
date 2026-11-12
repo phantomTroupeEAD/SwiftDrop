@@ -245,14 +245,12 @@ To meet **SRS NFR-PERF-001** ($\le$ 500ms p95), **NFR-PERF-003** ($\le$ 5s publi
 Database changes are managed sequentially via `golang-migrate` files in `core-api/migrations/`, adhering to Member 09 Agreement D3 (Member 8 owns migrations 000008 and 000009 in dependency sequence):
 
 > **Migration Numbering Note:**  
-> Member 8 defines sequential migration files `000008_create_outbox_events.up.sql` and `000009_create_worker_dedup_and_webhooks.up.sql`. This aligns with Member 9's authoritative schema dependency graph (Agreement D3 / K11/K12).
+> Member 8 defines sequential migration files `20261101000050_create_outbox_events.up.sql` and `20261101000500_create_worker_dedup_and_webhooks.up.sql`. This aligns with the timestamp migration convention.
 
-### 4.1 Migration File: `000008_create_outbox_events.up.sql`
+### 4.1 Migration File: `20261101000050_create_outbox_events.up.sql`
 ```sql
--- SwiftDrop: Migration 000008 (Member 08 - Transactional Outbox Engine)
--- Executed inside core-api monolithic schema migrations
-
-BEGIN;
+-- SwiftDrop: Migration 20261101000050 (Member 08 - Transactional Outbox Engine)
+-- Executed inside core-api monolithic schema migrations (migrator wraps each file in transaction)
 
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -289,23 +287,17 @@ ON outbox_events (correlation_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_retention 
 ON outbox_events (published_at ASC) 
 WHERE status = 'PUBLISHED';
-
-COMMIT;
 ```
 
-### 4.2 Rollback Migration File: `000008_create_outbox_events.down.sql`
+### 4.2 Rollback Migration File: `20261101000050_create_outbox_events.down.sql`
 ```sql
-BEGIN;
 DROP TABLE IF EXISTS outbox_events CASCADE;
-COMMIT;
 ```
 
-### 4.3 Migration File: `000009_create_worker_dedup_and_webhooks.up.sql`
+### 4.3 Migration File: `20261101000500_create_worker_dedup_and_webhooks.up.sql`
 ```sql
--- SwiftDrop: Migration 000009 (Member 08 - Messaging Worker Idempotency, Notifications & Webhooks)
--- Depends on: 000003_create_webhook_endpoints (Member 04)
-
-BEGIN;
+-- SwiftDrop: Migration 20261101000500 (Member 08 - Messaging Worker Idempotency, Notifications & Webhooks)
+-- Depends on: 20261101000300_create_merchant_webhook_endpoints (Member 04)
 
 -- 1. Consumer Idempotency Ledger (UUID Event ID)
 CREATE TABLE IF NOT EXISTS processed_events (
@@ -323,6 +315,10 @@ ON processed_events (processed_at ASC);
 CREATE TABLE IF NOT EXISTS notification_deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    aggregate_version INTEGER NOT NULL CHECK (aggregate_version >= 1),
+    payload JSONB NOT NULL,
     recipient VARCHAR(255) NOT NULL,
     channel VARCHAR(32) DEFAULT 'EMAIL' NOT NULL 
         CHECK (channel IN ('EMAIL', 'SMS')),
@@ -351,6 +347,11 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     endpoint_id UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE RESTRICT,
     event_id UUID NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    aggregate_version INTEGER NOT NULL CHECK (aggregate_version >= 1),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    payload JSONB NOT NULL,
     status VARCHAR(32) DEFAULT 'PENDING' NOT NULL 
         CHECK (status IN ('PENDING', 'IN_PROGRESS', 'SUCCESS', 'FAILED')),
     attempt_count INTEGER DEFAULT 0 NOT NULL CHECK (attempt_count >= 0),
@@ -387,18 +388,14 @@ CREATE TABLE IF NOT EXISTS webhook_delivery_attempts (
 
 CREATE INDEX IF NOT EXISTS idx_webhook_attempts_delivery 
 ON webhook_delivery_attempts (delivery_id, attempt_no ASC);
-
-COMMIT;
 ```
 
-### 4.4 Rollback Migration File: `000009_create_worker_dedup_and_webhooks.down.sql`
+### 4.4 Rollback Migration File: `20261101000500_create_worker_dedup_and_webhooks.down.sql`
 ```sql
-BEGIN;
 DROP TABLE IF EXISTS webhook_delivery_attempts CASCADE;
 DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS notification_deliveries CASCADE;
 DROP TABLE IF EXISTS processed_events CASCADE;
-COMMIT;
 ```
 
 ---

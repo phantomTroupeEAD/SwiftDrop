@@ -1,0 +1,25 @@
+{
+  "name": "@swiftdrop/e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cross-module end-to-end acceptance tests for SwiftDrop",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:dry-run": "playwright test flows/dry-run.spec.ts",
+    "test:webhook": "npm --prefix mock-webhook test",
+    "start": "npm --prefix mock-webhook start",
+    "start:webhook": "npm --prefix mock-webhook start",
+    "test:report": "playwright show-report artifacts/report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "@types/eventsource": "^1.1.15",
+    "@types/node": "^20.11.24",
+    "dotenv": "^16.4.5",
+    "eventsource": "^2.0.2",
+    "typescript": "^5.4.2"
+  }
+}

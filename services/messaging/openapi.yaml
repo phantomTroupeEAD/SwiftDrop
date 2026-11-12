@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Messaging Daemons Probes & Metrics API
+  description: >
+    Authoritative specification for Kubernetes health probes and Prometheus metrics endpoints
+    exposed by the Outbox Relay (port 8082) and Event Worker (port 8083).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082
+    description: Outbox Relay Daemon Probe Server
+  - url: http://localhost:8083
+    description: Event Worker Daemon Probe Server
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      description: Returns 200 OK as long as the daemon process is running.
+      responses:
+        '200':
+          description: Daemon is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      description: Evaluates connectivity to PostgreSQL authoritative store and RabbitMQ broker.
+      responses:
+        '200':
+          description: All backend dependencies are healthy and ready to accept traffic.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  checks:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      database: ok
+                      broker: ok
+        '503':
+          description: One or more dependencies are degraded or unreachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: degraded
+                  checks:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      database: ok
+                      broker: connection refused
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Scraped by Prometheus server; emits standard OpenMetrics text format.
+      responses:
+        '200':
+          description: Prometheus formatted metric gauges and counters.
+          content:
+            text/plain:
+              schema:
+                type: string
+

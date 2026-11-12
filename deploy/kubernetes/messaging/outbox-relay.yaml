@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbox-relay
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: outbox-relay
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: message-relay
+spec:
+  replicas: 1 # Strict Singleton Invariant per AGENTS.md §4.4
+  strategy:
+    type: Recreate # Prevents concurrent relay instances during rolling deployment
+  selector:
+    matchLabels:
+      app: outbox-relay
+  template:
+    metadata:
+      labels:
+        app: outbox-relay
+        app.kubernetes.io/name: outbox-relay
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: swiftdrop-relay-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: outbox-relay
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/relay"]
+          ports:
+            - containerPort: 8082
+              name: http-probes
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PROBE_PORT
+              value: "8082"
+          envFrom:
+            - configMapRef:
+                name: messaging-config
+            - secretRef:
+                name: outbox-relay-secrets # Dedicated credentials for swiftdrop_relay role
+            - secretRef:
+                name: rabbitmq-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8082
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: outbox-relay
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: outbox-relay
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  type: ClusterIP
+  selector:
+    app: outbox-relay
+  ports:
+    - name: http-probes
+      port: 8082
+      targetPort: 8082
+
