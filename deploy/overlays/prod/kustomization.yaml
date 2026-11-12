@@ -1,0 +1,50 @@
+# Azure K3s. Before applying, pin every image to the commit that was pushed to ghcr:
+#   cd deploy/overlays/prod
+#   kustomize edit set image ghcr.io/phantomtroupeead/swiftdrop/core-api=ghcr.io/phantomtroupeead/swiftdrop/core-api:<sha>   (repeat per image)
+# and set the real public origin in the CORS patch below.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../kubernetes
+
+images:
+  - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/tracking-api
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/messaging
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/web
+    newTag: REPLACE_WITH_GIT_SHA
+  # The base already renames swiftdrop/ai-assistant to this ghcr path.
+  - name: ghcr.io/phantomtroupeead/swiftdrop/ai-assistant
+    newTag: REPLACE_WITH_GIT_SHA
+
+patches:
+  # Only the real public origin may call the API cross-origin.
+  - target:
+      kind: Middleware
+      name: cors-headers
+    patch: |-
+      - op: replace
+        path: /spec/headers/accessControlAllowOriginList
+        value:
+          - "https://REPLACE_WITH_PUBLIC_HOST"
+  # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
+  # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
+  - target:
+      kind: (Deployment|StatefulSet|Job)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull
+  # CronJobs (the outbox reconciler) nest the pod template one level deeper.
+  - target:
+      kind: CronJob
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull

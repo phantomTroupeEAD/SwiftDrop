@@ -1,0 +1,23 @@
+# Local k3d cluster. Images are built locally and loaded with:
+#   docker compose -f deploy/docker-compose.yml build
+#   docker tag <local image> ghcr.io/phantomtroupeead/swiftdrop/<name>:dev
+#   k3d image import ghcr.io/phantomtroupeead/swiftdrop/<name>:dev -c swiftdrop
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../kubernetes
+
+images:
+  - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
+    newTag: dev
+  - name: ghcr.io/phantomtroupeead/swiftdrop/tracking-api
+    newTag: dev
+  - name: ghcr.io/phantomtroupeead/swiftdrop/messaging
+    newTag: dev
+  - name: ghcr.io/phantomtroupeead/swiftdrop/web
+    newTag: dev
+  # The base already renames swiftdrop/ai-assistant to this ghcr path.
+  - name: ghcr.io/phantomtroupeead/swiftdrop/ai-assistant
+    newTag: dev
+# imagePullPolicy stays IfNotPresent, so the imported :dev images are used without a registry.

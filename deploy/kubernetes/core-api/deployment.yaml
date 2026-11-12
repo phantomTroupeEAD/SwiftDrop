@@ -50,28 +50,29 @@ spec:
                 secretKeyRef:
                   name: core-api-secrets
                   key: JWT_SECRET
-            - name: API_KEY_PEPPER
+            - name: MERCHANT_API_KEY_PEPPER
               valueFrom:
                 secretKeyRef:
                   name: core-api-secrets
-                  key: API_KEY_PEPPER
-            # Connection budget D8: 4 pods * 20 conns = 80 <= 100 max allocated to app
-            - name: DB_MAX_OPEN_CONNS
-              value: "20"
-            - name: DB_MAX_IDLE_CONNS
-              value: "10"
-            - name: DB_CONN_MAX_LIFETIME
-              value: "5m"
+                  key: MERCHANT_API_KEY_PEPPER
+            # Base64 of 32 bytes (core-api format). The worker uses the hex form of the SAME key.
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEY
+            # Connection budget: core-api opens at most 10 connections per pod (db.DefaultOptions).
+            # 4 max replicas * 10 = 40 <= 150 (Postgres max_connections). No env var changes this.
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health/live
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -147,13 +148,13 @@ spec:
         - name: migrator
           image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
           imagePullPolicy: IfNotPresent
-          command: ["/app/core-api", "--migrate-only"]
+          command: ["/app/migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: postgres-secrets
-                  key: ADMIN_DATABASE_URL
+                  key: MIGRATOR_DATABASE_URL
           resources:
             requests:
               cpu: "50m"

@@ -22,10 +22,10 @@ switch ($Target) {
         Write-Host ".\scripts\make.ps1 ps          - Display container health & status"
         Write-Host ".\scripts\make.ps1 logs        - Follow logs across all containers"
         Write-Host ".\scripts\make.ps1 migrate-up  - Run database migrations"
-        Write-Host ".\scripts\make.ps1 seed        - Seed mock users & roles"
+        Write-Host ".\scripts\make.ps1 seed        - Load deploy/seeds/*.sql into the running database"
         Write-Host ".\scripts\make.ps1 test        - Run Go test suite with race detector"
         Write-Host ".\scripts\make.ps1 swagger     - Regenerate unified Swagger/OpenAPI docs in core-api"
-        Write-Host ".\scripts\make.ps1 test-e2e    - Run Python Playwright E2E tests"
+        Write-Host ".\scripts\make.ps1 test-e2e    - Run the Playwright (TypeScript) E2E suite"
         Write-Host ".\scripts\make.ps1 reset       - Wipe volumes and stop containers"
     }
     "up" {
@@ -47,7 +47,12 @@ switch ($Target) {
         docker compose -f $ComposeFile run --rm core-api-migrate
     }
     "seed" {
-        docker compose -f $ComposeFile exec core-api /app/migrate
+        # Load every deploy/seeds/*.sql into the running postgres container (seeds are idempotent)
+        Get-ChildItem -Path "deploy/seeds" -Filter "*.sql" | Sort-Object Name | ForEach-Object {
+            Write-Host "Seeding $($_.Name)"
+            Get-Content -Raw $_.FullName | docker compose -f $ComposeFile exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+            if ($LASTEXITCODE -ne 0) { throw "Seed failed: $($_.Name)" }
+        }
     }
     "test" {
         Push-Location core-api
@@ -67,7 +72,12 @@ switch ($Target) {
         }
     }
     "test-e2e" {
-        pytest tests/e2e/ -v
+        Push-Location tests/e2e
+        try {
+            npx playwright test
+        } finally {
+            Pop-Location
+        }
     }
     "reset" {
         docker compose -f $ComposeFile down -v
