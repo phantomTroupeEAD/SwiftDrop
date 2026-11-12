@@ -84,7 +84,7 @@ services/messaging/
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS` | `5` | Strict timeout for outbound webhook HTTP calls |
 | `WEBHOOK_RETRY_SCHEDULE` | `0s,30s,2m,10m,30m` | Exponential backoff retry progression |
 | `WEBHOOK_ALLOW_PRIVATE_HOSTS` | `false` | When true (or in `APP_ENV=local`), permits `http://` localhost targets |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | *(Required)* | 64 hex characters (32 bytes AES-256-GCM primary key) |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | *(Required)* | 32-byte AES-256-GCM primary key (Base64-encoded or 64 hex characters) |
 | `WEBHOOK_SECRET_ENCRYPTION_KEY_FALLBACKS` | *(Optional)* | Comma-separated `key_version=hex_key` for zero-downtime rotation |
 | `DELIVERY_LEASE_SECONDS` | `120` | Worker delivery claim lease duration |
 | `SMTP_HOST` | `localhost` | Outgoing SMTP host (e.g., Mailpit in dev) |
