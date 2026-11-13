@@ -4,10 +4,13 @@
 
 | IDs | Purpose |
 | --- | --- |
-| `register-full_name-input`, `register-email-input`, `register-phone-input`, `register-password-input`, `register-submit-btn` | Customer registration fields and submit |
+| `login-email-input`, `login-password-input`, `login-submit-btn` | Sign-in email, password, and submit |
+| `register-email-input`, `register-send-otp-btn` | Registration email and verification-code request |
+| `register-otp-input`, `register-first-name-input`, `register-last-name-input`, `register-phone-input`, `register-password-input`, `register-terms-checkbox`, `register-submit-btn` | Verification code, customer details, terms consent, and account creation |
 | `booking-wizard`, `booking-{pickup,dropoff}-{name,phone,address,city,postal}-input` | Booking form and address fields |
 | `booking-{weight,length,width,height,description}-input`, `booking-service-select` | Parcel details |
 | `booking-next-btn`, `booking-back-btn`, `quote-price-cents`, `booking-submit-btn`, `booking-confirmation`, `booking-receipt-btn`, `booking-receipt` | Booking navigation, authoritative quote, submission, result and official receipt |
+| `booking-confirmation-tracking-no` | Tracking number returned after booking |
 | `tracking-search-input`, `tracking-search-btn`, `tracking-status-badge`, `tracking-timeline` | Public tracking search and results |
 | `merchant-application-{business_name,contact_email,contact_phone,line1,city,country}-input`, `merchant-application-submit-btn`, `merchant-application-status` | Merchant application and status |
 | `merchant-order-search`, `merchant-order-filter`, `merchant-order-table`, `merchant-order-empty`, `merchant-order-reset-btn`, `merchant-retry-btn` | Tenant order list, filtering, empty state, filter reset and load retry |

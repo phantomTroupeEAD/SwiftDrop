@@ -199,7 +199,7 @@ export function BookingPage() {
     <PortalLayout title="Book a parcel" profile="customer">
       {booking ? <section className="m6-card" aria-live="polite" data-testid="booking-confirmation">
         <h2>Booking confirmed</h2>
-        <p>Tracking number <strong>{booking.tracking_number}</strong></p>
+        <p>Tracking number <strong data-testid="booking-confirmation-tracking-no">{booking.tracking_number}</strong></p>
         <Link to={`/track/${encodeURIComponent(booking.tracking_number)}`}>Track this parcel</Link>
         {booking.id && !receipt && <div className="m6-actions">
           <Button type="button" variant="outline" disabled={receiptPending} onClick={loadReceipt} data-testid="booking-receipt-btn">
