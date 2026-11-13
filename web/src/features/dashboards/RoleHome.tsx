@@ -5,7 +5,7 @@ import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/shared/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
-import { errorMessage, portalRequest } from '@/features/customer-merchant/portal/api';
+import { errorMessage, PortalError, portalRequest } from '@/features/customer-merchant/portal/api';
 import { PortalStatus } from '@/features/customer-merchant/portal/PortalLayout';
 import type { Role } from '@/shared/types/auth';
 
@@ -34,7 +34,7 @@ type Shipment = {
   created_at: string;
 };
 
-type ShipmentResult = { rows: Shipment[]; error?: string };
+type ShipmentResult = { rows: Shipment[]; error?: string; unavailable?: boolean };
 
 function ShipmentOverview({ merchant, token }: { merchant: boolean; token: string }) {
   const [result, setResult] = useState<ShipmentResult>();
@@ -51,7 +51,12 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
       if (!Array.isArray(rows)) throw new Error('Unexpected shipment list');
       if (!controller.signal.aborted) setResult({ rows });
     }).catch(cause => {
-      if (!controller.signal.aborted) setResult({ rows: [], error: errorMessage(cause) });
+      if (controller.signal.aborted) return;
+      if (!merchant && cause instanceof PortalError && [404, 405, 501].includes(cause.status)) {
+        setResult({ rows: [], unavailable: true });
+        return;
+      }
+      setResult({ rows: [], error: errorMessage(cause) });
     });
     return () => controller.abort();
   }, [merchant, token, attempt]);
@@ -67,7 +72,7 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
   ];
 
   return <>
-    {result && !result.error && <section aria-label="Shipment summary" className="grid gap-3 sm:grid-cols-3">
+    {result && !result.error && !result.unavailable && <section aria-label="Shipment summary" className="grid gap-3 sm:grid-cols-3">
       {metrics.map(({ label, value }) => <Card key={label}>
         <CardContent className="p-4">
           <p className="text-sm text-text-muted">{label}</p>
@@ -83,7 +88,11 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
           <p role="alert">Couldn’t load {merchant ? 'orders' : 'parcels'}. {result.error}</p>
           <Button type="button" variant="outline" onClick={() => { setResult(undefined); setAttempt(value => value + 1); }}>Retry</Button>
         </div>}
-        {result && !result.error && recent.length === 0 && <p className="text-text-muted">{merchant ? 'No orders yet.' : 'No parcels yet.'}</p>}
+        {result?.unavailable && <div className="space-y-3">
+          <p className="text-text-muted">Recent parcels are unavailable on this server. You can still look up a parcel by its tracking number.</p>
+          <Button asChild variant="outline"><Link to="/portal/tracking">Look up a parcel</Link></Button>
+        </div>}
+        {result && !result.error && !result.unavailable && recent.length === 0 && <p className="text-text-muted">{merchant ? 'No orders yet.' : 'No parcels yet.'}</p>}
         {recent.length > 0 && <Table aria-label={title}>
           <TableHeader><TableRow><TableHead>Tracking number</TableHead><TableHead>Status</TableHead><TableHead>Booked</TableHead></TableRow></TableHeader>
           <TableBody>

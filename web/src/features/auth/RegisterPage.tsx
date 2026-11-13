@@ -55,18 +55,23 @@ export const RegisterPage: React.FC = () => {
         body: JSON.stringify({ email: email.trim() }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         if (res.status === 409) {
           throw new Error('An account with this email already exists. Please log in.');
         } else if (res.status === 429) {
           throw new Error('Please wait before requesting another verification code.');
+        } else if (!data) {
+          throw new Error('Email verification is unavailable right now. Please try again later.');
         } else {
           throw new Error(data?.error?.message || 'Failed to send verification code.');
         }
       }
 
+      if (!data?.data) {
+        throw new Error('Email verification is unavailable right now. Please try again later.');
+      }
       setOtpSent(true);
       setCooldown(data?.data?.cooldown_seconds || 60);
     } catch (err: unknown) {
@@ -106,12 +111,15 @@ export const RegisterPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(data?.error?.message || 'Registration failed. Please check your inputs.');
+        throw new Error(data?.error?.message || 'Registration is unavailable right now. Please try again later.');
       }
 
+      if (!data?.data) {
+        throw new Error('The server could not confirm your registration. Try signing in or request a new verification code.');
+      }
       setSuccess(true);
     } catch (err: unknown) {
       if (err instanceof Error) {
