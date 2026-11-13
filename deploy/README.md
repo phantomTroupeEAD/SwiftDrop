@@ -50,6 +50,8 @@ deploy/
 │       └── kubernetes/                  # Same routes as IngressRoute + Middleware CRDs (the K8s ingress)
 ├── seeds/                               # Idempotent seed SQL, loaded by `make seed` after migrations
 ├── scripts/smoke-test.py                # Gateway smoke test: python deploy/scripts/smoke-test.py [base URL]
+├── scripts/deploy.sh                    # Production deploy: render prod overlay with a SHA, apply, smoke, auto-rollback
+├── cd/                                  # CD setup: deployer-rbac.yaml (least-privilege SA), install-runner.sh (VM runner)
 ├── observability/                       # Prometheus, Grafana, alerts (Compose profile + K8s, section 9)
 ├── overlays/                            # Kustomize overlays: kubectl apply -k deploy/overlays/<env>
 │   ├── dev/                             # k3d: :dev images, ingress over plain HTTP

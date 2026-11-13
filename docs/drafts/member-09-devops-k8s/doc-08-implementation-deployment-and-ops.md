@@ -41,7 +41,7 @@ The full tree is in Doc 3 §2. **Entry points:**
 | `deploy/docker-compose.yml` | the local stack |
 | `deploy/kubernetes/` (later `deploy/helm/swiftdrop/`) | the cluster |
 | `deploy/gateway/traefik/` | gateway config (shared with M7) |
-| `.github/workflows/ci.yml` ✅, `deploy.yml` (planned) | CI/CD |
+| `.github/workflows/ci.yml` ✅, `release-images.yml` ✅, `deploy.yml` ✅ (self-hosted runner + approval + auto-rollback) | CI/CD |
 | `scripts/verify.sh` / `verify.ps1` ✅ | local pre-PR checks |
 | `docs/operations/deployment-guide.md`, `runbook.md`, `environment-variables.md` ✅ | operations docs |
 

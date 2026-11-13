@@ -157,5 +157,23 @@ The dev overlay serves Member 7's IngressRoute over plain HTTP. It still matches
 | `.github/workflows/ci.yml` | push / PR to `main`, `dev` | Secret scan, Go (core-api, messaging, tracking) lint and tests, ai-assistant pytest, web build, Docker build check, `docker compose config`, kubeconform on `deploy/kubernetes` and `deploy/observability/kubernetes` |
 | `.github/workflows/release-images.yml` | push to `main`, manual | Builds and pushes the five images to ghcr, tagged with the 7-char SHA |
 | `.github/workflows/e2e.yml` | PR to `main`, manual | Gateway system checks (Member 7) |
+| `.github/workflows/deploy.yml` | after "SwiftDrop Publish Images" succeeds on `main`; manual (`sha` input) | Deploys that SHA to the Azure cluster after **approval**; smoke test; automatic rollback |
 
-Rollout to the cluster is manual (§4) so a human checks every production change.
+### 7.1 Automatic deployment (CD)
+```
+merge dev -> main ──> release-images.yml builds <service>:<sha7> ──> deploy.yml queued on the VM runner
+   ──> Minidu approves (GitHub "production" environment) ──> deploy/scripts/deploy.sh <sha7>
+   ──> apply prod overlay -> DB Jobs -> rollouts -> smoke test ──> success, or automatic rollback
+```
+- **Runner on the VM, not on GitHub's machines.** It only makes outbound HTTPS calls to GitHub, so the Kubernetes API stays closed to the internet. While the VM is deallocated the job waits (up to 24 h) and runs when the VM starts.
+- **Least privilege.** The runner uses ServiceAccount `cd-deployer` (`deploy/cd/deployer-rbac.yaml`): full control of namespace `swiftdrop`, nothing else (no `kube-system`, no other namespaces, no nodes).
+- **Approval.** Every production deploy waits for a required reviewer in the `production` environment.
+- **Rollback.** If a DB Job or a rollout fails, or the smoke test fails, every app Deployment is rolled back with `kubectl rollout undo`. Migrations are forward-only: the schema is not rolled back.
+- **Manual run.** Actions → *Deploy to Azure* → Run workflow → `sha` = a published image tag. Or from a laptop with an admin kubeconfig: `bash deploy/scripts/deploy.sh <sha7> [smoke_url|none]` (`DRY_RUN=1` for a server-side dry run).
+
+### 7.2 One-time CD setup
+1. `kubectl apply -f deploy/cd/deployer-rbac.yaml` (admin kubeconfig).
+2. GitHub → Settings → Actions → Runners → *New self-hosted runner* (Linux x64): copy the registration token.
+3. On the VM: `bash install-runner.sh` (copied from `deploy/cd/install-runner.sh`), paste the token when asked. The runner `swiftdrop-azure` must show **Idle**.
+4. GitHub → Settings → Environments → `production`: required reviewer = Minidu; deployment branches = `main`; variable `SMOKE_URL` (`none` until the site is public, then `https://swiftdrop.work`); secrets `SMOKE_PASSWORD_<ROLE>` = the `SEED_PASSWORD_<ROLE>` values (optional).
+5. GitHub → Settings → Actions → General: fork pull request workflows → *Require approval for all outside collaborators*.
