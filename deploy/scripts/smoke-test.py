@@ -8,35 +8,46 @@ Usage:
     python deploy/scripts/smoke-test.py                         # http://localhost (Compose)
     python deploy/scripts/smoke-test.py https://swiftdrop.work  # production
 
-The demo accounts are the ones core-api seeds in local/test mode
-(core-api/migrations/20261021000002_seed_mock_users.up.sql). Exit code 0 = no unexpected failure.
-Standard library only.
+Passwords for the demo accounts:
+  - env SMOKE_PASSWORD_<ROLE> (ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER) if set;
+  - otherwise, for localhost only, the published development defaults
+    (core-api/migrations/20261021000002_seed_mock_users.up.sql).
+In production those defaults are rotated or suspended by core-api, so roles without a
+SMOKE_PASSWORD_<ROLE> are skipped there (public checks still run).
+Exit code 0 = no failure. Standard library only. Never prints passwords or tokens.
 """
 import json
+import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost").rstrip("/")
+IS_LOCAL = urllib.parse.urlparse(BASE).hostname in ("localhost", "127.0.0.1")
 
-USERS = {
+DEV_DEFAULTS = {
     "ADMIN": ("admin@swiftdrop.local", "AdminPassword123!"),
     "DISPATCHER": ("dispatcher@swiftdrop.local", "Dispatcher123!"),
     "COURIER": ("courier@swiftdrop.local", "CourierPassword123!"),
     "MERCHANT": ("merchant@vendor.com", "Merchant123!"),
     "CUSTOMER": ("customer@swiftdrop.local", "CustomerPassword123!"),
 }
-# path -> roles that should be allowed (from the routes in core-api/cmd/api/wiring.go)
+USERS = {}
+for _role, (_email, _default) in DEV_DEFAULTS.items():
+    _pw = os.environ.get(f"SMOKE_PASSWORD_{_role}") or (_default if IS_LOCAL else None)
+    if _pw:
+        USERS[_role] = (_email, _pw)
+
+# path -> roles that should be allowed (from the routes in core-api/cmd/api/wiring.go).
+# merchant/portal needs a tenant in the token, so Admin (no tenant) gets 403 by design.
 PROTECTED = {
     "/api/v1/admin/dashboard": {"ADMIN"},
     "/api/v1/courier/dashboard": {"COURIER", "ADMIN"},
-    "/api/v1/merchant/portal": {"MERCHANT", "ADMIN"},
+    "/api/v1/merchant/portal": {"MERCHANT"},
 }
-# Reported to the owner; shown as KNOWN instead of FAIL until fixed.
-KNOWN = {
-    "ADMIN /api/v1/merchant/portal": "admin has no tenant, RequireTenant() returns 403 (reported to M1)",
-    "error envelope correlation_id": "error envelope has no correlation_id yet (reported to M1)",
-}
+# Reported to an owner and not fixed yet: shown as KNOWN instead of FAIL. (Empty = none.)
+KNOWN = {}
 
 results = {"PASS": 0, "FAIL": 0, "KNOWN": 0}
 
@@ -66,6 +77,9 @@ def check(name, ok, detail="", known_key=None):
 
 
 print(f"Smoke test against {BASE}\n")
+_skipped = [r for r in DEV_DEFAULTS if r not in USERS]
+if _skipped:
+    print(f"SKIP   role logins for {', '.join(_skipped)} (set SMOKE_PASSWORD_<ROLE> to test them)\n")
 for role, (email, password) in USERS.items():
     st, hdr, raw = call("POST", "/api/v1/auth/login", {"email": email, "password": password})
     check(f"{role:10} login", st == 200, f"HTTP {st} {raw[:100]!r}")

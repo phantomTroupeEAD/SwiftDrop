@@ -55,12 +55,25 @@ spec:
                 secretKeyRef:
                   name: core-api-secrets
                   key: MERCHANT_API_KEY_PEPPER
-            # Base64 of 32 bytes (core-api format). The worker uses the hex form of the SAME key.
+            # Base64 of 32 bytes. The event-worker gets the SAME value (integrations-secrets).
             - name: WEBHOOK_SECRET_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
                   name: core-api-secrets
                   key: WEBHOOK_SECRET_ENCRYPTION_KEY
+            # Optional private passwords for the demo accounts. In production (APP_ENV=production,
+            # set by the prod overlay) a demo account still on its published password is rotated
+            # to this value, or suspended if none is set (>= 12 characters).
+            - name: SEED_PASSWORD_ADMIN
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_ADMIN, optional: true}}
+            - name: SEED_PASSWORD_DISPATCHER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_DISPATCHER, optional: true}}
+            - name: SEED_PASSWORD_COURIER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_COURIER, optional: true}}
+            - name: SEED_PASSWORD_MERCHANT
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_MERCHANT, optional: true}}
+            - name: SEED_PASSWORD_CUSTOMER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_CUSTOMER, optional: true}}
             # Connection budget: core-api opens at most 10 connections per pod (db.DefaultOptions).
             # 4 max replicas * 10 = 40 <= 150 (Postgres max_connections). No env var changes this.
           livenessProbe:

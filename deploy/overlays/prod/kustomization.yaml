@@ -49,3 +49,24 @@ patches:
         path: /spec/jobTemplate/spec/template/spec/imagePullSecrets
         value:
           - name: ghcr-pull
+  # Production mode. Without it core-api and tracking-api default to "local" and ai-assistant to
+  # "development": dev fallbacks, mock tokens and the published demo-account passwords would be
+  # active. core-api in production also fails fast without a DB or a real JWT_SECRET.
+  - target:
+      kind: Deployment
+      name: (core-api|tracking-api)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: APP_ENV
+          value: production
+  - target:
+      kind: Deployment
+      name: ai-assistant
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: ENVIRONMENT
+          value: production

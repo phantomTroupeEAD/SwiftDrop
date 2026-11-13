@@ -77,7 +77,7 @@ shred -u ~/sd-secrets.yaml ~/sd-messaging.yaml ~/sd-ai.yaml
 | :--- | :--- | :--- |
 | `postgres-secrets` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MIGRATOR_/APP_/TRACKING_/RELAY_/WORKER_/RECONCILER_PASSWORD`, matching `*_DATABASE_URL` | Each `*_PASSWORD` must equal the password inside its `*_DATABASE_URL`. The bootstrap Job sets the role passwords from these keys. |
 | `rabbitmq-secrets` | `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`, `RABBITMQ_URL` | The URL must contain the same user and password. Defined only in `secrets.example.yaml`. |
-| `core-api-secrets` | `JWT_SECRET`, `MERCHANT_API_KEY_PEPPER` (≥ 32 bytes), `WEBHOOK_SECRET_ENCRYPTION_KEY` (base64 of 32 bytes) | The ai-assistant reads `JWT_SECRET` from here too. |
+| `core-api-secrets` | `JWT_SECRET` (≥ 32 chars), `MERCHANT_API_KEY_PEPPER` (≥ 32 bytes), `WEBHOOK_SECRET_ENCRYPTION_KEY` (base64 of 32 bytes), optional `SEED_PASSWORD_ADMIN/_DISPATCHER/_COURIER/_MERCHANT/_CUSTOMER` (≥ 12 chars) | tracking-api and ai-assistant read `JWT_SECRET` from here too. Production suspends every demo account whose `SEED_PASSWORD_<ROLE>` is not set (their default passwords are public). |
 | `integrations-secrets` | `WEBHOOK_SECRET_ENCRYPTION_KEY`, SMTP credentials | Same webhook key as `core-api-secrets`. |
 | `outbox-relay-secrets`, `event-worker-secrets` | `DATABASE_URL` | Passwords equal `RELAY_PASSWORD` / `WORKER_PASSWORD`. |
 | `ai-assistant-secrets` | `LLM_API_KEY`, `SWIFTDROP_API_KEY`, `AI_SERVICE_ROLE_TOKEN` | Values from Member 10. |
@@ -128,7 +128,8 @@ kubectl apply -k deploy/overlays/prod
 - [ ] `kubectl get hpa,scaledobject -n swiftdrop`: core-api HPA and the event-worker ScaledObject are active.
 - [ ] `kubectl logs -n swiftdrop deploy/outbox-relay`: `connected to rabbitmq and declared topology`.
 - [ ] `https://swiftdrop.work/` returns the SPA; `http://` redirects to `https://`.
-- [ ] Gateway smoke test (logins for all roles, `/auth/me`, role checks): `python deploy/scripts/smoke-test.py https://swiftdrop.work`.
+- [ ] Gateway smoke test (logins, `/auth/me`, role checks, `correlation_id`): `python deploy/scripts/smoke-test.py https://swiftdrop.work`. In production pass the demo passwords as `SMOKE_PASSWORD_<ROLE>` env vars; roles without one are skipped.
+- [ ] core-api log shows `Demo accounts secured: rotated=[...] suspended=[...]`, and the published demo passwords no longer log in.
 - [ ] Monitoring: `kubectl port-forward -n swiftdrop svc/grafana 3001:3000` → **SwiftDrop Overview**; `kubectl port-forward -n swiftdrop svc/prometheus 9090` → targets UP (core-api, tracking-api, ai-assistant show DOWN until they expose Prometheus `/metrics`).
 - [ ] Health endpoints stay internal: check them with `kubectl port-forward`, never through the public domain.
 
