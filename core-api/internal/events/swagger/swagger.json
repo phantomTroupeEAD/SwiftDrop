@@ -1030,6 +1030,321 @@
                 }
             }
         },
+        "/api/v1/parcels": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Validates caller identity and merchant approval, verifies UUID Idempotency-Key and raw SHA-256 request hash, atomically consumes an unexpired quote owned by the caller, allocates a Crockford Base32 tracking number, and persists the parcel, audit history, and outbox event in a single transaction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "parcels"
+                ],
+                "summary": "Book a new parcel using an accepted pricing quote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID Idempotency Key",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Parcel booking payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_parcels_transport.BookParcelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Booked parcel aggregate wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing/invalid Idempotency-Key, malformed JSON, or disallowed fields",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role, invalid/missing merchant tenant, unapproved merchant, or quote ownership mismatch",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced pricing quote not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Idempotency key payload mismatch/conflict or quote already used",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request body exceeds 64 KB size limit",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Content-Type",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Semantic validation failure, expired quote, or quote zone/weight mismatch",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal parcel booking failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "503": {
+                        "description": "Tracking number allocation temporarily unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/parcels/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved merchants.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "parcels"
+                ],
+                "summary": "Retrieve authorized parcel details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Parcel UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Parcel details wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parcel UUID path parameter",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role, unapproved merchant, or caller does not own parcel",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Parcel not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal parcel lookup failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/parcels/{id}/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, or admin.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "parcels"
+                ],
+                "summary": "Retrieve authorized chronological parcel status history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Parcel UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Parcel status history wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parcel UUID path parameter",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role, unapproved merchant, or caller does not own parcel",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Parcel not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal parcel history lookup failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/pricing/quotes": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Evaluates geographic tariffs, volumetric weight, and service level multipliers to generate a 15-minute price-frozen quote scoped to the authenticated customer, merchant, or admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Calculate and persist a delivery pricing quote",
+                "parameters": [
+                    {
+                        "description": "Pricing quote request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_pricing_transport.CreateQuoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Generated pricing quote wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed JSON body or disallowed fields",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role, missing/invalid tenant UUID, owner mismatch, or unapproved merchant",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request body exceeds size limit",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Content-Type",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Semantic validation failure or no applicable tariff available",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal quote generation or verification failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/health/live": {
             "get": {
                 "description": "Probes whether the Core API service process is alive.",
@@ -1361,6 +1676,115 @@
             "type": "object",
             "properties": {
                 "data": {}
+            }
+        },
+        "internal_parcels_transport.AddressRequest": {
+            "type": "object",
+            "properties": {
+                "address_line1": {
+                    "type": "string"
+                },
+                "address_line2": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "instructions": {
+                    "type": "string"
+                },
+                "postal_code": {
+                    "type": "string"
+                },
+                "zone_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_parcels_transport.BookParcelRequest": {
+            "type": "object",
+            "properties": {
+                "dimensions": {
+                    "$ref": "#/definitions/internal_parcels_transport.DimensionsRequest"
+                },
+                "dropoff": {
+                    "$ref": "#/definitions/internal_parcels_transport.AddressRequest"
+                },
+                "item_description": {
+                    "type": "string"
+                },
+                "pickup": {
+                    "$ref": "#/definitions/internal_parcels_transport.AddressRequest"
+                },
+                "quote_id": {
+                    "type": "string"
+                },
+                "recipient_name": {
+                    "type": "string"
+                },
+                "recipient_phone": {
+                    "type": "string"
+                },
+                "special_instructions": {
+                    "type": "string"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_parcels_transport.DimensionsRequest": {
+            "type": "object",
+            "properties": {
+                "height_cm": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_pricing_transport.CreateQuoteRequest": {
+            "type": "object",
+            "properties": {
+                "actual_weight_kg": {
+                    "type": "number"
+                },
+                "destination_zone_id": {
+                    "type": "string"
+                },
+                "dimensions": {
+                    "$ref": "#/definitions/internal_pricing_transport.DimensionsRequest"
+                },
+                "origin_zone_id": {
+                    "type": "string"
+                },
+                "service_level": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_pricing_transport.DimensionsRequest": {
+            "type": "object",
+            "properties": {
+                "height_cm": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
+                }
             }
         }
     },
