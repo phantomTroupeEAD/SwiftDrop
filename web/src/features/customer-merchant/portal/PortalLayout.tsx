@@ -11,12 +11,13 @@ export function PortalLayout({ title, profile, children }: { title: string; prof
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   return (
-    <div className="m6-portal" data-profile={profile}>
+    <div className="m6-portal" data-profile={profile} data-role={profile.toUpperCase()}>
       <header className="m6-header">
         <Link className="m6-brand" to={profile === 'public' ? '/track' : '/dashboard'}><Package size={20} aria-hidden="true" /> SwiftDrop</Link>
         <nav aria-label="Portal navigation">
+          {profile !== 'public' && <NavLink to="/dashboard" end>Home</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
-          {profile === 'customer' && <NavLink to="/portal/merchants/apply">Merchant application</NavLink>}
+          {profile === 'customer' && <NavLink to="/portal/merchants/apply">Apply for a merchant account</NavLink>}
           {profile === 'merchant' && <>
             <NavLink to="/portal/merchants/orders">Orders</NavLink>
             <NavLink to="/portal/merchants/api-keys">API keys</NavLink>

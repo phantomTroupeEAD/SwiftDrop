@@ -1,5 +1,29 @@
 # SwiftDrop UI design system
 
+## Member 6 dashboard implementation
+
+Use the canonical [shared design specification](design.md) for colors, typography, and component rules. The Member 6 workspace is implemented in [RoleHome.tsx](src/features/dashboards/RoleHome.tsx). It uses the same Apple-style surfaces and shared components for customers and merchants, with the signed-in role applied through `data-role`.
+
+| Area | Pattern |
+| --- | --- |
+| Header | SwiftDrop brand links to `/dashboard`. Sign out stays on the right. |
+| Page layout | Center content at a maximum width of 896px with 16px side padding on phones and 24px on wider screens. Use a neutral canvas, bordered surface cards, and 20px between sections. |
+| Overview | Show the role title and the most useful next action. Use the primary button for that action and outline buttons for supporting links. |
+| Shipment summary | Show three counts from the loaded collection. Stack cards on phones and place them in one row on wider screens. Customer counts cover the latest fetched page. Merchant counts cover the fetched order list. |
+| Recent activity | Use the shared table for tracking number, status, and booking date. Show up to six recent records. Tracking numbers open the signed-in tracking route. |
+| Feedback | Show a loading message while fetching, an empty message for a successful empty response, and an error with **Retry** when fetching fails. Display counts only after a successful response. |
+
+### Role content and access
+
+- **Customer:** Lead with **Book a parcel**. Show recent parcels and signed-in tracking. Put **Apply for a merchant account** under **Account**. Approval and a session with the merchant role are required to access merchant tools.
+- **Merchant:** Lead with **View orders**. Show recent company orders and shipments that need attention. Put API keys and webhooks under **Integrations**.
+- **Public visitor:** Keep public tracking separate. Display only the fields returned by the public tracking endpoint.
+- **Operations roles:** Reuse the shared shell, tokens, and feedback patterns when designing admin, dispatcher, and courier screens. Use Member 7’s routes and workflows for their content.
+
+The frontend chooses the workspace from the authenticated role. The backend enforces parcel ownership and merchant tenant access. The customer workspace uses the documented parcel-list API, which must be enabled to show live records. The merchant workspace uses the merchant orders API. Both workspace layouts and their retry behavior were checked with simulated responses.
+
+The sections below retain the earlier design proposal for reference. For implementation, follow the shared specification and the dashboard patterns above.
+
 - **Version** — 1.0, implementation baseline
 - **Reference** — [Apple-style SwiftDrop prototype](public/scratch-apple.html), using its default Apple variant
 - **Audience** — Frontend contributors and reviewers

@@ -12,6 +12,7 @@ type RequestOptions = {
   body?: object;
   idempotencyKey?: string;
   signal?: AbortSignal;
+  allowUnwrapped?: boolean;
 };
 
 export async function portalRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -34,6 +35,7 @@ export async function portalRequest<T>(path: string, options: RequestOptions = {
     throw new PortalError(reference ? `${message} (Reference: ${reference})` : message, response.status);
   }
   if (!envelope || !Object.prototype.hasOwnProperty.call(envelope, 'data')) {
+    if (options.allowUnwrapped && envelope && typeof envelope === 'object') return envelope as T;
     throw new PortalError('SwiftDrop returned an unexpected response. Check the API connection.', response.status);
   }
   return envelope.data as T;

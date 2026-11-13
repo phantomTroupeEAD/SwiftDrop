@@ -164,7 +164,7 @@ export const DesignSystemPage: React.FC = () => {
             {/* Studio Controls: Theme & Role Switcher */}
             <div className="flex flex-wrap items-center gap-3">
               {/* Role Switcher */}
-              <div className="flex items-center gap-1.5 rounded-[8px] border border-border bg-surface-subtle p-1">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-[8px] border border-border bg-surface-subtle p-1">
                 {(['PUBLIC', 'CUSTOMER', 'MERCHANT', 'DISPATCHER', 'COURIER', 'ADMIN'] as RoleScope[]).map((role) => (
                   <Button
                     key={role}
@@ -197,7 +197,7 @@ export const DesignSystemPage: React.FC = () => {
           {/* Banner: Active Role Context */}
           <Card className="border-border bg-surface">
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-primary">
                   <Sparkles className="h-4 w-4" />
                   <span>Interactive Context Scoping</span>

@@ -2,6 +2,8 @@
 
 Read the [SwiftDrop UI design system](design.mdx) before building a screen. Start with the end user's role preset and complete the screen brief.
 
+After sign-in, the customer and merchant home pages share the same layout and display recent shipments and status counts from their account-scoped APIs. Counts describe the returned collection. Merchant integrations and customer business-account applications have separate sections.
+
 ## Member 6 Apple-style frontend
 
 The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
@@ -63,7 +65,7 @@ SwiftDrop adopts a **Unified Single-Page Application** architecture rather than 
 
 ### Why Unified SPA?
 1. **Single Deployment & Port:** Built once into static assets and served via an optimized Nginx container on port `3000` behind the Traefik API Gateway. No complex multi-port routing or cross-origin overhead.
-2. **Unified Authentication & RBAC Shell:** Single login screen (`/auth/login`). Upon JWT authentication, the user is redirected dynamically based on their role (`CUSTOMER`, `MERCHANT` &rarr; `/portal/*` vs `DISPATCHER`, `ADMIN` &rarr; `/ops/*`, `COURIER` &rarr; `/courier/*`).
+2. **Unified Authentication & RBAC Shell:** After sign-in, `/dashboard` displays the customer or merchant home. It routes admins to `/admin/dashboard`, dispatchers to `/dispatcher/dashboard`, and couriers to their delivery tasks at `/courier/dashboard`. Protected routes check the session role before rendering.
 3. **Shared Design System:** A unified component system (buttons, modals, form inputs, status chips, notification toasts) ensures consistent brand visual standards across all portals.
 4. **Feature-Sliced Isolation:** Code is isolated into dedicated feature folders (`customer-merchant` vs `dispatcher-admin`). Member 6 and Member 7 work in decoupled directories without merge conflicts.
 5. **Route-Based Code Splitting:** Vite dynamically splits bundles at route boundaries (`React.lazy`). Customers never download the dispatcher board or admin reporting code.

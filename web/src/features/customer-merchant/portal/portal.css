@@ -1,24 +1,19 @@
 .m6-portal {
-  --m6-canvas: #f5f5f7;
-  --m6-surface: #fff;
-  --m6-ink: #1d1d1f;
-  --m6-muted: #59595f;
-  --m6-line: #d2d2d7;
-  --m6-blue: #0071e3;
-  --action-primary: #0062c5;
-  --action-hover: #0057af;
-  --action-tint: #eaf3fe;
-  --action-on-primary: #fff;
+  --m6-canvas: var(--canvas);
+  --m6-surface: var(--surface);
+  --m6-ink: var(--text);
+  --m6-muted: var(--text-muted);
+  --m6-line: var(--border);
+  --m6-blue: var(--ring);
+  --action-primary: var(--primary);
+  --action-hover: var(--primary-hover);
+  --action-tint: var(--primary-tint);
+  --action-on-primary: var(--primary-foreground);
   min-height: 100vh;
   background: var(--m6-canvas);
   color: var(--m6-ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
-}
-.m6-portal[data-profile="merchant"] {
-  --action-primary: #00695c;
-  --action-hover: #005349;
-  --action-tint: #e7f5f1;
 }
 .m6-header {
   display: flex;
@@ -76,9 +71,9 @@
   width: 100%;
   min-height: 44px;
   padding: .55rem .7rem;
-  border: 1px solid #828289;
+  border: 1px solid var(--input);
   border-radius: 9px;
-  background: #fbfbfd;
+  background: var(--surface-subtle);
   color: var(--m6-ink);
   font: inherit;
   font-size: 1rem;
@@ -101,9 +96,9 @@
 .m6-btn:disabled { opacity: .65; cursor: not-allowed; }
 .m6-btn.m6-secondary { background: var(--action-tint); color: var(--action-primary); }
 .m6-btn.m6-secondary:hover:not(:disabled) { color: var(--action-hover); text-decoration: underline; }
-.m6-btn.m6-danger { background: #9e2925; }
-.m6-btn.m6-danger:hover:not(:disabled) { background: #81211e; }
-.m6-error { margin: .8rem 0; padding: .65rem .8rem; border-radius: 8px; background: #fff1f0; color: #9e2925; }
+.m6-btn.m6-danger { background: var(--status-error-bg); color: var(--status-error-ink); }
+.m6-btn.m6-danger:hover:not(:disabled) { background: var(--status-error-border); }
+.m6-error { margin: .8rem 0; padding: .65rem .8rem; border-radius: 8px; background: var(--status-error-bg); color: var(--status-error-ink); }
 .m6-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; margin-bottom: 1.25rem; }
 .m6-steps li { border-top: 2px solid var(--m6-line); padding-top: .5rem; font-size: .85rem; color: var(--m6-muted); }
 .m6-steps li[data-completed="true"], .m6-steps li[aria-current="step"] { border-color: var(--m6-blue); color: var(--action-primary); }
@@ -113,21 +108,21 @@
   display: inline-block;
   border-radius: 999px;
   padding: .2rem .55rem;
-  background: #eeeff2;
-  color: #41454d;
+  background: var(--surface-active);
+  color: var(--text);
   font-size: .8125rem;
   font-weight: 600;
 }
 .m6-pill::first-letter, .m6-timeline-label::first-letter { text-transform: uppercase; }
-.m6-pill[data-tone="info"] { background: #eaf3fe; color: #13437a; }
-.m6-pill[data-tone="success"] { background: #e7f5ec; color: #185c37; }
-.m6-pill[data-tone="warning"] { background: #fff4de; color: #874400; }
-.m6-pill[data-tone="error"] { background: #fff1f0; color: #9e2925; }
+.m6-pill[data-tone="info"] { background: var(--primary-tint); color: var(--primary); }
+.m6-pill[data-tone="success"] { background: var(--status-success-bg); color: var(--status-success-ink); }
+.m6-pill[data-tone="warning"] { background: var(--status-warning-bg); color: var(--status-warning-ink); }
+.m6-pill[data-tone="error"] { background: var(--status-error-bg); color: var(--status-error-ink); }
 .m6-result-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
 .m6-result-heading h2 { margin: 0; overflow-wrap: anywhere; }
 .m6-quote-total { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .m6-empty { display: grid; justify-items: start; gap: .75rem; margin-top: 1rem; }
-.m6-confirmation { margin-top: 1rem; padding: 1rem; border: 1px solid #9e2925; border-radius: 9px; overflow-wrap: anywhere; }
+.m6-confirmation { margin-top: 1rem; padding: 1rem; border: 1px solid var(--status-error-ink); border-radius: 9px; overflow-wrap: anywhere; }
 .m6-confirmation h3 { font-weight: 700; margin-bottom: .5rem; }
 .m6-table { width: 100%; border-collapse: collapse; text-align: left; font-variant-numeric: tabular-nums; }
 .m6-table :is(td, th) { padding: .65rem .75rem; border-bottom: 1px solid var(--m6-line); }

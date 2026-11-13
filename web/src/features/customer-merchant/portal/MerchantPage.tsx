@@ -274,10 +274,14 @@ export function MerchantApplication() {
   }, [accessToken, retry]);
   return <PortalLayout title="Merchant application" profile="customer">
     <section className="m6-card">
+      <p className="m6-muted">Apply for a business account to manage shipments in bulk. Merchant tools become available after approval.</p>
       <PortalErrorMessage message={error} />
       {loading ? <p role="status">Checking application status…</p> : lookupFailed
         ? <button className="m6-btn" onClick={() => setRetry(current => current + 1)}>Retry lookup</button>
-        : profile ? <div data-testid="merchant-application-status" className="m6-result-heading"><h2>{profile.business_name}</h2><PortalStatus status={profile.status} /></div>
+        : profile ? <div data-testid="merchant-application-status">
+          <div className="m6-result-heading"><h2>{profile.business_name}</h2><PortalStatus status={profile.status} /></div>
+          {profile.status === 'APPROVED' && <p>Sign out and sign back in to open your merchant workspace.</p>}
+        </div>
         : <form onSubmit={async event => {
           event.preventDefault();
           if (pending) return;
