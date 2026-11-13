@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Input } from '@/shared/components/ui/input';
+import { Button } from '@/shared/components/ui/button';
 import { errorMessage, PortalError, portalRequest } from './api';
 import { PortalErrorMessage, PortalLayout } from './PortalLayout';
 
@@ -18,9 +19,22 @@ const parcelFields = [
   ['weight', 'Weight (kg)', 30], ['length', 'Length (cm)', 150],
   ['width', 'Width (cm)', 150], ['height', 'Height (cm)', 150],
 ] as const;
+const addressAutocomplete = {
+  name: 'name',
+  phone: 'tel',
+  address: 'address-line1',
+  city: 'address-level2',
+  postal: 'postal-code',
+  zone: 'off',
+} as const;
 
 type Quote = { quote_id: string; fee_cents: number; currency: string; expires_at: string };
-type Booking = { tracking_number: string; status: string };
+type Booking = { id?: string; tracking_number: string; status: string };
+type Receipt = {
+  receipt_number: string;
+  financial_summary: { total_fee_formatted: string };
+  payment_status: string;
+};
 
 export function BookingPage() {
   const { accessToken, user } = useAuth();
@@ -32,6 +46,9 @@ export function BookingPage() {
   }));
   const [quote, setQuote] = useState<Quote>();
   const [booking, setBooking] = useState<Booking>();
+  const [receipt, setReceipt] = useState<Receipt>();
+  const [receiptPending, setReceiptPending] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const bookingKey = useRef<string>();
@@ -54,6 +71,28 @@ export function BookingPage() {
       postal_code: value(prefix + '-postal'),
       zone_id: value(prefix + '-zone'),
     };
+  }
+
+  async function loadReceipt() {
+    if (!booking?.id || !accessToken || receiptPending) return;
+    setReceiptPending(true);
+    setReceiptError('');
+    try {
+      const result = await portalRequest<Receipt>(`/parcels/${encodeURIComponent(booking.id)}/receipt`, {
+        token: accessToken,
+      });
+      if (!result?.receipt_number || !result.financial_summary?.total_fee_formatted) {
+        setReceiptError('The server did not return a complete receipt.');
+        return;
+      }
+      setReceipt(result);
+    } catch (cause) {
+      setReceiptError(cause instanceof PortalError && cause.status === 404
+        ? 'An official receipt is currently unavailable for this booking.'
+        : errorMessage(cause));
+    } finally {
+      setReceiptPending(false);
+    }
   }
 
   async function advance(event: FormEvent<HTMLFormElement>) {
@@ -146,6 +185,20 @@ export function BookingPage() {
         <h2>Booking confirmed</h2>
         <p>Tracking number <strong>{booking.tracking_number}</strong></p>
         <Link to={`/track/${encodeURIComponent(booking.tracking_number)}`}>Track this parcel</Link>
+        {booking.id && !receipt && <div className="m6-actions">
+          <Button type="button" variant="outline" disabled={receiptPending} onClick={loadReceipt} data-testid="booking-receipt-btn">
+            {receiptPending ? 'Loading receipt…' : receiptError ? 'Retry receipt' : 'View receipt'}
+          </Button>
+        </div>}
+        <PortalErrorMessage message={receiptError} />
+        {receipt && <section aria-label="Booking receipt" data-testid="booking-receipt">
+          <h3>Booking receipt</h3>
+          <dl>
+            <dt>Receipt number</dt><dd>{receipt.receipt_number}</dd>
+            <dt>Total</dt><dd>{receipt.financial_summary.total_fee_formatted}</dd>
+            <dt>Payment status</dt><dd>{receipt.payment_status}</dd>
+          </dl>
+        </section>}
       </section> : <>
           <ol className="m6-steps" aria-label="Booking progress">
           {steps.map((label, index) => <li key={label} aria-current={step === index ? 'step' : undefined}
@@ -158,7 +211,8 @@ export function BookingPage() {
               {fields.map(([field, name, type]) => {
                 const key = prefix + '-' + field;
                 return <label className="m6-field" key={key}>{name}
-                  <Input required type={type} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                  <Input required type={type} name={key} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                    autoComplete={field === 'zone' ? 'off' : `section-${prefix} ${addressAutocomplete[field]}`}
                     onChange={event => change(key, event.target.value)} />
                 </label>;
               })}

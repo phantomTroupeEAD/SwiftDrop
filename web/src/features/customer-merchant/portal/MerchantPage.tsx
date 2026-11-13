@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
+import { Button } from '@/shared/components/ui/button';
 import { errorMessage, PortalError, portalRequest, statusLabel } from './api';
 import { PortalErrorMessage, PortalLayout, PortalStatus } from './PortalLayout';
 import { MerchantOrderImport } from './MerchantOrderImport';
 
 type Section = 'orders' | 'api-keys' | 'webhooks';
+const ordersPerPage = 20;
 type Order = { parcel_id: string; tracking_number: string; merchant_reference?: string; status: string; created_at: string };
 type ApiKey = { key_id: string; label: string; key_prefix: string; status: string };
 type Webhook = { webhook_id: string; url: string; enabled: boolean; events: string[] };
@@ -50,6 +52,7 @@ export function MerchantPage({ section }: { section: Section }) {
   const [secret, setSecret] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -135,6 +138,10 @@ export function MerchantPage({ section }: { section: Section }) {
   const statuses = [...new Set(orders.map(order => order.status))];
   const filtered = orders.filter(order => (!status || status === order.status) &&
     `${order.tracking_number} ${order.merchant_reference ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / ordersPerPage));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * ordersPerPage;
+  const visibleOrders = filtered.slice(start, start + ordersPerPage);
 
   return <PortalLayout title={titles[section]} profile="merchant">
     <PortalErrorMessage message={loadError} />
@@ -145,10 +152,10 @@ export function MerchantPage({ section }: { section: Section }) {
         <h2>Orders</h2>
         <div className="m6-grid">
           <label className="m6-field">Search orders
-            <input type="search" value={search} onChange={event => setSearch(event.target.value)} data-testid="merchant-order-search" />
+            <input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} data-testid="merchant-order-search" />
           </label>
           <label className="m6-field">Status
-            <select value={status} onChange={event => setStatus(event.target.value)} data-testid="merchant-order-filter">
+            <select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }} data-testid="merchant-order-filter">
               <option value="">All statuses</option>
               {statuses.map(item => <option key={item} value={item}>{statusLabel(item)}</option>)}
             </select>
@@ -159,7 +166,7 @@ export function MerchantPage({ section }: { section: Section }) {
             <th role="columnheader" scope="col">Tracking number</th><th role="columnheader" scope="col">Status</th>
             <th role="columnheader" scope="col">Reference</th><th role="columnheader" scope="col">Created</th>
           </tr></thead><tbody role="rowgroup">
-            {filtered.map(order => <tr key={order.parcel_id} role="row">
+            {visibleOrders.map(order => <tr key={order.parcel_id} role="row">
               <td role="cell"><Link to={`/portal/tracking/${encodeURIComponent(order.tracking_number)}`}>{order.tracking_number}</Link></td>
               <td role="cell"><PortalStatus status={order.status} /></td>
               <td role="cell" className="m6-order-meta"><span aria-hidden="true">Reference </span>{order.merchant_reference || '—'}</td>
@@ -169,8 +176,13 @@ export function MerchantPage({ section }: { section: Section }) {
         </div> : <div className="m6-empty">
           <p role="status" data-testid="merchant-order-empty">{orders.length ? 'No orders match your filters.' : 'No orders yet.'}</p>
           {orders.length > 0 && <button type="button" className="m6-btn m6-secondary" data-testid="merchant-order-reset-btn"
-            onClick={() => { setSearch(''); setStatus(''); }}>Reset filters</button>}
+            onClick={() => { setSearch(''); setStatus(''); setPage(1); }}>Reset filters</button>}
         </div>}
+        {pageCount > 1 && <nav className="m6-actions" aria-label="Order pages">
+          <Button type="button" variant="outline" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</Button>
+          <span role="status">Page {currentPage} of {pageCount}</span>
+          <Button type="button" variant="outline" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</Button>
+        </nav>}
       </section>
     </>}
     {section === 'orders' && <MerchantOrderImport token={accessToken} onComplete={() => setRevision(current => current + 1)} />}

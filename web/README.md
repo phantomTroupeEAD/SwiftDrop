@@ -19,7 +19,15 @@ For local integration, Vite forwards tracking requests to the tracking service o
 
 Reloading a protected page restores a real session using the server-issued refresh cookie. Local demo sign-ins last until reload.
 
+For live integration, start Vite with demo auth unset. By default it connects to Core API on port 8080 and Tracking API on port 8081. Set `SWIFTDROP_CORE_API_URL` and `SWIFTDROP_TRACKING_API_URL` before starting Vite if the team provides different service origins. Use the gateway origin for both variables when it serves both APIs.
+
+For a UI-only preview, set `SWIFTDROP_DEMO_AUTH=1` and bind Vite to loopback. Demo credentials only open the frontend screens. Live API calls require a session issued by the real backend.
+
 Booking prefills the sender's name and phone from the signed-in profile. The sender can edit both fields and enter the pickup address.
+
+Pickup and delivery forms support browser address autofill with separate sender and recipient sections. Merchant order search and status filters apply to the full fetched list before it is displayed in pages of 20.
+
+After booking, **View receipt** fetches the official receipt using the returned parcel ID when the parcels API supports it.
 
 Clean UI update (6 November 2026): the design-preview routes now render the teal/ivory shipping UI directly. Removed theme-selection chrome, palette specifications, coordination notes, technical banners, reviewer state controls and simulated SSE connectivity. Sidebar navigation, forms, orders filters and the appearance toggle remain. A small **Sample data** label and action-specific feedback preserve honesty about incomplete integration. This change is presentation-only; real APIs and shared M7/auth code are not changed.
 
