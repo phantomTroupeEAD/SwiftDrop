@@ -5,14 +5,15 @@ import { Button } from '@/shared/components/ui/button';
 import { errorMessage, PortalError, portalRequest, statusLabel } from './api';
 import { PortalErrorMessage, PortalLayout, PortalStatus } from './PortalLayout';
 import { MerchantOrderImport } from './MerchantOrderImport';
+import { MerchantProfileBanner, type MerchantProfile } from './MerchantProfileBanner';
 
 type Section = 'orders' | 'api-keys' | 'webhooks';
 const ordersPerPage = 20;
 type Order = { parcel_id: string; tracking_number: string; merchant_reference?: string; status: string; created_at: string };
-type ApiKey = { key_id: string; label: string; key_prefix: string; status: string };
+type ApiKey = { key_id: string; label: string; key_prefix: string; status: string; scopes?: string[]; created_at?: string };
 type Webhook = { webhook_id: string; url: string; enabled: boolean; events: string[] };
 type EventType = { event_type: string; description: string };
-type Profile = { merchant_id: string; business_name: string; status: string };
+type Profile = MerchantProfile;
 
 const titles: Record<Section, string> = { orders: 'Merchant orders', 'api-keys': 'API keys', webhooks: 'Webhooks' };
 const paths = { orders: '/merchant/orders', 'api-keys': '/merchants/me/api-keys', webhooks: '/merchants/me/webhooks' };
@@ -115,11 +116,12 @@ export function MerchantPage({ section }: { section: Section }) {
       if (section === 'api-keys') {
         const scopes = data.getAll('scope');
         if (!scopes.length) throw new PortalError('Select at least one permission.', 400);
-        const result = await portalRequest<{ api_key: string }>(path, {
+        const result = await portalRequest<{ api_key?: string; plaintext_key?: string }>(path, {
           token: accessToken, method: 'POST', body: { label: data.get('label'), scopes },
         });
-        if (!result?.api_key) throw new PortalError('The server did not return the new key. Check the key list.', 200);
-        setSecret(result.api_key);
+        const plaintext = result?.api_key || result?.plaintext_key;
+        if (!plaintext) throw new PortalError('The server did not return the new key. Check the key list.', 200);
+        setSecret(plaintext);
       } else {
         const events = data.getAll('event');
         if (!events.length) throw new PortalError('Select at least one event.', 400);
@@ -144,6 +146,7 @@ export function MerchantPage({ section }: { section: Section }) {
   const visibleOrders = filtered.slice(start, start + ordersPerPage);
 
   return <PortalLayout title={titles[section]} profile="merchant">
+    {section === 'orders' && accessToken && <MerchantProfileBanner key={accessToken} token={accessToken} />}
     <PortalErrorMessage message={loadError} />
     {loadError && <button className="m6-btn m6-secondary" data-testid="merchant-retry-btn" onClick={() => setRevision(current => current + 1)}>Retry</button>}
     {loading && <p role="status">Loading {titles[section].toLowerCase()}…</p>}
@@ -214,7 +217,11 @@ export function MerchantPage({ section }: { section: Section }) {
       <section className="m6-card">
         <h2>{titles[section]}</h2>
         {section === 'api-keys' ? keys.length ? keys.map(key => <div key={key.key_id} className="m6-item">
-          <span>{key.label} · <code>{key.key_prefix}</code> <PortalStatus status={key.status} /></span>
+          <div>
+            <p>{key.label} · <code>{key.key_prefix}</code> <PortalStatus status={key.status} /></p>
+            {!!key.scopes?.length && <p className="m6-muted">{key.scopes.join(', ')}</p>}
+            {key.created_at && <p className="m6-muted">Created <time dateTime={key.created_at}>{new Date(key.created_at).toLocaleDateString('en-LK')}</time></p>}
+          </div>
           {key.status === 'ACTIVE' && <button className="m6-btn m6-secondary" disabled={pending} data-testid="merchant-key-revoke-btn"
             onClick={() => setRemove({ id: key.key_id, label: key.label })}>Revoke</button>}
         </div>) : <p>No API keys yet.</p> : hooks.length ? hooks.map(hook => <div key={hook.webhook_id} className="m6-item">

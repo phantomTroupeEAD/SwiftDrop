@@ -4,6 +4,8 @@ Read the [SwiftDrop UI design system](design.mdx) before building a screen. Star
 
 After sign-in, the customer and merchant home pages share the same layout and display recent shipments and status counts from their account-scoped APIs. Counts describe the returned collection. Merchant integrations and customer business-account applications have separate sections.
 
+The merchant home and orders page display the business profile, tenant ID, and approval status returned by the merchant API.
+
 ## Member 6 Apple-style frontend
 
 The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.

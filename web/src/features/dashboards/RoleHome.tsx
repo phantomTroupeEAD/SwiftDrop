@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader } from '@/shared/compone
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
 import { errorMessage, PortalError, portalRequest } from '@/features/customer-merchant/portal/api';
 import { PortalStatus } from '@/features/customer-merchant/portal/PortalLayout';
+import { MerchantProfileBanner } from '@/features/customer-merchant/portal/MerchantProfileBanner';
 import type { Role } from '@/shared/types/auth';
 
 const homeByRole: Record<Extract<Role, 'CUSTOMER' | 'MERCHANT'>, { title: string; description: string; actions: { label: string; path: string }[] }> = {
@@ -142,6 +143,7 @@ export function RoleHome() {
             </nav>
           </CardContent>
         </Card>
+        {user.role === 'MERCHANT' && accessToken && <MerchantProfileBanner key={accessToken} token={accessToken} />}
         {(user.role === 'CUSTOMER' || user.role === 'MERCHANT') && accessToken && (
           <ShipmentOverview key={`${user.id}:${user.role}:${user.tenant_id ?? ''}`} merchant={user.role === 'MERCHANT'} token={accessToken} />
         )}
