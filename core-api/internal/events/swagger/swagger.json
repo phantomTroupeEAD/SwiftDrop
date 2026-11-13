@@ -1244,7 +1244,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Test portal endpoint for authenticated Merchants and Admins with active tenant.",
+                "description": "Test portal endpoint for merchant users. Requires a tenant in the token: platform Admins have no tenant and get 403 AUTH_TENANT_REQUIRED.",
                 "produces": [
                     "application/json"
                 ],
@@ -1262,6 +1262,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Wrong role, or no tenant (AUTH_TENANT_REQUIRED)",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope"
                         }
@@ -2188,6 +2194,12 @@
                     "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address"
                 },
                 "businessName": {
+                    "type": "string"
+                },
+                "contactEmail": {
+                    "type": "string"
+                },
+                "contactPhone": {
                     "type": "string"
                 }
             }

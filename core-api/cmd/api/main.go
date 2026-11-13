@@ -54,7 +54,7 @@ func main() {
 	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/auth/me (Bearer Token)")
 	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/admin/dashboard (Admin only)")
 	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/courier/dashboard (Courier/Admin)")
-	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/merchant/portal (Merchant/Admin)")
+	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/merchant/portal (Merchant with a tenant; Admin has no tenant -> 403)")
 	fmt.Println("==================================================================")
 
 	serverAddr := ":" + port

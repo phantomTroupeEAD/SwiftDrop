@@ -79,11 +79,14 @@ func TestHealthEndpoints(t *testing.T) {
 			_ = os.Unsetenv("SWAGGER_ENABLED")
 		}()
 
-		container := BuildAppContainer()
+		// Test the Swagger gate directly: a full BuildAppContainer in production now (correctly)
+		// refuses to start without a reachable database and a real JWT_SECRET.
+		mux := http.NewServeMux()
+		registerEventsModules(mux, nil, nil)
 		req := httptest.NewRequest(http.MethodGet, "/swagger/events/", nil)
 		rec := httptest.NewRecorder()
 
-		container.Mux.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 Not Found, got %d", rec.Code)
 		}
