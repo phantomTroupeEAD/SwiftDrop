@@ -109,10 +109,14 @@ func TestMember02Wiring_RouteRegistrationAndSecurity(t *testing.T) {
 
 func TestMember02Wiring_BuildAppContainer_NilDB(t *testing.T) {
 	origEnv := os.Getenv("APP_ENV")
-	origDBURL := os.Getenv("DATABASE_URL")
+	origDBURL, hasDBURL := os.LookupEnv("DATABASE_URL")
 	defer func() {
 		_ = os.Setenv("APP_ENV", origEnv)
-		_ = os.Setenv("DATABASE_URL", origDBURL)
+		if hasDBURL {
+			_ = os.Setenv("DATABASE_URL", origDBURL)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
 	}()
 
 	_ = os.Setenv("APP_ENV", "local")
