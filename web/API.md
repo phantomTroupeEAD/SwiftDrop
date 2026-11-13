@@ -2,6 +2,8 @@
 
 ## Apple-style portal integration checkpoint
 
+SwiftDrop Assistant sends `POST /api/v1/ai/chat` with the customer Bearer token and JSON fields `prompt` and optional `conversation_id`. The service returns `reply`, `conversation_id`, and optional `actions`. The chat renders replies as text and accepts only a recognized booking action. It prefills supported postal codes, weight, and service level. Booking still requests an authoritative quote and requires confirmation.
+
 Retrying the merchant profile repeats only `GET /api/v1/merchants/me` with the current session token. Order and integration requests use their existing endpoints.
 
 The routed portal uses real requests and never substitutes sample quotes, credentials, orders or tracking data. The older design preview and prototype dashboard notes below describe separate pages.

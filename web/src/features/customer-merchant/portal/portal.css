@@ -1,3 +1,24 @@
+.assistant-chat-launcher {
+  position: fixed;
+  inset-inline-end: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-full);
+}
+.assistant-chat-launcher svg.assistant-chat-bubble { width: 1.5rem; height: 1.5rem; }
+.assistant-chat-launcher svg.assistant-chat-sparkle { position: absolute; top: .6rem; right: .55rem; width: .75rem; height: .75rem; }
+.assistant-chat-panel {
+  max-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+@media (max-width: 39.99rem) {
+  .assistant-chat-panel {
+    height: 100dvh;
+    border-radius: 0;
+  }
+}
 .m6-portal {
   --m6-canvas: var(--canvas);
   --m6-surface: var(--surface);

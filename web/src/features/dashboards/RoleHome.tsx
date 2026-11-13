@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { errorMessage, PortalError, portalRequest } from '@/features/customer-merchant/portal/api';
 import { PortalHeader, PortalStatus } from '@/features/customer-merchant/portal/PortalLayout';
 import { MerchantProfileBanner } from '@/features/customer-merchant/portal/MerchantProfileBanner';
+import { AssistantChat } from '@/features/customer-merchant/portal/AssistantChat';
 import type { Role } from '@/shared/types/auth';
 
 const homeByRole: Record<Extract<Role, 'CUSTOMER' | 'MERCHANT'>, { title: string; description: string; actions: { label: string; path: string }[] }> = {
@@ -155,6 +156,7 @@ export function RoleHome() {
           </CardContent>
         </Card>}
       </main>
+      {user.role === 'CUSTOMER' && accessToken && <AssistantChat key={user.id} token={accessToken} />}
     </div>
   );
 }

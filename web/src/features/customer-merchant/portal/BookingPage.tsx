@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Input } from '@/shared/components/ui/input';
 import { Button } from '@/shared/components/ui/button';
@@ -38,9 +38,14 @@ type Receipt = {
 
 export function BookingPage() {
   const { accessToken, user } = useAuth();
+  const [params] = useSearchParams();
+  const weight = Number(params.get('weight_kg'));
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Record<string, string>>(() => ({
-    service: 'STANDARD',
+    service: params.get('service_type') === 'EXPRESS' ? 'EXPRESS' : 'STANDARD',
+    weight: weight >= 0.01 && weight <= 30 ? String(weight) : '',
+    'pickup-postal': params.get('pickup_postal_code')?.match(/^\d{5}$/)?.[0] ?? '',
+    'dropoff-postal': params.get('delivery_postal_code')?.match(/^\d{5}$/)?.[0] ?? '',
     'pickup-name': user?.display_name?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' '),
     'pickup-phone': user?.phone ?? '',
   }));

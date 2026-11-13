@@ -14,6 +14,7 @@
 | `batch-csv-file-input`, `batch-csv-submit-btn` | CSV selection and order submission or retry |
 | `merchant-key-label-input`, `merchant-key-read-scope`, `merchant-key-create-scope`, `merchant-key-revoke-btn` | API key creation fields and revoke actions |
 | `merchant-profile-retry-btn` | Retries a failed merchant profile request on the dashboard or orders page |
+| `assistant-open-btn`, `assistant-prompt-input`, `assistant-send-btn` | Opens the customer assistant, enters a message, and submits it |
 | `merchant-webhook-url-input`, `merchant-webhook-event-{eventType}`, `merchant-webhook-delete-btn` | Webhook registration fields and remove actions |
 | `merchant-credential-create-btn`, `merchant-credential-confirm-btn`, `one-time-key-copy-btn`, `merchant-secret-close-btn` | Credential mutations, one-time copy and dismissal |
 

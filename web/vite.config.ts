@@ -78,6 +78,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      '/api/v1/ai': {
+        target: process.env.SWIFTDROP_AI_API_URL || 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
       '/api/v1/tracking': {
         target: process.env.SWIFTDROP_TRACKING_API_URL || 'http://127.0.0.1:8081',
         changeOrigin: true,
