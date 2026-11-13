@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/swiftdrop/core-api/internal/platform/middleware"
 )
 
 type testPayload struct {
@@ -167,5 +169,42 @@ func TestCursor_EncodeDecode(t *testing.T) {
 	_, _, err = DecodeCursor("")
 	if !errors.Is(err, ErrInvalidCursor) {
 		t.Errorf("expected ErrInvalidCursor on empty cursor, got: %v", err)
+	}
+}
+
+// A client that sends no X-Request-ID still gets a correlation_id: the RequestID middleware
+// generates one and puts it in the response header, which WriteError reads.
+func TestWriteError_CorrelationIDWithoutClientHeader(t *testing.T) {
+	handler := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "missing")
+	}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/x", nil))
+
+	var envelope ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("invalid envelope: %v", err)
+	}
+	headerID := rec.Header().Get("X-Request-ID")
+	if headerID == "" || envelope.Error.CorrelationID != headerID {
+		t.Fatalf("correlation_id %q must equal X-Request-ID response header %q", envelope.Error.CorrelationID, headerID)
+	}
+}
+
+// An invalid client X-Request-ID is replaced by the middleware; the error body must carry the
+// validated ID, not echo the client's value.
+func TestWriteError_CorrelationIDUsesValidatedID(t *testing.T) {
+	handler := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, r, http.StatusBadRequest, "BAD", "bad")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/x", nil)
+	req.Header.Set("X-Request-ID", "<script>not valid</script>")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var envelope ErrorEnvelope
+	_ = json.Unmarshal(rec.Body.Bytes(), &envelope)
+	if envelope.Error.CorrelationID == "<script>not valid</script>" || envelope.Error.CorrelationID != rec.Header().Get("X-Request-ID") {
+		t.Fatalf("correlation_id must be the validated ID, got %q", envelope.Error.CorrelationID)
 	}
 }

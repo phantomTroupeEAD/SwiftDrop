@@ -49,7 +49,7 @@ test:
 	cd core-api && go test -v -race ./...
 
 swagger:
-	cd core-api && go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
+	cd core-api && go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
 	cp core-api/docs/swagger.json core-api/internal/events/swagger/swagger.json
 
 test-e2e:

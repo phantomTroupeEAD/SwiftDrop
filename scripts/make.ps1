@@ -65,7 +65,7 @@ switch ($Target) {
     "swagger" {
         Push-Location core-api
         try {
-            go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
+            go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g cmd/api/main.go -o docs --ot json,yaml --parseDependency --parseInternal
             Copy-Item -Path "docs/swagger.json" -Destination "internal/events/swagger/swagger.json" -Force
         } finally {
             Pop-Location
