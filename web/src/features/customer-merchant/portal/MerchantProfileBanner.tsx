@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { errorMessage, portalRequest } from './api';
 
 export type MerchantProfile = {
@@ -13,6 +14,7 @@ export type MerchantProfile = {
 
 export function MerchantProfileBanner({ token }: { token: string }) {
   const [result, setResult] = useState<{ profile: MerchantProfile } | { error: string }>();
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     void portalRequest<MerchantProfile>('/merchants/me', { token, signal: controller.signal })
@@ -26,14 +28,20 @@ export function MerchantProfileBanner({ token }: { token: string }) {
         if (!controller.signal.aborted) setResult({ error: errorMessage(cause) });
       });
     return () => controller.abort();
-  }, [token]);
+  }, [token, attempt]);
 
   return (
     <Card className="mb-4">
       <CardHeader><h2 className="text-lg font-semibold">Merchant profile</h2></CardHeader>
       <CardContent>
         {!result ? <p role="status">Loading merchant profile…</p> : 'error' in result ? (
-          <p role="alert">Couldn’t load merchant profile. {result.error}</p>
+          <div className="space-y-3">
+            <p role="alert">Couldn’t load merchant profile. {result.error}</p>
+            <Button type="button" variant="outline" data-testid="merchant-profile-retry-btn" onClick={() => {
+              setResult(undefined);
+              setAttempt(value => value + 1);
+            }}>Retry profile</Button>
+          </div>
         ) : (
           <dl className="space-y-2 break-words text-sm">
             <div><dt className="text-text-muted">Business</dt><dd className="font-medium">{result.profile.business_name}</dd></div>

@@ -2,6 +2,8 @@
 
 ## Apple-style portal integration checkpoint
 
+Retrying the merchant profile repeats only `GET /api/v1/merchants/me` with the current session token. Order and integration requests use their existing endpoints.
+
 The routed portal uses real requests and never substitutes sample quotes, credentials, orders or tracking data. The older design preview and prototype dashboard notes below describe separate pages.
 
 - Booking sends `origin_zone_id`, `destination_zone_id`, `actual_weight_kg`, `dimensions` and `service_level` to the pricing handler. It renders the returned `fee_cents`. The parcel transport on `feature/member-02-http-transport` takes the quote ID, top-level `recipient_name` and `recipient_phone`, parcel dimensions, weight, and pickup and dropoff addresses. The service level belongs to the quote. The client keeps the same idempotency key when retrying an uncertain submission. The pricing and parcel routers still need to be available in the running Core API for live verification. The older examples below describe the original design.

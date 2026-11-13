@@ -16,6 +16,13 @@
   line-height: 1.5;
 }
 .m6-header {
+  --m6-surface: var(--surface);
+  --m6-muted: var(--text-muted);
+  --m6-line: var(--border);
+  --m6-ink: var(--text);
+  --m6-blue: var(--ring);
+  --action-primary: var(--primary);
+  --action-tint: var(--primary-tint);
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -25,13 +32,20 @@
   background: var(--m6-surface);
   border-bottom: 1px solid var(--m6-line);
 }
+.m6-header .m6-session-action { margin-inline-start: auto; order: 2; }
+.m6-header nav { order: 1; margin-inline-start: auto; }
+.m6-header nav a { padding-inline: .5rem; }
+@media (max-width: 48rem) {
+  .m6-header .m6-session-action { order: 1; }
+  .m6-header nav { order: 2; width: 100%; margin-inline-start: 0; gap: .25rem; }
+}
 .m6-header nav, .m6-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: .5rem 1rem;
 }
-.m6-header a, .m6-portal .m6-quiet {
+.m6-header a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;

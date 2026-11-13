@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/shared/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
 import { errorMessage, PortalError, portalRequest } from '@/features/customer-merchant/portal/api';
-import { PortalStatus } from '@/features/customer-merchant/portal/PortalLayout';
+import { PortalHeader, PortalStatus } from '@/features/customer-merchant/portal/PortalLayout';
 import { MerchantProfileBanner } from '@/features/customer-merchant/portal/MerchantProfileBanner';
 import type { Role } from '@/shared/types/auth';
 
@@ -93,7 +92,14 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
           <p className="text-text-muted">Recent parcels are unavailable on this server. You can still look up a parcel by its tracking number.</p>
           <Button asChild variant="outline"><Link to="/portal/tracking">Look up a parcel</Link></Button>
         </div>}
-        {result && !result.error && !result.unavailable && recent.length === 0 && <p className="text-text-muted">{merchant ? 'No orders yet.' : 'No parcels yet.'}</p>}
+        {result && !result.error && !result.unavailable && recent.length === 0 && (
+          <div className="space-y-3">
+            <p className="text-text-muted">{merchant ? 'No orders yet.' : 'No parcels yet.'}</p>
+            <Button asChild variant="outline">
+              <Link to={merchant ? '/portal/merchants/orders' : '/portal/book'}>{merchant ? 'Open merchant orders' : 'Book your first parcel'}</Link>
+            </Button>
+          </div>
+        )}
         {recent.length > 0 && <Table aria-label={title}>
           <TableHeader><TableRow><TableHead>Tracking number</TableHead><TableHead>Status</TableHead><TableHead>Booked</TableHead></TableRow></TableHeader>
           <TableBody>
@@ -112,21 +118,13 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
 }
 
 export function RoleHome() {
-  const { user, accessToken, logout } = useAuth();
+  const { user, accessToken } = useAuth();
   if (!user || (user.role !== 'CUSTOMER' && user.role !== 'MERCHANT')) return null;
   const home = homeByRole[user.role];
 
   return (
     <div data-role={user.role} className="min-h-screen bg-canvas text-text">
-      <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link to="/dashboard" className="inline-flex items-center gap-2 font-semibold">
-            <Package className="size-5 text-primary" aria-hidden="true" />
-            SwiftDrop
-          </Link>
-          <Button type="button" variant="ghost" onClick={logout}>Sign out</Button>
-        </div>
-      </header>
+      <PortalHeader profile={user.role === 'MERCHANT' ? 'merchant' : 'customer'} />
       <main className="mx-auto max-w-4xl space-y-5 px-4 py-10 sm:px-6">
         <Card>
           <CardHeader>

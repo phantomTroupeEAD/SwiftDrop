@@ -6,6 +6,8 @@ After sign-in, the customer and merchant home pages share the same layout and di
 
 The merchant home and orders page display the business profile, tenant ID, and approval status returned by the merchant API.
 
+The customer and merchant dashboards share the navigation header with their portal pages. On phones, navigation wraps below the brand and session action. Empty shipment lists link to the next action, and merchant profile errors have an independent retry.
+
 ## Member 6 Apple-style frontend
 
 The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
