@@ -17,7 +17,8 @@ import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: 'CUSTOMER' | 'MERCHANT' }> = ({ children, role }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isRestoringSession, user } = useAuth();
+  if (isRestoringSession) return <p role="status">Restoring your session…</p>;
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />;
   }
@@ -53,6 +54,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/register" element={<PortalRegisterPage />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
       <Route path="/portal/merchants/apply" element={<ProtectedRoute role="CUSTOMER"><MerchantApplication /></ProtectedRoute>} />
       <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />

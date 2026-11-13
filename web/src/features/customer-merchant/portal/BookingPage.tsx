@@ -1,6 +1,8 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
+import { Input } from '@/shared/components/ui/input';
+import { Button } from '@/shared/components/ui/button';
 import { errorMessage, PortalError, portalRequest } from './api';
 import { PortalErrorMessage, PortalLayout } from './PortalLayout';
 
@@ -10,28 +12,49 @@ const contacts = [
 ] as const;
 const fields = [
   ['name', 'Full name', 'text'], ['phone', 'Phone', 'tel'],
-  ['address', 'Street address', 'text'], ['city', 'City', 'text'], ['zone', 'Zone ID', 'text'],
+  ['address', 'Street address', 'text'], ['city', 'City', 'text'],
+  ['postal', 'Postal code', 'text'], ['zone', 'Zone ID', 'text'],
 ] as const;
 const parcelFields = [
   ['weight', 'Weight (kg)', 30], ['length', 'Length (cm)', 150],
   ['width', 'Width (cm)', 150], ['height', 'Height (cm)', 150],
 ] as const;
+const addressAutocomplete = {
+  name: 'name',
+  phone: 'tel',
+  address: 'address-line1',
+  city: 'address-level2',
+  postal: 'postal-code',
+  zone: 'off',
+} as const;
 
-type Quote = { quote_id: string; total_fee_cents: number; currency: string; expires_at: string };
-type Booking = { tracking_number: string; status: string };
+type Quote = { quote_id: string; fee_cents: number; currency: string; expires_at: string };
+type Booking = { id?: string; tracking_number: string; status: string };
+type Receipt = {
+  receipt_number: string;
+  financial_summary: { total_fee_formatted: string };
+  payment_status: string;
+};
 
 export function BookingPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Record<string, string>>({ service: 'STANDARD' });
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    service: 'STANDARD',
+    'pickup-name': user?.display_name?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' '),
+    'pickup-phone': user?.phone ?? '',
+  }));
   const [quote, setQuote] = useState<Quote>();
   const [booking, setBooking] = useState<Booking>();
+  const [receipt, setReceipt] = useState<Receipt>();
+  const [receiptPending, setReceiptPending] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const bookingKey = useRef<string>();
   const requestPending = useRef(false);
   const money = quote && new Intl.NumberFormat('en-LK', { style: 'currency', currency: quote.currency })
-    .format(quote.total_fee_cents / 100);
+    .format(quote.fee_cents / 100);
 
   const value = (key: string) => draft[key]?.trim() ?? '';
   function change(key: string, input: string) {
@@ -41,9 +64,35 @@ export function BookingPage() {
   }
   function contact(prefix: string) {
     return {
-      name: value(prefix + '-name'), phone: value(prefix + '-phone'),
-      address_lines: [value(prefix + '-address')], city: value(prefix + '-city'), zone_id: value(prefix + '-zone'),
+      contact_name: value(prefix + '-name'),
+      contact_phone: value(prefix + '-phone'),
+      address_line1: value(prefix + '-address'),
+      city: value(prefix + '-city'),
+      postal_code: value(prefix + '-postal'),
+      zone_id: value(prefix + '-zone'),
     };
+  }
+
+  async function loadReceipt() {
+    if (!booking?.id || !accessToken || receiptPending) return;
+    setReceiptPending(true);
+    setReceiptError('');
+    try {
+      const result = await portalRequest<Receipt>(`/parcels/${encodeURIComponent(booking.id)}/receipt`, {
+        token: accessToken,
+      });
+      if (!result?.receipt_number || !result.financial_summary?.total_fee_formatted) {
+        setReceiptError('The server did not return a complete receipt.');
+        return;
+      }
+      setReceipt(result);
+    } catch (cause) {
+      setReceiptError(cause instanceof PortalError && cause.status === 404
+        ? 'An official receipt is currently unavailable for this booking.'
+        : errorMessage(cause));
+    } finally {
+      setReceiptPending(false);
+    }
   }
 
   async function advance(event: FormEvent<HTMLFormElement>) {
@@ -65,17 +114,27 @@ export function BookingPage() {
     const pickup = contact('pickup');
     const dropoff = contact('dropoff');
     const weight = Number(value('weight'));
-    const dimensions = { length: Number(value('length')), width: Number(value('width')), height: Number(value('height')) };
+    const dimensions = {
+      length_cm: Number(value('length')),
+      width_cm: Number(value('width')),
+      height_cm: Number(value('height')),
+    };
+    const serviceLevel = value('service');
     requestPending.current = true;
     setPending(true);
     try {
       if (step < 3) {
         const next = await portalRequest<Quote>('/pricing/quotes', {
           token: accessToken, method: 'POST',
-          body: { pickup_zone_id: pickup.zone_id, dropoff_zone_id: dropoff.zone_id, weight_kg: weight,
-            length_cm: dimensions.length, width_cm: dimensions.width, height_cm: dimensions.height, service_level: value('service') },
+          body: {
+            origin_zone_id: pickup.zone_id,
+            destination_zone_id: dropoff.zone_id,
+            actual_weight_kg: weight,
+            dimensions,
+            service_level: serviceLevel,
+          },
         });
-        if (!next?.quote_id || !Number.isFinite(next.total_fee_cents) || !/^[A-Z]{3}$/.test(next.currency)
+        if (!next?.quote_id || !Number.isSafeInteger(next.fee_cents) || next.fee_cents < 0 || !/^[A-Z]{3}$/.test(next.currency)
           || !(Date.parse(next.expires_at) > Date.now())) {
           setError('The pricing service did not return a valid quote.');
           return;
@@ -91,9 +150,16 @@ export function BookingPage() {
         bookingKey.current ??= crypto.randomUUID();
         const result = await portalRequest<Booking>('/parcels', {
           token: accessToken, method: 'POST', idempotencyKey: bookingKey.current,
-          body: { quote_id: quote.quote_id, pickup, dropoff, parcel: {
-            weight_kg: weight, dimensions_cm: dimensions, description: value('description'),
-          } },
+          body: {
+            quote_id: quote.quote_id,
+            recipient_name: dropoff.contact_name,
+            recipient_phone: dropoff.contact_phone,
+            weight_kg: weight,
+            dimensions,
+            pickup,
+            dropoff,
+            item_description: value('description'),
+          },
         });
         if (!result?.tracking_number) {
           setError('No tracking number was returned. Retry this submission to check the booking.');
@@ -119,6 +185,20 @@ export function BookingPage() {
         <h2>Booking confirmed</h2>
         <p>Tracking number <strong>{booking.tracking_number}</strong></p>
         <Link to={`/track/${encodeURIComponent(booking.tracking_number)}`}>Track this parcel</Link>
+        {booking.id && !receipt && <div className="m6-actions">
+          <Button type="button" variant="outline" disabled={receiptPending} onClick={loadReceipt} data-testid="booking-receipt-btn">
+            {receiptPending ? 'Loading receipt…' : receiptError ? 'Retry receipt' : 'View receipt'}
+          </Button>
+        </div>}
+        <PortalErrorMessage message={receiptError} />
+        {receipt && <section aria-label="Booking receipt" data-testid="booking-receipt">
+          <h3>Booking receipt</h3>
+          <dl>
+            <dt>Receipt number</dt><dd>{receipt.receipt_number}</dd>
+            <dt>Total</dt><dd>{receipt.financial_summary.total_fee_formatted}</dd>
+            <dt>Payment status</dt><dd>{receipt.payment_status}</dd>
+          </dl>
+        </section>}
       </section> : <>
           <ol className="m6-steps" aria-label="Booking progress">
           {steps.map((label, index) => <li key={label} aria-current={step === index ? 'step' : undefined}
@@ -131,7 +211,8 @@ export function BookingPage() {
               {fields.map(([field, name, type]) => {
                 const key = prefix + '-' + field;
                 return <label className="m6-field" key={key}>{name}
-                  <input required type={type} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                  <Input required type={type} name={key} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                    autoComplete={field === 'zone' ? 'off' : `section-${prefix} ${addressAutocomplete[field]}`}
                     onChange={event => change(key, event.target.value)} />
                 </label>;
               })}
@@ -154,7 +235,7 @@ export function BookingPage() {
           </fieldset>}
           {step === 2 && quote && <>
             <h2>Delivery quote</h2>
-            <p className="m6-quote-total" data-testid="quote-price-cents" data-amount-cents={quote.total_fee_cents}>{money}</p>
+            <p className="m6-quote-total" data-testid="quote-price-cents" data-amount-cents={quote.fee_cents}>{money}</p>
             <p className="m6-muted">Valid until {new Date(quote.expires_at).toLocaleString()}</p>
           </>}
           {step === 3 && <><h2>Review your booking</h2>
