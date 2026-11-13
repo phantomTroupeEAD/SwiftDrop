@@ -194,6 +194,27 @@ func (h *Handler) GetParcel(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, NewParcelResponse(parcel))
 }
 
+// GetParcelReceipt returns the accepted booking price to authorized callers.
+func (h *Handler) GetParcelReceipt(w http.ResponseWriter, r *http.Request) {
+	principal, errSpec := requireAuthenticatedPrincipal(r.Context())
+	if errSpec != nil {
+		writeErrorSpec(w, r, *errSpec)
+		return
+	}
+
+	parcel, err := h.getParcelUseCase.Execute(r.Context(), application.GetParcelQuery{
+		ParcelID: strings.TrimSpace(r.PathValue("id")),
+		Caller:   callerContextFromPrincipal(principal),
+	})
+	if err != nil {
+		writeParcelError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	_ = httpx.WriteData(w, http.StatusOK, newReceiptResponse(parcel))
+}
+
 // GetParcelHistory godoc
 // @Summary      Retrieve authorized chronological parcel status history
 // @Description  Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, or admin.

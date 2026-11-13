@@ -1,6 +1,6 @@
 # Parcel Management API Specifications (`/api/v1/parcels`)
 
-> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Implemented HTTP Transport (`POST /api/v1/parcels`, `GET /api/v1/parcels/{id}`, `GET /api/v1/parcels/{id}/history` Ready for Startup Wiring; List/Receipt/Cancel Deferred)
+> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Booking, parcel detail, history, and receipts implemented. List and cancellation deferred.
 
 ---
 
@@ -243,12 +243,43 @@ Wrapped in `httpx.WriteData` (`{"data": ...}`):
 
 ---
 
-## 5. Deferred Endpoints (Planned — Not Yet Implemented in HTTP Transport)
+## 5. Get Booking Receipt
+
+`GET /api/v1/parcels/{id}/receipt` uses the same Bearer authentication, ownership checks, and errors as Get Parcel. It returns `200 OK` with the following `data` envelope and a `Cache-Control: no-store` header.
+
+```json
+{
+  "data": {
+    "receipt_number": "RCP-SD-20261025-A3X9K7",
+    "parcel_id": "7f8b3c10-e29b-4b14-9f44-8d961234ef01",
+    "tracking_number": "SD-20261025-A3X9K7",
+    "booking_date": "2026-10-25T14:32:00Z",
+    "customer_name": "Kasun Perera",
+    "service_level": "STANDARD",
+    "financial_summary": {
+      "currency": "LKR",
+      "price_cents": 55000,
+      "total_fee_formatted": "LKR 550.00",
+      "pricing_rule_id": "pr-rule-zone-w-c-v2",
+      "pricing_rule_version": 2
+    },
+    "package_summary": {
+      "chargeable_weight_kg": 2.5,
+      "origin_zone": "ZONE_WESTERN_01",
+      "destination_zone": "ZONE_CENTRAL_01"
+    },
+    "payment_status": "NOT_TRACKED"
+  }
+}
+```
+
+The name comes from the booking's pickup contact. The amount and pricing rule come from the accepted booking. The parcel module does not track payment settlement.
+
+## 6. Deferred Endpoints (Planned — Not Yet Implemented in HTTP Transport)
 
 > [!NOTE]
 > **Implementation Status Notice:**
 > The routes below are deferred from the current HTTP transport milestone and are **not** registered in `internal/parcels/transport/routes.go`.
 
 - `GET /api/v1/parcels`: Paginated list of parcels visible to caller (`CUSTOMER`, `MERCHANT`, `ADMIN`).
-- `GET /api/v1/parcels/{id}/receipt`: Financial booking receipt snapshot derived from the immutable accepted-price record.
 - `POST /api/v1/parcels/{id}/cancel`: Cancel parcel prior to pickup (`CREATED -> CANCELLED`; application lifecycle support already exists in `TransitionParcelStatusUseCase`).
