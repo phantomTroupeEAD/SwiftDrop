@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -33,8 +32,7 @@ type AppContainer struct {
 }
 
 // BuildAppContainer wires all dependencies and sets up HTTP routes.
-// It prioritizes PostgreSQL if running, automatically applies migrations,
-// and gracefully falls back to mock storage if PostgreSQL is not yet started.
+// It connects to PostgreSQL, automatically applies migrations, and wires real infrastructure adapters.
 func BuildAppContainer() *AppContainer {
 	config.LoadEnv(".env", "../.env", "../../.env")
 
@@ -42,8 +40,7 @@ func BuildAppContainer() *AppContainer {
 	hasher := infrastructure.NewStandardPasswordHasher()
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		// #nosec G101 -- Local development fallback key
-		jwtSecret = "swiftdrop-development-secret-key-change-in-production-32chars" //nolint:gosec
+		log.Println("[WARN] JWT_SECRET environment variable is not set.")
 	}
 	tokenProvider := infrastructure.NewJWTTokenProvider(jwtSecret)
 
@@ -51,54 +48,44 @@ func BuildAppContainer() *AppContainer {
 	var tokenRepo application.TokenRepository
 	var auditWriter application.AuditWriter
 	var oauthRepo application.OAuthRepository
+	var otpRepo application.OTPRepository
 	var dbConn *sql.DB
-	storageType := "In-Memory (Mock Role Accounts)"
+	storageType := "PostgreSQL (Disconnected)"
 
-	// 2. Attempt PostgreSQL Connection
+	// 2. Connect to PostgreSQL
 	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://swiftdrop:swiftdrop_dev@localhost:5432/swiftdrop_db?sslmode=disable"
-	}
+	if dbURL != "" {
+		db, err := sql.Open("postgres", dbURL)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
 
-	db, err := sql.Open("postgres", dbURL)
-	if err == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
+			if pingErr := db.PingContext(ctx); pingErr == nil {
+				log.Println("[INFO] Successfully connected to PostgreSQL database.")
 
-		if pingErr := db.PingContext(ctx); pingErr == nil {
-			log.Println("[INFO] Successfully connected to PostgreSQL database.")
+				if migErr := migrations.RunMigrations(context.Background(), db); migErr != nil {
+					log.Printf("[WARN] Auto-migration error: %v\n", migErr)
+				}
 
-			// Auto-run migrations & seed mock accounts in PostgreSQL
-			if migErr := migrations.RunMigrations(context.Background(), db); migErr != nil {
-				log.Printf("[WARN] Auto-migration error: %v\n", migErr)
+				userRepo = infrastructure.NewPostgresUserRepository(db)
+				tokenRepo = infrastructure.NewPostgresTokenRepository(db)
+				auditWriter = infrastructure.NewPostgresAuditWriter(db)
+				oauthRepo = infrastructure.NewPostgresOAuthRepository(db)
+				otpRepo = infrastructure.NewPostgresOTPRepository(db)
+				dbConn = db
+				storageType = "PostgreSQL Database (Authoritative)"
+			} else {
+				_ = db.Close()
+				log.Printf("[ERROR] PostgreSQL is unreachable at %s: %v\n", dbURL, pingErr)
 			}
-
-			userRepo = infrastructure.NewPostgresUserRepository(db)
-			tokenRepo = infrastructure.NewPostgresTokenRepository(db)
-			auditWriter = infrastructure.NewPostgresAuditWriter(db)
-			oauthRepo = infrastructure.NewPostgresOAuthRepository(db)
-			dbConn = db
-			storageType = "PostgreSQL Database (Authoritative)"
 		} else {
-			log.Printf("[NOTICE] PostgreSQL is not running at %s.\n", dbURL)
-			log.Println("[NOTICE] Using pre-seeded mock accounts so you and your team can develop immediately!")
+			log.Printf("[ERROR] Invalid DATABASE_URL: %v\n", err)
 		}
+	} else {
+		log.Println("[ERROR] DATABASE_URL environment variable is not set.")
 	}
 
-	// 3. Fallback to Pre-Seeded Mock Repository if PostgreSQL is offline
-	if userRepo == nil {
-		userRepo = infrastructure.NewMockUserRepository(hasher)
-		tokenRepo = infrastructure.NewMockTokenRepository()
-		auditWriter = infrastructure.NewMockAuditWriter()
-		oauthRepo = infrastructure.NewMockOAuthRepository()
-	}
-
-	// 4. Application Services
-	otpRepo := infrastructure.NewMemoryOTPRepository()
-
-	// Email Sender Adapter:
-	// - If SMTP_HOST is configured in environment variables, sends real emails via SMTPEmailSender.
-	// - Otherwise, falls back to DevEmailSender (prints 6-digit OTP to server console for local testing).
+	// 3. Email Sender Adapter (SMTP required for transactional emails)
 	var emailSender application.EmailSender
 	smtpHost := os.Getenv("SMTP_HOST")
 	if smtpHost != "" {
@@ -113,12 +100,13 @@ func BuildAppContainer() *AppContainer {
 			smtpFrom = "no-reply@swiftdrop.com"
 		}
 		emailSender = infrastructure.NewSMTPEmailSender(smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom)
-		log.Printf("[INFO] Using production SMTP Email Sender (%s:%s)\n", smtpHost, smtpPort)
+		log.Printf("[INFO] Using SMTP Email Sender (%s:%s)\n", smtpHost, smtpPort)
 	} else {
-		emailSender = infrastructure.NewDevEmailSender()
-		log.Println("[INFO] Using Dev Email Sender (OTP printed to console). Set SMTP_HOST in .env to send real emails.")
+		emailSender = infrastructure.NewUnconfiguredEmailSender()
+		log.Println("[WARN] SMTP_HOST is not configured. Transactional OTP emails will fail until SMTP_HOST is set.")
 	}
 
+	// 4. Application Services
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	oidcClient := infrastructure.NewGoogleOIDCClient(googleClientID)
 
@@ -299,20 +287,8 @@ func handleHealthLive(w http.ResponseWriter, _ *http.Request) {
 func handleHealthReady(dbConn *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		appEnv := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
-		if appEnv == "" {
-			appEnv = "local"
-		}
 
 		if dbConn == nil {
-			if appEnv == "local" {
-				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"status":   "ok",
-					"database": "mock",
-				})
-				return
-			}
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"status":   "degraded",

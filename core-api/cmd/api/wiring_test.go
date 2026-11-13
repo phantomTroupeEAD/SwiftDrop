@@ -32,9 +32,9 @@ func TestHealthEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("GET /health/ready in local fallback returns 200 mock", func(t *testing.T) {
+	t.Run("GET /health/ready when DB unreachable returns 503 degraded", func(t *testing.T) {
 		_ = os.Setenv("APP_ENV", "local")
-		// Point to unreachable DB to ensure fallback
+		// Point to unreachable DB
 		_ = os.Setenv("DATABASE_URL", "postgres://none:none@127.0.0.1:54399/none?sslmode=disable")
 
 		container := BuildAppContainer()
@@ -42,14 +42,14 @@ func TestHealthEndpoints(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		container.Mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200 OK in local fallback, got %d", rec.Code)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503 Service Unavailable when DB unreachable, got %d", rec.Code)
 		}
 
 		var body map[string]string
 		_ = json.NewDecoder(rec.Body).Decode(&body)
-		if body["database"] != "mock" && body["database"] != "connected" {
-			t.Errorf("expected mock or connected, got %v", body["database"])
+		if body["database"] != "down" {
+			t.Errorf("expected database 'down', got %v", body["database"])
 		}
 	})
 

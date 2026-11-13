@@ -112,9 +112,9 @@ func TestDispatchAndDeliveryWiring_AgreementA2Preserved(t *testing.T) {
 	container.Mux.ServeHTTP(recLive, reqLive)
 	assert.Equal(t, http.StatusOK, recLive.Code)
 
-	// 2. Verify /health/ready is unaffected (checks DB ping only, not storage)
+	// 2. Verify /health/ready returns 503 when DB is unreachable
 	reqReady := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	recReady := httptest.NewRecorder()
 	container.Mux.ServeHTTP(recReady, reqReady)
-	assert.Equal(t, http.StatusOK, recReady.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, recReady.Code)
 }

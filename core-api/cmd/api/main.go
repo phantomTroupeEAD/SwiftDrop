@@ -37,18 +37,17 @@ func main() {
 	}
 
 	container := BuildAppContainer()
+	if container.DB == nil {
+		log.Fatal("[FATAL] PostgreSQL database connection is required to start SwiftDrop Core API. Set DATABASE_URL and ensure PostgreSQL is running.")
+	}
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Fatal("[FATAL] JWT_SECRET environment variable is required.")
+	}
 
 	fmt.Println("==================================================================")
 	fmt.Println("   SwiftDrop Core API (Modular Monolith) — Identity & Auth Ready")
-	fmt.Println("   Storage: 🐘 PostgreSQL (Authoritative Database)")
+	fmt.Println("   Storage:", container.StorageType)
 	fmt.Println("==================================================================")
-	fmt.Println(" 5 Mock Accounts Seeded in PostgreSQL:")
-	fmt.Println(" 1. ADMIN:      admin@swiftdrop.local      / AdminPassword123!")
-	fmt.Println(" 2. DISPATCHER: dispatcher@swiftdrop.local / Dispatcher123!")
-	fmt.Println(" 3. COURIER:    courier@swiftdrop.local    / CourierPassword123!")
-	fmt.Println(" 4. MERCHANT:   merchant@vendor.com        / Merchant123! (Tenant: mrc_01HMERCHANTTENANT00001)")
-	fmt.Println(" 5. CUSTOMER:   customer@swiftdrop.local   / CustomerPassword123!")
-	fmt.Println(" -----------------------------------------------------------------")
 	fmt.Println(" Auth REST API Endpoints:")
 	fmt.Println(" - POST http://localhost:" + port + "/api/v1/auth/login")
 	fmt.Println(" - GET  http://localhost:" + port + "/api/v1/auth/me (Bearer Token)")
