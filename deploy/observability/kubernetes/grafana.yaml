@@ -1,0 +1,85 @@
+# Grafana with the provisioned Prometheus datasource and the SwiftDrop Overview dashboard.
+# Admin password comes from the grafana-admin Secret:
+#   kubectl create secret generic grafana-admin -n swiftdrop --from-literal=GF_SECURITY_ADMIN_PASSWORD=<strong password>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: GF_SECURITY_ADMIN_PASSWORD
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /var/lib/grafana/dashboards/swiftdrop-overview.json
+          ports:
+            - containerPort: 3000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+---
+# ClusterIP only: kubectl port-forward svc/grafana 3001:3000 -n swiftdrop. Not exposed publicly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: swiftdrop
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

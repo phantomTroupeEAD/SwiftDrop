@@ -1,0 +1,9 @@
+# Lets deploy/kubernetes/kustomization.yaml include Member 7's gateway CRDs.
+# Added by Member 9 with Member 7's agreement. Do not put environment differences here:
+# k3d and production changes are patches in deploy/overlays/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ingressroutes.yaml
+  - middlewares.yaml

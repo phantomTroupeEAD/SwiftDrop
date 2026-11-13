@@ -3,11 +3,12 @@ package webhook
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/swiftdrop/messaging/internal/config"
 )
 
 var (
@@ -22,16 +23,12 @@ type Decryptor struct {
 }
 
 // NewDecryptor initializes Decryptor with primary key from WEBHOOK_SECRET_ENCRYPTION_KEY.
+// Accepts 64-character hexadecimal or base64-encoded 32-byte AES-256 keys.
 // Also loads WEBHOOK_SECRET_ENCRYPTION_KEY_V2, V3 etc. if present for key rotation (Decision D3).
-func NewDecryptor(primaryKeyHex string) (*Decryptor, error) {
-	primaryKeyHex = strings.TrimSpace(primaryKeyHex)
-	if len(primaryKeyHex) != 64 {
-		return nil, fmt.Errorf("primary encryption key must be exactly 64 hex characters (32 bytes), got length %d", len(primaryKeyHex))
-	}
-
-	key1, err := hex.DecodeString(primaryKeyHex)
+func NewDecryptor(primaryKey string) (*Decryptor, error) {
+	key1, err := config.DecodeAES256Key(primaryKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode primary encryption key hex: %w", err)
+		return nil, fmt.Errorf("failed to decode primary encryption key: %w", err)
 	}
 
 	keys := map[int][]byte{
@@ -42,8 +39,8 @@ func NewDecryptor(primaryKeyHex string) (*Decryptor, error) {
 	for v := 2; v <= 10; v++ {
 		envName := fmt.Sprintf("WEBHOOK_SECRET_ENCRYPTION_KEY_V%d", v)
 		val := strings.TrimSpace(os.Getenv(envName))
-		if val != "" && len(val) == 64 {
-			if kBytes, err := hex.DecodeString(val); err == nil {
+		if val != "" {
+			if kBytes, err := config.DecodeAES256Key(val); err == nil {
 				keys[v] = kBytes
 			}
 		}

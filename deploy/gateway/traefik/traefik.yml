@@ -1,5 +1,6 @@
 # Traefik Static Configuration (SwiftDrop Gateway)
-# Version: 3.x
+# Version: 3.x. Same file locally and in Docker Compose. Kubernetes uses the
+# CRD files in kubernetes/ with the same routes and middlewares.
 
 global:
   checkNewVersion: false
@@ -16,8 +17,8 @@ accessLog:
       - "400-599"
 
 api:
-  dashboard: true      # Enabled for local inspection; secure with auth or disable in production
-  insecure: true       # WARNING: Development only. Set to false in Kubernetes/production (use kubectl port-forward).
+  dashboard: true      # served only on the internal "traefik" entry point below
+  insecure: false      # never expose the dashboard on its own open port (GS-12)
 
 entryPoints:
   web:
@@ -53,6 +54,11 @@ entryPoints:
         - "2405:8100::/32"
         - "2a06:98c0::/29"
         - "2c0f:f248::/32"
+    transport:
+      respondingTimeouts:
+        readTimeout: 60s    # slow-upload guard (slowloris)
+        writeTimeout: 0s    # must stay 0: SSE streams are long-lived
+        idleTimeout: 180s
   websecure:
     address: ":443"
     forwardedHeaders:
@@ -86,6 +92,16 @@ entryPoints:
         - "2405:8100::/32"
         - "2a06:98c0::/29"
         - "2c0f:f248::/32"
+    transport:
+      respondingTimeouts:
+        readTimeout: 60s    # slow-upload guard (slowloris)
+        writeTimeout: 0s    # must stay 0: SSE streams are long-lived
+        idleTimeout: 180s
+  traefik:                # internal only: dashboard + ping. Compose publishes it on 127.0.0.1:8090;
+    address: ":8090"      # never publish it through a Service or IngressRoute.
+
+ping:
+  entryPoint: traefik
 
 providers:
   file:

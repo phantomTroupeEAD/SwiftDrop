@@ -227,6 +227,8 @@ All settings, ordered by key.
   "data": [
     { "key": "ops.board_refresh_seconds", "value": 30, "value_type": "INTEGER", "description": "Dispatch board polling interval", "version": 1 },
     { "key": "ops.maintenance_banner", "value": "", "value_type": "STRING", "description": "Optional message shown on ops screens", "version": 1 },
+    { "key": "parcels.max_cod_cents", "value": 3500000, "value_type": "INTEGER", "description": "Highest cash-on-delivery amount, in LKR cents (0 to 10000000)", "version": 1 },
+    { "key": "parcels.max_weight_kg", "value": 25, "value_type": "DECIMAL", "description": "Heaviest parcel accepted, in kilograms (0.5 to 30)", "version": 1 },
     { "key": "reports.max_range_days", "value": 92, "value_type": "INTEGER", "description": "Longest report period in days", "version": 1 }
   ]
 }
@@ -245,7 +247,7 @@ Replaces the value of one allowlisted setting and writes a `SETTING_CHANGED` aud
 | Field | Type | Rules |
 | :-- | :-- | :-- |
 | `version` | integer | required, the current version |
-| `value` | JSON | required, at most 4096 bytes, type and range per key (see README §2.6) |
+| `value` | JSON | required, at most 4096 bytes, type and range per key (see README §2.6). `parcels.max_weight_kg` is a number from 0.5 to 30; `parcels.max_cod_cents` is a whole number of LKR cents from 0 to 10000000 |
 | `reason` | string | required, 10 to 500 characters |
 
 **200:**

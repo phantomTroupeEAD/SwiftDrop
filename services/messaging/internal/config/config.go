@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -130,7 +131,7 @@ func LoadConfig(defaultProbePort int) (*Config, error) {
 
 	allowPrivateHosts := getEnvBool("WEBHOOK_ALLOW_PRIVATE_HOSTS", false)
 
-	// Encryption key validation: must be 64 hex chars (32 bytes AES-256 key)
+	// Encryption key validation: accepts 64 hex characters or base64 (32 bytes AES-256 key)
 	encKey := getEnv("WEBHOOK_SECRET_ENCRYPTION_KEY", "")
 	if encKey == "" {
 		if appEnv == "production" {
@@ -139,11 +140,8 @@ func LoadConfig(defaultProbePort int) (*Config, error) {
 		// Default development fallback key: 64 hex characters (32 bytes of 0x01)
 		encKey = "0101010101010101010101010101010101010101010101010101010101010101"
 	}
-	if len(encKey) != 64 {
-		return nil, fmt.Errorf("%w: WEBHOOK_SECRET_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)", ErrInvalidConfig)
-	}
-	if _, err := hex.DecodeString(encKey); err != nil {
-		return nil, fmt.Errorf("%w: WEBHOOK_SECRET_ENCRYPTION_KEY must be valid hex: %v", ErrInvalidConfig, err)
+	if _, err := DecodeAES256Key(encKey); err != nil {
+		return nil, fmt.Errorf("%w: invalid WEBHOOK_SECRET_ENCRYPTION_KEY: %v", ErrInvalidConfig, err)
 	}
 
 	deliveryLeaseSeconds := getEnvInt("DELIVERY_LEASE_SECONDS", 120)
@@ -240,4 +238,41 @@ func getEnvBool(key string, def bool) bool {
 		return def
 	}
 	return parsed
+}
+
+// DecodeAES256Key decodes an AES-256 key from a 64-character hex string or a base64 string.
+// It returns the 32-byte binary key or an error if invalid.
+func DecodeAES256Key(raw string) ([]byte, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, errors.New("empty encryption key")
+	}
+
+	// 1. Try 64-character Hex
+	if len(raw) == 64 {
+		if b, err := hex.DecodeString(raw); err == nil && len(b) == 32 {
+			return b, nil
+		}
+	}
+
+	// 2. Try Base64 variants (StdEncoding, RawStdEncoding, URLEncoding, RawURLEncoding)
+	if b, err := base64.StdEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	if b, err := base64.RawStdEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	if b, err := base64.URLEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	if b, err := base64.RawURLEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+
+	// 3. Fallback hex decode (if hex was valid hex but not exactly 64 length)
+	if b, err := hex.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+
+	return nil, fmt.Errorf("encryption key must decode to exactly 32 bytes (AES-256) via 64-character hex or base64 (got length %d)", len(raw))
 }

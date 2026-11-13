@@ -79,6 +79,17 @@ func TestLoadConfig_EncryptionKeyValidation(t *testing.T) {
 	if cfg.WebhookSecretEncryptionKey != validKey {
 		t.Errorf("expected key %s, got %s", validKey, cfg.WebhookSecretEncryptionKey)
 	}
+
+	// 4. Valid Base64 key (32 bytes)
+	validB64 := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+	os.Setenv("WEBHOOK_SECRET_ENCRYPTION_KEY", validB64)
+	cfgB64, err := LoadConfig(8082)
+	if err != nil {
+		t.Fatalf("expected success with valid base64 key, got: %v", err)
+	}
+	if cfgB64.WebhookSecretEncryptionKey != validB64 {
+		t.Errorf("expected key %s, got %s", validB64, cfgB64.WebhookSecretEncryptionKey)
+	}
 }
 
 func TestLoadConfig_SMTPSecurityRules(t *testing.T) {

@@ -76,6 +76,66 @@ func TestManager_DisconnectedBehavior(t *testing.T) {
 	}
 }
 
+func TestManager_WaitForConnection_Timeout(t *testing.T) {
+	mgr := NewManager("amqp://guest:guest@localhost:5672/", nil)
+	defer mgr.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := mgr.WaitForConnection(ctx)
+	if err != context.DeadlineExceeded {
+		t.Errorf("expected DeadlineExceeded, got %v", err)
+	}
+}
+
+func TestManager_WaitForConnection_CloseUnblocks(t *testing.T) {
+	mgr := NewManager("amqp://guest:guest@localhost:5672/", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- mgr.WaitForConnection(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	_ = mgr.Close()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Errorf("expected error after close, got nil")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("WaitForConnection did not unblock after Close()")
+	}
+}
+
+func TestManager_Connect_ContextExpiryStartsRetry(t *testing.T) {
+	// Point to an invalid port where connection fails immediately
+	mgr := NewManager("amqp://guest:guest@127.0.0.1:59999/", nil)
+	defer mgr.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	err := mgr.Connect(ctx)
+	if err == nil {
+		t.Fatal("expected Connect to fail on unreachable address")
+	}
+
+	// Verify manager is in reconnecting state
+	mgr.mu.RLock()
+	reconnecting := mgr.reconnecting
+	mgr.mu.RUnlock()
+
+	if !reconnecting {
+		t.Errorf("expected reconnecting=true after Connect context expired, got false")
+	}
+}
+
 func TestIntegration_TopologyAndRoundTrip(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("skipping integration test; set INTEGRATION=1 to run against active RabbitMQ")

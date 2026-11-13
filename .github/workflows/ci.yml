@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.99.8
         with:
           extra_args: --only-verified
 
@@ -68,7 +68,7 @@ jobs:
       - name: Run golangci-lint (with depguard)
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
           working-directory: core-api
           args: --timeout=5m
         if: hashFiles('core-api/go.mod') != ''
@@ -125,7 +125,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
           working-directory: services/messaging
           args: --timeout=5m
 
@@ -220,3 +220,23 @@ jobs:
           tags: ${{ matrix.service.name }}:test
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+
+  deploy-config-validation:
+    name: Compose & Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose file
+        run: docker compose -f deploy/docker-compose.yml config --quiet
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      # CRDs (KEDA ScaledObject, Traefik IngressRoute) have no built-in schema, so they are skipped.
+      - name: Validate Kubernetes manifests
+        run: kubeconform -strict -summary -ignore-missing-schemas deploy/kubernetes deploy/observability/kubernetes

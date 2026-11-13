@@ -33,6 +33,8 @@ Zones carry **no money**. Fees, including any per-zone charge, belong to Member 
    | `reports.max_range_days` | integer | 1 to 366 |
    | `ops.board_refresh_seconds` | integer | 10 to 300 |
    | `ops.maintenance_banner` | string | at most 200 characters |
+   | `parcels.max_weight_kg` | decimal | 0.5 to 30 |
+   | `parcels.max_cod_cents` | integer (LKR cents) | 0 to 10,000,000 |
 
    Any other key is `422 SETTING_UNKNOWN`, so secrets or arbitrary keys cannot be stored this way. A value is at most 4096 bytes.
 7. **A reason is required** (10 to 500 characters) to enable or disable a zone and to change a setting. It is stored in `audit_logs.reason`.
@@ -80,6 +82,7 @@ This module writes **no outbox events** and consumes none. Zone and setting chan
 | `delivery_zones` | `20261109000100_admin_create_delivery_zones` | `id VARCHAR(32)` PK, `code` unique, `enabled`, `version`, `boundary_polygon JSONB` (not used by the API yet) |
 | `zone_postal_codes` | `20261109000100_admin_create_delivery_zones` | `prefix` PK, `zone_id` FK `ON DELETE CASCADE` |
 | `system_settings` | `20261109000100_admin_create_delivery_zones` | `key` PK, `value JSONB`, `value_type`, `version`, `updated_by` FK `users(id)`. Seeds the 3 allowlisted keys |
+| `system_settings` (extra) | `20261112000100_admin_add_parcel_settings` | Adds the `DECIMAL` value type and seeds `parcels.max_weight_kg` (25) and `parcels.max_cod_cents` (3500000) |
 | `audit_logs` | `20261109000200_admin_create_audit_logs` | Shared with Member 1. Append-only trigger; `UPDATE`/`DELETE` revoked from `swiftdrop_app` when that role exists |
 
 Other modules may write `audit_logs` rows in their own transactions. The columns and the `actor_role` CHECK (`ADMIN`, `DISPATCHER`, `COURIER`, `MERCHANT`, `CUSTOMER`, `SYSTEM`) are the contract.
@@ -119,7 +122,7 @@ They apply only the migrations this module needs (identity's `users` table and t
 | Delivery report (`GET /api/v1/admin/reports/deliveries`, ADMIN and DISPATCHER) | Endpoint done. Numbers come from a stand-in until Members 2 and 3 implement `application.ReportReader`; `source` says so |
 | Merchant approval routes (A-11 to A-13) | Served by Member 4's module at the same paths (list, one, action). Not mounted here: a second registration would make Core API panic at startup. Covered by a wiring test |
 | Metrics (`admin_changes_total`, `admin_conflicts_total`) | Not started. Core API has no metrics package yet |
-| Demo zone seed data | Not included. Admins create zones through the API |
+| Demo zone seed data | Done. `go run ./cmd/seed` (after `go run ./cmd/migrate`) loads 7 Sri Lankan zones (`ZONE_COLOMBO_01` to `_03`, `ZONE_NEGOMBO_01`, `ZONE_KANDY_01`, `ZONE_GALLE_01`, and `ZONE_DEMO_DISABLED`, which is disabled), their 12 prefixes and the 5 settings. Safe to run twice: existing zones and settings are left as they are. Refuses to run when `APP_ENV=production`. No fees: Member 2's seed prices these ids |
 
 ### Known limitation in shared code
 
@@ -133,5 +136,8 @@ They apply only the migrations this module needs (identity's `users` table and t
 | :-- | :-- | :-- |
 | 2026-10-21 | Module baseline created | Architecture setup |
 | 2026-10-25 | Contract draft (surcharges, `/system-settings`) | Post-submission alignment |
+| 2026-11-12 | Added settings `parcels.max_weight_kg` (0.5 to 30) and `parcels.max_cod_cents` (0 to 10M, LKR cents) with migration `20261112000100` (adds `DECIMAL` value type). Added `cmd/seed`: 7 demo zones, prefixes, 5 settings, repeatable, refuses production (Doc 5 section 10.1) | Member 7 |
+| 2026-11-12 | `tests/openapi_contract_test.go` now mounts the admin routes (with a DB), because swagger.json documents them and the contract test requires every documented route to exist when `INTEGRATION=1` | Member 7 |
+| 2026-11-12 | Added swag annotations to the 10 admin handlers so they show in Swagger UI (`/swagger/`). Regenerated `docs/swagger.json` and the copy in `internal/events/swagger/` with `make swagger` | Member 7 |
 | 2026-11-09 | Zone and audit lists use `page`/`per_page` with `meta` (api-conventions 2.2) instead of `limit`. Added `GET /api/v1/admin/reports/deliveries` (ADMIN, DISPATCHER) behind a `ReportReader` interface with a labelled stand-in. Merchant approval routes left to Member 4's module (duplicate paths) | Member 7 |
 | 2026-11-09 | Implemented zones, postal prefixes, settings and audit trail, ported from the Member 7 draft (`docs/drafts/member-07-dispatcher-admin-web-gateway/doc8-local`) onto `database/sql` and the Core API platform. Removed surcharges (pricing owns fees) and the unimplemented report contract | Member 7 |

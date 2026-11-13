@@ -1,0 +1,72 @@
+# Kubernetes (CRD) form of the routers in ../dynamic-routes.yml. Owner: Member 7.
+# One host; paths decide the service. Replace the placeholder host when the production
+# domain is fixed. TLS = Cloudflare Origin CA certificate (ADR-002, secret traefik-origin-tls).
+# Explicit priorities keep the same order as the file provider (Traefik otherwise ranks by
+# rule length). Backends are ClusterIP Services in namespace swiftdrop.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: swiftdrop, namespace: swiftdrop}
+spec:
+  entryPoints: ["websecure"]
+  tls: {secretName: traefik-origin-tls}
+  routes:
+    # Tracking SSE streams: open-stream cap, no buffering (GS-09)
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/tracking/(public/)?[^/]+/stream$`)
+      kind: Rule
+      priority: 100
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}, {name: stream-inflight}]
+      services: [{name: tracking-api, port: 8081, serversTransport: stream-transport}]
+    # Tracking API, exact prefix (GS-03)
+    - match: Host(`swiftdrop.example.com`) && (Path(`/api/v1/tracking`) || PathPrefix(`/api/v1/tracking/`))
+      kind: Rule
+      priority: 90
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: tracking-ratelimit}]
+      services: [{name: tracking-api, port: 8081, serversTransport: stream-transport}]
+    # AI Assistant REST API (GS-20)
+    - match: Host(`swiftdrop.example.com`) && (Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`))
+      kind: Rule
+      priority: 80
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: ai-ratelimit}, {name: json-limit}]
+      services: [{name: ai-assistant, port: 8000, serversTransport: ai-transport}]
+    # FastMCP remote SSE server: stream, so no buffering
+    - match: Host(`swiftdrop.example.com`) && (Path(`/mcp`) || PathPrefix(`/mcp/`))
+      kind: Rule
+      priority: 75
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: ai-ratelimit}, {name: stream-inflight}]
+      services: [{name: ai-assistant, port: 8002, serversTransport: ai-transport}]
+    # Login brute-force guard (GS-06)
+    - match: Host(`swiftdrop.example.com`) && Path(`/api/v1/auth/login`)
+      kind: Rule
+      priority: 70
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: login-ratelimit}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    # Proof photo upload, 10 MB (GS-08)
+    - match: Host(`swiftdrop.example.com`) && PathRegexp(`^/api/v1/deliveries/[^/]+/proof-photo$`)
+      kind: Rule
+      priority: 60
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: upload-limit-middleware}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    # Merchant API (GS-21)
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api/v1/merchant/`)
+      kind: Rule
+      priority: 55
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: merchant-ratelimit}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    # Everything else in v1, 1 MB JSON (GS-07)
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api/v1`)
+      kind: Rule
+      priority: 50
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: cors-middleware}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    # Unknown API versions answer 404 JSON from core-api, not the SPA (GS-04)
+    - match: Host(`swiftdrop.example.com`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 2
+      middlewares: [{name: strip-identity-headers}, {name: security-headers}, {name: json-limit}]
+      services: [{name: core-api, port: 8080, serversTransport: backend-transport}]
+    # SPA
+    - match: Host(`swiftdrop.example.com`)
+      kind: Rule
+      priority: 1
+      middlewares: [{name: security-headers}, {name: spa-csp}]
+      services: [{name: web, port: 3000, serversTransport: backend-transport}]

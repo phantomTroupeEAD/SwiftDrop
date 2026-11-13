@@ -1,0 +1,95 @@
+# Least-privilege identity for automatic deploys (.github/workflows/deploy.yml on the VM runner).
+# Apply ONCE with the cluster-admin kubeconfig (not part of the Kustomize base):
+#   kubectl apply -f deploy/cd/deployer-rbac.yaml
+# It can manage everything inside the swiftdrop namespace (what deploy/overlays/prod contains),
+# read/patch only that one Namespace object, and nothing else: no kube-system, no keda, no nodes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cd-deployer
+  namespace: swiftdrop
+automountServiceAccountToken: false
+---
+# Built-in "admin" role, limited to the swiftdrop namespace by this RoleBinding.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cd-deployer-admin
+  namespace: swiftdrop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: cd-deployer
+    namespace: swiftdrop
+---
+# Custom resources used by the overlay that the built-in "admin" role may not cover.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cd-deployer-crds
+  namespace: swiftdrop
+rules:
+  - apiGroups: ["keda.sh"]
+    resources: ["scaledobjects", "triggerauthentications"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes", "middlewares", "serverstransports", "tlsoptions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Prometheus' RoleBinding refers to a Role created in the same apply. RBAC escalation checks
+  # need either that Role to exist already or "bind" on it; allow bind for that one Role only.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    resourceNames: ["prometheus-discovery"]
+    verbs: ["bind"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cd-deployer-crds
+  namespace: swiftdrop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cd-deployer-crds
+subjects:
+  - kind: ServiceAccount
+    name: cd-deployer
+    namespace: swiftdrop
+---
+# The overlay also contains the Namespace object itself: allow get/patch of "swiftdrop" only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cd-deployer-namespace
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["swiftdrop"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cd-deployer-namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cd-deployer-namespace
+subjects:
+  - kind: ServiceAccount
+    name: cd-deployer
+    namespace: swiftdrop
+---
+# Long-lived token for the runner's kubeconfig (written by deploy/cd/install-runner.sh).
+# Rotate: delete this Secret, re-apply this file, re-run install-runner.sh.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cd-deployer-token
+  namespace: swiftdrop
+  annotations:
+    kubernetes.io/service-account.name: cd-deployer
+type: kubernetes.io/service-account-token

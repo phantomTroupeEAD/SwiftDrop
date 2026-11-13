@@ -152,7 +152,13 @@ func WriteData(w http.ResponseWriter, status int, v any) error {
 
 // WriteError writes a canonical error envelope per api-conventions.md §2.3.
 func WriteError(w http.ResponseWriter, r *http.Request, status int, code, message string, details ...ErrorDetail) {
-	corrID := extractCorrelationID(r)
+	// Prefer the X-Request-ID response header: the platform RequestID middleware sets it to the
+	// validated (or freshly generated) correlation ID before any handler runs. The request header
+	// alone is missing when the client sends none, and is unvalidated when it does.
+	corrID := w.Header().Get("X-Request-ID")
+	if corrID == "" {
+		corrID = extractCorrelationID(r)
+	}
 
 	envelope := ErrorEnvelope{
 		Error: ErrorEnvelopeBody{

@@ -1,0 +1,30 @@
+# Observability stack for Kubernetes. Included by deploy/kubernetes/kustomization.yaml.
+# The alert rules and Grafana dashboard are the same files Compose mounts (one copy, no drift).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: swiftdrop
+
+resources:
+  - kubernetes/prometheus.yaml
+  - kubernetes/postgres-exporter.yaml
+  - kubernetes/grafana.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - prometheus.yml=prometheus-k8s.yml
+  - name: prometheus-alerts
+    files:
+      - alerts.yml
+  - name: grafana-datasources
+    files:
+      - prometheus.yml=grafana/provisioning/datasources/prometheus.yml
+  - name: grafana-dashboard-provider
+    files:
+      - swiftdrop.yml=grafana/provisioning/dashboards/swiftdrop.yml
+  - name: grafana-dashboards
+    files:
+      - grafana/dashboards/swiftdrop-overview.json

@@ -90,3 +90,44 @@ func TestConfigHelpers(t *testing.T) {
 		t.Error("expected IsLocal() to be true")
 	}
 }
+
+func TestLoadEnv(t *testing.T) {
+	tempFile, err := os.CreateTemp("", ".env.test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+
+	content := `
+# Sample comment
+TEST_LOADENV_A=simple_value
+TEST_LOADENV_B="quoted value"
+TEST_LOADENV_C='single quoted'
+TEST_LOADENV_PREEXISTING=from_file
+`
+	if _, err := tempFile.WriteString(content); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	tempFile.Close()
+
+	os.Setenv("TEST_LOADENV_PREEXISTING", "already_set")
+	defer os.Unsetenv("TEST_LOADENV_PREEXISTING")
+	defer os.Unsetenv("TEST_LOADENV_A")
+	defer os.Unsetenv("TEST_LOADENV_B")
+	defer os.Unsetenv("TEST_LOADENV_C")
+
+	LoadEnv(tempFile.Name())
+
+	if val := os.Getenv("TEST_LOADENV_A"); val != "simple_value" {
+		t.Errorf("expected 'simple_value', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOADENV_B"); val != "quoted value" {
+		t.Errorf("expected 'quoted value', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOADENV_C"); val != "single quoted" {
+		t.Errorf("expected 'single quoted', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOADENV_PREEXISTING"); val != "already_set" {
+		t.Errorf("expected pre-existing env to not be overwritten, got %q", val)
+	}
+}

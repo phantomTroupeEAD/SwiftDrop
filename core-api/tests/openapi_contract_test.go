@@ -16,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	adminapp "github.com/swiftdrop/core-api/internal/admin/application"
+	admininfra "github.com/swiftdrop/core-api/internal/admin/infrastructure"
+	admintransport "github.com/swiftdrop/core-api/internal/admin/transport"
 	eventstransport "github.com/swiftdrop/core-api/internal/events/transport"
 	identityapp "github.com/swiftdrop/core-api/internal/identity/application"
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
@@ -72,6 +75,29 @@ func (v *merchantVerifierAdapter) Verify(tok string) (merchantstransport.Claims,
 	}, nil
 }
 
+// contractAdminAuth mirrors cmd/api/wiring_admin.go's identityAuthAdapter (that type is
+// in package main, so tests cannot import it). It keeps the admin 401/403 contract.
+type contractAdminAuth struct {
+	sec *identitytransport.SecurityMiddleware
+}
+
+func (a contractAdminAuth) Require(roles ...string) func(http.Handler) http.Handler {
+	allowed := make([]identitydomain.Role, 0, len(roles))
+	for _, r := range roles {
+		allowed = append(allowed, identitydomain.Role(r))
+	}
+	byRole := identitytransport.RequireRole(allowed...)
+	return func(next http.Handler) http.Handler { return a.sec.Authenticate(byRole(next)) }
+}
+
+func (contractAdminAuth) Principal(ctx context.Context) (admintransport.Principal, bool) {
+	p, ok := identitytransport.GetPrincipal(ctx)
+	if !ok || p == nil {
+		return admintransport.Principal{}, false
+	}
+	return admintransport.Principal{UserID: p.UserID, Role: string(p.Role)}, true
+}
+
 func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenProvider) {
 	mux := http.NewServeMux()
 	tokenProv := identityinfra.NewJWTTokenProvider("test-contract-smoke-secret-key-32chars")
@@ -123,6 +149,18 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 		panic(err)
 	}
 	pricingtransport.RegisterRoutes(mux, pricingHandler, security)
+
+	// 5. Admin Operations (Member 07: zones, settings, audit log, delivery report).
+	// Needs PostgreSQL, like the real wiring: offline runs skip these routes (404).
+	if db != nil {
+		(&admintransport.Handlers{
+			Svc:          &adminapp.Service{Store: &admininfra.Store{DB: db, LockTimeout: 2 * time.Second}},
+			Auth:         contractAdminAuth{sec: security},
+			Log:          slog.Default(),
+			Reports:      adminapp.NoDeliveryData{},
+			ReportSource: adminapp.NoDeliveryDataSource,
+		}).Register(mux)
+	}
 
 	// 4. Standalone & Health Endpoints
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {

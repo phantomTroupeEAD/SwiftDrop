@@ -48,57 +48,205 @@ func NewManager(url string, logger *slog.Logger) *Manager {
 }
 
 // Connect dials RabbitMQ, declares topology, and configures publisher confirms.
+// It retries with exponential backoff until connected, the context expires, or Close is called.
+// If the connection cannot be established before ctx expires, a background retry loop
+// is started so the manager connects as soon as the broker becomes reachable.
 func (m *Manager) Connect(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	m.mu.RLock()
+	if m.closed {
+		m.mu.RUnlock()
+		return errors.New("amqp broker manager is closed")
+	}
 	if m.conn != nil && !m.conn.IsClosed() {
+		m.mu.RUnlock()
+		return nil
+	}
+	m.mu.RUnlock()
+
+	// 1. Try initial connection immediately
+	conn, pubCh, confirms, returns, err := m.dialAndSetup()
+	if err == nil {
+		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			_ = pubCh.Close()
+			_ = conn.Close()
+			return errors.New("amqp broker manager is closed")
+		}
+		m.conn = conn
+		m.pubCh = pubCh
+		m.confirms = confirms
+		m.returns = returns
+		m.reconnecting = false
+		select {
+		case <-m.notifyReady:
+		default:
+			close(m.notifyReady)
+		}
+		m.mu.Unlock()
+
+		m.logger.Info("connected to rabbitmq and declared topology")
+		go m.reconnectLoop(conn.NotifyClose(make(chan *amqp.Error, 1)))
 		return nil
 	}
 
-	return m.connectLocked(ctx)
+	// 2. Initial dial failed; retry within ctx window with exponential backoff
+	backoff := 500 * time.Millisecond
+	maxBackoff := 5 * time.Second
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Context expired before connection succeeded.
+			// Start background retry loop so manager connects as soon as broker is ready.
+			m.mu.Lock()
+			if !m.closed && !m.reconnecting {
+				m.reconnecting = true
+				go m.startRetryLoop()
+			}
+			m.mu.Unlock()
+			return fmt.Errorf("initial broker connect failed (retrying in background): %w: %v", ctx.Err(), err)
+		case <-time.After(backoff):
+		}
+
+		m.mu.RLock()
+		if m.closed {
+			m.mu.RUnlock()
+			return errors.New("amqp broker manager is closed")
+		}
+		if m.conn != nil && !m.conn.IsClosed() {
+			m.mu.RUnlock()
+			return nil
+		}
+		m.mu.RUnlock()
+
+		conn, pubCh, confirms, returns, err = m.dialAndSetup()
+		if err == nil {
+			m.mu.Lock()
+			if m.closed {
+				m.mu.Unlock()
+				_ = pubCh.Close()
+				_ = conn.Close()
+				return errors.New("amqp broker manager is closed")
+			}
+			m.conn = conn
+			m.pubCh = pubCh
+			m.confirms = confirms
+			m.returns = returns
+			m.reconnecting = false
+			select {
+			case <-m.notifyReady:
+			default:
+				close(m.notifyReady)
+			}
+			m.mu.Unlock()
+
+			m.logger.Info("connected to rabbitmq and declared topology")
+			go m.reconnectLoop(conn.NotifyClose(make(chan *amqp.Error, 1)))
+			return nil
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
 }
 
-func (m *Manager) connectLocked(_ context.Context) error {
-	conn, err := amqp.Dial(m.url)
+// dialAndSetup establishes a connection, declares topology, and configures confirm mode without holding the manager lock.
+func (m *Manager) dialAndSetup() (*amqp.Connection, *amqp.Channel, chan amqp.Confirmation, chan amqp.Return, error) {
+	conn, err := amqp.DialConfig(m.url, amqp.Config{
+		Dial: amqp.DefaultDial(5 * time.Second),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to dial rabbitmq: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to dial rabbitmq: %w", err)
 	}
 
 	pubCh, err := conn.Channel()
 	if err != nil {
 		_ = conn.Close()
-		return fmt.Errorf("failed to open publisher channel: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to open publisher channel: %w", err)
 	}
 
 	// 1. Declare Topology idempotently
 	if err := DeclareTopology(pubCh); err != nil {
 		_ = pubCh.Close()
 		_ = conn.Close()
-		return fmt.Errorf("failed to declare broker topology: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to declare broker topology: %w", err)
 	}
 
 	// 2. Put publisher channel into confirm mode
 	if err := pubCh.Confirm(false); err != nil {
 		_ = pubCh.Close()
 		_ = conn.Close()
-		return fmt.Errorf("failed to put channel into confirm mode: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to put channel into confirm mode: %w", err)
 	}
 
 	confirms := pubCh.NotifyPublish(make(chan amqp.Confirmation, 100))
 	returns := pubCh.NotifyReturn(make(chan amqp.Return, 100))
 
-	m.conn = conn
-	m.pubCh = pubCh
-	m.confirms = confirms
-	m.returns = returns
+	return conn, pubCh, confirms, returns, nil
+}
 
-	m.logger.Info("connected to rabbitmq and declared topology")
+// startRetryLoop repeatedly attempts to connect until successful or the manager is closed.
+func (m *Manager) startRetryLoop() {
+	backoff := 500 * time.Millisecond
+	maxBackoff := 10 * time.Second
 
-	// Monitor connection loss in background
-	go m.reconnectLoop(conn.NotifyClose(make(chan *amqp.Error, 1)))
+	for {
+		m.mu.RLock()
+		if m.closed {
+			m.mu.RUnlock()
+			return
+		}
+		if m.conn != nil && !m.conn.IsClosed() {
+			m.mu.RUnlock()
+			return
+		}
+		m.mu.RUnlock()
 
-	return nil
+		time.Sleep(backoff)
+
+		m.mu.RLock()
+		if m.closed {
+			m.mu.RUnlock()
+			return
+		}
+		m.mu.RUnlock()
+
+		conn, pubCh, confirms, returns, err := m.dialAndSetup()
+		if err == nil {
+			m.mu.Lock()
+			if m.closed {
+				m.mu.Unlock()
+				_ = pubCh.Close()
+				_ = conn.Close()
+				return
+			}
+			m.conn = conn
+			m.pubCh = pubCh
+			m.confirms = confirms
+			m.returns = returns
+			m.reconnecting = false
+
+			select {
+			case <-m.notifyReady:
+			default:
+				close(m.notifyReady)
+			}
+			m.mu.Unlock()
+
+			m.logger.Info("connected to rabbitmq successfully")
+			go m.reconnectLoop(conn.NotifyClose(make(chan *amqp.Error, 1)))
+			return
+		}
+
+		m.logger.Warn("broker connection attempt failed, retrying...", "error", err.Error(), "next_backoff", backoff)
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
 }
 
 // reconnectLoop listens for connection closure and attempts reconnection with exponential backoff.
@@ -117,42 +265,18 @@ func (m *Manager) reconnectLoop(closeErr chan *amqp.Error) {
 	m.pubCh = nil
 	m.conn = nil
 	m.reconnecting = true
+
+	// Replace notifyReady channel so new callers can wait for reconnection
+	select {
+	case <-m.notifyReady:
+		m.notifyReady = make(chan struct{})
+	default:
+	}
 	m.mu.Unlock()
 
 	m.logger.Warn("rabbitmq connection closed, reconnecting...", "reason", err.Error())
 
-	backoff := 500 * time.Millisecond
-	maxBackoff := 10 * time.Second
-
-	for {
-		m.mu.RLock()
-		isClosed := m.closed
-		m.mu.RUnlock()
-		if isClosed {
-			return
-		}
-
-		time.Sleep(backoff)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		m.mu.Lock()
-		connErr := m.connectLocked(ctx)
-		if connErr == nil {
-			m.reconnecting = false
-			m.mu.Unlock()
-			cancel()
-			m.logger.Info("reconnected to rabbitmq successfully")
-			return
-		}
-		m.mu.Unlock()
-		cancel()
-
-		m.logger.Warn("reconnect attempt failed, retrying...", "error", connErr.Error(), "next_backoff", backoff)
-		backoff *= 2
-		if backoff > maxBackoff {
-			backoff = maxBackoff
-		}
-	}
+	m.startRetryLoop()
 }
 
 // Publish sends a persistent, mandatory message and waits for publisher confirm and return.
@@ -227,6 +351,37 @@ func (m *Manager) OpenConsumerChannel(prefetch int) (*amqp.Channel, error) {
 	return ch, nil
 }
 
+// WaitForConnection blocks until an active connection is established, the context expires,
+// or the manager is closed.
+func (m *Manager) WaitForConnection(ctx context.Context) error {
+	m.mu.RLock()
+	if m.closed {
+		m.mu.RUnlock()
+		return errors.New("amqp broker manager is closed")
+	}
+	if m.conn != nil && !m.conn.IsClosed() {
+		m.mu.RUnlock()
+		return nil
+	}
+	ready := m.notifyReady
+	m.mu.RUnlock()
+
+	select {
+	case <-ready:
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		if m.closed {
+			return errors.New("amqp broker manager is closed")
+		}
+		if m.conn != nil && !m.conn.IsClosed() {
+			return nil
+		}
+		return ErrNotConnected
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // CheckHealth returns nil if connection is active, or an error if disconnected.
 func (m *Manager) CheckHealth(_ context.Context) error {
 	m.mu.RLock()
@@ -235,7 +390,7 @@ func (m *Manager) CheckHealth(_ context.Context) error {
 	if m.closed {
 		return errors.New("amqp broker manager is closed")
 	}
-	if m.conn == nil || m.conn.IsClosed() {
+	if m.reconnecting || m.conn == nil || m.conn.IsClosed() || m.pubCh == nil || m.pubCh.IsClosed() {
 		return ErrNotConnected
 	}
 	return nil
@@ -247,6 +402,13 @@ func (m *Manager) Close() error {
 	defer m.mu.Unlock()
 
 	m.closed = true
+
+	// Unblock any waiters on notifyReady
+	select {
+	case <-m.notifyReady:
+	default:
+		close(m.notifyReady)
+	}
 
 	var errs []error
 	if m.pubCh != nil {

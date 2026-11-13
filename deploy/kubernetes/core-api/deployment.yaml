@@ -50,28 +50,42 @@ spec:
                 secretKeyRef:
                   name: core-api-secrets
                   key: JWT_SECRET
-            - name: API_KEY_PEPPER
+            - name: MERCHANT_API_KEY_PEPPER
               valueFrom:
                 secretKeyRef:
                   name: core-api-secrets
-                  key: API_KEY_PEPPER
-            # Connection budget D8: 4 pods * 20 conns = 80 <= 100 max allocated to app
-            - name: DB_MAX_OPEN_CONNS
-              value: "20"
-            - name: DB_MAX_IDLE_CONNS
-              value: "10"
-            - name: DB_CONN_MAX_LIFETIME
-              value: "5m"
+                  key: MERCHANT_API_KEY_PEPPER
+            # Base64 of 32 bytes. The event-worker gets the SAME value (integrations-secrets).
+            - name: WEBHOOK_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: WEBHOOK_SECRET_ENCRYPTION_KEY
+            # Optional private passwords for the demo accounts. In production (APP_ENV=production,
+            # set by the prod overlay) a demo account still on its published password is rotated
+            # to this value, or suspended if none is set (>= 12 characters).
+            - name: SEED_PASSWORD_ADMIN
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_ADMIN, optional: true}}
+            - name: SEED_PASSWORD_DISPATCHER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_DISPATCHER, optional: true}}
+            - name: SEED_PASSWORD_COURIER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_COURIER, optional: true}}
+            - name: SEED_PASSWORD_MERCHANT
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_MERCHANT, optional: true}}
+            - name: SEED_PASSWORD_CUSTOMER
+              valueFrom: {secretKeyRef: {name: core-api-secrets, key: SEED_PASSWORD_CUSTOMER, optional: true}}
+            # Connection budget: core-api opens at most 10 connections per pod (db.DefaultOptions).
+            # 4 max replicas * 10 = 40 <= 150 (Postgres max_connections). No env var changes this.
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health/live
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -143,17 +157,43 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
-      containers:
-        - name: migrator
-          image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
-          imagePullPolicy: IfNotPresent
-          command: ["/app/core-api", "--migrate-only"]
+      # The bootstrap Job runs in one transaction: once swiftdrop_migrator can log in, all roles and
+      # default privileges exist. Migrations need that (they GRANT to roles only IF they exist), and
+      # backoffLimit is 0, so wait here instead of failing the race against postgres-bootstrap-roles.
+      initContainers:
+        - name: wait-for-roles
+          image: postgres:16-alpine
+          command: ["sh", "-c"]
+          args:
+            - |
+              until psql "$DATABASE_URL" -tAc "select 1" >/dev/null 2>&1; do
+                echo "Waiting for postgres-bootstrap-roles (swiftdrop_migrator login)..."
+                sleep 3
+              done
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: postgres-secrets
-                  key: ADMIN_DATABASE_URL
+                  key: MIGRATOR_DATABASE_URL
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"
+      containers:
+        - name: migrator
+          image: ghcr.io/phantomtroupeead/swiftdrop/core-api:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: MIGRATOR_DATABASE_URL
           resources:
             requests:
               cpu: "50m"

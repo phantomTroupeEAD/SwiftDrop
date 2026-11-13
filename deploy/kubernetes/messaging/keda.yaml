@@ -1,0 +1,48 @@
+# KEDA autoscaling for the event-worker (moved here from the removed event-worker/ folder).
+# Requires the KEDA operator. Consumers are idempotent, so scaling 1-3 is safe (ADR-002 §7.1).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: event-worker-scaler
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: event-worker
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/component: keda-autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event-worker
+  pollingInterval: 15
+  cooldownPeriod: 30
+  minReplicaCount: 1
+  maxReplicaCount: 3 # Micro-scaling limit safe for single-node VPS
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.notifications.worker
+        mode: QueueLength
+        value: "10"
+      authenticationRef:
+        name: keda-rabbitmq-auth
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: q.webhooks.dispatcher
+        mode: QueueLength
+        value: "10"
+      authenticationRef:
+        name: keda-rabbitmq-auth
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq-auth
+  namespace: swiftdrop
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: rabbitmq-secrets
+      key: RABBITMQ_URL

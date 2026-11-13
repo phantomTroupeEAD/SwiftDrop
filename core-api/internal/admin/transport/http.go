@@ -203,6 +203,17 @@ func replyPage[T any](w http.ResponseWriter, data []T, page, perPage, total int)
 	_ = httpx.WriteJSON(w, http.StatusOK, httpx.NewPaginatedResponse(data, page, perPage, total))
 }
 
+// @Summary      List delivery zones (admin)
+// @Tags         admin-zones
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page      query int false "Page, from 1"          default(1)
+// @Param        per_page  query int false "Items per page, 1-100" default(20)
+// @Success      200 {object} httpx.PaginatedEnvelope{data=[]application.ZoneView}
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: bad page or per_page"
+// @Router       /api/v1/admin/zones [get]
 func (h *Handlers) listZones(w http.ResponseWriter, r *http.Request) {
 	page, perPage, err := pageParams(r)
 	if err != nil {
@@ -221,6 +232,16 @@ func (h *Handlers) listZones(w http.ResponseWriter, r *http.Request) {
 	replyPage(w, out, page, perPage, total)
 }
 
+// @Summary      Get one delivery zone (admin)
+// @Tags         admin-zones
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Zone id, e.g. ZONE_COLOMBO_01"
+// @Success      200 {object} httpx.DataEnvelope{data=application.ZoneView}
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      404 {object} httpx.ErrorResponse "NOT_FOUND"
+// @Router       /api/v1/admin/zones/{id} [get]
 func (h *Handlers) getZone(w http.ResponseWriter, r *http.Request) {
 	z, err := h.Svc.Store.GetZone(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -230,6 +251,19 @@ func (h *Handlers) getZone(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, application.View(z))
 }
 
+// @Summary      Create a delivery zone (admin)
+// @Tags         admin-zones
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body application.CreateZoneInput true "New zone"
+// @Success      201 {object} httpx.DataEnvelope{data=application.ZoneView}
+// @Failure      400 {object} httpx.ErrorResponse "BAD_REQUEST: malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      409 {object} httpx.ErrorResponse "ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED"
+// @Router       /api/v1/admin/zones [post]
 func (h *Handlers) createZone(w http.ResponseWriter, r *http.Request) {
 	var in application.CreateZoneInput
 	if err := decode(w, r, &in); err != nil {
@@ -245,6 +279,21 @@ func (h *Handlers) createZone(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusCreated, v)
 }
 
+// @Summary      Edit a delivery zone (admin)
+// @Tags         admin-zones
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id      path string                    true "Zone id"
+// @Param        request body application.UpdateZoneInput true "Fields to change plus current version"
+// @Success      200 {object} httpx.DataEnvelope{data=application.ZoneView}
+// @Failure      400 {object} httpx.ErrorResponse "BAD_REQUEST: malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      404 {object} httpx.ErrorResponse "NOT_FOUND"
+// @Failure      409 {object} httpx.ErrorResponse "CONCURRENT_MODIFICATION, ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED"
+// @Router       /api/v1/admin/zones/{id} [patch]
 func (h *Handlers) updateZone(w http.ResponseWriter, r *http.Request) {
 	var in application.UpdateZoneInput
 	if err := decode(w, r, &in); err != nil {
@@ -259,6 +308,21 @@ func (h *Handlers) updateZone(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, v)
 }
 
+// @Summary      Enable or disable a delivery zone (admin)
+// @Tags         admin-zones
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id      path string                 true "Zone id"
+// @Param        request body application.StatusInput true "enabled, current version and a 10-500 char reason"
+// @Success      200 {object} httpx.DataEnvelope{data=application.ZoneView}
+// @Failure      400 {object} httpx.ErrorResponse "BAD_REQUEST: malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      404 {object} httpx.ErrorResponse "NOT_FOUND"
+// @Failure      409 {object} httpx.ErrorResponse "CONCURRENT_MODIFICATION"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED or REASON_REQUIRED"
+// @Router       /api/v1/admin/zones/{id}/status [patch]
 func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 	var in application.StatusInput
 	if err := decode(w, r, &in); err != nil {
@@ -273,6 +337,14 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, v)
 }
 
+// @Summary      List system settings (admin)
+// @Tags         admin-settings
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} httpx.DataEnvelope{data=[]application.Setting}
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Router       /api/v1/admin/settings [get]
 func (h *Handlers) listSettings(w http.ResponseWriter, r *http.Request) {
 	s, err := h.Svc.Store.ListSettings(r.Context())
 	if err != nil {
@@ -282,6 +354,20 @@ func (h *Handlers) listSettings(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, s)
 }
 
+// @Summary      Change one system setting (admin)
+// @Tags         admin-settings
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        key     path string                   true "reports.max_range_days, ops.board_refresh_seconds, ops.maintenance_banner, parcels.max_weight_kg or parcels.max_cod_cents"
+// @Param        request body application.SettingInput true "value, current version and a 10-500 char reason"
+// @Success      200 {object} httpx.DataEnvelope{data=application.Setting}
+// @Failure      400 {object} httpx.ErrorResponse "BAD_REQUEST: malformed JSON"
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      409 {object} httpx.ErrorResponse "CONCURRENT_MODIFICATION"
+// @Failure      422 {object} httpx.ErrorResponse "SETTING_UNKNOWN, REASON_REQUIRED or VALIDATION_FAILED"
+// @Router       /api/v1/admin/settings/{key} [put]
 func (h *Handlers) updateSetting(w http.ResponseWriter, r *http.Request) {
 	var in application.SettingInput
 	if err := decode(w, r, &in); err != nil {
@@ -296,6 +382,17 @@ func (h *Handlers) updateSetting(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, s)
 }
 
+// @Summary      List audit log rows, newest first (admin)
+// @Tags         admin-audit
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page      query int false "Page, from 1"          default(1)
+// @Param        per_page  query int false "Items per page, 1-100" default(20)
+// @Success      200 {object} httpx.PaginatedEnvelope{data=[]application.AuditRow}
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: bad page or per_page"
+// @Router       /api/v1/admin/audit-logs [get]
 func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 	page, perPage, err := pageParams(r)
 	if err != nil {
@@ -312,6 +409,18 @@ func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 
 // deliveryReport serves GET /api/v1/admin/reports/deliveries?from=&to= for ADMIN and
 // DISPATCHER. Numbers come through the ReportReader interface, never from SQL here.
+//
+// @Summary      Delivery report for a date range (admin, dispatcher)
+// @Tags         admin-reports
+// @Produce      json
+// @Security     BearerAuth
+// @Param        from query string true "Start date, YYYY-MM-DD"
+// @Param        to   query string true "End date, YYYY-MM-DD"
+// @Success      200 {object} httpx.DataEnvelope{data=application.DeliveryReport}
+// @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
+// @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN or DISPATCHER"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: bad dates or range too long"
+// @Router       /api/v1/admin/reports/deliveries [get]
 func (h *Handlers) deliveryReport(w http.ResponseWriter, r *http.Request) {
 	reader, source := h.Reports, h.ReportSource
 	if reader == nil {
@@ -330,6 +439,15 @@ var postalCodePattern = regexp.MustCompile(`^[0-9]{5}$`)
 
 // publicZones lists enabled zones for booking forms, or finds the zone of one
 // postal code. No sign-in; only id, code and name are shown (Doc 1 R-18).
+//
+// @Summary      List enabled zones, or find the zone of a postal code (public)
+// @Tags         zones
+// @Produce      json
+// @Param        postal_code query string false "5-digit postal code; returns the one matching zone"
+// @Success      200 {object} httpx.DataEnvelope{data=[]application.PublicZone}
+// @Failure      404 {object} httpx.ErrorResponse "ZONE_NOT_FOUND: no zone covers this postal code"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: postal_code must be 5 digits"
+// @Router       /api/v1/zones [get]
 func (h *Handlers) publicZones(w http.ResponseWriter, r *http.Request) {
 	if pc, ok := r.URL.Query()["postal_code"]; ok {
 		if len(pc) != 1 || !postalCodePattern.MatchString(pc[0]) {

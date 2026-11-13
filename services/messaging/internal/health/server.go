@@ -107,6 +107,16 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 
+	w.Header().Set("Content-Type", "application/json")
+	if len(checksCopy) == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(readyResponse{
+			Status: "initializing",
+			Checks: map[string]string{"system": "no readiness checks registered yet"},
+		})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
@@ -122,7 +132,6 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if !allHealthy {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(readyResponse{

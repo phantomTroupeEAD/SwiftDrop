@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,60 @@ var (
 	// ErrMissingConfig is returned when a required environment variable is not defined or empty.
 	ErrMissingConfig = errors.New("config: required environment variable is missing or empty")
 )
+
+// parseEnvFile reads a file line by line and sets environment variables if unset.
+func parseEnvFile(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		// Strip quotes if wrapped in "..." or '...'
+		if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+			val = val[1 : len(val)-1]
+		}
+
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, val)
+		}
+	}
+	return true
+}
+
+// LoadEnv loads environment variables from a .env file into the process environment
+// if the variable is not already defined in the environment.
+// It searches for .env files in the provided paths, or defaults to:
+// 1. ".env" in current directory
+// 2. "core-api/.env" (e.g. if running from repository root)
+// 3. "../.env" (e.g. if running from core-api/cmd/api)
+func LoadEnv(customPaths ...string) {
+	paths := customPaths
+	if len(paths) == 0 {
+		paths = []string{".env", "core-api/.env", "../.env"}
+	}
+
+	for _, p := range paths {
+		if parseEnvFile(p) {
+			break
+		}
+	}
+}
 
 // String retrieves an environment variable by key or returns def if unset or whitespace-only.
 func String(key, def string) string {

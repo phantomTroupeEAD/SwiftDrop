@@ -25,6 +25,21 @@ func intBetween(lo, hi int) rule {
 	}
 }
 
+// numberBetween accepts a JSON number (whole or decimal) from lo to hi. Used for
+// kilograms, which are not money; money settings use intBetween (minor units).
+func numberBetween(lo, hi float64) rule {
+	return func(v json.RawMessage) error {
+		var n float64
+		if err := json.Unmarshal(v, &n); err != nil {
+			return fmt.Errorf("%w: must be a number", ErrValidation)
+		}
+		if n < lo || n > hi {
+			return fmt.Errorf("%w: must be %g to %g", ErrValidation, lo, hi)
+		}
+		return nil
+	}
+}
+
 func stringMax(maxLen int) rule {
 	return func(v json.RawMessage) error {
 		var str string
@@ -45,6 +60,10 @@ var settingRules = map[string]rule{
 	"reports.max_range_days":    intBetween(1, 366),
 	"ops.board_refresh_seconds": intBetween(10, 300),
 	"ops.maintenance_banner":    stringMax(200),
+	// Parcel limits read by the AI assistant and booking screens (Doc 4 section 8).
+	// The weight cap matches pricing's hard limit of 30 kg. COD is LKR cents, never a float.
+	"parcels.max_weight_kg": numberBetween(0.5, 30),
+	"parcels.max_cod_cents": intBetween(0, 10_000_000),
 }
 
 // ValidateSetting checks one key/value pair before it is saved.

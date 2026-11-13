@@ -27,7 +27,8 @@ def test_traefik_ai_rest_router(traefik_config: dict):
     assert "ai-router" in routers
     ai_router = routers["ai-router"]
     
-    assert ai_router["rule"] == "PathPrefix(`/api/v1/ai`)"
+    # Exact prefix: matches /api/v1/ai and /api/v1/ai/..., but not /api/v1/aiX (gateway check GS-03).
+    assert ai_router["rule"] == "Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`)"
     assert "web" in ai_router["entryPoints"]
     assert ai_router["service"] == "ai-service"
     assert "cors-middleware" in ai_router["middlewares"]
@@ -39,7 +40,8 @@ def test_traefik_ai_mcp_sse_router(traefik_config: dict):
     assert "ai-mcp-router" in routers
     mcp_router = routers["ai-mcp-router"]
     
-    assert mcp_router["rule"] == "PathPrefix(`/mcp`)"
+    # Same exact-prefix form, so /mcpX is not sent to the MCP server (gateway check GS-03).
+    assert mcp_router["rule"] == "Path(`/mcp`) || PathPrefix(`/mcp/`)"
     assert "web" in mcp_router["entryPoints"]
     assert mcp_router["service"] == "ai-mcp-service"
     assert "cors-middleware" in mcp_router["middlewares"]
