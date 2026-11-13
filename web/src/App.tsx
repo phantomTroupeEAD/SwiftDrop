@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
+import { LandingPage } from '@/features/landing/LandingPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
@@ -128,8 +129,8 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Default Fallback */}
-      <Route path="/" element={<Navigate to="/auth/login" replace />} />
+      {/* Public Landing & Default Fallback */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="*" element={<Navigate to="/auth/login" replace />} />
     </Routes>
   );

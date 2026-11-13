@@ -1,11 +1,34 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
-import { AlertCircle, Eye, EyeOff, Package } from 'lucide-react';
+import {
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Package,
+  ArrowRight,
+  Loader2,
+} from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
+import { Checkbox } from '@/shared/components/ui/checkbox';
+import { Separator } from '@/shared/components/ui/separator';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/shared/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog';
 
 export const LoginPage: React.FC = () => {
   const { login, loginWithGoogle, updateProfile } = useAuth();
@@ -28,6 +51,7 @@ export const LoginPage: React.FC = () => {
   const [onboardingTerms, setOnboardingTerms] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+
   const redirectToDashboard = () => navigate('/dashboard', { replace: true });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,7 +82,6 @@ export const LoginPage: React.FC = () => {
       setGoogleModalOpen(false);
 
       if (requiresPhone) {
-        // Approach A: prompt for phone number and terms acceptance
         setOnboardingOpen(true);
       } else {
         redirectToDashboard();
@@ -95,113 +118,352 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <main data-role="PUBLIC" className="min-h-screen bg-canvas text-text px-4 py-12 sm:px-6">
-      <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
-        <div className="flex items-center justify-between gap-3">
-          <Link to="/" className="inline-flex items-center gap-2 font-semibold">
-            <Package className="size-5 text-primary" aria-hidden="true" />
-            SwiftDrop
-          </Link>
-          <Button asChild variant="link" size="sm"><Link to="/track">Track a parcel</Link></Button>
-        </div>
+    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary overflow-hidden">
+      {/* Strategic Background: Cinematic Logistics Artwork with Ambient Blur & Contrast Scrim */}
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
+        <img
+          src="/login-bg.jpg"
+          alt=""
+          className="h-full w-full object-cover object-center filter blur-sm scale-105"
+        />
 
-        <section className="rounded-xl border border-border bg-surface p-5 sm:p-6" aria-labelledby="sign-in-title">
-          <h1 id="sign-in-title" className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="mt-1 text-sm text-text-muted">Use your SwiftDrop email and password.</p>
+        {/* Soft atmospheric glow orbs */}
+        <div className="absolute -top-32 -left-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-50" />
+        <div className="absolute -bottom-32 -right-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-40" />
 
-          {error && <p role="alert" className="mt-4 flex items-start gap-2 text-sm text-status-error-ink">
-            <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{error}
-          </p>}
-
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="login-email">Email address</Label>
-              <Input id="login-email" type="email" autoComplete="username" required
-                value={email} onChange={event => setEmail(event.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
-              <div className="flex items-center gap-2">
-                <Input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required
-                  value={password} onChange={event => setPassword(event.target.value)} />
-                <Button type="button" variant="ghost" size="icon" aria-controls="login-password"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword(current => !current)}>
-                  {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                </Button>
-              </div>
-            </div>
-            <Button type="submit" size="lg" className="w-full" disabled={loading || googleLoading}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </Button>
-          </form>
-
-          {import.meta.env.DEV && (
-            <Button type="button" variant="outline" className="mt-3 w-full" disabled={loading || googleLoading}
-              onClick={() => setGoogleModalOpen(true)}>
-              Google sign-in test
-            </Button>
-          )}
-        </section>
-
-        <p className="text-center text-sm text-text-muted">
-          New to SwiftDrop? <Button asChild variant="link"><Link to="/auth/register">Create an account</Link></Button>
-        </p>
-        {import.meta.env.DEV && (
-          <Button asChild variant="link" size="sm">
-            <Link to="/design-preview" data-testid="login-theme-preview-link">Preview customer and merchant screens</Link>
-          </Button>
-        )}
+        {/* Backdrop Scrim & Blur Veil for Contrast and Legibility across Light/Dark modes */}
+        <div className="absolute inset-0 bg-canvas/75 backdrop-blur-sm" />
       </div>
 
+      {/* Top Header */}
+      <header className="relative z-10 px-4 sm:px-8 py-5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-text hover:opacity-90 transition-opacity"
+            aria-label="SwiftDrop Home"
+          >
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-tint text-primary border border-border">
+              <Package className="size-4" aria-hidden="true" />
+            </div>
+            <span className="text-lg font-bold">
+              Swift<span className="text-primary">Drop</span>
+            </span>
+          </Link>
+
+          <Button asChild variant="ghost" size="sm" className="text-xs text-text-muted hover:text-text">
+            <Link to="/track">
+              Track a parcel
+              <ArrowRight className="ml-1.5 size-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
+        </div>
+      </header>
+
+      {/* Centralized Clean Solid Login Window */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[420px] flex-col gap-4 px-4 my-auto">
+        <Card className="border border-border bg-surface rounded-2xl">
+          <CardHeader className="text-center space-y-2 pb-5 pt-7">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary-tint text-primary border border-border mb-1">
+              <Package className="size-5" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-bold tracking-tight text-text">
+                Welcome back
+              </CardTitle>
+              <CardDescription className="text-xs text-text-muted">
+                Sign in to your SwiftDrop account to continue
+              </CardDescription>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4 px-6">
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-ink font-medium leading-relaxed"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="login-email" className="text-xs font-medium text-text">
+                  Email address
+                </Label>
+                <Input
+                  id="login-email"
+                  data-testid="login-email-input"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  placeholder="name@swiftdrop.local"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="login-password" className="text-xs font-medium text-text">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="login-password"
+                    data-testid="login-password-input"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                    placeholder="••••••••"
+                    className="pr-10"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-[38px] w-[38px] text-text-muted hover:text-text hover:bg-transparent"
+                    aria-controls="login-password"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="size-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                data-testid="login-submit-btn"
+                size="lg"
+                className="w-full mt-2"
+                disabled={loading || googleLoading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                    Signing in…
+                  </>
+                ) : (
+                  'Sign in'
+                )}
+              </Button>
+            </form>
+
+            {import.meta.env.DEV && (
+              <div className="space-y-3 pt-1">
+                <div className="relative flex items-center justify-center">
+                  <Separator className="w-full" />
+                  <span className="absolute bg-surface px-2 text-[10px] uppercase tracking-wider text-text-muted">
+                    developer testing
+                  </span>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs text-text-muted hover:text-text"
+                  disabled={loading || googleLoading}
+                  onClick={() => setGoogleModalOpen(true)}
+                >
+                  <svg className="size-3.5 mr-2 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  Google Sign-In test dialog
+                </Button>
+              </div>
+            )}
+          </CardContent>
+
+          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-2xl">
+            <p className="text-xs text-text-muted">
+              Don’t have an account?{' '}
+              <Button asChild variant="link" className="text-xs font-semibold text-primary">
+                <Link to="/auth/register">Create one</Link>
+              </Button>
+            </p>
+
+            {import.meta.env.DEV && (
+              <Button asChild variant="link" size="sm" className="text-[11px] text-text-muted hover:text-text h-auto p-0">
+                <Link to="/design-preview" data-testid="login-theme-preview-link">
+                  Open design preview studio
+                </Link>
+              </Button>
+            )}
+          </CardFooter>
+        </Card>
+
+
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 px-4 py-4 text-center text-xs text-text-muted">
+        <span>&copy; 2026 SwiftDrop Logistics Inc.</span>
+      </footer>
+
+      {/* Google Sign-in Test Modal */}
       <Dialog open={googleModalOpen} onOpenChange={setGoogleModalOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Google sign-in test</DialogTitle>
-            <DialogDescription>Choose a test account or enter a Google ID token.</DialogDescription>
+            <DialogTitle className="text-base font-semibold">Google sign-in test</DialogTitle>
+            <DialogDescription className="text-xs text-text-muted">
+              Choose a test account or enter a Google ID token.
+            </DialogDescription>
           </DialogHeader>
-          {error && <p role="alert" className="text-sm text-status-error-ink">{error}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={googleLoading}
-              onClick={() => handleGoogleSignIn('mock_google_id_token_alice')}>New customer</Button>
-            <Button type="button" variant="outline" disabled={googleLoading}
-              onClick={() => handleGoogleSignIn('mock_customer@swiftdrop.local')}>Existing customer</Button>
+
+          {error && (
+            <p role="alert" className="text-xs text-status-error-ink">
+              {error}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={googleLoading}
+              onClick={() => handleGoogleSignIn('mock_google_id_token_alice')}
+            >
+              New customer (Alice)
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={googleLoading}
+              onClick={() => handleGoogleSignIn('mock_customer@swiftdrop.local')}
+            >
+              Existing customer
+            </Button>
           </div>
-          <form className="space-y-3" onSubmit={event => {
-            event.preventDefault();
-            if (googleTokenInput.trim() && !googleLoading) void handleGoogleSignIn(googleTokenInput.trim());
-          }}>
-            <Label htmlFor="google-token">Google ID token</Label>
-            <Input id="google-token" type="password" value={googleTokenInput} autoComplete="off"
-              onChange={event => setGoogleTokenInput(event.target.value)} />
-            <Button type="submit" disabled={!googleTokenInput.trim() || googleLoading}>
-              {googleLoading ? 'Signing in…' : 'Continue'}
+
+          <form
+            className="space-y-3 pt-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (googleTokenInput.trim() && !googleLoading) {
+                void handleGoogleSignIn(googleTokenInput.trim());
+              }
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="google-token" className="text-xs font-medium text-text">
+                Google ID token
+              </Label>
+              <Input
+                id="google-token"
+                type="password"
+                value={googleTokenInput}
+                autoComplete="off"
+                placeholder="mock_google_id_token_..."
+                onChange={(event) => setGoogleTokenInput(event.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="w-full text-xs"
+              disabled={!googleTokenInput.trim() || googleLoading}
+            >
+              {googleLoading ? (
+                <>
+                  <Loader2 className="mr-2 size-3.5 animate-spin" aria-hidden="true" />
+                  Signing in…
+                </>
+              ) : (
+                'Continue with token'
+              )}
             </Button>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* Progressive Onboarding Modal (Approach A) */}
       <Dialog open={onboardingOpen}>
-        <DialogContent onEscapeKeyDown={event => event.preventDefault()}
-          onInteractOutside={event => event.preventDefault()} className="[&>button]:hidden">
+        <DialogContent
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          className="sm:max-w-md [&>button]:hidden"
+        >
           <DialogHeader>
-            <DialogTitle>Complete your account</DialogTitle>
-            <DialogDescription>Add a phone number for delivery updates.</DialogDescription>
+            <DialogTitle className="text-base font-semibold">Complete your account</DialogTitle>
+            <DialogDescription className="text-xs text-text-muted">
+              Add a phone number for live delivery updates and agree to terms.
+            </DialogDescription>
           </DialogHeader>
-          {onboardingError && <p role="alert" className="text-sm text-status-error-ink">{onboardingError}</p>}
-          <form onSubmit={handleOnboardingSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="onboarding-phone">Phone number</Label>
-              <Input id="onboarding-phone" type="tel" autoComplete="tel" required
-                value={onboardingPhone} onChange={event => setOnboardingPhone(event.target.value)} />
+
+          {onboardingError && (
+            <p role="alert" className="text-xs text-status-error-ink">
+              {onboardingError}
+            </p>
+          )}
+
+          <form onSubmit={handleOnboardingSubmit} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="onboarding-phone" className="text-xs font-medium text-text">
+                Mobile phone number
+              </Label>
+              <Input
+                id="onboarding-phone"
+                type="tel"
+                autoComplete="tel"
+                required
+                value={onboardingPhone}
+                onChange={(event) => setOnboardingPhone(event.target.value)}
+              />
             </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" required checked={onboardingTerms}
-                onChange={event => setOnboardingTerms(event.target.checked)} />
-              I agree to the Terms of Service and Privacy Policy.
-            </label>
-            <Button type="submit" className="w-full" disabled={!onboardingTerms || onboardingLoading}>
-              {onboardingLoading ? 'Saving…' : 'Complete setup'}
+
+            <div className="flex items-start gap-2.5">
+              <Checkbox
+                id="onboarding-terms"
+                checked={onboardingTerms}
+                onCheckedChange={(checked) => setOnboardingTerms(checked === true)}
+                className="mt-0.5"
+              />
+              <Label
+                htmlFor="onboarding-terms"
+                className="text-xs font-normal leading-relaxed text-text-muted cursor-pointer"
+              >
+                I agree to the Terms of Service and Privacy Policy.
+              </Label>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full text-xs"
+              disabled={!onboardingTerms || onboardingLoading}
+            >
+              {onboardingLoading ? (
+                <>
+                  <Loader2 className="mr-2 size-3.5 animate-spin" aria-hidden="true" />
+                  Completing setup…
+                </>
+              ) : (
+                'Complete setup'
+              )}
             </Button>
           </form>
         </DialogContent>

@@ -43,6 +43,24 @@ Clean UI verification: production build passed; browser checks exercised all fou
 
 Theme-preview update (6 November 2026): `/design-preview` shows the earlier **Swift Signature (Teal & Warm Ivory)** direction with sample customer and merchant flows. See [`design.mdx`](design.mdx) for the Apple-style implementation baseline and [`test-ids.md`](test-ids.md) for selector coverage.
 
+### Public Landing Page (`/`) (November 2026)
+Implemented an authoritative, image-heavy public landing page (`src/features/landing/LandingPage.tsx`) mounted at the application root (`/`):
+- **Hero & Utility**: Full-bleed cinematic logistics background with an instant interactive tracking input widget routing directly to `/track/:trackingNumber`.
+- **Performance Strip**: 4-column metric bar featuring SLA percentages, average turnaround times, active dispatch zones, and base tariffs with tabular figures.
+- **Photographic Feature Grid**: 3 photorealistic visual cards capturing doorstep collection (`feature-courier-fleet.jpg`), automated sorting (`feature-smart-sorting.jpg`), and digital proof of delivery (`feature-proof-delivery.jpg`).
+- **Tabbed Solution Engine**: Unified comparison tabs (`Tabs`) displaying personal sender doorstep booking vs. B2B merchant CSV batch ingestion & REST API endpoints.
+- **Island-Wide Dispatch Network**: Zone status grid highlighting Western, Central, Southern, and Express transit corridors.
+- **Strict Compliance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="PUBLIC"` scoping, zero raw elements, and zero arbitrary brackets. Tested cleanly with `npm run lint:ui` and `npm run build`.
+
+### Authentication Screens Refinement (November 2026)
+Both the primary sign-in screen (`src/features/auth/LoginPage.tsx`) and the registration screen (`src/features/auth/RegisterPage.tsx`) conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
+- Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
+- Floating solid white/neutral modal cards (`bg-surface rounded-2xl border border-border`) over the cinematic twilight logistics background (`public/login-bg.jpg`) with an ambient blur and contrast veil (`bg-canvas/75 backdrop-blur-sm`).
+- Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
+- Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).
+- Cleanly verified via `npm run lint:ui` and `npm run build`.
+
 ## Implementation checkpoint — 5 November 2026
 
 The sections below include the target architecture and planned commands. The checked-in app currently implements a login page, five prototype role dashboards, and an isolated design preview studio (`/design-preview`). Actual scripts in `package.json` are `dev`, `build`, and `preview`; lint, unit and E2E scripts/tooling have not been installed. TanStack Query is described below but is not yet a dependency.
