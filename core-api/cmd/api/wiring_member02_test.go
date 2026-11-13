@@ -164,4 +164,3 @@ func TestMember02Wiring_Integration(t *testing.T) {
 		t.Fatalf("parcels registration failed with live DB: %v", err)
 	}
 }
-

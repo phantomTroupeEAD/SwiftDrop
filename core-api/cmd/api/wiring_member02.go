@@ -110,4 +110,3 @@ func registerParcelsModule(mux *http.ServeMux, db *sql.DB, sec *identitytranspor
 	parcelstransport.RegisterRoutes(mux, parcelHandler, sec)
 	return nil
 }
-
