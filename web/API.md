@@ -363,6 +363,8 @@ data: {"tracking_number":"SD-20261026-00142","status":"OUT_FOR_DELIVERY","occurr
 
 ## 3. Standard Error Envelope
 
+Authentication, registration, and portal clients display the error's `correlation_id` as a request reference. If the error body omits it, the client uses the `X-Request-ID` response header when available.
+
 When any backend API request fails, the shared client parses the standard error response:
 
 ```json

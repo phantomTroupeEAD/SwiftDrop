@@ -139,6 +139,8 @@ The router guards ensure strict authorization before any protected view is mount
 
 ## 4. Shared API Client & Authentication Guarantees
 
+Sign-in, customer registration, profile completion, and customer and merchant portal errors show a request reference when available. Include it when reporting a failed request.
+
 All backend HTTP requests flow through a central client configured in `src/shared/api/`:
 - **Base URL:** Driven by `VITE_API_BASE_URL` (defaulting to `/api/v1` through the reverse proxy).
 - **JWT Storage:** Short-lived access tokens (15 minutes) are stored **only in memory** in React `AuthContext`. Tokens are never written to `localStorage` or `sessionStorage`.

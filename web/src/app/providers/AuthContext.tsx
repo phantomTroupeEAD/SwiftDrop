@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, LoginResponseData, GoogleLoginResponseData } from '@/shared/types/auth';
+import { withRequestReference } from '@/shared/lib/api-error';
 
 interface ApiResponseEnvelope<T = unknown> {
-  error?: { message?: string };
+  error?: { message?: string; correlation_id?: string };
   data?: T;
 }
 
@@ -86,13 +87,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (!res.ok) {
-        if (data?.error?.message) {
-          throw new Error(data.error.message);
-        }
-        if (res.status === 502 || res.status === 504 || res.status === 404) {
-          throw new Error('Cannot connect to backend server. Please verify Core API is running on port 8080.');
-        }
-        throw new Error(`Authentication failed (${res.status})`);
+        const unavailable = res.status === 502 || res.status === 504 || res.status === 404;
+        const fallback = unavailable
+          ? 'Cannot connect to backend server. Please verify Core API is running on port 8080.'
+          : `Authentication failed (${res.status})`;
+        throw new Error(withRequestReference(data?.error?.message || fallback, res, data?.error?.correlation_id));
       }
 
       if (!data?.data?.access_token) {
@@ -129,10 +128,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch {}
 
       if (!res.ok) {
-        if (data?.error?.message) {
-          throw new Error(data.error.message);
-        }
-        throw new Error(`Google Sign-In failed (${res.status})`);
+        const message = data?.error?.message || `Google Sign-In failed (${res.status})`;
+        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
       }
 
       if (!data?.data?.access_token) {
@@ -175,10 +172,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch {}
 
     if (!res.ok) {
-      if (data?.error?.message) {
-        throw new Error(data.error.message);
-      }
-      throw new Error(`Profile update failed (${res.status})`);
+      const message = data?.error?.message || `Profile update failed (${res.status})`;
+      throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
     }
 
     if (!data?.data) {

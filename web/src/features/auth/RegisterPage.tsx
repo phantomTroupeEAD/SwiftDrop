@@ -5,6 +5,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import { withRequestReference } from '@/shared/lib/api-error';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -58,15 +59,15 @@ export const RegisterPage: React.FC = () => {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
+        let message = data?.error?.message || 'Failed to send verification code.';
         if (res.status === 409) {
-          throw new Error('An account with this email already exists. Please log in.');
+          message = 'An account with this email already exists. Please log in.';
         } else if (res.status === 429) {
-          throw new Error('Please wait before requesting another verification code.');
+          message = 'Please wait before requesting another verification code.';
         } else if (!data) {
-          throw new Error('Email verification is unavailable right now. Please try again later.');
-        } else {
-          throw new Error(data?.error?.message || 'Failed to send verification code.');
+          message = 'Email verification is unavailable right now. Please try again later.';
         }
+        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
       }
 
       if (!data?.data) {
@@ -114,7 +115,8 @@ export const RegisterPage: React.FC = () => {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(data?.error?.message || 'Registration is unavailable right now. Please try again later.');
+        const message = data?.error?.message || 'Registration is unavailable right now. Please try again later.';
+        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
       }
 
       if (!data?.data) {
