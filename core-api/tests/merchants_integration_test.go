@@ -208,13 +208,16 @@ func TestMerchantsPostgresRepository_Integration(t *testing.T) {
 			t.Errorf("expected active count 1, got %d", activeCount)
 		}
 
-		// Revoke credential: (ctx, db, merchantID, credID, now)
-		revoked, exists, err := credRepo.Revoke(ctx, db, merchantID, credID, now)
+		// Revoke credential: use a future timestamp to satisfy the DB constraint
+		// ck_credentials_revoked (revoked_at >= created_at), because created_at is
+		// set server-side by PostgreSQL DEFAULT now() which may be ahead of Go's now.
+		revokeAt := now.Add(time.Second)
+		revoked, exists, err := credRepo.Revoke(ctx, db, merchantID, credID, revokeAt)
 		if err != nil || !revoked || !exists {
 			t.Fatalf("failed to revoke credential: revoked=%v exists=%v err=%v", revoked, exists, err)
 		}
 
-		activeCountAfter, _ := credRepo.CountActive(ctx, db, merchantID, now)
+		activeCountAfter, _ := credRepo.CountActive(ctx, db, merchantID, revokeAt)
 		if activeCountAfter != 0 {
 			t.Errorf("expected active count 0 after revocation, got %d", activeCountAfter)
 		}
@@ -252,14 +255,18 @@ func TestMerchantsPostgresRepository_Integration(t *testing.T) {
 			t.Errorf("expected url %s, got %s", url, hooks[0].URL)
 		}
 
-		// Query the canonical SQL view merchant_webhook_targets (Member 8 integration)
+		// Query the canonical SQL view merchant_webhook_targets (Member 8 integration).
+		// View columns (from migration 20261101000400): endpoint_id, merchant_id, url,
+		// secret_ciphertext, secret_key_version, subscribed_event_types, updated_at.
+		// Note: the view only exposes rows where merchant.status = 'APPROVED', so the
+		// merchant inserted in subtest 2 (now APPROVED) will appear here.
 		queryView := `
-			SELECT endpoint_id, merchant_id, business_name, url, secret_last4
+			SELECT endpoint_id, merchant_id, url
 			FROM merchant_webhook_targets
 			WHERE endpoint_id = $1;
 		`
-		var epID, mID, bName, targetURL, last4 string
-		err = db.QueryRowContext(ctx, queryView, webhookID).Scan(&epID, &mID, &bName, &targetURL, &last4)
+		var epID, mID, targetURL string
+		err = db.QueryRowContext(ctx, queryView, webhookID).Scan(&epID, &mID, &targetURL)
 		if err != nil {
 			t.Fatalf("failed to query merchant_webhook_targets view: %v", err)
 		}
@@ -393,7 +400,7 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 
 		var resp struct {
 			Data struct {
-				ID           string `json:"id"`
+				ID           string `json:"merchant_id"`
 				BusinessName string `json:"business_name"`
 				Status       string `json:"status"`
 			} `json:"data"`
@@ -476,7 +483,7 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 		var resp struct {
 			Data struct {
 				KeyID        string `json:"key_id"`
-				PlaintextKey string `json:"plaintext_key"`
+				PlaintextKey string `json:"api_key"`
 				KeyPrefix    string `json:"key_prefix"`
 			} `json:"data"`
 		}
@@ -547,8 +554,8 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 
 		mux.ServeHTTP(recReplay, reqReplay)
 
-		if recReplay.Code != http.StatusOK {
-			t.Fatalf("expected 200 OK for idempotent replay, got %d: %s", recReplay.Code, recReplay.Body.String())
+		if recReplay.Code != http.StatusCreated {
+			t.Fatalf("expected 201 Created for idempotent replay, got %d: %s", recReplay.Code, recReplay.Body.String())
 		}
 		if recReplay.Header().Get("Idempotent-Replay") != "true" {
 			t.Errorf("expected Idempotent-Replay: true header, got %s", recReplay.Header().Get("Idempotent-Replay"))
