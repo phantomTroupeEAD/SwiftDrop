@@ -1,9 +1,11 @@
 # Parcel Management Module (`internal/parcels`)
 
+The receipt endpoint uses the same access checks as parcel detail and reads the stored accepted booking price. Payment settlement is outside the parcel module.
+
 > **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking  
 > **Primary Owner:** Member 2 — Parcel Management & Pricing  
 > **Clean Architecture Boundary:** Modular Monolith Internal Module  
-> **Status:** Implemented HTTP Transport (`POST /api/v1/parcels`, `GET /api/v1/parcels/{id}`, `GET /api/v1/parcels/{id}/history` Tested & Ready for Startup Wiring; List/Receipt/Cancel Deferred)
+> **Status:** Booking, parcel detail, history, and receipts implemented. List and cancellation deferred.
 
 ---
 

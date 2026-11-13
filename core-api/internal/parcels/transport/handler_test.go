@@ -1078,6 +1078,33 @@ func TestBookParcel_IdempotentReplayConflictAndCallerIsolation(t *testing.T) {
 	}
 }
 
+func TestGetParcelReceipt(t *testing.T) {
+	th := newParcelTestHarness(t)
+	owner := th.issueToken(t, identityapp.Principal{UserID: testCustomerUserID, Role: identitydomain.RoleCustomer})
+	other := th.issueToken(t, identityapp.Principal{UserID: testOtherCustomerID, Role: identitydomain.RoleCustomer})
+	booking := assertParcelDataEnvelope(t, th.doJSON(t, http.MethodPost, "/api/v1/parcels", owner, testIdemKey1, validBookingJSON(testCustomerQuoteID)), http.StatusCreated)
+	path := "/api/v1/parcels/" + booking["id"].(string) + "/receipt"
+	rec := th.doJSON(t, http.MethodGet, path, owner, "", "")
+	receipt := assertParcelDataEnvelope(t, rec, http.StatusOK)
+	if receipt["parcel_id"] != booking["id"] || receipt["tracking_number"] != booking["tracking_number"] ||
+		receipt["receipt_number"] != "RCP-"+booking["tracking_number"].(string) || receipt["payment_status"] != "NOT_TRACKED" {
+		t.Fatalf("unexpected receipt: %v", receipt)
+	}
+	summary, ok := receipt["financial_summary"].(map[string]any)
+	if !ok || summary["price_cents"] != booking["delivery_fee_cents"] || summary["currency"] != booking["currency"] {
+		t.Fatalf("receipt price differs from booking: %v", summary)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("receipt must not be cached")
+	}
+	if rec := th.doJSON(t, http.MethodGet, path, other, "", ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("non-owner receipt lookup returned %d", rec.Code)
+	}
+	if rec := th.doJSON(t, http.MethodGet, path, "", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous receipt lookup returned %d", rec.Code)
+	}
+}
+
 func TestGetParcelAndHistory_AuthorizedIDORAndValidation(t *testing.T) {
 	th := newParcelTestHarness(t)
 
