@@ -33,6 +33,8 @@ For a UI-only preview, set `SWIFTDROP_DEMO_AUTH=1` and bind Vite to loopback. De
 
 Booking prefills the sender's name and phone from the signed-in profile. The sender can edit both fields and enter the pickup address.
 
+Customers enter postal codes in the booking form. SwiftDrop looks up the delivery zones before requesting a quote.
+
 Pickup and delivery forms support browser address autofill with separate sender and recipient sections. Merchant order search and status filters apply to the full fetched list before it is displayed in pages of 20.
 
 After booking, **View receipt** fetches the official receipt using the returned parcel ID when the parcels API supports it.

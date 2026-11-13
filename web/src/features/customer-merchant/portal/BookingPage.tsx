@@ -13,7 +13,7 @@ const contacts = [
 const fields = [
   ['name', 'Full name', 'text'], ['phone', 'Phone', 'tel'],
   ['address', 'Street address', 'text'], ['city', 'City', 'text'],
-  ['postal', 'Postal code', 'text'], ['zone', 'Zone ID', 'text'],
+  ['postal', 'Postal code', 'text'],
 ] as const;
 const parcelFields = [
   ['weight', 'Weight (kg)', 30], ['length', 'Length (cm)', 150],
@@ -25,7 +25,6 @@ const addressAutocomplete = {
   address: 'address-line1',
   city: 'address-level2',
   postal: 'postal-code',
-  zone: 'off',
 } as const;
 
 type Quote = { quote_id: string; fee_cents: number; currency: string; expires_at: string };
@@ -49,7 +48,7 @@ export function BookingPage() {
     'pickup-name': user?.display_name?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' '),
     'pickup-phone': user?.phone ?? '',
   }));
-  const [quote, setQuote] = useState<Quote>();
+  const [quote, setQuote] = useState<Quote & { pickupZone: string; dropoffZone: string }>();
   const [booking, setBooking] = useState<Booking>();
   const [receipt, setReceipt] = useState<Receipt>();
   const [receiptPending, setReceiptPending] = useState(false);
@@ -67,14 +66,14 @@ export function BookingPage() {
     setQuote(undefined);
     setError('');
   }
-  function contact(prefix: string) {
+  function contact(prefix: string, zoneId: string) {
     return {
       contact_name: value(prefix + '-name'),
       contact_phone: value(prefix + '-phone'),
       address_line1: value(prefix + '-address'),
       city: value(prefix + '-city'),
       postal_code: value(prefix + '-postal'),
-      zone_id: value(prefix + '-zone'),
+      zone_id: zoneId,
     };
   }
 
@@ -116,8 +115,6 @@ export function BookingPage() {
       setStep(3);
       return;
     }
-    const pickup = contact('pickup');
-    const dropoff = contact('dropoff');
     const weight = Number(value('weight'));
     const dimensions = {
       length_cm: Number(value('length')),
@@ -129,11 +126,23 @@ export function BookingPage() {
     setPending(true);
     try {
       if (step < 3) {
+        const resolveZone = async (prefix: string, label: string) => {
+          const postalCode = value(prefix + '-postal');
+          try {
+            const zone = await portalRequest<{ id: string }>(`/zones?postal_code=${encodeURIComponent(postalCode)}`);
+            if (!zone?.id) throw new PortalError(`The service did not return a zone for the ${label} address.`, 200);
+            return zone.id;
+          } catch (cause) {
+            throw new PortalError(`Couldn’t find a delivery zone for the ${label} address. ${errorMessage(cause)}`,
+              cause instanceof PortalError ? cause.status : 0);
+          }
+        };
+        const [pickupZone, dropoffZone] = await Promise.all([resolveZone('pickup', 'sender'), resolveZone('dropoff', 'recipient')]);
         const next = await portalRequest<Quote>('/pricing/quotes', {
           token: accessToken, method: 'POST',
           body: {
-            origin_zone_id: pickup.zone_id,
-            destination_zone_id: dropoff.zone_id,
+            origin_zone_id: pickupZone,
+            destination_zone_id: dropoffZone,
             actual_weight_kg: weight,
             dimensions,
             service_level: serviceLevel,
@@ -144,9 +153,11 @@ export function BookingPage() {
           setError('The pricing service did not return a valid quote.');
           return;
         }
-        setQuote(next);
+        setQuote({ ...next, pickupZone, dropoffZone });
         setStep(2);
       } else if (quote) {
+        const pickup = contact('pickup', quote.pickupZone);
+        const dropoff = contact('dropoff', quote.dropoffZone);
         if (!bookingKey.current && Date.parse(quote.expires_at) <= Date.now()) {
           setStep(2);
           setError('The quote has expired. Request a new quote to continue.');
@@ -217,7 +228,9 @@ export function BookingPage() {
                 const key = prefix + '-' + field;
                 return <label className="m6-field" key={key}>{name}
                   <Input required type={type} name={key} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
-                    autoComplete={field === 'zone' ? 'off' : `section-${prefix} ${addressAutocomplete[field]}`}
+                    autoComplete={`section-${prefix} ${addressAutocomplete[field]}`}
+                    inputMode={field === 'postal' ? 'numeric' : undefined}
+                    pattern={field === 'postal' ? '[0-9]{5}' : undefined}
                     onChange={event => change(key, event.target.value)} />
                 </label>;
               })}

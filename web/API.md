@@ -2,6 +2,19 @@
 
 ## Apple-style portal integration checkpoint
 
+Before requesting a booking quote, the web client resolves both five-digit postal codes through `GET /api/v1/zones?postal_code=...`. It uses the returned `data.id` values for pricing and reuses the same zones when submitting that quote's booking.
+
+| Role | Current pages and API integration | Remaining integration |
+| --- | --- | --- |
+| Public | Landing, sign-in, customer registration, public tracking | Verify OTP delivery and tracking updates against deployed services. |
+| Customer | Dashboard, booking, receipts, signed-in tracking, merchant application, AI chat | Verify quote, booking and receipt together with seeded pricing. Verify AI replies and booking prefill against the assistant service. |
+| Merchant | Dashboard, profile, orders and CSV import, API keys, webhooks | Verify tenant isolation and that CSV imports create parcels through the live booking adapter. |
+| Dispatcher | Dispatcher dashboard route | Connect the dispatch board and assignment operations to the dispatch API. |
+| Courier | Courier dashboard route | Replace local task fixtures and status changes with delivery and proof-of-delivery operations. |
+| Admin | Admin dashboard with user management requests | Connect delivery zones, settings, audit logs, delivery reports, and merchant approvals. |
+
+Background event processing, internal service interfaces, and health probes support these workflows through the backend.
+
 SwiftDrop Assistant sends `POST /api/v1/ai/chat` with the customer Bearer token and JSON fields `prompt` and optional `conversation_id`. The service returns `reply`, `conversation_id`, and optional `actions`. The chat renders replies as text and accepts only a recognized booking action. It prefills supported postal codes, weight, and service level. Booking still requests an authoritative quote and requires confirmation.
 
 Retrying the merchant profile repeats only `GET /api/v1/merchants/me` with the current session token. Order and integration requests use their existing endpoints.

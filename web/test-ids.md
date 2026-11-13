@@ -5,7 +5,7 @@
 | IDs | Purpose |
 | --- | --- |
 | `register-full_name-input`, `register-email-input`, `register-phone-input`, `register-password-input`, `register-submit-btn` | Customer registration fields and submit |
-| `booking-wizard`, `booking-{pickup,dropoff}-{name,phone,address,city,postal,zone}-input` | Booking form and address fields |
+| `booking-wizard`, `booking-{pickup,dropoff}-{name,phone,address,city,postal}-input` | Booking form and address fields |
 | `booking-{weight,length,width,height,description}-input`, `booking-service-select` | Parcel details |
 | `booking-next-btn`, `booking-back-btn`, `quote-price-cents`, `booking-submit-btn`, `booking-confirmation`, `booking-receipt-btn`, `booking-receipt` | Booking navigation, authoritative quote, submission, result and official receipt |
 | `tracking-search-input`, `tracking-search-btn`, `tracking-status-badge`, `tracking-timeline` | Public tracking search and results |
