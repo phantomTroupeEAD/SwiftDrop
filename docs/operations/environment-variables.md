@@ -13,7 +13,7 @@ Variables shared across multiple backend services and daemons:
 
 | Variable Name | Description | Default / Example Value | Required? | Secret? | Consumed By |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `APP_ENV` | Application runtime environment (`local`, `development`, `staging`, `production`). | `local` | **Yes** | No | All services |
+| `APP_ENV` | Runtime environment (`local`, `test`, `staging`, `production`). **Unset means `local`.** In Kubernetes the prod overlay (`deploy/overlays/prod`) sets `production` on core-api and tracking-api; the base and the dev (k3d) overlay stay non-production. Production turns on the strict rules: core-api refuses to start without a reachable DB or a real `JWT_SECRET`, rotates/suspends the demo accounts, requires merchant secrets; tracking-api requires a real `JWT_SECRET`. | `local` (Compose), `production` (Azure) | **Yes** | No | Core API, Tracking, Messaging (ai-assistant uses `ENVIRONMENT`, §5) |
 | `LOG_LEVEL` | Minimum log output level (`debug`, `info`, `warn`, `error`). | `info` | No | No | All services |
 | `DATABASE_URL` | PostgreSQL connection DSN (`postgres://user:pass@host:5432/dbname?sslmode=disable`). Each service logs in with its own role (D6): core-api `swiftdrop_app`, tracking `swiftdrop_tracking_ro`, relay `swiftdrop_relay`, worker `swiftdrop_worker`, reconciler `swiftdrop_reconciler`. In Kubernetes the value comes from the matching key of `postgres-secrets` (§7). Never the `swiftdrop` superuser. | `postgres://swiftdrop_app:<change-me-local-only>@postgres:5432/swiftdrop_db?sslmode=disable` | **Yes** | **Yes** | Core API, Tracking, Outbox Relay, Event Worker, Reconciler |
 | `DB_MAX_OPEN_CONNS` | Maximum database connection pool size per pod (D8 budget: Core 12, Tracking 5, Relay 5, Worker 10, Reconciler 2; max 105 active vs 150 server limit). | `12` | No | No | Core API, Tracking, Outbox Relay |
@@ -31,15 +31,17 @@ Primary backend modular monolith (HTTP Port `8080`, Probes at `/health/live`, `/
 | :--- | :--- | :--- | :--- | :--- |
 | `HTTP_ADDR` | TCP address and port for HTTP server to listen on. | `:8080` | **Yes** | No |
 | `PUBLIC_BASE_URL` | Public-facing base domain URL. | `https://swiftdrop.example.com` (one domain, path routing C17; real domain still open) (local: `http://localhost`) | **Yes** | No |
-| `JWT_PRIVATE_KEY_PEM` | Path to the RSA private key PEM file for minting access tokens. In Kubernetes, `jwt-secrets` is mounted as files under `/etc/secrets/jwt/`, because multi-line PEM text in env vars breaks line endings (Member 1, 2026-11-01). | `/etc/secrets/jwt/private.pem` | **Yes** | **Yes** |
-| `JWT_PUBLIC_KEY_PEM` | Path to the RSA public key PEM file for validating tokens. | `/etc/secrets/jwt/public.pem` | **Yes** | No |
+| `JWT_SECRET` | HS256 key that signs access tokens (**what the code uses today**). ≥ 32 characters, random. The same value must reach tracking-api and ai-assistant (in K8s all three read `core-api-secrets/JWT_SECRET`). In production a missing, short or public development key stops core-api at start-up. | *(random, ≥ 32 chars)* | **Yes** | **Yes** |
+| `SEED_PASSWORD_ADMIN`, `_DISPATCHER`, `_COURIER`, `_MERCHANT`, `_CUSTOMER` | Production only: private passwords (≥ 12 chars) for the five demo accounts whose default passwords are published. Set → that account's password is replaced; unset → the account is suspended. Ignored outside production. See `core-api/internal/identity/README.md` §2. | *(empty)* | No | **Yes** |
+| `JWT_PRIVATE_KEY_PEM` | *(Planned, not implemented: core-api uses `JWT_SECRET` above.)* Path to the RSA private key PEM file for minting access tokens. In Kubernetes, `jwt-secrets` is mounted as files under `/etc/secrets/jwt/`, because multi-line PEM text in env vars breaks line endings (Member 1, 2026-11-01). | `/etc/secrets/jwt/private.pem` | **Yes** | **Yes** |
+| `JWT_PUBLIC_KEY_PEM` | *(Planned, not implemented.)* Path to the RSA public key PEM file for validating tokens. | `/etc/secrets/jwt/public.pem` | No | No |
 | `JWT_ACCESS_EXP_MINUTES`| Lifetime duration for access tokens. | `15` | No | No |
 | `COOKIE_SECURE` | Secure flag on the refresh-token cookie. Must be `true` in production (HTTPS only). Local Docker runs plain HTTP, so it must be `false` there, or the browser drops the cookie (Member 1, 2026-11-01). | `false` (local), `true` (production) | **Yes** | No |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud Console. | `123456789-abc.apps.googleusercontent.com` | **Yes** | No |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret. | `GOCSPX-abc123xyz...` | **Yes** | **Yes** |
 | `GOOGLE_REDIRECT_URI` | Authorized OAuth redirect callback URL, through the gateway. The path `/api/v1/auth/google/callback` follows SRS §6.2 (confirmed by Member 1, 2026-11-01). It must match the URI registered in Google Cloud Console exactly, or sign-in fails with `redirect_uri_mismatch`. | `http://localhost/api/v1/auth/google/callback` (production: `https://swiftdrop.example.com/api/v1/auth/google/callback`) | **Yes** | No |
 | `IDEMPOTENCY_EXPIRY_HOURS`| Lifetime before stored idempotency cache rows expire. | `24` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for encrypting merchant webhook secrets (shared with Event Worker). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, **base64-encoded** (core-api rejects anything that does not decode to 32 bytes). Same value as the Event Worker. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
 | `MERCHANT_API_KEY_PEPPER`| Server-side pepper string for merchant API key HMAC hashing. | *(Secret pepper string)* | **Yes** | **Yes** |
 | `OBJECT_STORAGE_DRIVER` / `STORAGE_DRIVER` | Storage driver selection (`local`, `r2`, `minio`, `s3`). | `local` | No | No |
 | `LOCAL_STORAGE_PATH` | Local disk folder path when `OBJECT_STORAGE_DRIVER=local`. | `./data/proofs` | No | No |
@@ -61,7 +63,7 @@ Read-optimized public milestone and SSE projection service (HTTP Port `8081`, Pr
 | Variable Name | Description | Default / Example Value | Required? | Secret? |
 | :--- | :--- | :--- | :--- | :--- |
 | `TRACKING_HTTP_ADDR` | Listen address for Tracking service. | `:8081` | **Yes** | No |
-| `JWT_PUBLIC_KEY_PEM` | Path to the shared public key file for optional authenticated stream validation. Tracking mounts only `public.pem` from `jwt-secrets`. | `/etc/secrets/jwt/public.pem` | No | No |
+| `JWT_SECRET` (or `TRACKING_JWT_SECRET`) | Same HS256 key as core-api, to verify user tokens on authenticated tracking (issuer `https://api.swiftdrop.io`, `JWT_ISSUER` to override). Wired from `core-api-secrets` in K8s and from the shared `JWT_SECRET` in Compose. Without it tracking uses its development key and rejects real tokens; in production it refuses to start. | *(same as core-api)* | **Yes** | **Yes** |
 | `SSE_HEARTBEAT_SECONDS` | Interval in seconds between keep-alive SSE comments (`: ping` or `:keepalive`). | `15` | No | No |
 | `REDIS_URL` | Optional Redis URL for cross-replica SSE fan-out. | `redis://redis:6379/0` | No | No |
 
@@ -81,7 +83,7 @@ Read-optimized public milestone and SSE projection service (HTTP Port `8081`, Pr
 | :--- | :--- | :--- | :--- | :--- |
 | `WORKER_CONCURRENCY` | Number of parallel worker goroutines per pod. | `10` | No | No |
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS` | Socket timeout for outbound merchant webhooks. | `5` | No | No |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM hex key for decrypting merchant webhook signing secrets (shared with Core API). | `0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` | **Yes** | **Yes** |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY`| 32-byte AES-256-GCM key, base64 (64 hex characters also accepted). Same value as Core API. | `MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=` | **Yes** | **Yes** |
 | `NOTIFICATION_PROVIDER` | Notification provider backend (`mock`, `smtp`, `twilio`, `sendgrid`). | `mock` (local) or `smtp` | **Yes** | No |
 | `SMTP_HOST` | SMTP server hostname (e.g. `mailpit` locally). | `mailpit` | No | No |
 | `SMTP_PORT` | SMTP server port (e.g. `1025` for Mailpit). | `1025` | No | No |
@@ -101,6 +103,8 @@ Python/FastAPI LLM query and agent service (HTTP Port `8000`, Probes at `/health
 | Variable Name | Description | Default / Example Value | Required? | Secret? |
 | :--- | :--- | :--- | :--- | :--- |
 | `AI_HTTP_PORT` | HTTP port for FastAPI server. | `8000` | **Yes** | No |
+| `ENVIRONMENT` | `development`, `test` or `production` (default `development`). The prod overlay sets `production`, which disables mock tokens. | `production` (Azure) | **Yes** | No |
+| `JWT_SECRET` | Same key as core-api (read from `core-api-secrets` in K8s). | *(same as core-api)* | **Yes** | **Yes** |
 | `CORE_API_URL` | Internal cluster base URL to Core API for tool queries. | `http://core-api:8080` | **Yes** | No |
 | `AI_SERVICE_ROLE_TOKEN` | Service-to-service JWT token with read-only scopes. | *(Bearer JWT)* | **Yes** | **Yes** |
 | `LLM_PROVIDER` | LLM backend provider (`openai`, `anthropic`, `mock`). | `openai` (or `mock`) | **Yes** | No |
@@ -136,7 +140,8 @@ Standardized secret naming scheme per Member 9 Agreement A5:
 | Database App Credentials | `postgres-secrets` | `Secret` | One key per login role, mapped into each pod's `DATABASE_URL`: `DATABASE_URL` (core-api, `swiftdrop_app`), `TRACKING_DATABASE_URL` (`swiftdrop_tracking_ro`), `RELAY_DATABASE_URL` (`swiftdrop_relay`), `WORKER_DATABASE_URL` (`swiftdrop_worker`), `RECONCILER_DATABASE_URL` (`swiftdrop_reconciler`); plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` for the Postgres container only |
 | Database Migration Credentials | `postgres-migrator-secrets` | `Secret` | `DATABASE_URL` (role `swiftdrop_migrator`) |
 | RabbitMQ Credentials | `rabbitmq-secrets` | `Secret` | `RABBITMQ_URL` (user `swiftdrop`) |
-| JWT Keys | `jwt-secrets` | `Secret` (mounted as files at `/etc/secrets/jwt/`, not env vars) | `private.pem` (core-api only), `public.pem` (core-api, tracking-api) |
+| Core API secrets | `core-api-secrets` | `Secret` | `JWT_SECRET` (also read by tracking-api and ai-assistant), `MERCHANT_API_KEY_PEPPER`, `WEBHOOK_SECRET_ENCRYPTION_KEY`, optional `SEED_PASSWORD_<ROLE>` |
+| JWT Keys *(planned, not used)* | `jwt-secrets` | `Secret` (files at `/etc/secrets/jwt/`) | `private.pem`, `public.pem` |
 | Third-Party API Keys & Encryption | `integrations-secrets` | `Secret` | `WEBHOOK_SECRET_ENCRYPTION_KEY`, `MERCHANT_API_KEY_PEPPER`, `GOOGLE_CLIENT_SECRET`, `LLM_API_KEY`, `SMTP_PASSWORD` |
 | Module-Specific Secrets | `<service>-<module>-secrets` | `Secret` | E.g. `core-api-merchants-secrets` |
 | Traefik Configuration | `traefik-config` | `ConfigMap` | `traefik.yml` static configuration |

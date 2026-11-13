@@ -53,7 +53,11 @@ func TestLocalStorageClient_PathTraversalRejection(t *testing.T) {
 }
 
 func TestLocalStorageClient_GeneratePresignedURL(t *testing.T) {
-	client, err := NewLocalStorageClient("/tmp/proofs", "https://api.swiftdrop.io/api/v1/deliveries/proofs")
+	tempDir, err := os.MkdirTemp("", "proof-presign-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	client, err := NewLocalStorageClient(tempDir, "https://api.swiftdrop.io/api/v1/deliveries/proofs")
 	require.NoError(t, err)
 
 	ctx := context.Background()

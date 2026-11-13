@@ -92,38 +92,42 @@ func TestConfigHelpers(t *testing.T) {
 }
 
 func TestLoadEnv(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "test_env_*.env")
+	tempFile, err := os.CreateTemp("", ".env.test-*")
 	if err != nil {
-		t.Fatalf("failed to create temp env file: %v", err)
+		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer os.Remove(tempFile.Name())
 
 	content := `
-# Comment line
-TEST_LOAD_ENV_A=hello_world
-TEST_LOAD_ENV_B="quoted_string"
-TEST_LOAD_ENV_C='single_quoted'
+# Sample comment
+TEST_LOADENV_A=simple_value
+TEST_LOADENV_B="quoted value"
+TEST_LOADENV_C='single quoted'
+TEST_LOADENV_PREEXISTING=from_file
 `
-	if _, err := tmpFile.WriteString(content); err != nil {
-		t.Fatalf("failed to write temp env file: %v", err)
+	if _, err := tempFile.WriteString(content); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
 	}
-	_ = tmpFile.Close()
+	tempFile.Close()
 
-	os.Setenv("TEST_LOAD_ENV_EXISTING", "original")
-	defer os.Unsetenv("TEST_LOAD_ENV_EXISTING")
-	defer os.Unsetenv("TEST_LOAD_ENV_A")
-	defer os.Unsetenv("TEST_LOAD_ENV_B")
-	defer os.Unsetenv("TEST_LOAD_ENV_C")
+	os.Setenv("TEST_LOADENV_PREEXISTING", "already_set")
+	defer os.Unsetenv("TEST_LOADENV_PREEXISTING")
+	defer os.Unsetenv("TEST_LOADENV_A")
+	defer os.Unsetenv("TEST_LOADENV_B")
+	defer os.Unsetenv("TEST_LOADENV_C")
 
-	LoadEnv(tmpFile.Name())
+	LoadEnv(tempFile.Name())
 
-	if val := os.Getenv("TEST_LOAD_ENV_A"); val != "hello_world" {
-		t.Errorf("expected 'hello_world', got %q", val)
+	if val := os.Getenv("TEST_LOADENV_A"); val != "simple_value" {
+		t.Errorf("expected 'simple_value', got %q", val)
 	}
-	if val := os.Getenv("TEST_LOAD_ENV_B"); val != "quoted_string" {
-		t.Errorf("expected 'quoted_string', got %q", val)
+	if val := os.Getenv("TEST_LOADENV_B"); val != "quoted value" {
+		t.Errorf("expected 'quoted value', got %q", val)
 	}
-	if val := os.Getenv("TEST_LOAD_ENV_C"); val != "single_quoted" {
-		t.Errorf("expected 'single_quoted', got %q", val)
+	if val := os.Getenv("TEST_LOADENV_C"); val != "single quoted" {
+		t.Errorf("expected 'single quoted', got %q", val)
+	}
+	if val := os.Getenv("TEST_LOADENV_PREEXISTING"); val != "already_set" {
+		t.Errorf("expected pre-existing env to not be overwritten, got %q", val)
 	}
 }
