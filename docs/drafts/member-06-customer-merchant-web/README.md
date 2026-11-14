@@ -22,6 +22,7 @@ All eight mandatory module specification documents have been authored and harmon
 - [x] [Document 8 — Implementation, Deployment & Operations Guide](./doc-08-implementation-deployment-and-ops.md)
 
 ### Supporting Artifacts
+- **Audit & Action Plan:** [`M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md`](./M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md) (Comprehensive audit of backend mismatches, Apple HIG redesign specs, authentic imagery, postal resolution, and data-testid register)
 - **API Inventory:** [`integration-inventory.json`](./integration-inventory.json) (Machine-readable inventory of consumed endpoints and transport contracts)
 - **Reference Guide:** [`MEMBER_06_ALIGNMENT_AND_SPECIFICATION_GUIDE.md`](./MEMBER_06_ALIGNMENT_AND_SPECIFICATION_GUIDE.md) (Architectural action sheet for Meeting 2)
 

@@ -33,4 +33,14 @@ var (
 	ErrInvalidRequestHash          = errors.New("invalid idempotency request hash")
 	ErrInvalidIdempotencyRecord    = errors.New("invalid idempotency record")
 	ErrNilIdempotencyStore         = errors.New("nil idempotency store provided")
+
+	// Parcel read authorization and caller ownership errors.
+	ErrForbiddenParcelAccess = errors.New("forbidden access to parcel")
+	ErrInvalidCallerID       = errors.New("authenticated user id must be a valid UUID")
+	ErrMissingTenantID       = errors.New("tenant id required for merchant endpoints")
+	ErrInvalidTenantID       = errors.New("tenant id must be a valid UUID")
+	ErrMerchantNotFound      = errors.New("parcel: merchant tenant not found")
+	ErrMerchantOwnerMismatch = errors.New("authenticated user does not own merchant tenant")
+	ErrMerchantNotApproved   = errors.New("merchant account is not approved")
+	ErrNilMerchantReader     = errors.New("nil merchant reader provided")
 )

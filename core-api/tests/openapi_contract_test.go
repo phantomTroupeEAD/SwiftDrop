@@ -19,13 +19,18 @@ import (
 	adminapp "github.com/swiftdrop/core-api/internal/admin/application"
 	admininfra "github.com/swiftdrop/core-api/internal/admin/infrastructure"
 	admintransport "github.com/swiftdrop/core-api/internal/admin/transport"
+	"github.com/swiftdrop/core-api/internal/events"
 	eventstransport "github.com/swiftdrop/core-api/internal/events/transport"
 	identityapp "github.com/swiftdrop/core-api/internal/identity/application"
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	identityinfra "github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	identitytransport "github.com/swiftdrop/core-api/internal/identity/transport"
 	merchantsapp "github.com/swiftdrop/core-api/internal/merchants/application"
+	merchantsinfra "github.com/swiftdrop/core-api/internal/merchants/infrastructure"
 	merchantstransport "github.com/swiftdrop/core-api/internal/merchants/transport"
+	parcelsapp "github.com/swiftdrop/core-api/internal/parcels/application"
+	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
+	parcelstransport "github.com/swiftdrop/core-api/internal/parcels/transport"
 	pricingapp "github.com/swiftdrop/core-api/internal/pricing/application"
 	pricinginfra "github.com/swiftdrop/core-api/internal/pricing/infrastructure"
 	pricingtransport "github.com/swiftdrop/core-api/internal/pricing/transport"
@@ -160,6 +165,53 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 			Reports:      adminapp.NoDeliveryData{},
 			ReportSource: adminapp.NoDeliveryDataSource,
 		}).Register(mux)
+	}
+
+	// 6. Parcel Operations (Member 02: parcels booking, tracking, status history)
+	// Needs PostgreSQL, like the real wiring: offline runs skip these routes (404).
+	if db != nil {
+		txManager := parcelsapp.NewDBTransactionManager(db)
+		quoteConsumer := parcelsinfra.NewPostgresQuoteConsumer(db)
+		parcelRepo := parcelsinfra.NewPostgresParcelRepository(db)
+		statusHistoryRepo := parcelsinfra.NewPostgresStatusHistoryRepository(db)
+		idempotencyRepo := parcelsinfra.NewPostgresIdempotencyRepository(db)
+		outboxWriter := events.NewPostgresOutboxWriter()
+		trackingGen := parcelsapp.NewCryptoTrackingNumberGenerator()
+		idGen := parcelsapp.NewUUIDv7Generator()
+		clock := parcelsapp.NewSystemClock()
+		merchantReader := parcelsinfra.NewMerchantRepoAdapter(merchantsinfra.MerchantRepo{}, db)
+
+		bookUC, err := parcelsapp.NewBookParcelUseCase(
+			txManager,
+			quoteConsumer,
+			parcelRepo,
+			statusHistoryRepo,
+			outboxWriter,
+			trackingGen,
+			idGen,
+			clock,
+		)
+		if err != nil {
+			panic(err)
+		}
+		bookUC = bookUC.WithIdempotency(idempotencyRepo, parcelsapp.DefaultIdempotencyTTL)
+
+		getParcelUC, err := parcelsapp.NewGetParcelUseCase(parcelRepo, merchantReader)
+		if err != nil {
+			panic(err)
+		}
+
+		getHistoryUC, err := parcelsapp.NewGetParcelHistoryUseCase(parcelRepo, statusHistoryRepo, merchantReader)
+		if err != nil {
+			panic(err)
+		}
+
+		parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, merchantReader)
+		if err != nil {
+			panic(err)
+		}
+
+		parcelstransport.RegisterRoutes(mux, parcelHandler, security)
 	}
 
 	// 4. Standalone & Health Endpoints

@@ -55,6 +55,10 @@ spec:
                 name: outbox-relay-secrets # Dedicated credentials for swiftdrop_relay role
             - secretRef:
                 name: rabbitmq-secrets
+            # The shared messaging config (services/messaging/internal/config) requires the webhook
+            # key in production even for the relay; without it the relay exits at start-up.
+            - secretRef:
+                name: integrations-secrets
           resources:
             requests:
               cpu: 100m

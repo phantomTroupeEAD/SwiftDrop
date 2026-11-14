@@ -249,6 +249,7 @@ export const RegisterPage: React.FC = () => {
                   </Label>
                   <Input
                     id="register-email"
+                    data-testid="register-email-input"
                     type="email"
                     autoComplete="email"
                     required
@@ -260,6 +261,7 @@ export const RegisterPage: React.FC = () => {
 
                 <Button
                   type="submit"
+                  data-testid="register-send-otp-btn"
                   size="lg"
                   className="w-full mt-2 text-xs font-semibold"
                   disabled={loading}
@@ -315,6 +317,7 @@ export const RegisterPage: React.FC = () => {
                   </Label>
                   <Input
                     id="register-code"
+                    data-testid="register-otp-input"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     pattern="[0-9]{6}"
@@ -334,6 +337,7 @@ export const RegisterPage: React.FC = () => {
                     </Label>
                     <Input
                       id="register-first"
+                    data-testid="register-first-name-input"
                       autoComplete="given-name"
                       required
                       placeholder="Devinda"
@@ -347,6 +351,7 @@ export const RegisterPage: React.FC = () => {
                     </Label>
                     <Input
                       id="register-last"
+                    data-testid="register-last-name-input"
                       autoComplete="family-name"
                       required
                       placeholder="Perera"
@@ -362,6 +367,7 @@ export const RegisterPage: React.FC = () => {
                   </Label>
                   <Input
                     id="register-phone"
+                    data-testid="register-phone-input"
                     type="tel"
                     autoComplete="tel"
                     required
@@ -378,6 +384,7 @@ export const RegisterPage: React.FC = () => {
                   <div className="relative">
                     <Input
                       id="register-password"
+                    data-testid="register-password-input"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
                       aria-describedby="register-password-help"
@@ -411,6 +418,7 @@ export const RegisterPage: React.FC = () => {
                 <div className="flex items-start gap-2.5 pt-1">
                   <Checkbox
                     id="register-terms"
+                    data-testid="register-terms-checkbox"
                     required
                     checked={termsAccepted}
                     onCheckedChange={(value) => setTermsAccepted(value === true)}

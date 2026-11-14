@@ -74,6 +74,21 @@ log "Wait for database Jobs"
 kubectl -n "$NS" wait --for=condition=complete job/postgres-bootstrap-roles --timeout="$TIMEOUT" || rollback
 kubectl -n "$NS" wait --for=condition=complete job/core-api-migrate --timeout="$TIMEOUT" || rollback
 
+# core-api secures the published demo accounts at start-up (production). Its pods are created by the
+# same apply and can start BEFORE the migrate Job has created those accounts, which would leave them
+# with their public passwords. Restart core-api now that migrations are done, so the check sees them.
+log "Restart core-api after migrations (demo-account check must run on the migrated database)"
+kubectl -n "$NS" rollout restart deployment/core-api
+
+# sync-secrets.sh sets SECRETS_CHANGED=1 when a Secret was created or changed. Pods read env vars only
+# at start-up, so restart every other deployment that consumes a Secret as well.
+if [[ "${SECRETS_CHANGED:-0}" == "1" ]]; then
+  log "Secrets changed: restarting pods that read them"
+  for d in tracking-api outbox-relay event-worker ai-assistant grafana postgres-exporter; do
+    kubectl -n "$NS" rollout restart "deployment/$d" 2>/dev/null && echo "  restart $d" || true
+  done
+fi
+
 log "Wait for rollouts"
 for kind_name in $(kubectl -n "$NS" get deployments,statefulsets -o name); do
   kubectl -n "$NS" rollout status "$kind_name" --timeout="$TIMEOUT" || rollback

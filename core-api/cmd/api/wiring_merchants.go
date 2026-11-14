@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -47,7 +48,7 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		return errors.New("merchants: MERCHANT_API_KEY_PEPPER must be at least 32 bytes")
 	}
 
-	// 2. Webhook Secret Encryption Key (Base64-encoded 32-byte AES-256 key)
+	// 2. Webhook Secret Encryption Key (Base64-encoded 32-byte AES-256 key; hex-encoded accepted as fallback)
 	encKeyB64 := os.Getenv("WEBHOOK_SECRET_ENCRYPTION_KEY")
 	var encKey []byte
 	if encKeyB64 == "" {
@@ -58,13 +59,21 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		encKey = []byte("01234567890123456789012345678901")
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(encKeyB64)
-		if err != nil {
-			return fmt.Errorf("merchants: WEBHOOK_SECRET_ENCRYPTION_KEY must be a valid base64-encoded string: %w", err)
+		if err == nil && len(decoded) == 32 {
+			encKey = decoded
+		} else if len(encKeyB64) == 64 {
+			// Fallback: accept 64-character hex-encoded string (32 bytes)
+			if hexDecoded, hexErr := hex.DecodeString(encKeyB64); hexErr == nil && len(hexDecoded) == 32 {
+				encKey = hexDecoded
+			}
 		}
-		if len(decoded) != 32 {
+
+		if len(encKey) == 0 {
+			if err != nil {
+				return fmt.Errorf("merchants: WEBHOOK_SECRET_ENCRYPTION_KEY must be a valid base64-encoded string: %w", err)
+			}
 			return fmt.Errorf("merchants: WEBHOOK_SECRET_ENCRYPTION_KEY decoded length is %d bytes, must be exactly 32 bytes (AES-256)", len(decoded))
 		}
-		encKey = decoded
 	}
 
 	// 3. Environment-aware API key prefix

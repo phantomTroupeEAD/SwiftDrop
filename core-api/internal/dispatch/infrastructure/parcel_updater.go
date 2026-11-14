@@ -32,7 +32,7 @@ func (u *PostgresParcelLifecycleUpdater) GetStatusWithLock(
 		return "", 0, fmt.Errorf("parcel updater: %w", db.ErrNilDB)
 	}
 	query := `
-		SELECT current_status, attempt_count
+		SELECT status, attempt_count
 		FROM parcels
 		WHERE id = $1
 		FOR UPDATE;
@@ -74,7 +74,7 @@ func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 	}
 	updateQuery := `
 		UPDATE parcels
-		SET current_status = $1, updated_at = NOW()
+		SET status = $1, version = version + 1, updated_at = NOW()
 		WHERE id = $2;
 	`
 
@@ -88,19 +88,19 @@ func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 		return fmt.Errorf("failed to update parcel status: %w", err)
 	}
 
-	// Insert into immutable parcel_status_history audit log if the table exists
+	// Record the transition in parcel status history
 	historyQuery := `
 		INSERT INTO parcel_status_history (
-			id, parcel_id, from_status, to_status, actor_id, actor_role, note, occurred_at
+			id, parcel_id, from_status, to_status, actor_id, actor_type, actor_role, reason, occurred_at
 		) VALUES (
-			gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW()
+			gen_random_uuid(), $1, $2, $3, $4, 'USER', $5, $6, NOW()
 		);
 	`
 	if tx != nil {
-		_, _ = tx.ExecContext(ctx, historyQuery, parcelID, fromStatus, toStatus, actorID, actorRole, note)
+		_, err = tx.ExecContext(ctx, historyQuery, parcelID, fromStatus, toStatus, actorID, actorRole, note)
 	} else {
-		_, _ = u.db.ExecContext(ctx, historyQuery, parcelID, fromStatus, toStatus, actorID, actorRole, note)
+		_, err = u.db.ExecContext(ctx, historyQuery, parcelID, fromStatus, toStatus, actorID, actorRole, note)
 	}
 
-	return nil
+	return err
 }

@@ -42,9 +42,10 @@ type ParcelRepository interface {
 	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
 }
 
-// StatusHistoryRepository defines the append-only persistence port for status audit entries.
+// StatusHistoryRepository defines the append-only persistence and chronological query port for status audit entries.
 type StatusHistoryRepository interface {
 	Save(ctx context.Context, q db.Querier, entry domain.StatusHistoryEntry) error
+	FindByParcelID(ctx context.Context, q db.Querier, parcelID string) ([]domain.StatusHistoryEntry, error)
 }
 
 // ParcelLifecycleService defines the application port for requesting parcel lifecycle status transitions.
@@ -79,4 +80,20 @@ type IdempotencyStore interface {
 	AcquireLock(ctx context.Context, q db.Querier, key, callerScope string) error
 	Find(ctx context.Context, q db.Querier, key, callerScope string) (IdempotencyRecord, bool, error)
 	Save(ctx context.Context, q db.Querier, record IdempotencyRecord) error
+}
+
+// MerchantStatusApproved indicates an approved merchant permitted to create and access merchant parcels.
+const MerchantStatusApproved = "APPROVED"
+
+// MerchantProfile captures authoritative merchant identity and approval metadata needed
+// to verify merchant-scoped parcel operations without coupling parcels to merchant internals.
+type MerchantProfile struct {
+	ID          string
+	OwnerUserID string
+	Status      string
+}
+
+// MerchantReader retrieves authoritative merchant records for tenant ownership verification.
+type MerchantReader interface {
+	FindByID(ctx context.Context, merchantID string) (MerchantProfile, error)
 }

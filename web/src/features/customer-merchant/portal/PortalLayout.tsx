@@ -1,24 +1,26 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Package } from 'lucide-react';
+import { LogIn, LogOut, Package } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
 import { statusLabel } from './api';
-import './portal.css';
 
-type PortalProfile = 'public' | 'customer' | 'merchant';
+type PortalProfile = 'public' | 'customer' | 'merchant' | 'dispatcher';
 
 export function PortalHeader({ profile }: { profile: PortalProfile }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   return (
       <header className="m6-header">
-        <Link className="m6-brand" to={profile === 'public' ? '/track' : '/dashboard'}><Package size={20} aria-hidden="true" /> SwiftDrop</Link>
+        <Link className="m6-brand" to={profile === 'public' ? '/' : '/dashboard'}>
+          <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
+          SwiftDrop
+        </Link>
         {user
-          ? <Button type="button" variant="ghost" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}>Sign out</Button>
-          : <Button asChild variant="ghost" className="m6-session-action"><Link to="/auth/login">Sign in</Link></Button>}
+          ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
+          : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
         <nav aria-label="Portal navigation">
-          {profile !== 'public' && <NavLink to="/dashboard" end>Home</NavLink>}
+          {profile !== 'public' && profile !== 'dispatcher' && <NavLink to="/dashboard" end>Home</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/merchants/apply">Merchant application</NavLink>}
           {profile === 'merchant' && <>
@@ -28,7 +30,7 @@ export function PortalHeader({ profile }: { profile: PortalProfile }) {
           </>}
           {profile === 'public'
             ? <NavLink to="/track">Track a parcel</NavLink>
-            : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+            : profile === 'dispatcher' ? <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink> : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
         </nav>
       </header>

@@ -16,7 +16,15 @@ import (
 
 func TestDispatchAndDeliveryWiring_RoutesRegistered(t *testing.T) {
 	origEnv := os.Getenv("APP_ENV")
-	defer os.Setenv("APP_ENV", origEnv)
+	origDBURL, hasDBURL := os.LookupEnv("DATABASE_URL")
+	defer func() {
+		_ = os.Setenv("APP_ENV", origEnv)
+		if hasDBURL {
+			_ = os.Setenv("DATABASE_URL", origDBURL)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
 	_ = os.Setenv("APP_ENV", "local")
 	_ = os.Setenv("DATABASE_URL", "postgres://none:none@127.0.0.1:54399/none?sslmode=disable")
 
@@ -100,7 +108,15 @@ func TestDispatchAndDeliveryWiring_RoutesRegistered(t *testing.T) {
 
 func TestDispatchAndDeliveryWiring_AgreementA2Preserved(t *testing.T) {
 	origEnv := os.Getenv("APP_ENV")
-	defer os.Setenv("APP_ENV", origEnv)
+	origDBURL, hasDBURL := os.LookupEnv("DATABASE_URL")
+	defer func() {
+		_ = os.Setenv("APP_ENV", origEnv)
+		if hasDBURL {
+			_ = os.Setenv("DATABASE_URL", origDBURL)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
 	_ = os.Setenv("APP_ENV", "local")
 	_ = os.Setenv("DATABASE_URL", "postgres://none:none@127.0.0.1:54399/none?sslmode=disable")
 

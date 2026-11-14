@@ -331,20 +331,69 @@ definitions:
     properties:
       data: {}
     type: object
-  transport.CreateQuoteRequest:
+  internal_parcels_transport.AddressRequest:
+    properties:
+      address_line1:
+        type: string
+      address_line2:
+        type: string
+      city:
+        type: string
+      contact_name:
+        type: string
+      contact_phone:
+        type: string
+      instructions:
+        type: string
+      postal_code:
+        type: string
+      zone_id:
+        type: string
+    type: object
+  internal_parcels_transport.BookParcelRequest:
+    properties:
+      dimensions:
+        $ref: '#/definitions/internal_parcels_transport.DimensionsRequest'
+      dropoff:
+        $ref: '#/definitions/internal_parcels_transport.AddressRequest'
+      item_description:
+        type: string
+      pickup:
+        $ref: '#/definitions/internal_parcels_transport.AddressRequest'
+      quote_id:
+        type: string
+      recipient_name:
+        type: string
+      recipient_phone:
+        type: string
+      special_instructions:
+        type: string
+      weight_kg:
+        type: number
+    type: object
+  internal_parcels_transport.DimensionsRequest:
+    properties:
+      height_cm:
+        type: number
+      length_cm:
+        type: number
+      width_cm:
+        type: number
+    type: object
+  internal_pricing_transport.CreateQuoteRequest:
     properties:
       actual_weight_kg:
         type: number
       destination_zone_id:
         type: string
       dimensions:
-        $ref: '#/definitions/transport.DimensionsRequest'
+        $ref: '#/definitions/internal_pricing_transport.DimensionsRequest'
       origin_zone_id:
         type: string
       service_level:
         type: string
     type: object
-  transport.DimensionsRequest:
+  internal_pricing_transport.DimensionsRequest:
     properties:
       height_cm:
         type: number
@@ -1430,6 +1479,169 @@ paths:
       summary: List supported webhook event types
       tags:
       - merchants
+  /api/v1/parcels:
+    post:
+      consumes:
+      - application/json
+      description: Validates caller identity and merchant approval, verifies UUID
+        Idempotency-Key and raw SHA-256 request hash, atomically consumes an unexpired
+        quote owned by the caller, allocates a Crockford Base32 tracking number, and
+        persists the parcel, audit history, and outbox event in a single transaction.
+      parameters:
+      - description: UUID Idempotency Key
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Parcel booking payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_parcels_transport.BookParcelRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Booked parcel aggregate wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Missing/invalid Idempotency-Key, malformed JSON, or disallowed
+            fields
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, invalid/missing merchant tenant, unapproved
+            merchant, or quote ownership mismatch
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Referenced pricing quote not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "409":
+          description: Idempotency key payload mismatch/conflict or quote already
+            used
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "413":
+          description: Request body exceeds 64 KB size limit
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "415":
+          description: Unsupported Content-Type
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "422":
+          description: Semantic validation failure, expired quote, or quote zone/weight
+            mismatch
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel booking failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "503":
+          description: Tracking number allocation temporarily unavailable
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Book a new parcel using an accepted pricing quote
+      tags:
+      - parcels
+  /api/v1/parcels/{id}:
+    get:
+      description: Returns the Parcel aggregate root for the owning customer, approved
+        owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved
+        merchants.
+      parameters:
+      - description: Parcel UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Parcel details wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Invalid parcel UUID path parameter
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, unapproved merchant, or caller does not own
+            parcel
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Parcel not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retrieve authorized parcel details
+      tags:
+      - parcels
+  /api/v1/parcels/{id}/history:
+    get:
+      description: Returns parcel metadata and ordered lifecycle status history entries
+        for the owning customer, approved owning merchant tenant, or admin.
+      parameters:
+      - description: Parcel UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Parcel status history wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Invalid parcel UUID path parameter
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, unapproved merchant, or caller does not own
+            parcel
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Parcel not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel history lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retrieve authorized chronological parcel status history
+      tags:
+      - parcels
   /api/v1/pricing/quotes:
     post:
       consumes:
@@ -1443,7 +1655,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/transport.CreateQuoteRequest'
+          $ref: '#/definitions/internal_pricing_transport.CreateQuoteRequest'
       produces:
       - application/json
       responses:

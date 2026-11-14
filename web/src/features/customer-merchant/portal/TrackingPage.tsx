@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Input } from '@/shared/components/ui/input';
+import { MilestoneRail } from '@/shared/components/ui/milestone-rail';
 import { Button } from '@/shared/components/ui/button';
 import { apiBase, errorMessage, portalRequest, statusLabel } from './api';
 import { PortalErrorMessage, PortalLayout, PortalStatus } from './PortalLayout';
@@ -24,12 +25,14 @@ export function TrackingPage({ privateView = false }: { privateView?: boolean })
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [degraded, setDegraded] = useState(false);
   const [revision, setRevision] = useState(0);
 
   useEffect(() => setInput(trackingNumber), [trackingNumber]);
 
   useEffect(() => {
     setSnapshot(undefined);
+    setDegraded(false);
     setError('');
     if (!trackingNumber || (privateView && (!token || !portalRole))) { setLoading(false); return; }
     const controller = new AbortController();
@@ -74,13 +77,31 @@ export function TrackingPage({ privateView = false }: { privateView?: boolean })
         return;
       }
       stream = new EventSource(apiBase + path + '/stream');
-      stream.addEventListener('status_update', () => void refresh());
+      let failures = 0;
+      const seen = new Set<string>();
+      const refreshOnUpdate = (event: MessageEvent) => {
+        if (event.lastEventId) {
+          if (seen.has(event.lastEventId)) return;
+          if (seen.size >= 256) seen.clear();
+          seen.add(event.lastEventId);
+        }
+        void refresh();
+      };
+      stream.addEventListener('status_update', refreshOnUpdate);
+      stream.addEventListener('tracking-update', refreshOnUpdate);
       stream.onopen = () => {
+        failures = 0;
+        setDegraded(false);
         window.clearInterval(poll);
         poll = undefined;
         void refresh();
       };
-      stream.onerror = startPolling;
+      stream.onerror = () => {
+        if (++failures >= 3 || stream?.readyState === EventSource.CLOSED) {
+          setDegraded(true);
+          startPolling();
+        }
+      };
     });
     return () => {
       controller.abort();
@@ -109,6 +130,7 @@ export function TrackingPage({ privateView = false }: { privateView?: boolean })
           {loading && input.trim().toUpperCase() === trackingNumber ? 'Looking up parcel…' : 'Track parcel'}
         </Button></div>
       </form>
+      {degraded && <p role="status">Live updates degraded — polling</p>}
       {loading && <p role="status">Looking up your parcel…</p>}
       <PortalErrorMessage message={error} />
       {snapshot && snapshot.tracking_number === trackingNumber && <section className="m6-card" aria-live="polite">
@@ -119,14 +141,13 @@ export function TrackingPage({ privateView = false }: { privateView?: boolean })
         {snapshot.destination?.city && <p>Destination {snapshot.destination.city}</p>}
         {privateView && snapshot.destination?.postal_code && <p>Postal code {snapshot.destination.postal_code}</p>}
         {privateView && snapshot.destination?.zone_id && <p>Delivery zone {snapshot.destination.zone_id}</p>}
-        <ol className="m6-timeline" data-testid="tracking-timeline">
-          {snapshot.milestones.map((event, index) => <li key={`${event.status}-${event.timestamp}-${index}`}>
-            <strong className="m6-timeline-label">{statusLabel(event.status)}</strong>
-            <time dateTime={event.timestamp}>{new Date(event.timestamp).toLocaleString('en-LK')}</time>
-            {privateView && event.actor_role && <p>Updated by {statusLabel(event.actor_role)}</p>}
-            {privateView && event.reason_code && <p>Reason {statusLabel(event.reason_code)}</p>}
-          </li>)}
-        </ol>
+        <MilestoneRail entries={Array.from(new Map(snapshot.milestones.map(event => [
+          `${event.status}-${event.timestamp}`, event,
+        ])).entries()).sort(([, first], [, second]) => Date.parse(first.timestamp) - Date.parse(second.timestamp))
+          .map(([id, event]) => ({ id, time: event.timestamp, title: statusLabel(event.status), detail: privateView && <>
+            {event.actor_role && <p>Updated by {statusLabel(event.actor_role)}</p>}
+            {event.reason_code && <p>Reason {statusLabel(event.reason_code)}</p>}
+          </> }))} />
       </section>}
     </PortalLayout>
   );

@@ -30,8 +30,19 @@ spec:
             - name: reconciler
               image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest
               imagePullPolicy: IfNotPresent
-              command: ["/usr/local/bin/reconcile", "--stale-threshold=5m", "--batch-size=50"]
+              # Default subcommand = reconciliation pass. Flags defined in services/messaging/cmd/reconcile
+              # (there is no --batch-size; an unknown flag makes the binary print usage and exit).
+              command: ["/usr/local/bin/reconcile", "--stale-threshold=5m"]
+              # Same shared messaging config as the relay and worker (APP_ENV, RabbitMQ, webhook key).
+              envFrom:
+                - configMapRef:
+                    name: messaging-config
+                - secretRef:
+                    name: rabbitmq-secrets
+                - secretRef:
+                    name: integrations-secrets
               env:
+                # Explicit env wins over envFrom: the reconciler logs in as its own DB role.
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:

@@ -102,4 +102,15 @@ func TestRegisterMerchantsModule_Validation(t *testing.T) {
 			t.Fatalf("expected clean success, got error: %v", err)
 		}
 	})
+
+	t.Run("Valid 64-char hex encryption key fallback succeeds", func(t *testing.T) {
+		_ = os.Setenv("APP_ENV", "production")
+		_ = os.Setenv("MERCHANT_API_KEY_PEPPER", "valid_pepper_with_at_least_32_characters_length!")
+		_ = os.Setenv("WEBHOOK_SECRET_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+
+		err := registerMerchantsModule(http.NewServeMux(), db, tokenProv)
+		if err != nil {
+			t.Fatalf("expected clean success with 64-char hex fallback, got error: %v", err)
+		}
+	})
 }

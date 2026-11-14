@@ -15,10 +15,11 @@ type RequestOptions = {
   idempotencyKey?: string;
   signal?: AbortSignal;
   allowUnwrapped?: boolean;
+  acceptPdf?: boolean;
 };
 
 export async function portalRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const headers = new Headers({ Accept: 'application/json' });
+  const headers = new Headers({ Accept: options.acceptPdf ? 'application/pdf, application/json' : 'application/json' });
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
   if (options.body) headers.set('Content-Type', 'application/json');
   if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
@@ -30,6 +31,12 @@ export async function portalRequest<T>(path: string, options: RequestOptions = {
     headers,
   });
   if (response.status === 204) return undefined as T;
+  if (options.acceptPdf && response.ok && response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() === 'application/pdf') {
+    return await response.blob() as T;
+  }
+  if (response.headers.get('Content-Type')?.includes('text/html')) {
+    throw new PortalError('The API returned a web page. Check that the preview points to the SwiftDrop API.', 502);
+  }
   const envelope = await response.json().catch(() => null);
   if (!response.ok) {
     const message = envelope?.error?.message || `SwiftDrop could not complete the request (${response.status}).`;

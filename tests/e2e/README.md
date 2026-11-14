@@ -203,3 +203,9 @@ Per repository engineering standards (`AGENTS.md`), this directory maintains two
 - **Entry Point & User Guide (`README.md`):** This document — kept clean, polished, and focused on installation, commands, and architecture.
 - **Authoritative Continuous Journal ([`LIVING_DOCUMENT.md`](./LIVING_DOCUMENT.md)):** Detailed architectural decision records (ADRs), 6 domain invariants, minute-by-minute activity logs, and debugging records.
 - **Grounding Roadmap ([`PRE_TESTING_SETUP_ROADMAP.md`](./PRE_TESTING_SETUP_ROADMAP.md)): Phased status tracker across all 6 quality pillars.
+
+### Run Member 6 merchant integration tests
+
+From `tests/e2e`, run `npm ci` and `npx playwright install chromium` if needed. Set `BASE_URL` to the frontend preview connected to Core API and set `M6_MERCHANT_EMAIL` and `M6_MERCHANT_PASSWORD` to an approved account in an isolated test environment. Then run `npx playwright test flows/member-06-merchant.spec.ts --project=merchant-portal`.
+
+The suite signs in through the UI, checks the profile and order list, and creates and revokes a test API key after verifying the one-time credential acknowledgment.
