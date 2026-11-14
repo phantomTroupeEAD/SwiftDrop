@@ -210,6 +210,12 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `reports-totals`, `reports-total-delivered`, `reports-total-failed`, `reports-success-rate` | Period totals from the server ("No attempts" when the rate is null) |
 | `reports-table`, `reports-empty`, `reports-period` | Per-day table, empty state, "Period a to b. Source: ..." line |
 | `reports-source-note`, `reports-error` | Stand-in data warning; load error with reference id and Retry (a refused period shows beside the dates instead, `#reports-range-error`) |
+| `fleet-filters`, `fleet-filter-zone`, `fleet-filter-shift`, `fleet-reset-btn` | Fleet filters (zone is sent to the server, shift filters the loaded list) and Reset |
+| `fleet-add-btn`, `fleet-empty-add-btn`, `fleet-refresh-btn` | Add courier (header and empty state), refresh |
+| `fleet-table`, `fleet-row`, `fleet-summary` | Courier table, one row per courier (repeated), "N of M couriers" line |
+| `fleet-empty`, `fleet-empty-reset-btn`, `fleet-error` | Empty state (none yet, or none match), its Reset button, load error with reference id and Retry |
+| `fleet-add-dialog`, `fleet-add-user`, `fleet-add-code`, `fleet-add-vehicle`, `fleet-add-capacity`, `fleet-add-zone`, `fleet-add-save-btn` | Add courier dialog. `fleet-add-user` is a Select for ADMIN and a text input for DISPATCHER. Field errors: `#fleet-user-error`, `#fleet-code-error`, `#fleet-capacity-error`, `#fleet-zone-error` |
+| `fleet-add-no-accounts`, `fleet-add-error` | Every Courier account already has a profile; add failed with a non-field error |
 
 ## Ops workspace shell (Member 7)
 

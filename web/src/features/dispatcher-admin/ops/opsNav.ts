@@ -57,7 +57,7 @@ export const OPS_NAV: OpsNavItem[] = [
     icon: Truck,
     group: 'Operations',
     roles: BOTH,
-    built: false,
+    built: true,
   },
   {
     id: 'failed-deliveries',
