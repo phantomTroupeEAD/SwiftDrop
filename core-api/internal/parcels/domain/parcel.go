@@ -9,51 +9,55 @@ import (
 // CreateParcelParams contains the complete set of authoritative inputs
 // required to construct a new Parcel aggregate root at booking time.
 type CreateParcelParams struct {
-	ID                 string
-	TrackingNumber     TrackingNumber
-	SenderID           *string
-	MerchantID         *string
-	RecipientName      string
-	RecipientPhone     string
-	QuoteID            string
-	PricingRuleID      string
-	PricingRuleVersion int
-	DeliveryFee        Money
-	OriginZoneID       string
-	DestinationZoneID  string
-	ServiceLevel       ServiceLevel
-	Weight             Weight
-	Dimensions         Dimensions
-	PickupAddress      Address
-	DropoffAddress     Address
-	CreatedAt          time.Time
+	ID                  string
+	TrackingNumber      TrackingNumber
+	SenderID            *string
+	MerchantID          *string
+	RecipientName       string
+	RecipientPhone      string
+	QuoteID             string
+	PricingRuleID       string
+	PricingRuleVersion  int
+	DeliveryFee         Money
+	OriginZoneID        string
+	DestinationZoneID   string
+	ServiceLevel        ServiceLevel
+	Weight              Weight
+	Dimensions          Dimensions
+	PickupAddress       Address
+	DropoffAddress      Address
+	ItemDescription     string
+	SpecialInstructions string
+	CreatedAt           time.Time
 }
 
 // ReconstituteParcelParams contains all fields required to hydrate
 // a persisted Parcel aggregate root from the database.
 type ReconstituteParcelParams struct {
-	ID                 string
-	TrackingNumber     TrackingNumber
-	SenderID           *string
-	MerchantID         *string
-	RecipientName      string
-	RecipientPhone     string
-	QuoteID            string
-	PricingRuleID      string
-	PricingRuleVersion int
-	DeliveryFee        Money
-	OriginZoneID       string
-	DestinationZoneID  string
-	ServiceLevel       ServiceLevel
-	Weight             Weight
-	Dimensions         Dimensions
-	PickupAddress      Address
-	DropoffAddress     Address
-	Status             ParcelStatus
-	AttemptCount       int
-	Version            int
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                  string
+	TrackingNumber      TrackingNumber
+	SenderID            *string
+	MerchantID          *string
+	RecipientName       string
+	RecipientPhone      string
+	QuoteID             string
+	PricingRuleID       string
+	PricingRuleVersion  int
+	DeliveryFee         Money
+	OriginZoneID        string
+	DestinationZoneID   string
+	ServiceLevel        ServiceLevel
+	Weight              Weight
+	Dimensions          Dimensions
+	PickupAddress       Address
+	DropoffAddress      Address
+	ItemDescription     string
+	SpecialInstructions string
+	Status              ParcelStatus
+	AttemptCount        int
+	Version             int
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // Parcel is the authoritative Domain Aggregate Root governing courier parcel operations,
@@ -84,6 +88,10 @@ type Parcel struct {
 	// Immutable address snapshots captured at booking time.
 	PickupAddress  Address
 	DropoffAddress Address
+
+	// Optional parcel content metadata and courier special handling notes.
+	ItemDescription     string
+	SpecialInstructions string
 
 	// Lifecycle state machine and operational counters.
 	Status       ParcelStatus
@@ -178,33 +186,41 @@ func NewParcel(params CreateParcelParams) (Parcel, error) {
 			ErrZoneMismatch, params.DropoffAddress.ZoneID, params.DestinationZoneID)
 	}
 
+	itemDesc := strings.TrimSpace(params.ItemDescription)
+	if len(itemDesc) > 500 {
+		return Parcel{}, fmt.Errorf("%w: %w", ErrInvalidParcel, ErrItemDescriptionTooLong)
+	}
+	specialInstructions := strings.TrimSpace(params.SpecialInstructions)
+
 	if params.CreatedAt.IsZero() {
 		return Parcel{}, fmt.Errorf("%w: created_at timestamp is required", ErrInvalidTimestamp)
 	}
 
 	return Parcel{
-		ID:                 strings.TrimSpace(params.ID),
-		TrackingNumber:     params.TrackingNumber,
-		SenderID:           senderID,
-		MerchantID:         merchantID,
-		RecipientName:      strings.TrimSpace(params.RecipientName),
-		RecipientPhone:     strings.TrimSpace(params.RecipientPhone),
-		QuoteID:            strings.TrimSpace(params.QuoteID),
-		PricingRuleID:      strings.TrimSpace(params.PricingRuleID),
-		PricingRuleVersion: params.PricingRuleVersion,
-		DeliveryFee:        params.DeliveryFee,
-		OriginZoneID:       params.OriginZoneID,
-		DestinationZoneID:  params.DestinationZoneID,
-		ServiceLevel:       params.ServiceLevel,
-		Weight:             params.Weight,
-		Dimensions:         params.Dimensions,
-		PickupAddress:      params.PickupAddress,
-		DropoffAddress:     params.DropoffAddress,
-		Status:             StatusCreated,
-		AttemptCount:       0,
-		Version:            1,
-		CreatedAt:          params.CreatedAt,
-		UpdatedAt:          params.CreatedAt,
+		ID:                  strings.TrimSpace(params.ID),
+		TrackingNumber:      params.TrackingNumber,
+		SenderID:            senderID,
+		MerchantID:          merchantID,
+		RecipientName:       strings.TrimSpace(params.RecipientName),
+		RecipientPhone:      strings.TrimSpace(params.RecipientPhone),
+		QuoteID:             strings.TrimSpace(params.QuoteID),
+		PricingRuleID:       strings.TrimSpace(params.PricingRuleID),
+		PricingRuleVersion:  params.PricingRuleVersion,
+		DeliveryFee:         params.DeliveryFee,
+		OriginZoneID:        params.OriginZoneID,
+		DestinationZoneID:   params.DestinationZoneID,
+		ServiceLevel:        params.ServiceLevel,
+		Weight:              params.Weight,
+		Dimensions:          params.Dimensions,
+		PickupAddress:       params.PickupAddress,
+		DropoffAddress:      params.DropoffAddress,
+		ItemDescription:     itemDesc,
+		SpecialInstructions: specialInstructions,
+		Status:              StatusCreated,
+		AttemptCount:        0,
+		Version:             1,
+		CreatedAt:           params.CreatedAt,
+		UpdatedAt:           params.CreatedAt,
 	}, nil
 }
 
@@ -277,29 +293,37 @@ func ReconstituteParcel(params ReconstituteParcelParams) (Parcel, error) {
 		return Parcel{}, fmt.Errorf("%w: updated_at cannot precede created_at", ErrInvalidTimestamp)
 	}
 
+	itemDesc := strings.TrimSpace(params.ItemDescription)
+	if len(itemDesc) > 500 {
+		return Parcel{}, fmt.Errorf("%w: %w", ErrInvalidParcel, ErrItemDescriptionTooLong)
+	}
+	specialInstructions := strings.TrimSpace(params.SpecialInstructions)
+
 	return Parcel{
-		ID:                 strings.TrimSpace(params.ID),
-		TrackingNumber:     params.TrackingNumber,
-		SenderID:           senderID,
-		MerchantID:         merchantID,
-		RecipientName:      strings.TrimSpace(params.RecipientName),
-		RecipientPhone:     strings.TrimSpace(params.RecipientPhone),
-		QuoteID:            strings.TrimSpace(params.QuoteID),
-		PricingRuleID:      strings.TrimSpace(params.PricingRuleID),
-		PricingRuleVersion: params.PricingRuleVersion,
-		DeliveryFee:        params.DeliveryFee,
-		OriginZoneID:       params.OriginZoneID,
-		DestinationZoneID:  params.DestinationZoneID,
-		ServiceLevel:       params.ServiceLevel,
-		Weight:             params.Weight,
-		Dimensions:         params.Dimensions,
-		PickupAddress:      params.PickupAddress,
-		DropoffAddress:     params.DropoffAddress,
-		Status:             params.Status,
-		AttemptCount:       params.AttemptCount,
-		Version:            params.Version,
-		CreatedAt:          params.CreatedAt,
-		UpdatedAt:          params.UpdatedAt,
+		ID:                  strings.TrimSpace(params.ID),
+		TrackingNumber:      params.TrackingNumber,
+		SenderID:            senderID,
+		MerchantID:          merchantID,
+		RecipientName:       strings.TrimSpace(params.RecipientName),
+		RecipientPhone:      strings.TrimSpace(params.RecipientPhone),
+		QuoteID:             strings.TrimSpace(params.QuoteID),
+		PricingRuleID:       strings.TrimSpace(params.PricingRuleID),
+		PricingRuleVersion:  params.PricingRuleVersion,
+		DeliveryFee:         params.DeliveryFee,
+		OriginZoneID:        params.OriginZoneID,
+		DestinationZoneID:   params.DestinationZoneID,
+		ServiceLevel:        params.ServiceLevel,
+		Weight:              params.Weight,
+		Dimensions:          params.Dimensions,
+		PickupAddress:       params.PickupAddress,
+		DropoffAddress:      params.DropoffAddress,
+		ItemDescription:     itemDesc,
+		SpecialInstructions: specialInstructions,
+		Status:              params.Status,
+		AttemptCount:        params.AttemptCount,
+		Version:             params.Version,
+		CreatedAt:           params.CreatedAt,
+		UpdatedAt:           params.UpdatedAt,
 	}, nil
 }
 
