@@ -9,10 +9,13 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/swiftdrop/core-api/internal/platform/config"
 	"github.com/swiftdrop/core-api/migrations"
 )
 
 func main() {
+	config.LoadEnv()
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/swiftdrop?sslmode=disable"

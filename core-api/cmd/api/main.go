@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/swiftdrop/core-api/internal/platform/config"
 )
 
 // @title                      SwiftDrop Core API
@@ -31,6 +33,8 @@ import (
 // @description                 Type "Bearer" followed by a space and JWT token (e.g. 'Bearer eyJhbGci...').
 
 func main() {
+	config.LoadEnv()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
