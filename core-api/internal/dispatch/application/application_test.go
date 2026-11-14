@@ -165,8 +165,10 @@ func TestAssignCourierUseCase_Success(t *testing.T) {
 	if parcelUpdater.lastStatus != "ASSIGNED" {
 		t.Errorf("expected parcel to be ASSIGNED, got %s", parcelUpdater.lastStatus)
 	}
-	if len(outboxWriter.events) != 1 || outboxWriter.events[0] != "parcel.assigned.v1" {
-		t.Errorf("expected parcel.assigned.v1 outbox event, got %v", outboxWriter.events)
+	// Canonical outbox event (parcel.assigned.v1) is published by Member 2's ExecuteTx
+	// through ParcelLifecycleUpdater. Dispatch avoids emitting a duplicate event.
+	if len(outboxWriter.events) != 0 {
+		t.Errorf("expected no duplicate outbox events from dispatch, got %v", outboxWriter.events)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
@@ -94,6 +93,9 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 		}
 
 		// 6. Transition parcel aggregate root state machine (internal/parcels)
+		// Member 2's TransitionParcelStatusUseCase.ExecuteTx handles the parcel state machine,
+		// history insertion, concurrency validation, and publishes the canonical parcel.assigned.v1
+		// outbox event within this atomic transaction. Dispatch avoids creating a duplicate event.
 		err = uc.parcelUpdater.TransitionStatus(
 			ctx,
 			tx,
@@ -106,28 +108,6 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 		)
 		if err != nil {
 			return fmt.Errorf("failed to transition parcel status: %w", err)
-		}
-
-		// 7. Commit versioned outbox event for asynchronous notification & tracking fan-out
-		eventPayload := map[string]any{
-			"assignment_id": asgn.ID.String(),
-			"parcel_id":     asgn.ParcelID.String(),
-			"courier_id":    asgn.CourierID.String(),
-			"assigned_by":   asgn.AssignedBy.String(),
-			"assigned_at":   asgn.AssignedAt.Format(time.RFC3339),
-		}
-		err = uc.outboxWriter.Write(
-			ctx,
-			tx,
-			"PARCEL",
-			parcelUUID,
-			1,
-			"parcel.assigned.v1",
-			eventPayload,
-			asgn.ID.String(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to commit outbox event: %w", err)
 		}
 
 		result = &AssignmentResultDTO{
