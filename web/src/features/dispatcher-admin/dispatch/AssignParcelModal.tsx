@@ -59,11 +59,16 @@ interface AssignParcelModalProps {
   onDone: (message: string) => void;
   /** The server said the board is out of date. */
   onStale: () => void;
+  /** "retry" is the Failed deliveries wording for rescheduling a failed parcel. */
+  mode?: 'assign' | 'retry';
+  /** Extra facts shown above the courier field, for example why the last attempt failed. */
+  context?: React.ReactNode;
 }
 
-export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, parcel, couriers, stillWaiting, onClose, onDone, onStale }) => {
+export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, parcel, couriers, stillWaiting, onClose, onDone, onStale, mode = 'assign', context }) => {
+  const retry = mode === 'retry';
   const reassign = parcel.status === 'ATTEMPT_FAILED';
-  const verb = reassign ? 'Reassign' : 'Assign';
+  const verb = retry ? 'Schedule retry' : reassign ? 'Reassign' : 'Assign';
   const [courierId, setCourierId] = useState('');
   const [notes, setNotes] = useState('');
   const [courierError, setCourierError] = useState<string | null>(null);
@@ -93,9 +98,10 @@ export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, par
       const body = { courier_id: courierId, notes: notes.trim() };
       if (reassign) await rescheduleParcel(token, parcel.id, body);
       else await assignParcel(token, { parcel_id: parcel.id, ...body }, key.current);
-      onDone(`Parcel ${parcel.tracking_number} ${reassign ? 'reassigned' : 'assigned'} to ${chosen?.courier_name || chosen?.employee_code}.`);
+      const who = chosen?.courier_name || chosen?.employee_code;
+      onDone(retry ? `Retry scheduled for parcel ${parcel.tracking_number} with ${who}.` : `Parcel ${parcel.tracking_number} ${reassign ? 'reassigned' : 'assigned'} to ${who}.`);
     } catch (err) {
-      const api = err instanceof ApiError ? err : new ApiError(0, 'UNKNOWN', `Couldn't ${verb.toLowerCase()} the parcel. Try again.`);
+      const api = err instanceof ApiError ? err : new ApiError(0, 'UNKNOWN', `Couldn't ${retry ? 'schedule the retry' : `${verb.toLowerCase()} the parcel`}. Try again.`);
       // A refused request is a new decision; only a network failure or a 5xx may reuse the key.
       if (api.status !== 0 && api.status < 500) key.current = crypto.randomUUID();
       if (STALE_CODES.has(api.code)) onStale();
@@ -109,7 +115,7 @@ export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, par
 
   return (
     <AdminDialog
-      title={`${verb} parcel ${parcel.tracking_number}`}
+      title={retry ? `Schedule retry for ${parcel.tracking_number}` : `${verb} parcel ${parcel.tracking_number}`}
       description={
         reassign
           ? 'A delivery attempt failed. Choose the courier for the new attempt.'
@@ -136,6 +142,8 @@ export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, par
               No courier can take a parcel right now. A courier must be on shift and below capacity. Couriers start their own shift in the courier app.
             </Banner>
           )}
+
+          {context}
 
           <div className="grid content-start gap-1.5">
             <Label htmlFor="dispatch-courier">Courier</Label>
@@ -184,7 +192,7 @@ export const AssignParcelModal: React.FC<AssignParcelModalProps> = ({ token, par
             Cancel
           </Button>
           <Button type="submit" disabled={saving || !stillWaiting || eligibleCount === 0} data-testid="dispatch-assign-save-btn">
-            {saving ? <Busy label={reassign ? 'Reassigning...' : 'Assigning...'} /> : `${verb} parcel`}
+            {saving ? <Busy label={retry ? 'Scheduling...' : reassign ? 'Reassigning...' : 'Assigning...'} /> : retry ? 'Schedule retry' : `${verb} parcel`}
           </Button>
         </DialogFooter>
       </form>

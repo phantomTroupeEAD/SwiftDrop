@@ -223,6 +223,12 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `dispatch-couriers`, `dispatch-courier`, `dispatch-couriers-summary`, `dispatch-couriers-empty` | Courier list, one item per courier (repeated), count line, empty state with link to Fleet |
 | `dispatch-assign-dialog`, `dispatch-assign-courier`, `dispatch-assign-notes`, `dispatch-assign-save-btn` | Assign window: courier Select (ineligible couriers disabled with the reason), notes, submit. Errors: `#dispatch-courier-error`, `#dispatch-notes-error` |
 | `dispatch-assign-error`, `dispatch-assign-gone`, `dispatch-assign-no-couriers` | Non-field error with reference id; parcel no longer waiting; no courier can take a parcel |
+| `failed-filters`, `failed-filter-reason`, `failed-reset-btn`, `failed-refresh-btn` | Failed deliveries: reason filter (matches the last failure), Reset, refresh |
+| `failed-table`, `failed-row`, `failed-summary` | Table, one row per parcel (repeated), count line |
+| `failed-history-btn`, `failed-retry-btn` | Per row: view attempts (disabled while the history is missing), Schedule retry |
+| `failed-empty`, `failed-empty-reset-btn`, `failed-error` | Empty state (none, or none match), its Reset button, error with reference id and Retry |
+| `failed-history-dialog`, `failed-history-item` | Attempts window and one item per attempt (repeated) |
+| `failed-retry-context` | Last failure reason and note shown in the retry window (the window itself uses the `dispatch-assign-*` ids) |
 
 ## Ops workspace shell (Member 7)
 

@@ -9,6 +9,7 @@ import { SettingsPanel } from '../admin-console/SettingsPanel';
 import { UsersPanel } from '../admin-console/UsersPanel';
 import { Banner } from '../admin-console/ui';
 import { DispatchBoardPanel } from '../dispatch/DispatchBoardPanel';
+import { FailedDeliveriesPanel } from '../failed/FailedDeliveriesPanel';
 import { FleetPanel } from '../fleet/FleetPanel';
 import { ReportsPanel } from '../reports/ReportsPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
@@ -111,6 +112,19 @@ export function DispatchPage() {
       <PageHeader title={item.title} description={item.description} />
       {banner}
       <DispatchBoardPanel token={accessToken} onNotice={show} />
+    </>
+  );
+}
+
+export function FailedDeliveriesPage() {
+  const { accessToken } = useAuth();
+  const { banner, show } = useNotice();
+  const item = navItem('failed-deliveries');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      {banner}
+      <FailedDeliveriesPanel token={accessToken} onNotice={show} />
     </>
   );
 }

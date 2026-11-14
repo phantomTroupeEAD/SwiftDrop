@@ -68,7 +68,7 @@ export const OPS_NAV: OpsNavItem[] = [
     icon: PackageX,
     group: 'Operations',
     roles: BOTH,
-    built: false,
+    built: true,
   },
   {
     id: 'merchants',
