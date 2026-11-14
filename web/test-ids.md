@@ -18,7 +18,8 @@
 | `batch-csv-file-input`, `batch-csv-submit-btn` | CSV selection and order submission or retry |
 | `merchant-key-label-input`, `merchant-key-read-scope`, `merchant-key-create-scope`, `merchant-key-revoke-btn` | API key creation fields and revoke actions |
 | `merchant-profile-retry-btn` | Retries a failed merchant profile request on the dashboard or orders page |
-| `assistant-panel`, `assistant-prompt-input`, `assistant-send-btn` | Embedded customer chat, message field, and submit action |
+| `assistant-open-btn` | Toggle the customer assistant panel |
+| `assistant-panel`, `assistant-prompt-input`, `assistant-send-btn` | Floating customer chat panel, message field, and submit action |
 | `merchant-webhook-url-input`, `merchant-webhook-event-{eventType}`, `merchant-webhook-delete-btn` | Webhook registration fields and remove actions |
 | `merchant-credential-create-btn`, `merchant-credential-confirm-btn`, `one-time-key-copy-btn`, `merchant-secret-close-btn` | Credential mutations, one-time copy and dismissal |
 
@@ -181,3 +182,7 @@ Verification: `npm run build` passed (`tsc && vite build`). All 31 active select
 | `dispatcher-courier-select` | Eligible courier selection within a parcel row |
 | `dispatcher-assign-btn` | Submit the selected parcel and courier |
 | `dispatcher-retry-btn` | Reload the dispatch board after a failed request |
+
+| Booking selector | Purpose |
+| --- | --- |
+| `booking-special-instructions-input` | Optional handling or delivery instructions sent as `special_instructions` |

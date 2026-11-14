@@ -9,7 +9,8 @@ import { NativeSelect } from '@/shared/components/ui/native-select';
 
 type Parcel = { id: string; tracking_number: string; recipient_city: string; weight_kg: number };
 type Courier = { courier_id: string; name: string; employee_code: string; status: string; max_capacity: number; active_assignments: number };
-type Board = { unassigned_parcels: Parcel[] | null; courier_loads: Courier[] | null };
+type AssignedParcel = Parcel & { courier_id: string; status: string };
+type Board = { assigned_parcels?: AssignedParcel[]; unassigned_parcels: Parcel[] | null; courier_loads: Courier[] | null };
 
 export function DispatcherDashboard() {
   const { accessToken } = useAuth();
@@ -95,7 +96,27 @@ export function DispatcherDashboard() {
               {parcels.length > 0 && !available.length && <p className="text-sm text-text-muted">No on-shift couriers have spare capacity.</p>}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="lg:col-start-1 lg:col-span-2 lg:row-start-2">
+            <CardHeader><h2 className="text-lg font-semibold">Assigned parcels</h2></CardHeader>
+            <CardContent data-testid="dispatcher-assigned-parcels">
+              {board.assigned_parcels === undefined ? <p className="text-sm text-text-muted">Assigned parcels are unavailable right now.</p> :
+                !board.assigned_parcels.length ? <p className="text-sm text-text-muted">No active assignments.</p> :
+                <ul className="divide-y divide-border">
+                  {board.assigned_parcels.map(parcel => {
+                    const courier = couriers.find(item => item.courier_id === parcel.courier_id);
+                    return <li key={parcel.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                      <div>
+                        <p className="font-mono font-semibold">{parcel.tracking_number}</p>
+                        <p className="text-sm text-text-muted">{parcel.recipient_city} · {parcel.weight_kg} kg</p>
+                      </div>
+                      <p className="text-sm">{courier?.name || courier?.employee_code || 'Courier details unavailable'}</p>
+                      <Badge variant="active" className="capitalize">{statusLabel(parcel.status)}</Badge>
+                    </li>;
+                  })}
+                </ul>}
+            </CardContent>
+          </Card>
+          <Card className="lg:col-start-3 lg:row-start-1 lg:row-span-2">
             <CardHeader><h2 className="text-lg font-semibold">Courier roster</h2></CardHeader>
             <CardContent>
               {!couriers.length && <p className="text-sm text-text-muted">No couriers are listed on this board.</p>}

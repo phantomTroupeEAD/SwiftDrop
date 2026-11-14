@@ -21,7 +21,7 @@ import {
   CardContent,
   CardFooter,
 } from '@/shared/components/ui/card';
-import { withRequestReference } from '@/shared/lib/api-error';
+import { friendlyApiError } from '@/shared/lib/api-error';
 
 interface AuthApiResponse {
   data?: {
@@ -31,7 +31,7 @@ interface AuthApiResponse {
   };
   error?: {
     message?: string;
-    correlation_id?: string;
+    code?: string;
   };
 }
 
@@ -93,7 +93,7 @@ export const RegisterPage: React.FC = () => {
       }
 
       if (!res.ok) {
-        let message = data?.error?.message || 'Failed to send verification code.';
+        let message = 'Failed to send verification code.';
         if (res.status === 409) {
           message = 'An account with this email already exists. Please log in.';
         } else if (res.status === 429) {
@@ -105,7 +105,7 @@ export const RegisterPage: React.FC = () => {
         } else {
           throw new Error(`Failed to send verification code (${res.status}).`);
         }
-        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
+        throw new Error(friendlyApiError(res, data?.error?.code, message));
       }
 
       if (!data?.data) {
@@ -114,10 +114,10 @@ export const RegisterPage: React.FC = () => {
       setOtpSent(true);
       setCooldown(data?.data?.cooldown_seconds || 60);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setError(err.message);
       } else {
-        setError('Network error. Is the backend server running?');
+        setError('Could not connect to SwiftDrop. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -159,12 +159,8 @@ export const RegisterPage: React.FC = () => {
       }
 
       if (!res.ok) {
-        if (data?.error?.message) {
-          throw new Error(data.error.message);
-        } else if (res.status === 502 || res.status === 504 || res.status === 500) {
-          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
-        }
-        throw new Error(`Registration failed (${res.status}). Please check your inputs.`);
+        const message = 'Registration is unavailable right now. Please try again later.';
+        throw new Error(friendlyApiError(res, data?.error?.code, message));
       }
 
       if (!data?.data) {
@@ -172,7 +168,7 @@ export const RegisterPage: React.FC = () => {
       }
       setSuccess(true);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setError(err.message);
       } else {
         setError('Registration failed. Please try again.');

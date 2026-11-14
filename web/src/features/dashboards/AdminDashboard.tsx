@@ -1,3 +1,4 @@
+import { friendlyApiError } from '@/shared/lib/api-error';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from './DashboardLayout';
 import { useAuth } from '@/app/providers/AuthContext';
@@ -61,8 +62,7 @@ export const AdminDashboard: React.FC = () => {
 
       const res = await fetch(url.toString(), { headers });
       if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error?.message || `Core API responded with HTTP ${res.status}`);
+        throw new Error(friendlyApiError(res));
       }
 
       const data = await res.json();
@@ -125,7 +125,7 @@ export const AdminDashboard: React.FC = () => {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error?.message || `Failed to update role (${res.status})`);
+        throw new Error(friendlyApiError(res, errorData?.error?.code, 'Could not update the role. Please try again.'));
       }
 
       const responseData = await res.json();
@@ -140,7 +140,7 @@ export const AdminDashboard: React.FC = () => {
       setSuccessMessage(`Role for ${selectedUser.email} successfully updated to ${targetRole}.`);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setRoleError(err.message);
       } else {
         setRoleError('Failed to update user role.');
@@ -166,7 +166,7 @@ export const AdminDashboard: React.FC = () => {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error?.message || `Failed to change status (${res.status})`);
+        throw new Error(friendlyApiError(res, errorData?.error?.code, 'Could not change the account status. Please try again.'));
       }
 
       setUsers((prev) =>
@@ -175,7 +175,7 @@ export const AdminDashboard: React.FC = () => {
       setSuccessMessage(`Account ${user.email} is now ${nextStatus}.`);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setError(err.message);
       } else {
         setError('Failed to update account status.');
