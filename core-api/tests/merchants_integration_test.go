@@ -499,7 +499,7 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 	// 5. Merchant Registers Webhook (POST /api/v1/merchants/me/webhooks)
 	t.Run("E2E-5: Merchant registers webhook endpoint", func(t *testing.T) {
 		hookBody := map[string]interface{}{
-			"url":    "http://127.0.0.1:8080/webhooks/test",
+			"url":    "https://example.com/webhooks/swiftdrop",
 			"events": []string{"parcel.delivered.v1"},
 		}
 		jsonBytes, _ := json.Marshal(hookBody)
