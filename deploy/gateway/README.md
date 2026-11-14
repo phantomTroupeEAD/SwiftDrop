@@ -30,9 +30,9 @@ Incoming Request (Internet: Browsers, Couriers, Merchant API Clients)
 │ Traefik Ingress Controller / API Gateway               │
 │  ├── Real Client IP Restoration (`trustedIPs`)         │
 │  ├── TLS Termination & Ingress Routing                 │
-│  ├── CORS Middleware (`headers`)                       │
-│  ├── Rate Limiter (`ratelimit`: 30 req/min on tracking)│
-│  └── Upload Limit (`buffering`: 10 MB on Core API)     │
+│  ├── Strip identity headers, security headers, CORS    │
+│  ├── Per-visitor rate limits & open-stream caps        │
+│  └── Body limits (1 MB JSON, 10 MB proof photo)        │
 └──────┬───────────────────┬───────────────────┬─────────┘
        │                   │                   │
        ▼                   ▼                   ▼
@@ -53,11 +53,31 @@ Incoming Request (Internet: Browsers, Couriers, Merchant API Clients)
 | :--- | :--- | :--- |
 | **Path Routing** | Traefik Router | Matches `PathPrefix` rules and forwards to internal service endpoints (`/api/v1/*`, `/portal/*`). |
 | **Real Client IP Restoration** | Traefik Entrypoints | Configured via `forwardedHeaders.trustedIPs` matching Cloudflare's published CIDRs. Restores real visitor IP from `CF-Connecting-IP` / `X-Forwarded-For`. |
-| **CORS Policy** | Traefik Middleware | Configured in `dynamic-routes.yml` allowing standard auth, tenant, and idempotency headers. |
-| **Request Buffering & Size Limits** | Traefik Middleware | Capped at 10 MB to allow photographic proof-of-delivery uploads while preventing memory exhaustion. |
-| **Edge Rate Limiting** | Traefik Middleware | Token-bucket rate limiting (30 req/min, burst 50) on `/api/v1/tracking` to protect read-heavy projections from scraping. Enforced accurately on real visitor IPs. |
-| **JWT & Merchant API Key Auth** | **Core API** | Handled natively by Go HTTP middleware in `core-api/internal/identity/` and `core-api/internal/merchants/`. Traefik transparently forwards `Authorization` and `X-API-Key` headers without modifying them. |
-| **SSE Streaming Compatibility** | Traefik + Tracking API | Native HTTP/2 unbuffered streaming. Tracking API emits `X-Accel-Buffering: no` and periodic `: ping` heartbeats (every 15s) to prevent Cloudflare edge proxy connection drops. |
+| **CORS Policy** | Traefik Middleware | `cors-middleware`, exactly as `docs/security/security-notes.md` §4. Allowed headers: `Authorization`, `Content-Type`, `X-API-Key`, `Idempotency-Key`, `X-Request-ID`. Exposed: `X-Request-ID`, `Content-Length`. `X-Tenant-ID` is **not** allowed: the tenant comes from the token. Local origins `http://localhost:3000`, `http://127.0.0.1:3000`; production origins in `kubernetes/middlewares.yaml`. |
+| **Identity Header Stripping** | Traefik Middleware | `strip-identity-headers` removes client-sent `X-User-ID`, `X-User-Role`, `X-Tenant-ID`, `X-Merchant-ID`, `X-Forwarded-User` before any backend (defence in depth). `Authorization` passes unchanged. |
+| **Response Hardening** | Traefik Middleware | `security-headers`: `nosniff`, `X-Frame-Options: DENY`, strict referrer policy, HSTS (HTTPS only), removes `Server` and `X-Powered-By`. `spa-csp` adds a Content-Security-Policy with `frame-ancestors 'none'` on the SPA. |
+| **Request Size Limits** | Traefik Middleware | `json-limit` 1 MB on every API route (SEC-006); `upload-limit-middleware` 10 MB only on `POST /api/v1/deliveries/{id}/proof-photo`. Stream routes are never buffered. |
+| **Edge Rate Limiting** | Traefik Middleware | Per visitor IP (right-most `X-Forwarded-For`, depth 1): tracking 30/min burst 10; login 5/min burst 3; AI and MCP 10/min burst 2; merchant API 120/min burst 20. SSE streams also capped at 5 open per visitor (`stream-inflight`). |
+| **Dependency Timeouts** | Traefik ServersTransport | `backend-transport` 30 s to first response header, `stream-transport` 10 s, `ai-transport` 60 s; dial 5 s. No retry middleware: the gateway never resends a write. |
+| **JWT & Merchant API Key Auth** | **Core API** | Handled natively by Go HTTP middleware in `core-api/internal/identity/` and `core-api/internal/merchants/`. Traefik forwards `Authorization` and `X-API-Key` without modifying them. |
+| **SSE Streaming Compatibility** | Traefik + Tracking API | Unbuffered streaming; entry point `writeTimeout: 0s`. Tracking API emits `X-Accel-Buffering: no` and periodic `: ping` heartbeats (every 15s) to prevent Cloudflare edge proxy connection drops. |
+
+### Routes
+
+| Priority | Path | Backend | Middlewares (after strip-identity, security-headers, CORS) |
+| :-- | :-- | :-- | :-- |
+| 100 | `^/api/v1/tracking/(public/)?{id}/stream$` | `tracking-api:8081` | tracking rate limit, stream cap |
+| 90 | `/api/v1/tracking`, `/api/v1/tracking/*` | `tracking-api:8081` | tracking rate limit |
+| 80 | `/api/v1/ai`, `/api/v1/ai/*` | `ai-assistant:8000` | AI rate limit, 1 MB |
+| 75 | `/mcp`, `/mcp/*` | `ai-assistant:8002` | AI rate limit, stream cap |
+| 70 | `/api/v1/auth/login` | `core-api:8080` | login rate limit, 1 MB |
+| 60 | `^/api/v1/deliveries/{id}/proof-photo$` | `core-api:8080` | 10 MB |
+| 55 | `/api/v1/merchant/*` | `core-api:8080` | merchant rate limit, 1 MB |
+| 50 | `/api/v1/*` | `core-api:8080` | 1 MB |
+| 2 | `/api/*` (unknown versions answer 404 JSON) | `core-api:8080` | 1 MB, no CORS |
+| 1 | everything else | `web:3000` | security headers and SPA CSP only (no identity strip, no CORS) |
+
+The file provider ranks routers without a `priority` by rule length; the Kubernetes file sets every priority explicitly in the same order.
 
 ---
 
@@ -67,25 +87,32 @@ Incoming Request (Internet: Browsers, Couriers, Merchant API Clients)
 deploy/gateway/
 ├── README.md                            # Living gateway architecture documentation
 └── traefik/
-    ├── traefik.yml                      # Static Traefik daemon configuration (entrypoints, logs, trustedIPs)
-    └── dynamic-routes.yml               # Dynamic routing, services & middleware definitions
+    ├── traefik.yml                      # Static config: entry points, timeouts, trustedIPs, internal dashboard
+    ├── dynamic-routes.yml               # File provider (Docker Compose): routers, services, middlewares, transports
+    └── kubernetes/
+        ├── ingressroutes.yaml           # IngressRoute CRD: same routes for the cluster (namespace swiftdrop)
+        └── middlewares.yaml             # Middleware + ServersTransport CRDs: same values as dynamic-routes.yml
 ```
+
+`scripts/gateway_parity.py` (needs Python with PyYAML) fails if any middleware or servers transport differs between `dynamic-routes.yml` and `kubernetes/middlewares.yaml`. Only the CORS allowed origins may differ. Change both files in the same PR.
 
 ---
 
 ## 4. Local Testing with Docker
 
-To test Traefik locally with Docker:
+Docker Compose (`deploy/docker-compose.yml`) mounts both files. To run Traefik alone:
 ```bash
 docker run -d \
   -p 80:80 \
-  -p 8080:8080 \
+  -p 127.0.0.1:8090:8090 \
   -v $(pwd)/traefik/traefik.yml:/etc/traefik/traefik.yml:ro \
   -v $(pwd)/traefik/dynamic-routes.yml:/etc/traefik/dynamic/dynamic-routes.yml:ro \
   --name swiftdrop-gateway \
-  traefik:v3.1
+  traefik:v3.1.7
 ```
-The Traefik dashboard is accessible in development at `http://localhost:8080/dashboard/`.
+The dashboard is served only on the internal `traefik` entry point: `http://127.0.0.1:8090/dashboard/` (health: `/ping`). Port 8080 serves nothing.
+
+Local behaviour to expect: CORS only allows `http://localhost:3000` and `http://127.0.0.1:3000`, logins are limited to 5 per minute per IP (burst 3), and API bodies over 1 MB get `413`.
 
 ---
 
@@ -109,3 +136,15 @@ As documented in [ADR-002](../../docs/architecture/adr-002-kubernetes-hosting.md
    ```
 2. **Traefik v3.x Installation:** Traefik is deployed declaratively into namespace `traefik` using official Helm charts or customized manifests with Custom Resource Definitions (`IngressRoute`, `Middleware`).
 3. **Production Hardening:** The Traefik dashboard is configured with `api.insecure: false`. Cluster administrators inspect routing state and metrics exclusively via authenticated `kubectl port-forward` sessions.
+4. **Routes and middlewares:**
+   ```bash
+   kubectl apply -f deploy/gateway/traefik/kubernetes/middlewares.yaml
+   kubectl apply -f deploy/gateway/traefik/kubernetes/ingressroutes.yaml
+   ```
+   Prerequisites: namespace `swiftdrop`; TLS Secret `traefik-origin-tls` (Cloudflare Origin CA, ADR-002); ClusterIP Services `core-api:8080`, `tracking-api:8081`, `ai-assistant:8000` and `:8002`, `web:3000`. Only `ai-assistant` has a manifest in `deploy/kubernetes/` today.
+5. **Host:** one host, paths choose the service. `swiftdrop.example.com` in `ingressroutes.yaml` is a placeholder until the production domain is fixed. ADR-002's per-service subdomain diagram predates this choice and should be updated to match.
+
+### 6.1 Verification status
+
+- The 25 behaviour checks (GS-01 to GS-21, in `docs/drafts/member-07-dispatcher-admin-web-gateway/doc7-tests/gateway/`) passed against the proposed `traefik.yml` and `dynamic-routes.yml` on 26 Oct 2026. The files here are identical to that proposal except that the MCP route is `/mcp` on port 8002 (the AI service's real MCP path) instead of the unused `/api/v1/ai/mcp/sse`. The `/mcp` route is not covered by those checks.
+- The Kubernetes files have not been applied to a cluster or validated with `kubeconform` in this repo yet.

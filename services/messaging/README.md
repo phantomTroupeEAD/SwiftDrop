@@ -22,6 +22,7 @@ The **SwiftDrop Messaging Service** provides the asynchronous integration backbo
 5. **SSRF Hardened Webhooks:** Outbound webhooks block all non-public CIDRs (private, loopback, link-local, cloud metadata `169.254.169.254`, CGNAT, IPv6 ULA) and disable HTTP redirect following.
 6. **Payload Sanitization (Decision D4):** Customer email addresses in delivery records are masked on read (`k***@domain.com`). No passwords, tokens, API keys, courier phone numbers, or private delivery notes may ever be exposed via merchant webhooks or tracking queues.
 7. **Dead-Letter Safety:** Poison messages that fail JSON schema validation or unrecoverable processing are rejected directly to `swiftdrop.dlq` without tight retry loops.
+8. **Resilient Broker Connection & Cold-Start Recovery:** RabbitMQ connection manager retries with exponential backoff on cold starts and starts an asynchronous background retry loop if the initial dial fails. Outbox relay and worker daemons wait on broker readiness before polling or opening consumer channels, preventing crash loops and false outbox delivery failures during infrastructure boots.
 
 ---
 
@@ -84,7 +85,7 @@ services/messaging/
 | `WEBHOOK_HTTP_TIMEOUT_SECONDS` | `5` | Strict timeout for outbound webhook HTTP calls |
 | `WEBHOOK_RETRY_SCHEDULE` | `0s,30s,2m,10m,30m` | Exponential backoff retry progression |
 | `WEBHOOK_ALLOW_PRIVATE_HOSTS` | `false` | When true (or in `APP_ENV=local`), permits `http://` localhost targets |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | *(Required)* | 64 hex characters (32 bytes AES-256-GCM primary key) |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | *(Required)* | 32-byte AES-256-GCM primary key (Base64-encoded or 64 hex characters) |
 | `WEBHOOK_SECRET_ENCRYPTION_KEY_FALLBACKS` | *(Optional)* | Comma-separated `key_version=hex_key` for zero-downtime rotation |
 | `DELIVERY_LEASE_SECONDS` | `120` | Worker delivery claim lease duration |
 | `SMTP_HOST` | `localhost` | Outgoing SMTP host (e.g., Mailpit in dev) |

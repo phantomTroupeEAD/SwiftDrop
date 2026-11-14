@@ -81,10 +81,7 @@ kubectl scale deployment/outbox-relay -n swiftdrop --replicas=1
 ```
 
 ### 3.3 Database Migration Rollback
-```bash
-# Run golang-migrate rollback step
-migrate -path core-api/migrations -database "$DATABASE_URL" down 1
-```
+Migrations run with core-api's own migrator (`/app/migrate`, `schema_migrations` ledger), not golang-migrate. Production deploys never roll back the schema. To undo the last migration by hand, run that migration's `.down.sql` as the migrator role and delete its row from `schema_migrations`; agree it with the migration's owner and Member 9 (DB coordinator) first.
 
 ---
 
@@ -168,6 +165,12 @@ kubectl rollout undo deployment/core-api -n swiftdrop
 # 3. Monitor rollout status
 kubectl rollout status deployment/core-api -n swiftdrop
 ```
+
+### 7.1 Failed automatic deploy (`.github/workflows/deploy.yml`)
+`deploy/scripts/deploy.sh` already rolled every app Deployment back. Open the failed run: the log ends with `kubectl get pods` and the last events. Typical causes: image tag not published (ImagePullBackOff → check the *SwiftDrop Publish Images* run), missing Secret key (CreateContainerConfigError → `kubectl describe pod`), migrate Job failed (`kubectl logs job/core-api-migrate -n swiftdrop`; the schema is not rolled back), smoke test failed (run `python deploy/scripts/smoke-test.py <url>` locally). Fix, then re-run the workflow or dispatch it with the same `sha`.
+
+### 7.2 Deploy job stuck "Waiting for a runner"
+The VM is deallocated or the runner service is down. Start the VM (`az vm start -g swiftdrop-rg -n swiftdrop-vm`); the job continues. If it still waits: `ssh azureuser@<vm-ip>` → `cd /home/gh-runner/actions-runner && sudo ./svc.sh status` (`sudo ./svc.sh start` if stopped).
 
 ---
 

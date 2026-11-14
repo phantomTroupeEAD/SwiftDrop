@@ -11,7 +11,15 @@ import (
 func TestHealthEndpoints(t *testing.T) {
 	// Set local environment
 	origEnv := os.Getenv("APP_ENV")
-	defer os.Setenv("APP_ENV", origEnv)
+	origDBURL, hasDBURL := os.LookupEnv("DATABASE_URL")
+	defer func() {
+		_ = os.Setenv("APP_ENV", origEnv)
+		if hasDBURL {
+			_ = os.Setenv("DATABASE_URL", origDBURL)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
 
 	t.Run("GET /health/live returns 200 OK", func(t *testing.T) {
 		container := BuildAppContainer()
@@ -33,6 +41,17 @@ func TestHealthEndpoints(t *testing.T) {
 	})
 
 	t.Run("GET /health/ready in local fallback returns 200 mock", func(t *testing.T) {
+		subEnv := os.Getenv("APP_ENV")
+		subDBURL, subHasDB := os.LookupEnv("DATABASE_URL")
+		defer func() {
+			_ = os.Setenv("APP_ENV", subEnv)
+			if subHasDB {
+				_ = os.Setenv("DATABASE_URL", subDBURL)
+			} else {
+				_ = os.Unsetenv("DATABASE_URL")
+			}
+		}()
+
 		_ = os.Setenv("APP_ENV", "local")
 		// Point to unreachable DB to ensure fallback
 		_ = os.Setenv("DATABASE_URL", "postgres://none:none@127.0.0.1:54399/none?sslmode=disable")
@@ -79,11 +98,14 @@ func TestHealthEndpoints(t *testing.T) {
 			_ = os.Unsetenv("SWAGGER_ENABLED")
 		}()
 
-		container := BuildAppContainer()
+		// Test the Swagger gate directly: a full BuildAppContainer in production now (correctly)
+		// refuses to start without a reachable database and a real JWT_SECRET.
+		mux := http.NewServeMux()
+		registerEventsModules(mux, nil, nil)
 		req := httptest.NewRequest(http.MethodGet, "/swagger/events/", nil)
 		rec := httptest.NewRecorder()
 
-		container.Mux.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 Not Found, got %d", rec.Code)
 		}

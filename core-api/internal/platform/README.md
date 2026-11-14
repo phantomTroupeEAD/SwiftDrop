@@ -23,10 +23,13 @@ internal/platform/
 ## 2. Package Breakdown & Usage Guide
 
 ### 2.1 `platform/config`
-Provides strongly-typed environment parsing with fallback defaults. Values are never printed or logged to protect secrets.
+Provides strongly-typed environment parsing with fallback defaults and zero-dependency `.env` loading (`config.LoadEnv()`). Searches `.env`, `core-api/.env`, and `../.env` without overwriting existing environment variables. Values are never printed or logged to protect secrets.
 
 ```go
 import "github.com/swiftdrop/core-api/internal/platform/config"
+
+// Load .env if present (e.g. at app entrypoint)
+config.LoadEnv()
 
 // Parse configuration safely
 port := config.String("PORT", "8080")

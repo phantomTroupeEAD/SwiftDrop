@@ -33,7 +33,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: outbox-relay
-          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:${IMAGE_TAG}
+          image: ghcr.io/phantomtroupeead/swiftdrop/messaging:latest # tag set by the Kustomize overlay (deploy/overlays)
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/relay"]
           ports:
@@ -55,6 +55,10 @@ spec:
                 name: outbox-relay-secrets # Dedicated credentials for swiftdrop_relay role
             - secretRef:
                 name: rabbitmq-secrets
+            # The shared messaging config (services/messaging/internal/config) requires the webhook
+            # key in production even for the relay; without it the relay exits at start-up.
+            - secretRef:
+                name: integrations-secrets
           resources:
             requests:
               cpu: 100m
