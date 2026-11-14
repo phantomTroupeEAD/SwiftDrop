@@ -1,9 +1,9 @@
 import React, { useCallback, createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, LoginResponseData, GoogleLoginResponseData } from '@/shared/types/auth';
-import { withRequestReference } from '@/shared/lib/api-error';
+import { friendlyApiError } from '@/shared/lib/api-error';
 
 interface ApiResponseEnvelope<T = unknown> {
-  error?: { message?: string; correlation_id?: string };
+  error?: { code?: string };
   data?: T;
 }
 
@@ -98,13 +98,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!res.ok) {
         const unavailable = res.status === 502 || res.status === 504 || res.status === 404;
         const fallback = unavailable
-          ? 'Cannot connect to backend server. Please verify Core API is running on port 8080.'
-          : `Authentication failed (${res.status})`;
-        throw new Error(withRequestReference(data?.error?.message || fallback, res, data?.error?.correlation_id));
+          ? 'Sign-in is temporarily unavailable. Please try again later.'
+          : res.status === 401 ? 'Check your email and password and try again.' : 'Could not sign in. Please try again.';
+        throw new Error(friendlyApiError(res, data?.error?.code, fallback));
       }
 
       if (!data?.data?.access_token) {
-        throw new Error('Invalid authentication response from server');
+        throw new Error('Could not complete sign-in. Please try again.');
       }
 
       const loginData: LoginResponseData = data.data;
@@ -112,8 +112,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(loginData.user);
       return loginData.user;
     } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('Failed to fetch')) {
-        throw new Error('Network error: Unable to reach Core API server at port 8080.');
+      if (err instanceof Error && err instanceof TypeError) {
+        throw new Error('Could not connect to SwiftDrop. Please try again.');
       }
       throw err;
     }
@@ -137,12 +137,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch {}
 
       if (!res.ok) {
-        const message = data?.error?.message || `Google Sign-In failed (${res.status})`;
-        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
+        const message = 'Could not sign in with Google. Please try again.';
+        throw new Error(friendlyApiError(res, data?.error?.code, message));
       }
 
       if (!data?.data?.access_token) {
-        throw new Error('Invalid Google authentication response from server');
+        throw new Error('Could not complete Google sign-in. Please try again.');
       }
 
       const googleData: GoogleLoginResponseData = data.data;
@@ -154,8 +154,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         requiresPhone: googleData.requires_phone,
       };
     } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('Failed to fetch')) {
-        throw new Error('Network error: Unable to reach Core API server at port 8080.');
+      if (err instanceof Error && err instanceof TypeError) {
+        throw new Error('Could not connect to SwiftDrop. Please try again.');
       }
       throw err;
     }
@@ -181,12 +181,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch {}
 
     if (!res.ok) {
-      const message = data?.error?.message || `Profile update failed (${res.status})`;
-      throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
+      const message = 'Could not update your profile. Please try again.';
+      throw new Error(friendlyApiError(res, data?.error?.code, message));
     }
 
     if (!data?.data) {
-      throw new Error('Invalid profile update response from server');
+      throw new Error('Could not confirm your profile update. Please try again.');
     }
 
     const updatedUser: User = data.data;

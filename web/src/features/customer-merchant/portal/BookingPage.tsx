@@ -1,3 +1,4 @@
+import { Textarea } from '@/shared/components/ui/textarea';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { FileText, Package, Shirt } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -38,7 +39,7 @@ const addressAutocomplete = {
 } as const;
 
 type Quote = { quote_id: string; fee_cents: number; currency: string; expires_at: string };
-type Booking = { id?: string; tracking_number: string; status: string };
+type Booking = { id?: string; tracking_number: string; status: string; item_description?: string; special_instructions?: string };
 type Receipt = {
   receipt_number: string;
   barcode?: string;
@@ -218,6 +219,7 @@ export function BookingPage() {
             pickup,
             dropoff,
             item_description: value('description'),
+            special_instructions: value('special-instructions'),
           },
         });
         if (!result?.tracking_number) {
@@ -252,6 +254,16 @@ export function BookingPage() {
       {booking ? <section className="m6-card" aria-live="polite" data-testid="booking-confirmation">
         <h2>Booking confirmed</h2>
         <p>Tracking number <strong data-testid="booking-confirmation-tracking-no">{booking.tracking_number}</strong></p>
+        <dl className="mt-4 grid gap-3">
+          {booking.item_description && <div>
+            <dt className="font-semibold">Parcel contents</dt>
+            <dd className="whitespace-pre-wrap break-words">{booking.item_description}</dd>
+          </div>}
+          {booking.special_instructions && <div>
+            <dt className="font-semibold">Special instructions</dt>
+            <dd className="whitespace-pre-wrap break-words">{booking.special_instructions}</dd>
+          </div>}
+        </dl>
         <Link to={`/track/${encodeURIComponent(booking.tracking_number)}`}>Track this parcel</Link>
         {booking.id && <div className="m6-actions">
           <Button type="button" variant="outline" disabled={receiptPending} onClick={loadReceipt} data-testid="booking-receipt-btn">
@@ -274,14 +286,17 @@ export function BookingPage() {
         </Dialog>}
       </section> : <>
         <Stepper steps={steps} current={step} />
-        <form className="m6-card" onSubmit={event => { void advance(event); }} data-testid="booking-wizard">
-          {step === 0 && <div className="m6-grid">
-            {contacts.map(([prefix, label]) => <fieldset key={prefix} disabled={pending}>
-              <legend><strong>{label}</strong></legend>
+        <form className="rounded-2xl border border-border bg-surface p-4 sm:p-6" onSubmit={event => { void advance(event); }} data-testid="booking-wizard">
+          {step === 0 && <div className="grid gap-5 md:grid-cols-2">
+            {contacts.map(([prefix, label]) => <fieldset key={prefix} disabled={pending} className="min-w-0 rounded-xl border border-border bg-surface-subtle px-4 pb-4 pt-2">
+              <legend className="px-2 text-base font-semibold">{label === 'Sender' ? 'Pickup address' : 'Delivery address'}</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
               {fields.map(([field, name, type]) => {
                 const key = prefix + '-' + field;
-                return <label className="m6-field" key={key}>{name}
+                return <label className={`space-y-1.5 text-sm font-medium ${field === 'address' ? 'sm:col-span-2' : ''}`} key={key}>
+                  <span className="block">{name}</span>
                   <Input required type={type} name={key} value={draft[key] ?? ''} data-testid={`booking-${key}-input`}
+                    placeholder={field === 'postal' ? 'e.g. 00100' : field === 'phone' ? 'e.g. +94771234567' : undefined}
                     autoComplete={`section-${prefix} ${addressAutocomplete[field]}`}
                     inputMode={field === 'postal' ? 'numeric' : undefined}
                     pattern={field === 'postal' ? '[0-9]{5}' : field === 'phone' ? '[+]?[0-9]{9,15}' : undefined}
@@ -289,6 +304,7 @@ export function BookingPage() {
                     onChange={event => change(key, event.target.value)} />
                 </label>;
               })}
+              </div>
               <BookingZone postal={value(prefix + '-postal')} selected={value(prefix + '-postal-zone')}
                 onSelect={id => change(prefix + '-postal-zone', id)} />
             </fieldset>)}
@@ -317,6 +333,11 @@ export function BookingPage() {
                 <option value="STANDARD">Standard</option><option value="EXPRESS">Express</option>
               </NativeSelect>
             </label>
+            <label className="m6-field col-span-full">Special instructions (optional)
+              <Textarea value={draft['special-instructions'] ?? ''} data-testid="booking-special-instructions-input"
+                placeholder="Add any handling or delivery instructions"
+                onChange={event => change('special-instructions', event.target.value)} />
+            </label>
           </fieldset>}
           {step === 2 && quote && <>
             <h2>Delivery quote</h2>
@@ -330,17 +351,18 @@ export function BookingPage() {
             <p>{value('pickup-name')} · {value('pickup-address')}, {value('pickup-city')}</p>
             <p>{value('dropoff-name')} · {value('dropoff-address')}, {value('dropoff-city')}</p>
             <p>{value('description')} · {value('weight')} kg · {money}</p>
+            {value('special-instructions') && <p className="whitespace-pre-wrap break-words"><strong>Special instructions</strong> {value('special-instructions')}</p>}
             {bookingKey.current && error && <p>Retry this booking to reuse the same request and avoid a duplicate.</p>}
           </>}
           <PortalErrorMessage message={error} />
-          <div className="m6-actions">
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4">
             {step > 0 && <Button variant="outline" type="button" data-testid="booking-back-btn"
               disabled={pending || Boolean(bookingKey.current)} onClick={() => { setStep(step - 1); setError(''); }}>Back</Button>}
             {quote && secondsRemaining === 0 && !bookingKey.current &&
               <p role="status">Quote expired. {step === 3 ? 'Go back to request a new quote.' : 'Request a new quote to continue.'}</p>}
             <Button disabled={pending || (step === 3 && secondsRemaining === 0 && !bookingKey.current)} data-testid={step === 3 ? 'booking-submit-btn' : 'booking-next-btn'}>
               {pending ? (step === 3 ? 'Confirming booking…' : 'Getting quote…') : step === 2 && quote && Date.parse(quote.expires_at) <= Date.now()
-                ? 'Get a new quote' : ['Continue', 'Get quote', 'Continue', 'Confirm booking'][step]}
+                ? 'Get a new quote' : ['Continue to parcel details', 'Get quote', 'Review booking', 'Confirm booking'][step]}
             </Button>
           </div>
         </form>
