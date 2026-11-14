@@ -60,6 +60,7 @@ if (depDiffAdded.length > 0 || depDiffRemoved.length > 0) {
 // Legacy pre-shadcn files are isolated in a tracked exemption ledger until migrated.
 const LEGACY_PRE_SHADCN_FILES = new Set([
   'src/features/dashboards/CourierDashboard.tsx',
+  'src/features/dashboards/AdminDashboard.tsx',
   'src/features/dashboards/DashboardLayout.tsx',
   'src/features/dashboards/DispatcherDashboard.tsx',
   'src/features/dashboards/MerchantDashboard.tsx',

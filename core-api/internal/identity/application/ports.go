@@ -53,6 +53,7 @@ type OTPRepository interface {
 // EmailSender defines the port for dispatching transactional email messages.
 type EmailSender interface {
 	SendOTPEmail(ctx context.Context, recipientEmail, code string) error
+	SendPasswordResetEmail(ctx context.Context, recipientEmail, code string) error
 }
 
 // RoleAssigner enables other bounded contexts (e.g., Member 4 Merchant Integration,

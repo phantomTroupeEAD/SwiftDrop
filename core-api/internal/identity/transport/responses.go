@@ -72,6 +72,11 @@ type OTPDataDTO struct {
 	CooldownSeconds int    `json:"cooldown_seconds"`
 }
 
+// MessageDataDTO is a generic message response payload.
+type MessageDataDTO struct {
+	Message string `json:"message"`
+}
+
 // SingleDataEnvelope wraps successful responses per SwiftDrop API conventions.
 type SingleDataEnvelope struct {
 	Data interface{} `json:"data"`

@@ -38,6 +38,23 @@ var adminMigrations = []string{
 // the same schema_migrations ledger as migrations.RunMigrations.
 func applyMigrations(t *testing.T, conn *sql.DB) {
 	t.Helper()
+
+	// Acquire the shared migration advisory lock to serialize with concurrent
+	// migration runners (e.g. migrations.RunMigrations in other packages).
+	lockConn, err := conn.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("failed to obtain dedicated connection for migration lock: %v", err)
+	}
+	defer lockConn.Close()
+
+	const migrationAdvisoryLockID = 83921749
+	if _, err := lockConn.ExecContext(context.Background(), "SELECT pg_advisory_lock($1);", migrationAdvisoryLockID); err != nil {
+		t.Fatalf("failed to acquire migration advisory lock: %v", err)
+	}
+	defer func() {
+		_, _ = lockConn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1);", migrationAdvisoryLockID)
+	}()
+
 	if _, err := conn.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version VARCHAR(50) PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("schema_migrations: %v", err)

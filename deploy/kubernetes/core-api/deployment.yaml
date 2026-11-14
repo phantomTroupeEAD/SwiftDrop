@@ -25,6 +25,9 @@ spec:
         app.kubernetes.io/part-of: swiftdrop
     spec:
       terminationGracePeriodSeconds: 20
+      # Kubernetes would inject CORE_API_PORT=tcp://<ip>:8080 for the core-api Service; core-api reads
+      # CORE_API_PORT as its listen port and would fail ("too many colons"). Services are reached by DNS.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -37,6 +40,13 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          # Optional mail (OTP emails) and object storage (proof photos) settings. Written by
+          # deploy/scripts/sync-secrets.sh only when configured; without it core-api prints OTPs to
+          # its log and uses its default storage driver.
+          envFrom:
+            - secretRef:
+                name: core-api-integrations
+                optional: true
           env:
             - name: PORT
               value: "8080"

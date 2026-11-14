@@ -3,7 +3,9 @@ package events
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -243,5 +245,187 @@ func TestEventHub_ConcurrentAccess(t *testing.T) {
 
 	if hub.SubscriberCount(tn) != 0 {
 		t.Fatalf("expected 0 subscribers after all unsubs, got %d", hub.SubscriberCount(tn))
+	}
+}
+
+func TestEventHub_SlowSubscriberNoPanicAndCleanup(t *testing.T) {
+	hub := NewEventHub(WithBufferSize(1))
+	tn := "SD-20261025-A8F3K2"
+
+	ch, unsub, err := hub.Subscribe(context.Background(), tn)
+	if err != nil {
+		t.Fatalf("unexpected subscribe error: %v", err)
+	}
+	defer unsub()
+
+	event := dto.PublicStatusUpdateEvent{
+		TrackingNumber: tn,
+		Status:         "IN_TRANSIT",
+		Timestamp:      time.Now().UTC(),
+	}
+
+	// First broadcast fills buffer (1/1)
+	if d := hub.Broadcast(event); d != 1 {
+		t.Fatalf("expected 1 delivery, got %d", d)
+	}
+
+	// Second broadcast overflows buffer, marks subscriber closed and closes channel
+	if d := hub.Broadcast(event); d != 0 {
+		t.Fatalf("expected 0 delivery on overflow, got %d", d)
+	}
+
+	// Verify channel is closed
+	<-ch // drain buffered
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("expected channel closed")
+		}
+	default:
+		t.Fatal("expected closed channel")
+	}
+
+	// Third broadcast occurs while slow subscriber is still in hub (before unsub is called)
+	// MUST NOT panic on send to closed channel!
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("Broadcast panicked on closed subscriber channel: %v", rec)
+		}
+	}()
+
+	d := hub.Broadcast(event)
+	if d != 0 {
+		t.Errorf("expected 0 deliveries to closed subscriber, got %d", d)
+	}
+
+	// Verify slow subscriber cleanup pruned the closed subscriber
+	if hub.SubscriberCount(tn) != 0 {
+		t.Errorf("expected closed subscriber to be cleaned up from hub, got %d", hub.SubscriberCount(tn))
+	}
+	if hub.TotalSubscribers() != 0 {
+		t.Errorf("expected TotalSubscribers 0 after cleanup, got %d", hub.TotalSubscribers())
+	}
+}
+
+func TestEventHub_ConcurrentBroadcastCloseUnsubscribe(t *testing.T) {
+	hub := NewEventHub(WithBufferSize(4), WithMaxSubscribersPerKey(500), WithMaxTotalSubscribers(1000))
+	tn := "SD-20261110-CONC01"
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	clientCount := 30
+	broadcastCount := 100
+
+	var panicCount atomic.Int64
+
+	// Start subscriber goroutines that rapidly subscribe, read events, and unsubscribe
+	for i := 0; i < clientCount; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCount.Add(1)
+					t.Errorf("subscriber goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				ch, unsub, err := hub.Subscribe(ctx, tn)
+				if err != nil {
+					time.Sleep(time.Millisecond)
+					continue
+				}
+
+				// Consume channel asynchronously
+				doneReading := make(chan struct{})
+				go func() {
+					defer close(doneReading)
+					for range ch {
+						// consume
+					}
+				}()
+
+				time.Sleep(time.Duration(id%5) * time.Millisecond)
+				unsub()
+				<-doneReading
+			}
+		}(i)
+	}
+
+	// Start concurrent broadcasters
+	for b := 0; b < 4; b++ {
+		wg.Add(1)
+		go func(bid int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCount.Add(1)
+					t.Errorf("broadcaster goroutine %d panicked: %v", bid, r)
+				}
+			}()
+
+			for j := 0; j < broadcastCount; j++ {
+				hub.Broadcast(dto.PublicStatusUpdateEvent{
+					TrackingNumber: tn,
+					Status:         "IN_TRANSIT",
+					Timestamp:      time.Now().UTC(),
+				})
+				time.Sleep(500 * time.Microsecond)
+			}
+		}(b)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	_ = hub.Close()
+
+	cancel()
+	wg.Wait()
+
+	if panicCount.Load() > 0 {
+		t.Fatalf("Encountered %d panics during concurrent operations", panicCount.Load())
+	}
+}
+
+func BenchmarkEventHub_Broadcast_FanOut(b *testing.B) {
+	for _, subCount := range []int{1, 10, 50, 100} {
+		b.Run(fmt.Sprintf("subscribers_%d", subCount), func(b *testing.B) {
+			hub := NewEventHub(WithBufferSize(b.N+100), WithMaxSubscribersPerKey(200))
+			tn := "SD-20261110-BENCH1"
+
+			unsubs := make([]func(), subCount)
+			for i := 0; i < subCount; i++ {
+				_, unsub, err := hub.Subscribe(context.Background(), tn)
+				if err != nil {
+					b.Fatalf("failed to subscribe: %v", err)
+				}
+				unsubs[i] = unsub
+			}
+			defer func() {
+				for _, u := range unsubs {
+					u()
+				}
+			}()
+
+			event := dto.PublicStatusUpdateEvent{
+				TrackingNumber: tn,
+				Status:         "IN_TRANSIT",
+				Timestamp:      time.Now().UTC(),
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				hub.Broadcast(event)
+			}
+		})
 	}
 }

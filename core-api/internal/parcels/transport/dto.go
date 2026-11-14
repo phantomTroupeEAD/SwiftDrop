@@ -68,30 +68,32 @@ type AddressResponse struct {
 
 // ParcelResponse represents the authoritative Parcel aggregate root returned inside the standard data envelope.
 type ParcelResponse struct {
-	ID                 string                   `json:"id"`
-	TrackingNumber     string                   `json:"tracking_number"`
-	SenderID           *string                  `json:"sender_id,omitempty"`
-	MerchantID         *string                  `json:"merchant_id,omitempty"`
-	RecipientName      string                   `json:"recipient_name"`
-	RecipientPhone     string                   `json:"recipient_phone"`
-	QuoteID            string                   `json:"quote_id"`
-	PricingRuleID      string                   `json:"pricing_rule_id"`
-	PricingRuleVersion int                      `json:"pricing_rule_version"`
-	DeliveryFeeCents   int64                    `json:"delivery_fee_cents"`
-	Currency           string                   `json:"currency"`
-	OriginZoneID       string                   `json:"origin_zone_id"`
-	DestinationZoneID  string                   `json:"destination_zone_id"`
-	ServiceLevel       string                   `json:"service_level"`
-	Weight             ParcelWeightResponse     `json:"weight"`
-	Dimensions         ParcelDimensionsResponse `json:"dimensions"`
-	Pickup             AddressResponse          `json:"pickup"`
-	Dropoff            AddressResponse          `json:"dropoff"`
-	Status             string                   `json:"status"`
-	AttemptCount       int                      `json:"attempt_count"`
-	MaxAttempts        int                      `json:"max_attempts"`
-	Version            int                      `json:"version"`
-	CreatedAt          string                   `json:"created_at"`
-	UpdatedAt          string                   `json:"updated_at"`
+	ID                  string                   `json:"id"`
+	TrackingNumber      string                   `json:"tracking_number"`
+	SenderID            *string                  `json:"sender_id,omitempty"`
+	MerchantID          *string                  `json:"merchant_id,omitempty"`
+	RecipientName       string                   `json:"recipient_name"`
+	RecipientPhone      string                   `json:"recipient_phone"`
+	QuoteID             string                   `json:"quote_id"`
+	PricingRuleID       string                   `json:"pricing_rule_id"`
+	PricingRuleVersion  int                      `json:"pricing_rule_version"`
+	DeliveryFeeCents    int64                    `json:"delivery_fee_cents"`
+	Currency            string                   `json:"currency"`
+	OriginZoneID        string                   `json:"origin_zone_id"`
+	DestinationZoneID   string                   `json:"destination_zone_id"`
+	ServiceLevel        string                   `json:"service_level"`
+	Weight              ParcelWeightResponse     `json:"weight"`
+	Dimensions          ParcelDimensionsResponse `json:"dimensions"`
+	Pickup              AddressResponse          `json:"pickup"`
+	Dropoff             AddressResponse          `json:"dropoff"`
+	ItemDescription     string                   `json:"item_description,omitempty"`
+	SpecialInstructions string                   `json:"special_instructions,omitempty"`
+	Status              string                   `json:"status"`
+	AttemptCount        int                      `json:"attempt_count"`
+	MaxAttempts         int                      `json:"max_attempts"`
+	Version             int                      `json:"version"`
+	CreatedAt           string                   `json:"created_at"`
+	UpdatedAt           string                   `json:"updated_at"`
 }
 
 // StatusHistoryItemResponse represents a single immutable audit record in a parcel's lifecycle.
@@ -142,14 +144,16 @@ func NewParcelResponse(p domain.Parcel) ParcelResponse {
 			WidthCm:  p.Dimensions.WidthCm,
 			HeightCm: p.Dimensions.HeightCm,
 		},
-		Pickup:       newAddressResponse(p.PickupAddress),
-		Dropoff:      newAddressResponse(p.DropoffAddress),
-		Status:       string(p.Status),
-		AttemptCount: p.AttemptCount,
-		MaxAttempts:  domain.MaxDeliveryAttempts,
-		Version:      p.Version,
-		CreatedAt:    p.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    p.UpdatedAt.UTC().Format(time.RFC3339),
+		Pickup:              newAddressResponse(p.PickupAddress),
+		Dropoff:             newAddressResponse(p.DropoffAddress),
+		ItemDescription:     p.ItemDescription,
+		SpecialInstructions: p.SpecialInstructions,
+		Status:              string(p.Status),
+		AttemptCount:        p.AttemptCount,
+		MaxAttempts:         domain.MaxDeliveryAttempts,
+		Version:             p.Version,
+		CreatedAt:           p.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:           p.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

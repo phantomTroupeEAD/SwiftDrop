@@ -629,6 +629,13 @@ func mapParcelError(err error) httpErrorSpec {
 			code:    "INVALID_SERVICE_LEVEL",
 			message: "Quote service level must be one of STANDARD, EXPRESS, or SAME_DAY",
 		}
+	case errors.Is(err, domain.ErrItemDescriptionTooLong):
+		return httpErrorSpec{
+			status:  http.StatusUnprocessableEntity,
+			code:    "INVALID_PARCEL",
+			message: "Item description exceeds maximum allowed length of 500 characters",
+			details: []httpx.ErrorDetail{{Field: "item_description", Issue: "cannot exceed 500 characters"}},
+		}
 	case errors.Is(err, domain.ErrInvalidOwner),
 		errors.Is(err, domain.ErrInvalidSenderID),
 		errors.Is(err, domain.ErrInvalidMerchantID),

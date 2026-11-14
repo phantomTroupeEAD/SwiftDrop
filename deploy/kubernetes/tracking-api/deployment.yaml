@@ -29,6 +29,11 @@ spec:
           ports:
             - containerPort: 8081
               name: http
+          # RABBITMQ_URL for the live-update consumer (q.tracking.updates). In production tracking-api
+          # reports not-ready without it.
+          envFrom:
+            - secretRef:
+                name: rabbitmq-secrets
           env:
             - name: PORT
               value: "8081"
