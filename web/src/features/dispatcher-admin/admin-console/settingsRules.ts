@@ -61,6 +61,23 @@ export function ruleFor(key: string): SettingRule | undefined {
   return SETTING_RULES[key];
 }
 
+/** The allowed values in words, for the table and the dialog, for example "Whole number from 10 to 300 seconds". */
+export function allowedText(rule: SettingRule): string {
+  if (rule.kind === 'text') return `Up to ${rule.max} characters`;
+  const lo = (rule.min ?? 0).toLocaleString('en-LK');
+  const hi = (rule.max ?? 0).toLocaleString('en-LK');
+  const unit = rule.unit ? ` ${rule.unit}` : '';
+  return `${rule.kind === 'integer' ? 'Whole number' : 'Number'} from ${lo} to ${hi}${unit}`;
+}
+
+/** A live rupee preview while the admin types cents, or null when there is nothing to show. */
+export function previewFor(key: string, text: string): string | null {
+  if (key !== 'parcels.max_cod_cents') return null;
+  const t = text.trim();
+  if (!/^\d{1,9}$/.test(t)) return null;
+  return `= ${formatCents(Number(t))}`;
+}
+
 /** Formats whole LKR cents as "LKR 35,000.00" with integer arithmetic only (no floats). */
 export function formatCents(cents: number): string {
   const negative = cents < 0;
@@ -100,9 +117,13 @@ export function parseSettingInput(key: string, text: string): ParsedSetting {
 
   const trimmed = text.trim();
   if (trimmed === '') return { ok: false, message: 'Enter a value.' };
+  // Plain digits only: no exponent ("1e2"), hex ("0x1F"), thousands separators or spaces.
+  const shape = rule.kind === 'integer' ? /^-?\d+$/ : /^-?\d+(\.\d+)?$/;
+  if (!shape.test(trimmed)) {
+    return { ok: false, message: rule.kind === 'integer' ? 'Enter a whole number using digits only, for example 60.' : 'Enter a number using digits only, for example 25 or 12.5.' };
+  }
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return { ok: false, message: 'Enter a number.' };
-  if (rule.kind === 'integer' && !Number.isInteger(n)) return { ok: false, message: 'Enter a whole number.' };
   const min = rule.min ?? Number.NEGATIVE_INFINITY;
   const max = rule.max ?? Number.POSITIVE_INFINITY;
   if (n < min || n > max) return { ok: false, message: `Enter a value from ${min.toLocaleString('en-LK')} to ${max.toLocaleString('en-LK')}.` };

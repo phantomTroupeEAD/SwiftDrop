@@ -12,7 +12,7 @@ import { Textarea } from '@/shared/components/ui/textarea';
 import { REASON_MAX, REASON_MIN, validateReason } from '../zones/zoneValidation';
 import { ApiError } from '../api';
 import { listSettings, updateSetting, type Setting } from './consoleApi';
-import { displayValue, parseSettingInput, ruleFor, valueToText } from './settingsRules';
+import { allowedText, displayValue, parseSettingInput, previewFor, ruleFor, valueToText } from './settingsRules';
 import { AdminDialog, Banner, Busy, FieldError, FieldHint } from './ui';
 
 // Runtime settings (core-api/internal/admin/API.md section 3). Only allowlisted keys can be
@@ -132,6 +132,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, onNotice, o
                           <div className="font-medium">{rule?.label ?? s.key}</div>
                           <div className="font-mono text-xs text-text-muted">{s.key}</div>
                           <div className="mt-0.5 max-w-sm text-xs text-text-muted">{s.description}</div>
+                          {rule && <div className="mt-0.5 font-mono text-xs tabular-nums text-text-muted">{allowedText(rule)}</div>}
                         </TableCell>
                         <TableCell className="font-mono tabular-nums">{displayValue(s)}</TableCell>
                         <TableCell className="font-mono tabular-nums">{s.version}</TableCell>
@@ -186,25 +187,59 @@ interface SettingDialogProps {
   token: string | null;
   onClose: () => void;
   onSaved: (saved: Setting) => void;
+  /** The latest setting could not be read after a conflict: the panel reloads the list. */
   onStale: () => void;
 }
 
 const SettingDialog: React.FC<SettingDialogProps> = ({ setting, token, onClose, onSaved, onStale }) => {
   const rule = ruleFor(setting.key);
+  // The version this form is based on. It moves forward when the admin keeps their value
+  // after someone else saved first.
+  const [base, setBase] = useState<Setting>(setting);
   const [text, setText] = useState(valueToText(setting.value));
   const [reason, setReason] = useState('');
   const [valueError, setValueError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [correlationId, setCorrelationId] = useState('');
-  const [stale, setStale] = useState(false);
+  const [conflict, setConflict] = useState<Setting | null>(null);
+  const [reloadNeeded, setReloadNeeded] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  /** Version conflict: read the latest value and let the admin decide, without losing what they typed. */
+  const handleConflict = async (err: ApiError) => {
+    try {
+      const latest = (await listSettings(token)).find((s) => s.key === setting.key);
+      if (latest) {
+        setConflict(latest);
+        return;
+      }
+    } catch {
+      // Fall through to the plain message below.
+    }
+    setBanner(err.message);
+    setReloadNeeded(true);
+  };
+
+  const keepMine = () => {
+    if (!conflict) return;
+    setBase(conflict);
+    setConflict(null);
+  };
+
+  const useTheirs = () => {
+    if (!conflict) return;
+    setBase(conflict);
+    setText(valueToText(conflict.value));
+    setValueError(null);
+    setConflict(null);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBanner(null);
     setCorrelationId('');
-    setStale(false);
+    setReloadNeeded(false);
 
     const parsed = parseSettingInput(setting.key, text);
     const reasonProblem = validateReason(reason);
@@ -212,22 +247,22 @@ const SettingDialog: React.FC<SettingDialogProps> = ({ setting, token, onClose, 
     setReasonError(reasonProblem);
     if (!parsed.ok || reasonProblem) return;
 
-    if (parsed.value === setting.value) {
+    if (parsed.value === base.value) {
       setBanner('The value is the same as the current one, so there is nothing to save.');
       return;
     }
 
     setSaving(true);
     try {
-      const saved = await updateSetting(token, setting.key, { version: setting.version, value: parsed.value, reason: reason.trim() });
+      const saved = await updateSetting(token, setting.key, { version: base.version, value: parsed.value, reason: reason.trim() });
       onSaved(saved);
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === 'REASON_REQUIRED') setReasonError(err.message);
+        setCorrelationId(err.correlationId);
+        if (err.code === 'CONCURRENT_MODIFICATION') await handleConflict(err);
+        else if (err.code === 'REASON_REQUIRED') setReasonError(err.message);
         else if (err.code === 'VALIDATION_FAILED') setValueError(err.message);
         else setBanner(err.message);
-        setStale(err.code === 'CONCURRENT_MODIFICATION');
-        setCorrelationId(err.correlationId);
       } else {
         setBanner("Couldn't save the setting. Try again.");
       }
@@ -238,20 +273,43 @@ const SettingDialog: React.FC<SettingDialogProps> = ({ setting, token, onClose, 
 
   if (!rule) return null;
 
+  const preview = previewFor(setting.key, text);
+
   return (
     <AdminDialog title={`Change ${rule.label}`} description={rule.help} onClose={onClose} busy={saving} testId="admin-setting-dialog">
       <form onSubmit={submit} noValidate>
         <div className="grid gap-4 px-5 py-5">
           <p className="font-mono text-xs tabular-nums text-text-muted">
-            {setting.key} · version {setting.version}
+            {setting.key} · version {base.version}
           </p>
+
+          {conflict && (
+            <Banner
+              tone="attn"
+              testId="admin-setting-conflict"
+              reference={correlationId}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={keepMine} data-testid="admin-setting-conflict-keep-btn">
+                    Keep my value on the latest version
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={useTheirs} data-testid="admin-setting-conflict-theirs-btn">
+                    Use their value instead
+                  </Button>
+                </div>
+              }
+            >
+              Someone else changed this setting while you were editing. It is now {displayValue(conflict)} (version {conflict.version}). Your
+              value and reason are still in the form.
+            </Banner>
+          )}
 
           {banner && (
             <Banner
               tone="err"
               reference={correlationId}
               action={
-                stale ? (
+                reloadNeeded ? (
                   <div>
                     <Button type="button" variant="outline" size="sm" onClick={onStale}>
                       <RefreshCw aria-hidden="true" /> Reload settings
@@ -281,11 +339,24 @@ const SettingDialog: React.FC<SettingDialogProps> = ({ setting, token, onClose, 
               aria-invalid={Boolean(valueError)}
               aria-describedby="setting-value-note"
             />
-            {valueError ? (
-              <FieldError id="setting-value-note">{valueError}</FieldError>
-            ) : (
-              <FieldHint id="setting-value-note">Current value: {displayValue(setting)}</FieldHint>
-            )}
+            <div className="flex justify-between gap-3">
+              {valueError ? (
+                <FieldError id="setting-value-note">{valueError}</FieldError>
+              ) : (
+                <FieldHint id="setting-value-note">
+                  {allowedText(rule)}. Current value: {displayValue(base)}
+                </FieldHint>
+              )}
+              {preview ? (
+                <span data-testid="admin-setting-preview" className="shrink-0 font-mono text-xs tabular-nums text-text">
+                  {preview}
+                </span>
+              ) : rule.kind === 'text' ? (
+                <span className="shrink-0 font-mono text-xs tabular-nums text-text-muted">
+                  {[...text].length}/{rule.max}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid gap-1.5">
@@ -323,7 +394,7 @@ const SettingDialog: React.FC<SettingDialogProps> = ({ setting, token, onClose, 
           <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" disabled={saving} data-testid="admin-setting-save-btn">
+          <Button type="submit" disabled={saving || conflict !== null} data-testid="admin-setting-save-btn">
             {saving ? <Busy label="Saving…" /> : 'Save changes'}
           </Button>
         </DialogFooter>

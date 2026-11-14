@@ -194,6 +194,8 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `admin-user-suspend-dialog`, `admin-user-suspend-confirm-btn` | Suspend confirmation |
 | `admin-settings-table`, `admin-setting-edit-btn` | Settings list and row action (repeated per row) |
 | `admin-setting-dialog`, `admin-setting-value-input`, `admin-setting-reason-input`, `admin-setting-save-btn` | Change a setting |
+| `admin-setting-preview` | Live rupee amount while typing cents for the cash-on-delivery setting |
+| `admin-setting-conflict`, `admin-setting-conflict-keep-btn`, `admin-setting-conflict-theirs-btn` | Version conflict on a setting: notice, keep my value on the latest version, use their value instead |
 | `admin-audit-table`, `admin-audit-details-btn`, `admin-audit-dialog` | Audit log, row details button (repeated per row), snapshot dialog |
 
 ## Ops workspace shell (Member 7)
