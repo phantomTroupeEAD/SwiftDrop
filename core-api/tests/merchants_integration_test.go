@@ -581,4 +581,3 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 		}
 	})
 }
-
