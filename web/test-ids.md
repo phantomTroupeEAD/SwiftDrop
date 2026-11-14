@@ -216,6 +216,13 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `fleet-empty`, `fleet-empty-reset-btn`, `fleet-error` | Empty state (none yet, or none match), its Reset button, load error with reference id and Retry |
 | `fleet-add-dialog`, `fleet-add-user`, `fleet-add-code`, `fleet-add-vehicle`, `fleet-add-capacity`, `fleet-add-zone`, `fleet-add-save-btn` | Add courier dialog. `fleet-add-user` is a Select for ADMIN and a text input for DISPATCHER. Field errors: `#fleet-user-error`, `#fleet-code-error`, `#fleet-capacity-error`, `#fleet-zone-error` |
 | `fleet-add-no-accounts`, `fleet-add-error` | Every Courier account already has a profile; add failed with a non-field error |
+| `dispatch-zone`, `dispatch-refresh-btn`, `dispatch-updated` | Zone picker (sent to the server), refresh now, "Updated hh:mm:ss" line |
+| `dispatch-error` | Load error with reference id and Retry; with data on screen it is the "couldn't refresh" warning |
+| `dispatch-parcels-table`, `dispatch-parcel-row`, `dispatch-parcels-summary`, `dispatch-parcels-empty` | Waiting parcels table, one row per parcel (repeated), count line, empty state |
+| `dispatch-assign-btn` | Assign (new parcel) or Reassign (failed attempt), repeated per row |
+| `dispatch-couriers`, `dispatch-courier`, `dispatch-couriers-summary`, `dispatch-couriers-empty` | Courier list, one item per courier (repeated), count line, empty state with link to Fleet |
+| `dispatch-assign-dialog`, `dispatch-assign-courier`, `dispatch-assign-notes`, `dispatch-assign-save-btn` | Assign window: courier Select (ineligible couriers disabled with the reason), notes, submit. Errors: `#dispatch-courier-error`, `#dispatch-notes-error` |
+| `dispatch-assign-error`, `dispatch-assign-gone`, `dispatch-assign-no-couriers` | Non-field error with reference id; parcel no longer waiting; no courier can take a parcel |
 
 ## Ops workspace shell (Member 7)
 

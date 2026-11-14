@@ -8,6 +8,7 @@ import { AuditLogPanel } from '../admin-console/AuditLogPanel';
 import { SettingsPanel } from '../admin-console/SettingsPanel';
 import { UsersPanel } from '../admin-console/UsersPanel';
 import { Banner } from '../admin-console/ui';
+import { DispatchBoardPanel } from '../dispatch/DispatchBoardPanel';
 import { FleetPanel } from '../fleet/FleetPanel';
 import { ReportsPanel } from '../reports/ReportsPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
@@ -97,6 +98,19 @@ export function AuditPage() {
     <>
       <PageHeader title={item.title} description={item.description} />
       <AuditLogPanel token={accessToken} refreshKey={0} />
+    </>
+  );
+}
+
+export function DispatchPage() {
+  const { accessToken } = useAuth();
+  const { banner, show } = useNotice();
+  const item = navItem('dispatch');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      {banner}
+      <DispatchBoardPanel token={accessToken} onNotice={show} />
     </>
   );
 }

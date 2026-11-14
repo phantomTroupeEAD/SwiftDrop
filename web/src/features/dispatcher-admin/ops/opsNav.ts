@@ -46,7 +46,7 @@ export const OPS_NAV: OpsNavItem[] = [
     icon: ClipboardList,
     group: 'Operations',
     roles: BOTH,
-    built: false,
+    built: true,
   },
   {
     id: 'couriers',
