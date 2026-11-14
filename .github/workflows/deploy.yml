@@ -56,7 +56,7 @@ jobs:
 
       # Manifests from the commit that built the images (workflow_run), or from main (manual run).
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 

@@ -212,9 +212,11 @@ func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel 
 
 // Mock Status History Repository.
 type mockStatusHistoryRepo struct {
-	entries    []domain.StatusHistoryEntry
-	saveErr    error
-	saveCalled bool
+	entries          []domain.StatusHistoryEntry
+	saveErr          error
+	saveCalled       bool
+	findByParcelErr  error
+	findByParcelSeen bool
 }
 
 func newMockStatusHistoryRepo() *mockStatusHistoryRepo {
@@ -230,6 +232,20 @@ func (m *mockStatusHistoryRepo) Save(ctx context.Context, q db.Querier, entry do
 	}
 	m.entries = append(m.entries, entry)
 	return nil
+}
+
+func (m *mockStatusHistoryRepo) FindByParcelID(ctx context.Context, q db.Querier, parcelID string) ([]domain.StatusHistoryEntry, error) {
+	m.findByParcelSeen = true
+	if m.findByParcelErr != nil {
+		return nil, m.findByParcelErr
+	}
+	out := make([]domain.StatusHistoryEntry, 0)
+	for _, entry := range m.entries {
+		if entry.ParcelID == parcelID {
+			out = append(out, entry)
+		}
+	}
+	return out, nil
 }
 
 // Helper to construct a valid test booking command.
