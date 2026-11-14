@@ -2,18 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Package,
-  Mail,
-  Lock,
   Eye,
   EyeOff,
   ArrowRight,
   ArrowLeft,
-  ShieldCheck,
   CheckCircle2,
-  KeyRound,
   AlertCircle,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/shared/components/ui/card';
 
 export const ForgotPasswordPage: React.FC = () => {
   const navigate = useNavigate();
@@ -156,276 +164,300 @@ export const ForgotPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center relative">
-      <div className="flex min-h-screen">
-        {/* Left Hero Branding Column (Visible on Desktop) */}
-        <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-r border-slate-800 flex-col justify-between p-12 overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary overflow-hidden">
+      {/* Background Image Layer with Ambient Blur & Contrast Scrim */}
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
+        <img
+          src="/login-bg.jpg"
+          alt=""
+          className="h-full w-full object-cover object-center filter blur-sm scale-105"
+        />
+        {/* Soft atmospheric glow orbs */}
+        <div className="absolute -top-32 -left-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-50" />
+        <div className="absolute -bottom-32 -right-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-40" />
 
-          {/* Top Brand Logo */}
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <Package className="w-6 h-6 text-white" />
+        {/* Ambient overlay scrim & blur veil for WCAG contrast in light/dark themes */}
+        <div className="absolute inset-0 bg-canvas/75 backdrop-blur-sm" />
+      </div>
+
+      {/* Top Header */}
+      <header className="relative z-10 px-4 sm:px-8 py-5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-text hover:opacity-90 transition-opacity"
+            aria-label="SwiftDrop Home"
+          >
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-tint text-primary border border-border">
+              <Package className="size-4" aria-hidden="true" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">
-              Swift<span className="text-blue-400">Drop</span>
+            <span className="text-lg font-bold">
+              Swift<span className="text-primary">Drop</span>
             </span>
-          </div>
+          </Link>
 
-          {/* Middle Value Proposition */}
-          <div className="relative z-10 my-auto max-w-lg space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Account Recovery
-            </div>
-            <h1 className="text-4xl font-extrabold text-white tracking-tight leading-tight">
-              Securely recover access to your SwiftDrop account.
-            </h1>
-            <p className="text-slate-400 text-base leading-relaxed">
-              We verify your identity with a single-use 6-digit code sent to your registered email address before updating your credentials.
-            </p>
-          </div>
-
-          {/* Footer Note */}
-          <div className="relative z-10 text-xs text-slate-500 flex items-center justify-between">
-            <span>© 2026 SwiftDrop Logistics Platform</span>
-            <span>Enterprise Edition v2.4</span>
-          </div>
+          <Button asChild variant="ghost" size="sm" className="text-xs text-text-muted hover:text-text">
+            <Link to="/track">
+              Track a parcel
+              <ArrowRight className="ml-1.5 size-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
+      </header>
 
-        {/* Right Form Column */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
-          <div className="w-full max-w-md space-y-6">
-            {/* Mobile Logo */}
-            <div className="flex lg:hidden items-center gap-2 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Package className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-white">
-                Swift<span className="text-blue-400">Drop</span>
-              </span>
+      {/* Centralized Card Window */}
+      <div className="relative z-10 mx-auto flex w-full max-w-md flex-col gap-4 px-4 my-auto py-6">
+        <Card className="border border-border bg-surface rounded-2xl">
+          <CardHeader className="text-center space-y-2 pb-5 pt-7">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary-tint text-primary border border-border mb-1">
+              {success ? (
+                <CheckCircle2 className="size-5 text-status-success-ink" aria-hidden="true" />
+              ) : (
+                <Package className="size-5" aria-hidden="true" />
+              )}
             </div>
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-bold tracking-tight text-text">
+                {success
+                  ? 'Password reset successful'
+                  : otpSent
+                  ? 'Verify code & set new password'
+                  : 'Forgot your password?'}
+              </CardTitle>
+              <CardDescription className="text-xs text-text-muted max-w-sm mx-auto">
+                {success
+                  ? 'Your password has been updated. You can now sign in using your new credentials.'
+                  : otpSent
+                  ? `Enter the 6-digit code sent to ${email} and choose a strong new password.`
+                  : 'Enter your account email address and we will send you a 6-digit reset code.'}
+              </CardDescription>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4 px-6 sm:px-8">
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-ink font-medium leading-relaxed"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {infoMessage && !error && (
+              <div
+                role="status"
+                className="flex items-start gap-2.5 rounded-lg border border-status-success-border bg-status-success-bg p-3 text-xs text-status-success-ink font-medium leading-relaxed"
+              >
+                <CheckCircle2 className="size-4 shrink-0 mt-0.5 text-status-success-ink" aria-hidden="true" />
+                <span>{infoMessage}</span>
+              </div>
+            )}
 
             {success ? (
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                </div>
-                <h2 className="text-xl font-bold text-white">Password Reset Successful</h2>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Your password has been updated. You can now sign in to your SwiftDrop account using your new password.
-                </p>
-                <button
+              <div className="pt-2">
+                <Button
                   type="button"
+                  size="lg"
+                  className="w-full"
                   onClick={() => navigate('/auth/login')}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  Back to Sign In
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                  Back to sign in
+                  <ArrowRight className="ml-2 size-4" aria-hidden="true" />
+                </Button>
               </div>
+            ) : !otpSent ? (
+              /* Step 1: Request Reset OTP */
+              <form onSubmit={handleSendOTP} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="reset-email" className="text-xs font-medium text-text">
+                    Email address
+                  </Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@swiftdrop.local"
+                    autoComplete="email"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full mt-2"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      Sending code…
+                    </>
+                  ) : (
+                    <>
+                      Send reset code
+                      <ArrowRight className="ml-2 size-4" aria-hidden="true" />
+                    </>
+                  )}
+                </Button>
+              </form>
             ) : (
-              <>
-                {/* Header */}
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-white">
-                    {otpSent ? 'Verify code & set new password' : 'Forgot your password?'}
-                  </h2>
-                  <p className="text-slate-400 text-xs mt-1">
-                    {otpSent
-                      ? `Enter the 6-digit code sent to ${email} and choose a strong new password.`
-                      : 'Enter your account email address and we will send you a 6-digit reset code.'}
+              /* Step 2: Enter OTP & New Password */
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="reset-otp" className="text-xs font-medium text-text">
+                      6-digit reset code
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      disabled={cooldown > 0 || loading}
+                      onClick={() => handleSendOTP()}
+                      className="text-xs font-medium text-primary p-0 h-auto"
+                    >
+                      <RefreshCw className="mr-1 size-3" aria-hidden="true" />
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+                    </Button>
+                  </div>
+                  <Input
+                    id="reset-otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="tracking-widest font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="reset-new-password" className="text-xs font-medium text-text">
+                    New password
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="reset-new-password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-[38px] w-[38px] text-text-muted hover:text-text hover:bg-transparent"
+                      aria-controls="reset-new-password"
+                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowNewPassword((curr) => !curr)}
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="size-4" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-text-subtle">
+                    Minimum 8 characters with uppercase, lowercase, digit, and symbol.
                   </p>
                 </div>
 
-                {/* Error Banner */}
-                {error && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                {/* Info Banner */}
-                {infoMessage && !error && (
-                  <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-blue-400" />
-                    <span>{infoMessage}</span>
-                  </div>
-                )}
-
-                {!otpSent ? (
-                  /* Step 1: Request Reset OTP */
-                  <form onSubmit={handleSendOTP} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Email Address
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <Mail className="w-4 h-4" />
-                        </div>
-                        <input
-                          type="email"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="you@company.com"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                <div className="space-y-1.5">
+                  <Label htmlFor="reset-confirm-password" className="text-xs font-medium text-text">
+                    Confirm new password
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="reset-confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-[38px] w-[38px] text-text-muted hover:text-text hover:bg-transparent"
+                      aria-controls="reset-confirm-password"
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowConfirmPassword((curr) => !curr)}
                     >
-                      {loading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {showConfirmPassword ? (
+                        <EyeOff className="size-4" aria-hidden="true" />
                       ) : (
-                        <>
-                          Send Reset Code
-                          <ArrowRight className="w-4 h-4" />
-                        </>
+                        <Eye className="size-4" aria-hidden="true" />
                       )}
-                    </button>
-                  </form>
-                ) : (
-                  /* Step 2: Enter OTP & New Password */
-                  <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-xs font-medium text-slate-300">
-                          6-Digit Reset Code
-                        </label>
-                        <button
-                          type="button"
-                          disabled={cooldown > 0 || loading}
-                          onClick={() => handleSendOTP()}
-                          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:text-slate-500 transition cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <KeyRound className="w-4 h-4" />
-                        </div>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          required
-                          value={otp}
-                          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                          placeholder="123456"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white tracking-widest font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                      </div>
-                    </div>
+                    </Button>
+                  </div>
+                </div>
 
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        New Password
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <Lock className="w-4 h-4" />
-                        </div>
-                        <input
-                          type={showNewPassword ? 'text' : 'password'}
-                          required
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="••••••••••••"
-                          className="w-full pl-10 pr-11 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition"
-                        >
-                          {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Minimum 8 characters with uppercase, lowercase, digit, and symbol.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Confirm New Password
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <Lock className="w-4 h-4" />
-                        </div>
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          required
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          placeholder="••••••••••••"
-                          className="w-full pl-10 pr-11 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition"
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2.5 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpSent(false);
-                          setOtp('');
-                          setError(null);
-                          setInfoMessage(null);
-                        }}
-                        className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        Change Email
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex-1 py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
-                      >
-                        {loading ? (
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            Reset Password
-                            <ArrowRight className="w-4 h-4" />
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* Back to Login Link */}
-                <p className="text-center text-xs text-slate-400">
-                  Remember your password?{' '}
-                  <Link to="/auth/login" className="font-semibold text-blue-400 hover:text-blue-300 transition">
-                    Sign in
-                  </Link>
-                </p>
-              </>
+                <div className="flex gap-2.5 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtp('');
+                      setError(null);
+                      setInfoMessage(null);
+                    }}
+                    className="gap-1.5"
+                  >
+                    <ArrowLeft className="size-3.5" aria-hidden="true" />
+                    Change email
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="flex-1"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                        Resetting…
+                      </>
+                    ) : (
+                      <>
+                        Reset password
+                        <ArrowRight className="ml-2 size-4" aria-hidden="true" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
             )}
-          </div>
-        </div>
+          </CardContent>
+
+          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-2xl">
+            <p className="text-xs text-text-muted">
+              Remember your password?{' '}
+              <Button asChild variant="link" className="text-xs font-semibold text-primary">
+                <Link to="/auth/login">Sign in</Link>
+              </Button>
+            </p>
+          </CardFooter>
+        </Card>
       </div>
-    </div>
+
+      {/* Bottom Footer Note */}
+      <footer className="relative z-10 px-4 py-4 text-center text-xs text-text-subtle">
+        <p>© 2026 SwiftDrop Logistics Platform. Enterprise Edition v2.4</p>
+      </footer>
+    </main>
   );
 };
