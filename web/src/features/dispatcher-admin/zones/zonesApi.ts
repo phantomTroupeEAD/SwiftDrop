@@ -12,6 +12,12 @@ export async function listZones(token: string | null, page: number, perPage: num
   return { zones: res.data, meta: res.meta };
 }
 
+/** One zone, for example to read the latest version after a 409 CONCURRENT_MODIFICATION. */
+export async function getZone(token: string | null, id: string): Promise<Zone> {
+  const res = await request<{ data: Zone }>(token, 'GET', `${BASE}/${encodeURIComponent(id)}`);
+  return res.data;
+}
+
 /** Sends an Idempotency-Key so a repeated submit (double click, retry) cannot create twice. */
 export async function createZone(token: string | null, input: ZoneCreateInput, idempotencyKey: string): Promise<Zone> {
   const res = await request<{ data: Zone }>(token, 'POST', BASE, input, idempotencyKey);

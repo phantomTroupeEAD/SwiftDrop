@@ -186,8 +186,10 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `admin-zones-table`, `admin-zone-new-btn`, `admin-zone-edit-btn`, `admin-zone-status-btn` | Zone list and row actions (repeated per row) |
 | `admin-zone-form`, `admin-zone-{id,code,name,description,prefixes,reason}-input`, `admin-zone-save-btn` | Create and edit zone dialog |
 | `admin-zone-status-dialog`, `admin-zone-status-reason-input`, `admin-zone-status-confirm-btn` | Enable or disable a zone |
+| `admin-zone-conflict`, `admin-zone-conflict-keep-btn`, `admin-zone-conflict-discard-btn` | Version conflict while editing a zone: notice, keep my changes on the latest version, discard my changes |
+| `admin-zone-status-conflict`, `admin-zone-status-conflict-continue-btn`, `admin-zone-status-conflict-close-btn` | Version conflict while enabling or disabling a zone |
 | `admin-users-table`, `admin-users-search`, `admin-users-role-filter` | User list, search and role filter |
-| `admin-user-role-btn`, `admin-user-reactivate-btn`, `admin-user-suspend-btn` | User row actions (repeated per row) |
+| `admin-user-role-btn`, `admin-user-reactivate-btn`, `admin-user-suspend-btn`, `admin-user-self-badge` | User row actions (repeated per row). The signed-in admin's own row shows the self badge instead of Change role and Suspend |
 | `admin-user-role-dialog`, `admin-user-role-select`, `admin-user-role-save-btn` | Change role dialog |
 | `admin-user-suspend-dialog`, `admin-user-suspend-confirm-btn` | Suspend confirmation |
 | `admin-settings-table`, `admin-setting-edit-btn` | Settings list and row action (repeated per row) |

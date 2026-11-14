@@ -230,20 +230,26 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="touch:min-h-[44px]"
-                              onClick={() => {
-                                setRowError(null);
-                                setRoleUser(u);
-                              }}
-                              aria-label={`Change role for ${u.email}`}
-                              data-testid="admin-user-role-btn"
-                            >
-                              Change role
-                            </Button>
+                            {isSelf ? (
+                              <Badge variant="neutral" showDot={false} data-testid="admin-user-self-badge">
+                                This is you
+                              </Badge>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="touch:min-h-[44px]"
+                                onClick={() => {
+                                  setRowError(null);
+                                  setRoleUser(u);
+                                }}
+                                aria-label={`Change role for ${u.email}`}
+                                data-testid="admin-user-role-btn"
+                              >
+                                Change role
+                              </Button>
+                            )}
                             {suspended ? (
                               <Button
                                 type="button"

@@ -7,6 +7,7 @@ import { Button } from '@/shared/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu';
 import { cn } from '@/shared/lib/utils';
 import { UNAUTHORIZED_EVENT } from '../api';
+import { useBodyRole } from '../admin-console/useBodyRole';
 import { ForbiddenPage } from './OpsPages';
 import { homePathFor, isOpsRole, itemForPath, navFor, type OpsGroup, type OpsNavItem } from './opsNav';
 import { useSessionKeepAlive } from './useSessionKeepAlive';
@@ -29,6 +30,9 @@ export const OpsLayout: React.FC = () => {
   }, [logout, navigate]);
   const endSessionRef = useRef(endSession);
   endSessionRef.current = endSession;
+
+  // Dialogs and menus render in a portal on <body>: give them the role palette too.
+  useBodyRole(user && isOpsRole(user.role) ? user.role : 'PUBLIC');
 
   // Renew the in-memory token shortly before it expires.
   useSessionKeepAlive(accessToken, refreshSession, () => endSessionRef.current());
