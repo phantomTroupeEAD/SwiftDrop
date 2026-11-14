@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -44,10 +44,10 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.22'
           check-latest: true
@@ -72,6 +72,13 @@ jobs:
           working-directory: core-api
           args: --timeout=5m
         if: hashFiles('core-api/go.mod') != ''
+
+      # Integration tests in several packages apply the migrations in parallel against this one
+      # database. pgcrypto is database-wide: two concurrent "CREATE EXTENSION IF NOT EXISTS" can both
+      # miss it and one fails (pg_extension_name_index). Create it once up front so they all find it.
+      - name: Prepare test database (pgcrypto)
+        if: hashFiles('core-api/go.mod') != ''
+        run: PGPASSWORD=swiftdrop_password psql -h localhost -U swiftdrop_user -d swiftdrop_db -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto'
 
       - name: Run Tests (-race)
         env:
@@ -99,10 +106,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'services/messaging/go.mod'
           check-latest: true
@@ -137,9 +144,9 @@ jobs:
     name: Tracking Service Quality & Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: 'services/tracking/go.mod'
           check-latest: true
@@ -153,9 +160,9 @@ jobs:
     name: AI Assistant Quality & Tests (Unit, API & E2E)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -170,9 +177,9 @@ jobs:
     name: Web Frontend Build & Typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'npm'
@@ -206,13 +213,13 @@ jobs:
             file: web/Dockerfile
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and Verify Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.file }}
@@ -227,7 +234,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate Docker Compose file
         run: docker compose -f deploy/docker-compose.yml config --quiet

@@ -32,6 +32,42 @@ patches:
         path: /spec/headers/accessControlAllowOriginList
         value:
           - "https://swiftdrop.work"
+  # Public hostname. Member 7's IngressRoute uses the placeholder swiftdrop.example.com in the base;
+  # production serves swiftdrop.work. Same 10 routes in the same order, only the Host() changes.
+  - target:
+      kind: IngressRoute
+      name: swiftdrop
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`swiftdrop.work`) && PathRegexp(`^/api/v1/tracking/(public/)?[^/]+/stream$`)
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`swiftdrop.work`) && (Path(`/api/v1/tracking`) || PathPrefix(`/api/v1/tracking/`))
+      - op: replace
+        path: /spec/routes/2/match
+        value: Host(`swiftdrop.work`) && (Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`))
+      - op: replace
+        path: /spec/routes/3/match
+        value: Host(`swiftdrop.work`) && (Path(`/mcp`) || PathPrefix(`/mcp/`))
+      - op: replace
+        path: /spec/routes/4/match
+        value: Host(`swiftdrop.work`) && Path(`/api/v1/auth/login`)
+      - op: replace
+        path: /spec/routes/5/match
+        value: Host(`swiftdrop.work`) && PathRegexp(`^/api/v1/deliveries/[^/]+/proof-photo$`)
+      - op: replace
+        path: /spec/routes/6/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api/v1/merchant/`)
+      - op: replace
+        path: /spec/routes/7/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api/v1`)
+      - op: replace
+        path: /spec/routes/8/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api`)
+      - op: replace
+        path: /spec/routes/9/match
+        value: Host(`swiftdrop.work`)
   # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
   # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
   - target:

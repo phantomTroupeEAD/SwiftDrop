@@ -242,10 +242,28 @@ func BuildAppContainer() *AppContainer {
 		log.Println("[NOTICE] Member 04 Merchant Integration not fully active: PostgreSQL connection (*sql.DB) is required")
 	}
 
-	// 10. Register Member 03 Dispatch & Delivery Modules
+	// 10. Register Member 02 Pricing & Parcel Operations
+	if dbConn != nil {
+		if err := registerPricingModule(mux, dbConn, security); err != nil {
+			if config.IsProduction() {
+				log.Fatalf("[FATAL] Failed to initialize Member 02 Pricing: %v", err)
+			}
+			log.Printf("[NOTICE] Member 02 Pricing not fully active in local mode: %v\n", err)
+		}
+		if err := registerParcelsModule(mux, dbConn, security); err != nil {
+			if config.IsProduction() {
+				log.Fatalf("[FATAL] Failed to initialize Member 02 Parcels: %v", err)
+			}
+			log.Printf("[NOTICE] Member 02 Parcels not fully active in local mode: %v\n", err)
+		}
+	} else {
+		log.Println("[NOTICE] Member 02 Pricing & Parcels not fully active: PostgreSQL connection (*sql.DB) is required")
+	}
+
+	// 11. Register Member 03 Dispatch & Delivery Modules
 	registerDispatchAndDeliveryModules(mux, dbConn, security)
 
-	// 11. Register Member 07 Admin Operations (zones, postal codes, settings, audit log, delivery report)
+	// 12. Register Member 07 Admin Operations (zones, postal codes, settings, audit log, delivery report)
 	if dbConn != nil {
 		if err := registerAdminModule(mux, dbConn, security); err != nil {
 			if config.IsProduction() {
