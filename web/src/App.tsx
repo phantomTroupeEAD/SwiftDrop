@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
@@ -43,6 +43,7 @@ function MerchantSessionGate({ children }: { children: React.ReactNode }) {
 
   if (user?.role === 'MERCHANT') return <>{children}</>;
   if (user?.role === 'CUSTOMER' && !attempted) return <p role="status">Checking merchant access…</p>;
+  if (user?.role === 'CUSTOMER') return <p className="p-5">If your application was approved, <Link to="/auth/login" className="underline">sign in again to open your merchant dashboard</Link>.</p>;
   return <Navigate to="/dashboard" replace />;
 }
 

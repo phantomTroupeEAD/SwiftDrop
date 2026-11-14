@@ -1,364 +1,182 @@
-import React, { useState } from 'react';
-import { DashboardLayout } from './DashboardLayout';
-import {
-  CheckCircle2,
-  MapPin,
-  Phone,
-  Camera,
-  AlertTriangle,
-  Navigation,
-  PenTool,
-  Clock,
-} from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useAuth } from '@/app/providers/AuthContext';
+import { PortalHeader } from '@/features/customer-merchant/portal/PortalLayout';
+import { portalRequest, errorMessage, statusLabel } from '@/features/customer-merchant/portal/api';
+import { Button } from '@/shared/components/ui/button';
+import { Badge } from '@/shared/components/ui/badge';
+import { Card, CardHeader, CardContent } from '@/shared/components/ui/card';
+import { Input } from '@/shared/components/ui/input';
+import { NativeSelect } from '@/shared/components/ui/native-select';
 
-interface DeliveryTask {
-  id: string;
-  trackingNumber: string;
-  recipientName: string;
-  phone: string;
-  address: string;
-  city: string;
-  codAmount: string;
-  status: 'ASSIGNED' | 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'ATTEMPT_FAILED';
-  proofType?: string;
-}
-
-export const CourierDashboard: React.FC = () => {
-  const [tasks, setTasks] = useState<DeliveryTask[]>([
-    {
-      id: 'tsk_01',
-      trackingNumber: 'SD-20261030-99801',
-      recipientName: 'Devinda Perera',
-      phone: '+94 77 123 4567',
-      address: '42 Galle Road, Bambalapitiya',
-      city: 'Colombo 04',
-      codAmount: 'PAID (Online)',
-      status: 'OUT_FOR_DELIVERY',
-    },
-    {
-      id: 'tsk_02',
-      trackingNumber: 'SD-20261030-99802',
-      recipientName: 'Kasun Wickramasinghe',
-      phone: '+94 71 987 6543',
-      address: '15/A Havelock Road',
-      city: 'Colombo 05',
-      codAmount: 'LKR 2,350.00',
-      status: 'PICKED_UP',
-    },
-    {
-      id: 'tsk_03',
-      trackingNumber: 'SD-20261030-99803',
-      recipientName: 'Priyani Fernando',
-      phone: '+94 76 555 4321',
-      address: '88 Duplication Road',
-      city: 'Colombo 03',
-      codAmount: 'PAID (Online)',
-      status: 'DELIVERED',
-      proofType: 'Signature Captured (P. Fernando)',
-    },
-  ]);
-
-  const [onDuty, setOnDuty] = useState(true);
-  const [activeModal, setActiveModal] = useState<{ id: string; type: 'POD' | 'FAIL' } | null>(null);
-  const [failReason, setFailReason] = useState('RECIPIENT_UNAVAILABLE');
-  const [signatureText, setSignatureText] = useState('');
-
-  const updateTaskStatus = (id: string, newStatus: DeliveryTask['status'], proof?: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: newStatus, proofType: proof || t.proofType } : t
-      )
-    );
-    setActiveModal(null);
-  };
-
-  return (
-    <DashboardLayout
-      activeRole="COURIER"
-      title="Courier Mobile Driver Route & POD Console"
-      subtitle="Mobile-responsive delivery run, transit milestones, electronic signature, and photo Proof of Delivery (POD)."
-    >
-      {/* Driver Shift & Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Shift Card */}
-        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs text-text-muted">Shift Status</span>
-            <div className="text-base font-bold text-text flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  onDuty ? 'bg-status-success-bg animate-pulse' : 'bg-surface-active'
-                }`}
-              />
-              {onDuty ? 'ON DUTY' : 'OFF DUTY'}
-            </div>
-            <div className="text-[11px] text-text-muted">Vehicle: Bike #BK-204</div>
-          </div>
-          <button
-            onClick={() => setOnDuty(!onDuty)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-              onDuty
-                ? 'bg-status-error-bg text-status-error-ink border-status-error-border hover:bg-status-error-bg'
-                : 'bg-status-success-bg text-status-success-ink border-status-success-border hover:bg-status-success-bg'
-            }`}
-          >
-            {onDuty ? 'End Shift' : 'Start Shift'}
-          </button>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
-          <div>
-            <div className="text-xs text-text-muted">Assigned Run</div>
-            <div className="text-2xl font-bold text-text mt-1">3 Stops</div>
-            <div className="text-[11px] text-status-success-ink">Zone: Colombo 03-05</div>
-          </div>
-          <div className="p-2.5 bg-primary-tint border border-border rounded-xl text-primary">
-            <Navigation className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
-          <div>
-            <div className="text-xs text-text-muted">Delivered Today</div>
-            <div className="text-2xl font-bold text-status-success-ink mt-1">1 / 3</div>
-            <div className="text-[11px] text-text-muted">On-Time SLA: 100%</div>
-          </div>
-          <div className="p-2.5 bg-status-success-bg border border-status-success-border rounded-xl text-status-success-ink">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
-          <div>
-            <div className="text-xs text-text-muted">COD Collected</div>
-            <div className="text-xl font-bold text-status-warning-ink mt-1">LKR 0.00</div>
-            <div className="text-[11px] text-text-muted">1 COD pending</div>
-          </div>
-          <div className="p-2.5 bg-status-warning-bg border border-status-warning-border rounded-xl text-status-warning-ink">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Delivery Task Cards List */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-text">Today's Stop-by-Stop Run</h2>
-          <span className="text-xs text-text-muted">Tap actions as you reach recipients</span>
-        </div>
-
-        <div className="space-y-3">
-          {tasks.map((task, index) => (
-            <div
-              key={task.id}
-              className={`p-5 rounded-2xl border transition-all ${
-                task.status === 'DELIVERED'
-                  ? 'bg-canvas border-border opacity-75'
-                  : task.status === 'ATTEMPT_FAILED'
-                  ? 'bg-status-error-bg border-status-error-border'
-                  : 'bg-surface border-border '
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-surface-subtle text-[11px] font-bold text-text flex items-center justify-center">
-                      {index + 1}
-                    </span>
-                    <span className="font-mono font-bold text-sm text-primary">
-                      {task.trackingNumber}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                        task.status === 'DELIVERED'
-                          ? 'bg-status-success-bg text-status-success-ink border-status-success-border'
-                          : task.status === 'OUT_FOR_DELIVERY'
-                          ? 'bg-primary-tint text-primary border-border'
-                          : task.status === 'ATTEMPT_FAILED'
-                          ? 'bg-status-error-bg text-status-error-ink border-status-error-border'
-                          : 'bg-status-warning-bg text-status-warning-ink border-status-warning-border'
-                      }`}
-                    >
-                      {task.status.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-
-                  <div className="text-sm font-semibold text-text">
-                    {task.recipientName}
-                  </div>
-
-                  <div className="text-xs text-text-muted flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                    <span>{task.address}, {task.city}</span>
-                  </div>
-
-                  <div className="text-xs text-text-muted flex items-center gap-3 pt-1">
-                    <span className="flex items-center gap-1 text-text font-mono">
-                      <Phone className="w-3 h-3 text-text-muted" />
-                      {task.phone}
-                    </span>
-                    <span className="text-status-warning-ink font-semibold">
-                      COD: {task.codAmount}
-                    </span>
-                  </div>
-
-                  {task.proofType && (
-                    <div className="text-[11px] text-status-success-ink flex items-center gap-1 pt-1 font-mono">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {task.proofType}
-                    </div>
-                  )}
-                </div>
-
-                {/* Milestone Action Buttons */}
-                <div className="flex flex-wrap sm:flex-col gap-2 shrink-0 justify-end pt-2 sm:pt-0">
-                  {task.status === 'ASSIGNED' && (
-                    <button
-                      onClick={() => updateTaskStatus(task.id, 'PICKED_UP')}
-                      className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-active text-text rounded-lg text-xs font-semibold border border-border cursor-pointer"
-                    >
-                      Mark Picked Up
-                    </button>
-                  )}
-
-                  {task.status === 'PICKED_UP' && (
-                    <button
-                      onClick={() => updateTaskStatus(task.id, 'OUT_FOR_DELIVERY')}
-                      className="px-3 py-1.5 bg-primary-tint hover:bg-primary-tint text-text rounded-lg text-xs font-semibold  cursor-pointer"
-                    >
-                      Out for Delivery
-                    </button>
-                  )}
-
-                  {task.status === 'OUT_FOR_DELIVERY' && (
-                    <>
-                      <button
-                        onClick={() => setActiveModal({ id: task.id, type: 'POD' })}
-                        className="px-3 py-1.5 bg-status-success-bg hover:bg-status-success-bg text-text rounded-lg text-xs font-semibold  flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <PenTool className="w-3.5 h-3.5" />
-                        Capture POD
-                      </button>
-                      <button
-                        onClick={() => setActiveModal({ id: task.id, type: 'FAIL' })}
-                        className="px-3 py-1.5 bg-surface-subtle hover:bg-status-error-bg text-text-muted hover:text-status-error-ink rounded-lg text-xs font-semibold border border-border cursor-pointer"
-                      >
-                        Failed Attempt
-                      </button>
-                    </>
-                  )}
-
-                  {task.status === 'DELIVERED' && (
-                    <span className="text-xs text-status-success-ink flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" /> Drop Completed
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Proof of Delivery (POD) Signature Modal Mock */}
-      {activeModal && activeModal.type === 'POD' && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 space-y-4 ">
-            <h3 className="text-base font-bold text-text flex items-center gap-2">
-              <Camera className="w-5 h-5 text-status-success-ink" />
-              Capture Proof of Delivery (POD)
-            </h3>
-            <p className="text-xs text-text-muted">
-              Record a recipient electronic signature or photo attachment to complete delivery.
-            </p>
-
-            <div className="space-y-2">
-              <label className="text-xs text-text font-medium">Recipient Signature Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Kasun W."
-                value={signatureText}
-                onChange={(e) => setSignatureText(e.target.value)}
-                className="w-full bg-canvas border border-border rounded-xl px-3 py-2 text-xs text-text outline-none focus:border-border"
-              />
-            </div>
-
-            <div className="h-28 rounded-xl bg-canvas border border-dashed border-border flex flex-col items-center justify-center text-text-muted text-xs gap-1">
-              <PenTool className="w-6 h-6 stroke-1 text-text-muted" />
-              <span>Digital Signature Pad Active</span>
-              <span className="text-[10px] text-text-muted">Touch or stylus canvas area</span>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() =>
-                  updateTaskStatus(
-                    activeModal.id,
-                    'DELIVERED',
-                    `Signed by ${signatureText || 'Recipient'}`
-                  )
-                }
-                className="flex-1 py-2 bg-status-success-bg hover:bg-status-success-bg text-text rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Confirm Delivery
-              </button>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="py-2 px-4 bg-surface-subtle hover:bg-surface-active text-text-muted rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Failed Delivery Attempt Reason Modal Mock */}
-      {activeModal && activeModal.type === 'FAIL' && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 space-y-4 ">
-            <h3 className="text-base font-bold text-text flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-status-error-ink" />
-              Record Delivery Attempt Failure
-            </h3>
-            <p className="text-xs text-text-muted">
-              Select failure reason to reschedule delivery route.
-            </p>
-
-            <select
-              value={failReason}
-              onChange={(e) => setFailReason(e.target.value)}
-              className="w-full bg-canvas border border-border rounded-xl px-3 py-2 text-xs text-text outline-none"
-            >
-              <option value="RECIPIENT_UNAVAILABLE">RECIPIENT_UNAVAILABLE (Doorbell unanswered)</option>
-              <option value="INVALID_ADDRESS">INVALID_ADDRESS (House number not found)</option>
-              <option value="SECURITY_ACCESS_DENIED">SECURITY_ACCESS_DENIED (Gated building restriction)</option>
-              <option value="RECIPIENT_RESCHEDULED">RECIPIENT_RESCHEDULED (Customer requested evening)</option>
-            </select>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() =>
-                  updateTaskStatus(
-                    activeModal.id,
-                    'ATTEMPT_FAILED',
-                    `Attempt Failed: ${failReason}`
-                  )
-                }
-                className="flex-1 py-2 bg-status-error-bg hover:bg-status-error-bg text-text rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Log Attempt & Reschedule
-              </button>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="py-2 px-4 bg-surface-subtle hover:bg-surface-active text-text-muted rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  );
+type Task = {
+  parcel_id: string; tracking_number: string; current_status: string;
+  recipient_name: string; recipient_phone: string; delivery_street: string; delivery_city: string;
+  handling_instructions?: string;
 };
+const reasons = ['RECIPIENT_UNAVAILABLE', 'CUSTOMER_REQUESTED_RESCHEDULE', 'ACCESS_RESTRICTED',
+  'INVALID_ADDRESS', 'REFUSED_BY_RECIPIENT', 'DAMAGED_IN_TRANSIT', 'OTHER'];
+
+export function CourierDashboard() {
+  const { accessToken } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>();
+  const [revision, setRevision] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [shift, setShift] = useState('');
+  const [pending, setPending] = useState(false);
+  const lock = useRef(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [panel, setPanel] = useState<{ id: string; type: 'proof' | 'failure' }>();
+  const proof = useRef<{ file: File; id: string; url: string; key: string }>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void portalRequest<Task[] | null>('/courier/parcels', { token: accessToken, signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted) { setTasks(result ?? []); setLoadError(''); } })
+      .catch(cause => { if (!controller.signal.aborted) setLoadError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [accessToken, revision]);
+
+  async function run(action: () => Promise<void>) {
+    if (lock.current) return;
+    lock.current = true;
+    setPending(true);
+    setActionError('');
+    setNotice('');
+    try { await action(); }
+    catch (cause) { setActionError(errorMessage(cause)); }
+    finally { lock.current = false; setPending(false); }
+  }
+
+  function updated(message: string) {
+    setNotice(message);
+    setPanel(undefined);
+    setSelected([]);
+    setRevision(value => value + 1);
+  }
+
+  function submitAttempt(event: FormEvent<HTMLFormElement>, task: Task, type: 'proof' | 'failure') {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const path = '/deliveries/' + encodeURIComponent(task.parcel_id);
+    void run(async () => {
+      if (type === 'failure') {
+        await portalRequest(path + '/failed', {
+          method: 'POST', token: accessToken, body: { failure_reason_code: fields.get('reason'), notes: fields.get('notes') },
+        });
+        updated('Delivery attempt recorded.');
+        return;
+      }
+      const file = fields.get('photo');
+      const name = String(fields.get('name') ?? '').trim();
+      if (!(file instanceof File) || !file.size || !name) {
+        setActionError('Add a proof photo and the recipient name.');
+        return;
+      }
+      if (proof.current?.file !== file || proof.current.id !== task.parcel_id) {
+        const payload = new FormData();
+        payload.set('file', file);
+        const uploaded = await portalRequest<{ photo_url: string }>(path + '/proof-photo', {
+          method: 'POST', token: accessToken, body: payload,
+        });
+        proof.current = { file, id: task.parcel_id, url: uploaded.photo_url, key: crypto.randomUUID() };
+      }
+      await portalRequest(path + '/complete', {
+        method: 'POST', token: accessToken, idempotencyKey: proof.current.key,
+        body: { proof_type: 'PHOTO', proof_url: proof.current.url, received_by_name: name },
+      });
+      proof.current = undefined;
+      updated('Delivery completed.');
+    });
+  }
+
+  const batchIds = (tasks ?? []).filter(task => task.current_status === 'ASSIGNED' && selected.includes(task.parcel_id)).map(task => task.parcel_id);
+
+  return <div data-role="COURIER" className="min-h-screen bg-canvas text-text">
+    <PortalHeader profile="courier" />
+    <main id="main-content" className="mx-auto max-w-5xl space-y-4 px-4 py-5 sm:px-6">
+      <section className="portal-hero" aria-labelledby="courier-title">
+        <img src="/courier-delivery-hero.jpg" alt="" fetchPriority="high" />
+        <div><h1 id="courier-title" className="text-4xl font-semibold tracking-tight">Delivery tasks</h1>
+          <p className="mt-2">Manage your shift and assigned deliveries.</p></div>
+      </section>
+      <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div><h2 className="font-semibold">Shift</h2>{shift && <p className="capitalize text-text-muted">{statusLabel(shift)}</p>}</div>
+        <div className="flex flex-wrap gap-2">
+          {['ON_SHIFT', 'OFF_SHIFT'].filter(status => status !== shift).map(status =>
+            <Button key={status} variant="outline" className="min-h-11" disabled={pending} onClick={() => void run(async () => {
+              const result = await portalRequest<{ new_status: string }>('/courier/shift', {
+                method: 'POST', token: accessToken, body: { target_status: status },
+              });
+              setShift(result.new_status);
+            })}>{status === 'ON_SHIFT' ? 'Start shift' : 'End shift'}</Button>)}
+        </div>
+      </CardContent></Card>
+      {notice && <p role="status">{notice}</p>}
+      {actionError && <p role="alert">{actionError}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Assigned deliveries</h2>
+        <Button variant="outline" className="min-h-11" disabled={pending}
+          onClick={() => setRevision(value => value + 1)}>Refresh tasks</Button>
+      </div>
+      {loadError ? <p role="alert">{loadError}</p> : !tasks ? <p role="status">Loading deliveries…</p> :
+        !tasks.length && <p>No deliveries are assigned to you.</p>}
+      {batchIds.length > 0 && <Button className="min-h-11 w-full" disabled={pending} onClick={() => void run(async () => {
+        await portalRequest('/courier/runs/start-batch', {
+          method: 'POST', token: accessToken, body: { parcel_ids: batchIds },
+        });
+        updated('Selected deliveries started.');
+      })}>Start selected deliveries</Button>}
+      {tasks?.map(task => {
+        const active = panel?.id === task.parcel_id ? panel.type : undefined;
+        const path = encodeURIComponent(task.parcel_id);
+        const address = [task.delivery_street, task.delivery_city].filter(Boolean).join(', ');
+        return <Card key={task.parcel_id} data-testid="courier-task">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+            <h3 className="break-all font-mono font-semibold">{task.tracking_number}</h3>
+            <Badge variant="active" className="capitalize">{statusLabel(task.current_status)}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="font-medium">{task.recipient_name}</p>
+            <p className="text-text-muted">{address}</p>
+            {task.handling_instructions && <p>{task.handling_instructions}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              {task.recipient_phone && <Button asChild variant="outline" className="min-h-11"><a href={'tel:' + task.recipient_phone}>Call recipient</a></Button>}
+              {address && <Button asChild variant="outline" className="min-h-11"><a href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address)} target="_blank" rel="noreferrer">Directions</a></Button>}
+            </div>
+            {task.current_status === 'ASSIGNED' && <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex min-h-11 items-center gap-2"><Input type="checkbox" className="!h-5 !w-5"
+                disabled={pending} checked={selected.includes(task.parcel_id)}
+                onChange={event => setSelected(current => event.target.checked ? [...current, task.parcel_id] : current.filter(id => id !== task.parcel_id))} />
+                Select for batch</label>
+              <Button className="min-h-11" disabled={pending || !!loadError} data-testid="courier-start-run" onClick={() => void run(async () => {
+                await portalRequest('/courier/parcels/' + path + '/start-run', { method: 'POST', token: accessToken });
+                updated('Delivery started.');
+              })}>Start delivery</Button>
+            </div>}
+            {task.current_status === 'OUT_FOR_DELIVERY' && <div className="grid gap-2 sm:grid-cols-2">
+              <Button className="min-h-11" disabled={pending} onClick={() => setPanel({ id: task.parcel_id, type: 'proof' })}>Record delivery</Button>
+              <Button className="min-h-11" variant="outline" disabled={pending} onClick={() => setPanel({ id: task.parcel_id, type: 'failure' })}>Report failed attempt</Button>
+            </div>}
+            {(active === 'proof' || active === 'failure') && <form key={active} className="space-y-3"
+              onSubmit={event => submitAttempt(event, task, active)}>
+              <fieldset disabled={pending} className="space-y-3">
+                {active === 'proof' ? <>
+                  <label className="m6-field">Recipient name<Input className="min-h-11" name="name" required /></label>
+                  <label className="m6-field">Proof photo<Input className="min-h-11" name="photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required /></label>
+                </> : <>
+                  <label className="m6-field">Reason<NativeSelect name="reason">{reasons.map(reason =>
+                    <option key={reason} value={reason}>{statusLabel(reason)}</option>)}</NativeSelect></label>
+                  <label className="m6-field">Notes<Input className="min-h-11" name="notes" /></label>
+                </>}
+                <Button className="min-h-11 w-full" disabled={pending}>{pending ? 'Saving…' : active === 'proof' ? 'Confirm delivery' : 'Save attempt'}</Button>
+              </fieldset>
+            </form>}
+            {active && <Button className="min-h-11" variant="ghost" disabled={pending} onClick={() => setPanel(undefined)}>Close details</Button>}
+          </CardContent>
+        </Card>;
+      })}
+    </main>
+  </div>;
+}

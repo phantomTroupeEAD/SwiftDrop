@@ -181,3 +181,7 @@ Verification: `npm run build` passed (`tsc && vite build`). All 31 active select
 | `dispatcher-courier-select` | Eligible courier selection within a parcel row |
 | `dispatcher-assign-btn` | Submit the selected parcel and courier |
 | `dispatcher-retry-btn` | Reload the dispatch board after a failed request |
+
+| Booking selector | Purpose |
+| --- | --- |
+| `booking-special-instructions-input` | Optional handling or delivery instructions sent as `special_instructions` |
