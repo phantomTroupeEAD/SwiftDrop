@@ -29,6 +29,7 @@ export const MerchantDashboard: React.FC = () => {
       title="B2B Merchant Logistics & Shipping Console"
       subtitle="Bulk order ingestion, API integration keys, webhook event configuration, and shipping analytics."
     >
+      <section data-testid="merchant-dashboard" className="space-y-5">
       {/* Multi-Tenant Scoping Banner */}
       <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3">
@@ -107,6 +108,7 @@ export const MerchantDashboard: React.FC = () => {
       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-4">
         <div className="flex border-b border-slate-800 pb-3 gap-2">
           <button
+            data-testid="merchant-batch-tab"
             onClick={() => setActiveTab('BATCH')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'BATCH'
@@ -117,6 +119,7 @@ export const MerchantDashboard: React.FC = () => {
             Bulk Batch CSV Orders
           </button>
           <button
+            data-testid="merchant-api-keys-tab"
             onClick={() => setActiveTab('API')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'API'
@@ -127,6 +130,7 @@ export const MerchantDashboard: React.FC = () => {
             B2B API Secret Keys
           </button>
           <button
+            data-testid="merchant-webhooks-tab"
             onClick={() => setActiveTab('WEBHOOKS')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'WEBHOOKS'
@@ -139,7 +143,7 @@ export const MerchantDashboard: React.FC = () => {
         </div>
 
         {activeTab === 'BATCH' && (
-          <div className="space-y-4">
+          <div data-testid="merchant-batch-panel" className="space-y-4">
             <div className="p-6 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center text-center space-y-2 bg-slate-950/40">
               <UploadCloud className="w-8 h-8 text-blue-400" />
               <div className="text-xs font-semibold text-slate-200">
@@ -148,7 +152,7 @@ export const MerchantDashboard: React.FC = () => {
               <div className="text-[11px] text-slate-500">
                 Columns: recipient_name, phone, address_line1, city, weight_kg, service_level
               </div>
-              <button className="mt-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer">
+              <button data-testid="merchant-batch-browse-btn" className="mt-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer">
                 Browse CSV File
               </button>
             </div>
@@ -168,7 +172,7 @@ export const MerchantDashboard: React.FC = () => {
                     { id: 'batch_20261030_01', time: 'Today, 10:15 AM', count: '120 parcels', status: 'PROCESSED' },
                     { id: 'batch_20261029_02', time: 'Yesterday, 3:30 PM', count: '85 parcels', status: 'PROCESSED' },
                   ].map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-800/30">
+                    <tr key={b.id} data-testid="merchant-batch-row" data-batch-id={b.id} className="hover:bg-slate-800/30">
                       <td className="py-2.5 px-3 font-mono font-medium text-slate-200">{b.id}</td>
                       <td className="py-2.5 px-3 text-slate-400">{b.time}</td>
                       <td className="py-2.5 px-3 text-slate-300">{b.count}</td>
@@ -186,7 +190,7 @@ export const MerchantDashboard: React.FC = () => {
         )}
 
         {activeTab === 'API' && (
-          <div className="space-y-4 text-xs">
+          <div data-testid="merchant-api-keys-panel" className="space-y-4 text-xs">
             <p className="text-slate-400">
               Integrate your ERP, WooCommerce, or Shopify store directly via SwiftDrop REST APIs using API Keys.
             </p>
@@ -201,12 +205,15 @@ export const MerchantDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <input
+                  data-testid="merchant-demo-api-key"
+                  aria-label="Prototype API key example"
                   type="text"
                   readOnly
                   value="sd_live_a1b2c3d4_9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c"
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 font-mono text-[11px] text-amber-300 outline-none"
                 />
                 <button
+                  data-testid="merchant-demo-key-copy-btn"
                   onClick={copyKey}
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0 transition cursor-pointer"
                 >
@@ -222,7 +229,7 @@ export const MerchantDashboard: React.FC = () => {
         )}
 
         {activeTab === 'WEBHOOKS' && (
-          <div className="space-y-3 text-xs">
+          <div data-testid="merchant-webhooks-panel" className="space-y-3 text-xs">
             <p className="text-slate-400">
               SwiftDrop automatically posts signed HTTP webhooks whenever parcel status changes.
             </p>
@@ -245,6 +252,7 @@ export const MerchantDashboard: React.FC = () => {
           </div>
         )}
       </div>
+      </section>
     </DashboardLayout>
   );
 };

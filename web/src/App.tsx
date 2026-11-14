@@ -1,41 +1,61 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
+import { LandingPage } from '@/features/landing/LandingPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
-import { MerchantDashboard } from '@/features/dashboards/MerchantDashboard';
-import { CustomerDashboard } from '@/features/dashboards/CustomerDashboard';
+import { RoleHome } from '@/features/dashboards/RoleHome';
+import type { Role } from '@/shared/types/auth';
+import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
+import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
+import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
+import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+
+function CustomerBookingAlias() {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: '/portal/book', search }} replace />;
+}
 
 // Protected Route Guard
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+function SignedInHome() {
+  const { user } = useAuth();
+  switch (user?.role) {
+    case 'ADMIN': return <Navigate to="/admin/dashboard" replace />;
+    case 'DISPATCHER': return <Navigate to="/dispatcher/dashboard" replace />;
+    case 'COURIER': return <Navigate to="/courier/dashboard" replace />;
+    default: return <RoleHome />;
+  }
+}
+
+function MerchantSessionGate({ children }: { children: React.ReactNode }) {
+  const { user, refreshSession } = useAuth();
+  const [attempted, setAttempted] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user?.role !== 'CUSTOMER') return;
+    let active = true;
+    void refreshSession().finally(() => { if (active) setAttempted(true); });
+    return () => { active = false; };
+  }, [user?.id, user?.role, refreshSession]);
+
+  if (user?.role === 'MERCHANT') return <>{children}</>;
+  if (user?.role === 'CUSTOMER' && !attempted) return <p role="status">Checking merchant access…</p>;
+  return <Navigate to="/dashboard" replace />;
+}
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: Role }> = ({ children, role }) => {
+  const { isAuthenticated, isRestoringSession, user } = useAuth();
+  if (isRestoringSession) return <p role="status">Restoring your session…</p>;
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />;
   }
+  if (role === 'MERCHANT') return <MerchantSessionGate>{children}</MerchantSessionGate>;
+  if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
-};
-
-// Automatic Role Route Redirector
-const RoleRedirector: React.FC = () => {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/auth/login" replace />;
-
-  switch (user.role) {
-    case 'ADMIN':
-      return <Navigate to="/admin/dashboard" replace />;
-    case 'DISPATCHER':
-      return <Navigate to="/dispatcher/dashboard" replace />;
-    case 'COURIER':
-      return <Navigate to="/courier/dashboard" replace />;
-    case 'MERCHANT':
-      return <Navigate to="/merchant/dashboard" replace />;
-    default:
-      return <Navigate to="/customer/dashboard" replace />;
-  }
 };
 
 export const AppRoutes: React.FC = () => {
@@ -46,12 +66,27 @@ export const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password" element={<Navigate to="/auth/forgot-password" replace />} />
+      <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/track" element={<TrackingPage />} />
+      <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
+      <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
+      <Route path="/customer/book" element={<CustomerBookingAlias />} />
+      <Route path="/portal/merchants/apply" element={<ProtectedRoute role="CUSTOMER"><MerchantApplication /></ProtectedRoute>} />
+      <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
 
-      {/* 5 Distinct Mock Pages for Each Role */}
+      {/* Dev-Only Design System Parity Studio (Gated out of production) */}
+      {import.meta.env.DEV && (
+        <Route path="/design-system" element={<DesignSystemPage />} />
+      )}
+
+      {/* Operations workspaces */}
       <Route
         path="/admin/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute role="ADMIN">
             <AdminDashboard />
           </ProtectedRoute>
         }
@@ -59,7 +94,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/dispatcher/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute role="DISPATCHER">
             <DispatcherDashboard />
           </ProtectedRoute>
         }
@@ -67,7 +102,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/courier/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute role="COURIER">
             <CourierDashboard />
           </ProtectedRoute>
         }
@@ -75,16 +110,16 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/merchant/dashboard"
         element={
-          <ProtectedRoute>
-            <MerchantDashboard />
+          <ProtectedRoute role="MERCHANT">
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />
       <Route
         path="/customer/dashboard"
         element={
-          <ProtectedRoute>
-            <CustomerDashboard />
+          <ProtectedRoute role="CUSTOMER">
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />
@@ -94,7 +129,7 @@ export const AppRoutes: React.FC = () => {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <RoleRedirector />
+            <SignedInHome />
           </ProtectedRoute>
         }
       />
@@ -102,7 +137,7 @@ export const AppRoutes: React.FC = () => {
         path="/ops/dashboard"
         element={
           <ProtectedRoute>
-            <RoleRedirector />
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />
@@ -110,13 +145,13 @@ export const AppRoutes: React.FC = () => {
         path="/portal/dashboard"
         element={
           <ProtectedRoute>
-            <RoleRedirector />
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />
 
-      {/* Default Fallback */}
-      <Route path="/" element={<Navigate to="/auth/login" replace />} />
+      {/* Public Landing & Default Fallback */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="*" element={<Navigate to="/auth/login" replace />} />
     </Routes>
   );

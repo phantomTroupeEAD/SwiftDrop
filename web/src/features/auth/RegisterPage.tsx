@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  Package,
-  Mail,
-  Lock,
+  AlertCircle,
   Eye,
   EyeOff,
+  Package,
   ArrowRight,
-  ShieldCheck,
   CheckCircle2,
-  KeyRound,
-  User,
-  Phone,
-  AlertCircle,
-  RefreshCw,
+  Loader2,
 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Checkbox } from '@/shared/components/ui/checkbox';
+import { Input } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/shared/components/ui/card';
+import { withRequestReference } from '@/shared/lib/api-error';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -74,8 +81,9 @@ export const RegisterPage: React.FC = () => {
       }
 
       if (!res.ok) {
+        let message = data?.error?.message || 'Failed to send verification code.';
         if (res.status === 409) {
-          throw new Error('An account with this email already exists. Please log in.');
+          message = 'An account with this email already exists. Please log in.';
         } else if (res.status === 429) {
           throw new Error('Please wait before requesting another verification code.');
         } else if (data?.error?.message) {
@@ -85,8 +93,12 @@ export const RegisterPage: React.FC = () => {
         } else {
           throw new Error(`Failed to send verification code (${res.status}).`);
         }
+        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
       }
 
+      if (!data?.data) {
+        throw new Error('Email verification is unavailable right now. Please try again later.');
+      }
       setOtpSent(true);
       setCooldown(data?.data?.cooldown_seconds || 60);
     } catch (err: unknown) {
@@ -143,6 +155,9 @@ export const RegisterPage: React.FC = () => {
         throw new Error(`Registration failed (${res.status}). Please check your inputs.`);
       }
 
+      if (!data?.data) {
+        throw new Error('The server could not confirm your registration. Try signing in or request a new verification code.');
+      }
       setSuccess(true);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -156,334 +171,322 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center">
-      <div className="flex min-h-screen">
-        {/* Left Hero Branding Column (Desktop) */}
-        <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-r border-slate-800 flex-col justify-between p-12 overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary overflow-hidden">
+      {/* Background Image Layer with Ambient Blur & Contrast Scrim (Aligned with Login) */}
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
+        <img
+          src="/login-bg.jpg"
+          alt=""
+          className="h-full w-full object-cover object-center filter blur-sm scale-105"
+        />
+        {/* Soft atmospheric glow orbs */}
+        <div className="absolute -top-32 -left-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-50" />
+        <div className="absolute -bottom-32 -right-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-40" />
 
-          {/* Logo */}
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <Package className="w-6 h-6 text-white" />
+        {/* Ambient overlay scrim & blur veil for WCAG contrast in light/dark themes */}
+        <div className="absolute inset-0 bg-canvas/75 backdrop-blur-sm" />
+      </div>
+
+      {/* Top Header */}
+      <header className="relative z-10 px-4 sm:px-8 py-5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-text hover:opacity-90 transition-opacity"
+            aria-label="SwiftDrop Home"
+          >
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-tint text-primary border border-border">
+              <Package className="size-4" aria-hidden="true" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">
-              Swift<span className="text-blue-400">Drop</span>
+            <span className="text-lg font-bold">
+              Swift<span className="text-primary">Drop</span>
             </span>
-          </div>
+          </Link>
 
-          {/* Main Message */}
-          <div className="relative z-10 my-auto max-w-lg space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Verified Identity & Protection
-            </div>
-            <h1 className="text-4xl font-extrabold text-white tracking-tight leading-tight">
-              Join SwiftDrop and send parcels with complete confidence.
-            </h1>
-            <p className="text-slate-400 text-base leading-relaxed">
-              Book on-demand deliveries, track couriers in real time, and receive instant proof-of-delivery receipts.
-            </p>
-
-            <div className="space-y-3 pt-2 text-sm text-slate-300">
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Instant OTP email ownership verification</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Zero address friction — book and ship anytime</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>End-to-end secure parcel tracking with SMS alerts</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 text-xs text-slate-500 border-t border-slate-800/80 pt-4 flex justify-between items-center">
-            <span>© 2026 SwiftDrop Logistics Inc.</span>
-            <span>Customer Portal v1.0.0</span>
-          </div>
+          <Button asChild variant="ghost" size="sm" className="text-xs text-text-muted hover:text-text">
+            <Link to="/track">
+              Track a parcel
+              <ArrowRight className="ml-1.5 size-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
+      </header>
 
-        {/* Right Form Column */}
-        <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-6 py-12 sm:px-12">
-          <div className="w-full max-w-md space-y-6">
-            {/* Header */}
-            <div className="space-y-1 text-center lg:text-left">
-              <h2 className="text-2xl font-bold tracking-tight text-white">
-                {success ? 'Account Created!' : 'Create your Customer Account'}
-              </h2>
-              <p className="text-sm text-slate-400">
-                {success
-                  ? 'Your account has been verified and registered successfully.'
-                  : otpSent
-                  ? `Enter the 6-digit code sent to ${email} to complete setup.`
-                  : 'Start by entering your email to receive a verification code.'}
-              </p>
+      {/* Centralized Clean Register Window */}
+      <div className="relative z-10 mx-auto flex w-full max-w-md sm:max-w-lg flex-col gap-4 px-4 my-auto py-6">
+        <Card className="border border-border bg-surface rounded-2xl">
+          <CardHeader className="text-center space-y-2 pb-5 pt-7">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary-tint text-primary border border-border mb-1">
+              {success ? (
+                <CheckCircle2 className="size-5 text-status-success-ink" aria-hidden="true" />
+              ) : (
+                <Package className="size-5" aria-hidden="true" />
+              )}
             </div>
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-bold tracking-tight text-text">
+                {success ? 'Account created' : 'Create a customer account'}
+              </CardTitle>
+              <CardDescription className="text-xs text-text-muted max-w-sm mx-auto">
+                {success
+                  ? 'Your SwiftDrop account is ready. Sign in with your email and password.'
+                  : otpSent
+                  ? `Enter the 6-digit verification code sent to ${email.trim()}.`
+                  : 'Enter your email to receive a secure verification code.'}
+              </CardDescription>
+            </div>
+          </CardHeader>
 
-            {/* Error Banner */}
+          <CardContent className="space-y-4 px-6 sm:px-8">
             {error && (
-              <div className="flex items-start gap-3 p-3.5 rounded-xl bg-red-950/50 border border-red-500/30 text-red-300 text-xs animate-shake">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-                <div className="flex-1">
-                  <div className="font-semibold text-red-200">Registration Error</div>
-                  <div className="mt-0.5">{error}</div>
-                </div>
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error-ink font-medium leading-relaxed"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{error}</span>
               </div>
             )}
 
-            {/* Success State Screen */}
             {success ? (
-              <div className="p-6 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-center space-y-4">
-                <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <CheckCircle2 className="w-7 h-7" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-lg font-bold text-white">Welcome, {firstName}!</h3>
-                  <p className="text-xs text-slate-300">
-                    Your account is active. You can now log in using your email and password.
-                  </p>
-                </div>
-                <button
+              <div className="space-y-4 pt-2">
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full text-xs font-semibold"
                   onClick={() => navigate('/auth/login')}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Proceed to Login
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                  Continue to Sign in
+                  <ArrowRight className="ml-1.5 size-4" />
+                </Button>
               </div>
             ) : !otpSent ? (
-              /* STEP 1: Email Form */
+              /* Step 1: Request Verification Code */
               <form onSubmit={handleSendOTP} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="alice@example.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    We will send a 6-digit verification code to confirm ownership.
-                  </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="register-email" className="text-xs font-medium text-text">
+                    Email address
+                  </Label>
+                  <Input
+                    id="register-email"
+                    data-testid="register-email-input"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    placeholder="name@domain.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
                 </div>
 
-                <button
+                <Button
                   type="submit"
+                  data-testid="register-send-otp-btn"
+                  size="lg"
+                  className="w-full mt-2 text-xs font-semibold"
                   disabled={loading}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                 >
                   {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
                     <>
-                      Send Verification Code
-                      <ArrowRight className="w-4 h-4" />
+                      <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      Sending code…
                     </>
+                  ) : (
+                    'Send verification code'
                   )}
-                </button>
+                </Button>
               </form>
             ) : (
-              /* STEP 2: Full Registration Form (with OTP) */
-              <form onSubmit={handleRegister} className="space-y-3.5">
-                {/* Email Chip with Resend */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-                  <div className="flex items-center gap-2 text-slate-300 truncate">
-                    <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span className="truncate">{email}</span>
+              /* Step 2: Verification Code & Profile Details */
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="text-xs text-text-muted">
+                    Email: <span className="font-semibold text-text">{email.trim()}</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
+                  <div className="flex items-center gap-2">
+                    <Button
                       type="button"
-                      disabled={cooldown > 0 || loading}
-                      onClick={() => handleSendOTP()}
-                      className="text-blue-400 hover:text-blue-300 disabled:text-slate-600 transition flex items-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-                      {cooldown > 0 ? `Resend (${cooldown}s)` : 'Resend'}
-                    </button>
-                    <button
-                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-text-muted hover:text-text"
+                      disabled={loading}
                       onClick={() => {
                         setOtpSent(false);
                         setOtp('');
                         setError(null);
                       }}
-                      className="text-slate-500 hover:text-slate-400 transition"
                     >
                       Change
-                    </button>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs text-text-muted hover:text-text"
+                      disabled={loading || cooldown > 0}
+                      onClick={() => void handleSendOTP()}
+                    >
+                      {cooldown > 0 ? `${cooldown}s` : 'Resend'}
+                    </Button>
                   </div>
                 </div>
 
-                {/* 6-Digit OTP Code */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    6-Digit Verification Code
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <KeyRound className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="text"
+                <div className="space-y-1.5">
+                  <Label htmlFor="register-code" className="text-xs font-medium text-text">
+                    6-digit verification code
+                  </Label>
+                  <Input
+                    id="register-code"
+                    data-testid="register-otp-input"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    placeholder="123456"
+                    className="font-mono text-center tracking-widest text-sm"
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="register-first" className="text-xs font-medium text-text">
+                      First name
+                    </Label>
+                    <Input
+                      id="register-first"
+                    data-testid="register-first-name-input"
+                      autoComplete="given-name"
                       required
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                      placeholder="849201"
-                      className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-base tracking-widest font-mono text-emerald-400 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                      placeholder="Devinda"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Check your email (or backend server console in development mode).
+                  <div className="space-y-1.5">
+                    <Label htmlFor="register-last" className="text-xs font-medium text-text">
+                      Last name
+                    </Label>
+                    <Input
+                      id="register-last"
+                    data-testid="register-last-name-input"
+                      autoComplete="family-name"
+                      required
+                      placeholder="Perera"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="register-phone" className="text-xs font-medium text-text">
+                    Mobile phone number
+                  </Label>
+                  <Input
+                    id="register-phone"
+                    data-testid="register-phone-input"
+                    type="tel"
+                    autoComplete="tel"
+                    required
+                    placeholder="+94 77 123 4567"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="register-password" className="text-xs font-medium text-text">
+                    Create password
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="register-password"
+                    data-testid="register-password-input"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      aria-describedby="register-password-help"
+                      required
+                      placeholder="••••••••"
+                      className="pr-10"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-[38px] w-[38px] text-text-muted hover:text-text hover:bg-transparent"
+                      aria-controls="register-password"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((value) => !value)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="size-4" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </div>
+                  <p id="register-password-help" className="text-xs text-text-muted">
+                    Must be at least 8 characters with an uppercase letter, number, and symbol.
                   </p>
                 </div>
 
-                {/* Names (Grid) */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      First Name
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                        <User className="w-3.5 h-3.5" />
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Alice"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Johnson"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    />
-                  </div>
+                <div className="flex items-start gap-2.5 pt-1">
+                  <Checkbox
+                    id="register-terms"
+                    data-testid="register-terms-checkbox"
+                    required
+                    checked={termsAccepted}
+                    onCheckedChange={(value) => setTermsAccepted(value === true)}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="register-terms"
+                    className="text-xs font-normal leading-relaxed text-text-muted cursor-pointer"
+                  >
+                    I agree to the Terms of Service and Privacy Policy.
+                  </Label>
                 </div>
 
-                {/* Phone Number */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Phone Number (for courier contact)
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <Phone className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+94771234567"
-                      className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Min 8 chars, 1 uppercase, 1 digit, 1 symbol"
-                      className="w-full pl-10 pr-10 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300"
-                    >
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Terms Checkbox */}
-                <div className="pt-1">
-                  <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-400">
-                    <input
-                      type="checkbox"
-                      required
-                      checked={termsAccepted}
-                      onChange={(e) => setTermsAccepted(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>
-                      I accept the{' '}
-                      <span className="text-blue-400 underline">Terms of Service</span> and{' '}
-                      <span className="text-blue-400 underline">Privacy Policy</span>.
-                    </span>
-                  </label>
-                </div>
-
-                {/* Submit Button */}
-                <button
+                <Button
                   type="submit"
-                  disabled={loading}
-                  className="w-full mt-2 py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                  data-testid="register-submit-btn"
+                  size="lg"
+                  className="w-full mt-2 text-xs font-semibold"
+                  disabled={loading || !termsAccepted}
                 >
                   {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
                     <>
-                      Create Account
-                      <ArrowRight className="w-4 h-4" />
+                      <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      Creating account…
                     </>
+                  ) : (
+                    'Create account'
                   )}
-                </button>
+                </Button>
               </form>
             )}
+          </CardContent>
 
-            {/* Bottom Link to Login */}
-            {!success && (
-              <p className="text-center text-xs text-slate-400 pt-2">
-                Already have an account?{' '}
-                <Link to="/auth/login" className="font-semibold text-blue-400 hover:text-blue-300 transition">
-                  Sign in
-                </Link>
-              </p>
-            )}
-          </div>
-        </div>
+          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-2xl">
+            <p className="text-xs text-text-muted">
+              Already have an account?{' '}
+              <Button asChild variant="link" className="text-xs font-semibold text-primary">
+                <Link to="/auth/login">Sign in</Link>
+              </Button>
+            </p>
+          </CardFooter>
+        </Card>
       </div>
-    </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 px-4 py-4 text-center text-xs text-text-muted">
+        <span>&copy; 2026 SwiftDrop Logistics Inc.</span>
+      </footer>
+    </main>
   );
 };
