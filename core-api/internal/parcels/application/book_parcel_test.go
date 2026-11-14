@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -194,6 +195,18 @@ func (m *mockParcelRepo) FindByID(ctx context.Context, q db.Querier, id string) 
 	return p, nil
 }
 
+func (m *mockParcelRepo) FindByTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (domain.Parcel, error) {
+	if m.findErr != nil {
+		return domain.Parcel{}, m.findErr
+	}
+	for _, p := range m.parcels {
+		if p.TrackingNumber == tn {
+			return p, nil
+		}
+	}
+	return domain.Parcel{}, domain.ErrInvalidTrackingNumber
+}
+
 func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error {
 	m.updateCalled = true
 	if m.updateErr != nil {
@@ -212,9 +225,11 @@ func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel 
 
 // Mock Status History Repository.
 type mockStatusHistoryRepo struct {
-	entries    []domain.StatusHistoryEntry
-	saveErr    error
-	saveCalled bool
+	entries          []domain.StatusHistoryEntry
+	saveErr          error
+	saveCalled       bool
+	findByParcelErr  error
+	findByParcelSeen bool
 }
 
 func newMockStatusHistoryRepo() *mockStatusHistoryRepo {
@@ -230,6 +245,20 @@ func (m *mockStatusHistoryRepo) Save(ctx context.Context, q db.Querier, entry do
 	}
 	m.entries = append(m.entries, entry)
 	return nil
+}
+
+func (m *mockStatusHistoryRepo) FindByParcelID(ctx context.Context, q db.Querier, parcelID string) ([]domain.StatusHistoryEntry, error) {
+	m.findByParcelSeen = true
+	if m.findByParcelErr != nil {
+		return nil, m.findByParcelErr
+	}
+	out := make([]domain.StatusHistoryEntry, 0)
+	for _, entry := range m.entries {
+		if entry.ParcelID == parcelID {
+			out = append(out, entry)
+		}
+	}
+	return out, nil
 }
 
 // Helper to construct a valid test booking command.
@@ -366,6 +395,12 @@ func TestBookParcelUseCase_Success(t *testing.T) {
 	if parcel.DropoffAddress.Instructions != "Leave at reception" {
 		t.Errorf("expected trimmed dropoff instructions, got %q", parcel.DropoffAddress.Instructions)
 	}
+	if parcel.ItemDescription != "Electronic Parts" {
+		t.Errorf("expected ItemDescription %q, got %q", "Electronic Parts", parcel.ItemDescription)
+	}
+	if parcel.SpecialInstructions != "Fragile" {
+		t.Errorf("expected SpecialInstructions %q, got %q", "Fragile", parcel.SpecialInstructions)
+	}
 
 	// 2. Verify StatusHistory audit record
 	if len(statusHistoryRepo.entries) != 1 {
@@ -409,6 +444,20 @@ func TestBookParcelUseCase_Success(t *testing.T) {
 	if env.GetAggregateType() != "parcel" {
 		t.Errorf("expected aggregate type parcel, got %s", env.GetAggregateType())
 	}
+	payloadBytes, err := env.SerializePayload()
+	if err != nil {
+		t.Fatalf("failed to serialize outbox payload: %v", err)
+	}
+	var outboxPayload ParcelBookedPayload
+	if err := json.Unmarshal(payloadBytes, &outboxPayload); err != nil {
+		t.Fatalf("failed to unmarshal outbox payload: %v", err)
+	}
+	if outboxPayload.ItemDescription != "Electronic Parts" {
+		t.Errorf("expected outbox item_description %q, got %q", "Electronic Parts", outboxPayload.ItemDescription)
+	}
+	if outboxPayload.SpecialInstructions != "Fragile" {
+		t.Errorf("expected outbox special_instructions %q, got %q", "Fragile", outboxPayload.SpecialInstructions)
+	}
 
 	// 4. Verify Transaction was committed
 	testTxMu.Lock()
@@ -416,6 +465,39 @@ func TestBookParcelUseCase_Success(t *testing.T) {
 	testTxMu.Unlock()
 	if !committed {
 		t.Error("expected transaction to be committed")
+	}
+}
+
+func TestBookParcelUseCase_OversizedItemDescription(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	database := getTestDB(t)
+	defer database.Close()
+
+	txManager := NewDBTransactionManager(database)
+	quoteConsumer := &mockQuoteConsumer{quote: validTestQuoteSnapshot(now)}
+	parcelRepo := newMockParcelRepo()
+	statusHistoryRepo := newMockStatusHistoryRepo()
+	outboxWriter := eventstest.NewInMemoryWriter()
+	trackingGen := &mockTrackingGen{}
+	idGen := &mockIDGen{}
+	clock := fixedClock{now: now}
+
+	uc, err := NewBookParcelUseCase(
+		txManager, quoteConsumer, parcelRepo, statusHistoryRepo, outboxWriter, trackingGen, idGen, clock,
+	)
+	if err != nil {
+		t.Fatalf("failed to create use case: %v", err)
+	}
+
+	cmd := validTestBookingCommand()
+	cmd.ItemDescription = strings.Repeat("Oversized description ", 30) // > 500 chars
+
+	_, err = uc.Execute(context.Background(), cmd)
+	if err == nil {
+		t.Fatalf("expected error for oversized item description, got nil")
+	}
+	if !errors.Is(err, domain.ErrItemDescriptionTooLong) {
+		t.Errorf("expected ErrItemDescriptionTooLong, got %v", err)
 	}
 }
 

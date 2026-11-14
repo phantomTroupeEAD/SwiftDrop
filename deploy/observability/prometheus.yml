@@ -1,0 +1,39 @@
+# Prometheus scrape config for the local Compose stack (profile "observability").
+# Kubernetes uses deploy/kubernetes/observability/ (pod discovery via prometheus.io annotations).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Instrumented today (Prometheus text format)
+  - job_name: outbox-relay
+    static_configs:
+      - targets: ["outbox-relay:8082"]
+  - job_name: event-worker
+    static_configs:
+      - targets: ["event-worker:8083"]
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # SRS requires /metrics on every service. These return 404 (or JSON) today and show
+  # as DOWN until their owners add a Prometheus endpoint: core-api (platform),
+  # tracking-api (Member 5), ai-assistant (Member 10).
+  - job_name: core-api
+    static_configs:
+      - targets: ["core-api:8080"]
+  - job_name: tracking-api
+    static_configs:
+      - targets: ["tracking-api:8081"]
+  - job_name: ai-assistant
+    static_configs:
+      - targets: ["ai-assistant:8000"]

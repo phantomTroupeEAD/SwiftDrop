@@ -1,0 +1,129 @@
+# Azure K3s. Before applying, pin every image to the commit that was pushed to ghcr:
+#   cd deploy/overlays/prod
+#   kustomize edit set image ghcr.io/phantomtroupeead/swiftdrop/core-api=ghcr.io/phantomtroupeead/swiftdrop/core-api:<sha>   (repeat per image)
+# Public domain: https://swiftdrop.work behind Cloudflare (Full strict). TLS uses the Cloudflare
+# Origin CA certificate as secret traefik-origin-tls (create it with kubectl, never commit it).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../kubernetes
+  - block-google-login.yaml
+
+images:
+  - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/tracking-api
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/messaging
+    newTag: REPLACE_WITH_GIT_SHA
+  - name: ghcr.io/phantomtroupeead/swiftdrop/web
+    newTag: REPLACE_WITH_GIT_SHA
+  # The base already renames swiftdrop/ai-assistant to this ghcr path.
+  - name: ghcr.io/phantomtroupeead/swiftdrop/ai-assistant
+    newTag: REPLACE_WITH_GIT_SHA
+
+patches:
+  # Only the real public origin may call the API cross-origin (Member 7's cors-middleware).
+  - target:
+      kind: Middleware
+      name: cors-middleware
+    patch: |-
+      - op: replace
+        path: /spec/headers/accessControlAllowOriginList
+        value:
+          - "https://swiftdrop.work"
+  # Public hostname. Member 7's IngressRoute uses the placeholder swiftdrop.example.com in the base;
+  # production serves swiftdrop.work. Same 10 routes in the same order, only the Host() changes.
+  - target:
+      kind: IngressRoute
+      name: swiftdrop
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`swiftdrop.work`) && PathRegexp(`^/api/v1/tracking/(public/)?[^/]+/stream$`)
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`swiftdrop.work`) && (Path(`/api/v1/tracking`) || PathPrefix(`/api/v1/tracking/`))
+      - op: replace
+        path: /spec/routes/2/match
+        value: Host(`swiftdrop.work`) && (Path(`/api/v1/ai`) || PathPrefix(`/api/v1/ai/`))
+      - op: replace
+        path: /spec/routes/3/match
+        value: Host(`swiftdrop.work`) && (Path(`/mcp`) || PathPrefix(`/mcp/`))
+      - op: replace
+        path: /spec/routes/4/match
+        value: Host(`swiftdrop.work`) && Path(`/api/v1/auth/login`)
+      - op: replace
+        path: /spec/routes/5/match
+        value: Host(`swiftdrop.work`) && PathRegexp(`^/api/v1/deliveries/[^/]+/proof-photo$`)
+      - op: replace
+        path: /spec/routes/6/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api/v1/merchant/`)
+      - op: replace
+        path: /spec/routes/7/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api/v1`)
+      - op: replace
+        path: /spec/routes/8/match
+        value: Host(`swiftdrop.work`) && PathPrefix(`/api`)
+      - op: replace
+        path: /spec/routes/9/match
+        value: Host(`swiftdrop.work`)
+      # Temporary: refuse Google login until mock tokens are rejected in production (see block-google-login.yaml).
+      - op: add
+        path: /spec/routes/-
+        value:
+          kind: Rule
+          match: Host(`swiftdrop.work`) && Path(`/api/v1/auth/google`)
+          priority: 200
+          middlewares:
+            - name: deny-all
+          services:
+            - name: core-api
+              port: 8080
+  # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
+  # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
+  - target:
+      kind: (Deployment|StatefulSet|Job)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull
+  # CronJobs (the outbox reconciler) nest the pod template one level deeper.
+  - target:
+      kind: CronJob
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull
+  # Production mode. Without it core-api and tracking-api default to "local" and ai-assistant to
+  # "development": dev fallbacks, mock tokens and the published demo-account passwords would be
+  # active. core-api in production also fails fast without a DB or a real JWT_SECRET.
+  - target:
+      kind: Deployment
+      name: (core-api|tracking-api)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: APP_ENV
+          value: production
+  # Production LLM chosen by Member 10 (free OpenRouter model; the base ConfigMap keeps its default).
+  - target:
+      kind: ConfigMap
+      name: ai-assistant-config
+    patch: |-
+      - op: replace
+        path: /data/LLM_MODEL
+        value: nvidia/nemotron-3.5-super-vl:free
+  - target:
+      kind: Deployment
+      name: ai-assistant
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: ENVIRONMENT
+          value: production

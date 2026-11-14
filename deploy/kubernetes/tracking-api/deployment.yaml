@@ -39,6 +39,14 @@ spec:
                   key: TRACKING_DATABASE_URL
             - name: REDIS_URL
               value: "redis://redis:6379/0"
+            # Same key core-api signs access tokens with (issuer https://api.swiftdrop.io on both
+            # sides). Without it tracking uses its dev key and rejects every real token, and in
+            # production it refuses to start.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: JWT_SECRET
           livenessProbe:
             httpGet:
               path: /health/live

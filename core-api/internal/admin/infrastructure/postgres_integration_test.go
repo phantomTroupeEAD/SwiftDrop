@@ -28,14 +28,33 @@ import (
 // then this module's tables.
 var adminMigrations = []string{
 	"20261021000001_create_identity_tables.up.sql",
+	"20261109000001_create_audit_logs.up.sql",
 	"20261109000100_admin_create_delivery_zones.up.sql",
 	"20261109000200_admin_create_audit_logs.up.sql",
+	"20261112000100_admin_add_parcel_settings.up.sql",
 }
 
 // applyMigrations runs each file once, in its own transaction, and records it in
 // the same schema_migrations ledger as migrations.RunMigrations.
 func applyMigrations(t *testing.T, conn *sql.DB) {
 	t.Helper()
+
+	// Acquire the shared migration advisory lock to serialize with concurrent
+	// migration runners (e.g. migrations.RunMigrations in other packages).
+	lockConn, err := conn.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("failed to obtain dedicated connection for migration lock: %v", err)
+	}
+	defer lockConn.Close()
+
+	const migrationAdvisoryLockID = 83921749
+	if _, err := lockConn.ExecContext(context.Background(), "SELECT pg_advisory_lock($1);", migrationAdvisoryLockID); err != nil {
+		t.Fatalf("failed to acquire migration advisory lock: %v", err)
+	}
+	defer func() {
+		_, _ = lockConn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1);", migrationAdvisoryLockID)
+	}()
+
 	if _, err := conn.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version VARCHAR(50) PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatalf("schema_migrations: %v", err)
@@ -358,5 +377,58 @@ func TestZonePagingAndAuditPaging(t *testing.T) {
 	}
 	if first[len(first)-1].CreatedAt.Before(second[0].CreatedAt) {
 		t.Fatal("audit rows are not newest first across pages")
+	}
+}
+
+// Seed: 7 zones, prefixes and settings load, and a second run changes nothing.
+func TestSeedDemoIsRepeatable(t *testing.T) {
+	_, conn := setup(t)
+	ctx := context.Background()
+
+	// Remove only zones this test creates, so a database that was already seeded keeps its rows.
+	existing := map[string]bool{}
+	for _, z := range infrastructure.DemoZones {
+		var n int
+		if err := conn.QueryRow("SELECT count(*) FROM delivery_zones WHERE id = $1", z.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		existing[z.ID] = n > 0
+	}
+	t.Cleanup(func() {
+		for _, z := range infrastructure.DemoZones {
+			if !existing[z.ID] {
+				_, _ = conn.Exec("DELETE FROM delivery_zones WHERE id = $1", z.ID)
+			}
+		}
+	})
+
+	for run := 1; run <= 2; run++ {
+		if err := infrastructure.SeedDemo(ctx, conn); err != nil {
+			t.Fatalf("seed run %d: %v", run, err)
+		}
+	}
+	if len(infrastructure.DemoZones) != 7 {
+		t.Fatalf("want 7 demo zones, have %d", len(infrastructure.DemoZones))
+	}
+	for _, z := range infrastructure.DemoZones {
+		var enabled bool
+		var prefixes int
+		if err := conn.QueryRow("SELECT enabled FROM delivery_zones WHERE id = $1", z.ID).Scan(&enabled); err != nil {
+			t.Fatalf("zone %s missing: %v", z.ID, err)
+		}
+		if err := conn.QueryRow("SELECT count(*) FROM zone_postal_codes WHERE zone_id = $1", z.ID).Scan(&prefixes); err != nil {
+			t.Fatal(err)
+		}
+		if !existing[z.ID] && (enabled != z.Enabled || prefixes != len(z.Prefixes)) {
+			t.Errorf("zone %s: enabled=%v prefixes=%d, want %v/%d (a second run must not duplicate)", z.ID, enabled, prefixes, z.Enabled, len(z.Prefixes))
+		}
+	}
+	var settings int
+	if err := conn.QueryRow(`SELECT count(*) FROM system_settings WHERE key IN
+		('reports.max_range_days','ops.board_refresh_seconds','ops.maintenance_banner','parcels.max_weight_kg','parcels.max_cod_cents')`).Scan(&settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings != 5 {
+		t.Errorf("want 5 allowlisted settings, have %d", settings)
 	}
 }

@@ -303,6 +303,77 @@ func (r *PostgresTrackingRepository) FindStatusHistoryByParcelID(ctx context.Con
 	return records, nil
 }
 
+// FindStatusHistoryByID queries the authoritative parcel_status_history table
+// for a single status-history entry by its unique ID (UUIDv7).
+// Correlates incoming RabbitMQ integration events (payload.status_history_id)
+// directly with persisted status history entries.
+func (r *PostgresTrackingRepository) FindStatusHistoryByID(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+	if r.db == nil {
+		return nil, domain.ErrDatabaseUnavailable
+	}
+
+	cleanID := strings.TrimSpace(historyID)
+	if cleanID == "" {
+		return nil, errors.New("empty status history id")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, r.queryTimeout)
+	defer cancel()
+
+	const query = `
+		SELECT
+			id,
+			parcel_id,
+			from_status,
+			to_status,
+			actor_id,
+			actor_type,
+			actor_role,
+			reason,
+			occurred_at
+		FROM parcel_status_history
+		WHERE id = $1
+		LIMIT 1;
+	`
+
+	var (
+		rec        domain.MilestoneRecord
+		fromStatus sql.NullString
+		actorID    sql.NullString
+	)
+
+	err := r.db.QueryRowContext(timeoutCtx, query, cleanID).Scan(
+		&rec.ID,
+		&rec.ParcelID,
+		&fromStatus,
+		&rec.ToStatus,
+		&actorID,
+		&rec.ActorType,
+		&rec.ActorRole,
+		&rec.Reason,
+		&rec.Timestamp,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrTrackingNotFound
+		}
+		if errors.Is(timeoutCtx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: query status history by id: %v", domain.ErrDatabaseUnavailable, err)
+	}
+
+	if fromStatus.Valid {
+		statusVal := fromStatus.String
+		rec.FromStatus = &statusVal
+	}
+	if actorID.Valid {
+		rec.ActorID = actorID.String
+	}
+
+	return &rec, nil
+}
+
 // FindTrackingSummary retrieves both parcel details and chronological status history
 // within a single consistent read-only transaction.
 func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {

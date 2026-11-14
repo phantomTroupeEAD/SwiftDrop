@@ -1,5 +1,161 @@
 basePath: /
 definitions:
+  github_com_swiftdrop_core-api_internal_admin_application.AuditRow:
+    properties:
+      action:
+        type: string
+      actor_id:
+        type: string
+      actor_role:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      new_state:
+        items:
+          type: integer
+        type: array
+      previous_state:
+        items:
+          type: integer
+        type: array
+      reason:
+        type: string
+      request_id:
+        type: string
+      target_id:
+        type: string
+      target_type:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.CreateZoneInput:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      postal_prefixes:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.DeliveryDay:
+    properties:
+      date:
+        description: Asia/Colombo day, YYYY-MM-DD
+        type: string
+      delivered:
+        type: integer
+      failed:
+        type: integer
+      returned:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.DeliveryReport:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.DeliveryDay'
+        type: array
+      delivered:
+        type: integer
+      failed:
+        type: integer
+      from:
+        type: string
+      source:
+        type: string
+      success_rate:
+        description: null when there were no attempts
+        type: number
+      to:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.PublicZone:
+    properties:
+      code:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.Setting:
+    properties:
+      description:
+        type: string
+      key:
+        type: string
+      value:
+        items:
+          type: integer
+        type: array
+      value_type:
+        type: string
+      version:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.SettingInput:
+    properties:
+      reason:
+        type: string
+      value:
+        items:
+          type: integer
+        type: array
+      version:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.StatusInput:
+    properties:
+      enabled:
+        type: boolean
+      reason:
+        type: string
+      version:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.UpdateZoneInput:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      postal_prefixes:
+        items:
+          type: string
+        type: array
+      reason:
+        type: string
+      version:
+        type: integer
+    type: object
+  github_com_swiftdrop_core-api_internal_admin_application.ZoneView:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      postal_prefixes:
+        items:
+          type: string
+        type: array
+      version:
+        type: integer
+    type: object
   github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail:
     properties:
       field:
@@ -175,20 +331,69 @@ definitions:
     properties:
       data: {}
     type: object
-  transport.CreateQuoteRequest:
+  internal_parcels_transport.AddressRequest:
+    properties:
+      address_line1:
+        type: string
+      address_line2:
+        type: string
+      city:
+        type: string
+      contact_name:
+        type: string
+      contact_phone:
+        type: string
+      instructions:
+        type: string
+      postal_code:
+        type: string
+      zone_id:
+        type: string
+    type: object
+  internal_parcels_transport.BookParcelRequest:
+    properties:
+      dimensions:
+        $ref: '#/definitions/internal_parcels_transport.DimensionsRequest'
+      dropoff:
+        $ref: '#/definitions/internal_parcels_transport.AddressRequest'
+      item_description:
+        type: string
+      pickup:
+        $ref: '#/definitions/internal_parcels_transport.AddressRequest'
+      quote_id:
+        type: string
+      recipient_name:
+        type: string
+      recipient_phone:
+        type: string
+      special_instructions:
+        type: string
+      weight_kg:
+        type: number
+    type: object
+  internal_parcels_transport.DimensionsRequest:
+    properties:
+      height_cm:
+        type: number
+      length_cm:
+        type: number
+      width_cm:
+        type: number
+    type: object
+  internal_pricing_transport.CreateQuoteRequest:
     properties:
       actual_weight_kg:
         type: number
       destination_zone_id:
         type: string
       dimensions:
-        $ref: '#/definitions/transport.DimensionsRequest'
+        $ref: '#/definitions/internal_pricing_transport.DimensionsRequest'
       origin_zone_id:
         type: string
       service_level:
         type: string
     type: object
-  transport.DimensionsRequest:
+  internal_pricing_transport.DimensionsRequest:
     properties:
       height_cm:
         type: number
@@ -210,6 +415,50 @@ info:
   title: SwiftDrop Core API
   version: "1.0"
 paths:
+  /api/v1/admin/audit-logs:
+    get:
+      parameters:
+      - default: 1
+        description: Page, from 1
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page, 1-100
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.AuditRow'
+                  type: array
+              type: object
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: bad page or per_page'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List audit log rows, newest first (admin)
+      tags:
+      - admin-audit
   /api/v1/admin/dashboard:
     get:
       description: Test dashboard endpoint for authenticated Administrators.
@@ -409,6 +658,372 @@ paths:
       summary: Retry failed webhook delivery
       tags:
       - events
+  /api/v1/admin/reports/deliveries:
+    get:
+      parameters:
+      - description: Start date, YYYY-MM-DD
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: End date, YYYY-MM-DD
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.DeliveryReport'
+              type: object
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN or DISPATCHER
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: bad dates or range too long'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delivery report for a date range (admin, dispatcher)
+      tags:
+      - admin-reports
+  /api/v1/admin/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.Setting'
+                  type: array
+              type: object
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List system settings (admin)
+      tags:
+      - admin-settings
+  /api/v1/admin/settings/{key}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: reports.max_range_days, ops.board_refresh_seconds, ops.maintenance_banner,
+          parcels.max_weight_kg or parcels.max_cod_cents
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: value, current version and a 10-500 char reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.SettingInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.Setting'
+              type: object
+        "400":
+          description: 'BAD_REQUEST: malformed JSON'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: CONCURRENT_MODIFICATION
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: SETTING_UNKNOWN, REASON_REQUIRED or VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change one system setting (admin)
+      tags:
+      - admin-settings
+  /api/v1/admin/zones:
+    get:
+      parameters:
+      - default: 1
+        description: Page, from 1
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page, 1-100
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView'
+                  type: array
+              type: object
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: bad page or per_page'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List delivery zones (admin)
+      tags:
+      - admin-zones
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: New zone
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.CreateZoneInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView'
+              type: object
+        "400":
+          description: 'BAD_REQUEST: malformed JSON'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a delivery zone (admin)
+      tags:
+      - admin-zones
+  /api/v1/admin/zones/{id}:
+    get:
+      parameters:
+      - description: Zone id, e.g. ZONE_COLOMBO_01
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView'
+              type: object
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one delivery zone (admin)
+      tags:
+      - admin-zones
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Zone id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change plus current version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.UpdateZoneInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView'
+              type: object
+        "400":
+          description: 'BAD_REQUEST: malformed JSON'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: CONCURRENT_MODIFICATION, ZONE_CODE_ALREADY_EXISTS or ZONE_POSTAL_CODE_CONFLICT
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Edit a delivery zone (admin)
+      tags:
+      - admin-zones
+  /api/v1/admin/zones/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Zone id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: enabled, current version and a 10-500 char reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.StatusInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.ZoneView'
+              type: object
+        "400":
+          description: 'BAD_REQUEST: malformed JSON'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: Role is not ADMIN
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: CONCURRENT_MODIFICATION
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED or REASON_REQUIRED
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Enable or disable a delivery zone (admin)
+      tags:
+      - admin-zones
   /api/v1/auth/login:
     post:
       consumes:
@@ -561,8 +1176,8 @@ paths:
       - merchants
   /api/v1/merchant/portal:
     get:
-      description: Test portal endpoint for authenticated Merchants and Admins with
-        active tenant.
+      description: 'Test portal endpoint for merchant users. Requires a tenant in
+        the token: platform Admins have no tenant and get 403 AUTH_TENANT_REQUIRED.'
       produces:
       - application/json
       responses:
@@ -573,6 +1188,10 @@ paths:
             type: object
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Wrong role, or no tenant (AUTH_TENANT_REQUIRED)
           schema:
             $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_transport.ErrorEnvelope'
       security:
@@ -860,6 +1479,169 @@ paths:
       summary: List supported webhook event types
       tags:
       - merchants
+  /api/v1/parcels:
+    post:
+      consumes:
+      - application/json
+      description: Validates caller identity and merchant approval, verifies UUID
+        Idempotency-Key and raw SHA-256 request hash, atomically consumes an unexpired
+        quote owned by the caller, allocates a Crockford Base32 tracking number, and
+        persists the parcel, audit history, and outbox event in a single transaction.
+      parameters:
+      - description: UUID Idempotency Key
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Parcel booking payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_parcels_transport.BookParcelRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Booked parcel aggregate wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Missing/invalid Idempotency-Key, malformed JSON, or disallowed
+            fields
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, invalid/missing merchant tenant, unapproved
+            merchant, or quote ownership mismatch
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Referenced pricing quote not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "409":
+          description: Idempotency key payload mismatch/conflict or quote already
+            used
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "413":
+          description: Request body exceeds 64 KB size limit
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "415":
+          description: Unsupported Content-Type
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "422":
+          description: Semantic validation failure, expired quote, or quote zone/weight
+            mismatch
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel booking failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "503":
+          description: Tracking number allocation temporarily unavailable
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Book a new parcel using an accepted pricing quote
+      tags:
+      - parcels
+  /api/v1/parcels/{id}:
+    get:
+      description: Returns the Parcel aggregate root for the owning customer, approved
+        owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved
+        merchants.
+      parameters:
+      - description: Parcel UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Parcel details wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Invalid parcel UUID path parameter
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, unapproved merchant, or caller does not own
+            parcel
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Parcel not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retrieve authorized parcel details
+      tags:
+      - parcels
+  /api/v1/parcels/{id}/history:
+    get:
+      description: Returns parcel metadata and ordered lifecycle status history entries
+        for the owning customer, approved owning merchant tenant, or admin.
+      parameters:
+      - description: Parcel UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Parcel status history wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Invalid parcel UUID path parameter
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role, unapproved merchant, or caller does not own
+            parcel
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Parcel not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal parcel history lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Retrieve authorized chronological parcel status history
+      tags:
+      - parcels
   /api/v1/pricing/quotes:
     post:
       consumes:
@@ -873,7 +1655,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/transport.CreateQuoteRequest'
+          $ref: '#/definitions/internal_pricing_transport.CreateQuoteRequest'
       produces:
       - application/json
       responses:
@@ -915,6 +1697,38 @@ paths:
       summary: Calculate and persist a delivery pricing quote
       tags:
       - pricing
+  /api/v1/zones:
+    get:
+      parameters:
+      - description: 5-digit postal code; returns the one matching zone
+        in: query
+        name: postal_code
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_swiftdrop_core-api_internal_admin_application.PublicZone'
+                  type: array
+              type: object
+        "404":
+          description: 'ZONE_NOT_FOUND: no zone covers this postal code'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: postal_code must be 5 digits'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
+      summary: List enabled zones, or find the zone of a postal code (public)
+      tags:
+      - zones
   /health/live:
     get:
       description: Probes whether the Core API service process is alive.

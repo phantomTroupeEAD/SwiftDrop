@@ -20,6 +20,22 @@ var migrationFiles embed.FS
 func RunMigrations(ctx context.Context, db *sql.DB) error {
 	log.Println("[MIGRATOR] Checking PostgreSQL schema migrations...")
 
+	// Acquire a session-level advisory lock so concurrent migration runners
+	// (e.g. parallel go test packages) serialize cleanly instead of colliding in pg_type / DDL.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to obtain connection for migration lock: %w", err)
+	}
+	defer conn.Close()
+
+	const migrationAdvisoryLockID = 83921749
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1);", migrationAdvisoryLockID); err != nil {
+		return fmt.Errorf("failed to acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1);", migrationAdvisoryLockID)
+	}()
+
 	// 1. Ensure schema_migrations ledger table exists
 	createLedgerQuery := `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -28,7 +44,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 			applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 	`
-	if _, err := db.ExecContext(ctx, createLedgerQuery); err != nil {
+	if _, err := conn.ExecContext(ctx, createLedgerQuery); err != nil {
 		return fmt.Errorf("failed to initialize schema_migrations ledger: %w", err)
 	}
 
@@ -53,7 +69,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 
 		var alreadyApplied bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1);`
-		if err := db.QueryRowContext(ctx, checkQuery, version).Scan(&alreadyApplied); err != nil {
+		if err := conn.QueryRowContext(ctx, checkQuery, version).Scan(&alreadyApplied); err != nil {
 			return fmt.Errorf("failed to check migration status for %s: %w", fileName, err)
 		}
 
@@ -70,7 +86,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		}
 
 		// Execute migration inside a single atomic transaction
-		tx, err := db.BeginTx(ctx, nil)
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("failed to start transaction for %s: %w", fileName, err)
 		}
@@ -101,6 +117,20 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 func RollbackMigrations(ctx context.Context, db *sql.DB) error {
 	log.Println("[MIGRATOR] Rolling back PostgreSQL schema migrations in reverse order...")
 
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to obtain connection for rollback lock: %w", err)
+	}
+	defer conn.Close()
+
+	const migrationAdvisoryLockID = 83921749
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1);", migrationAdvisoryLockID); err != nil {
+		return fmt.Errorf("failed to acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1);", migrationAdvisoryLockID)
+	}()
+
 	// 1. Check if schema_migrations table exists
 	var tableExists bool
 	checkLedgerQuery := `
@@ -109,7 +139,7 @@ func RollbackMigrations(ctx context.Context, db *sql.DB) error {
 			WHERE table_schema = 'public' AND table_name = 'schema_migrations'
 		);
 	`
-	if err := db.QueryRowContext(ctx, checkLedgerQuery).Scan(&tableExists); err != nil {
+	if err := conn.QueryRowContext(ctx, checkLedgerQuery).Scan(&tableExists); err != nil {
 		return fmt.Errorf("failed to check schema_migrations existence: %w", err)
 	}
 	if !tableExists {
@@ -142,7 +172,7 @@ func RollbackMigrations(ctx context.Context, db *sql.DB) error {
 
 		var applied bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1);`
-		if err := db.QueryRowContext(ctx, checkQuery, version).Scan(&applied); err != nil {
+		if err := conn.QueryRowContext(ctx, checkQuery, version).Scan(&applied); err != nil {
 			return fmt.Errorf("failed to check migration status for %s: %w", fileName, err)
 		}
 
@@ -157,7 +187,7 @@ func RollbackMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("failed to read file %s: %w", fileName, err)
 		}
 
-		tx, err := db.BeginTx(ctx, nil)
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("failed to start rollback transaction for %s: %w", fileName, err)
 		}

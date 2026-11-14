@@ -46,54 +46,6 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const fallbackMockUsers: User[] = [
-      {
-        id: 'usr_01HADMIN000000000000000001',
-        display_name: 'System Administrator',
-        email: 'admin@swiftdrop.local',
-        role: 'ADMIN',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-21T00:00:00Z',
-      },
-      {
-        id: 'usr_01HDISPATCH00000000000002',
-        display_name: 'Central Dispatcher',
-        email: 'dispatcher@swiftdrop.local',
-        role: 'DISPATCHER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-22T00:00:00Z',
-      },
-      {
-        id: 'usr_01HCOURIER00000000000003',
-        display_name: 'Kamal Perera',
-        email: 'courier@swiftdrop.local',
-        role: 'COURIER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-24T00:00:00Z',
-      },
-      {
-        id: 'usr_01HMERCHANT00000000000004',
-        display_name: 'Colombo Tech Stores',
-        email: 'merchant@vendor.com',
-        role: 'MERCHANT',
-        status: 'ACTIVE',
-        tenant_id: 'mrc_01HMERCHANTTENANT00001',
-        created_at: '2026-10-25T00:00:00Z',
-      },
-      {
-        id: 'usr_01HCUSTOMER00000000000005',
-        display_name: 'Nimal Fernando',
-        email: 'customer@swiftdrop.local',
-        role: 'CUSTOMER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-26T00:00:00Z',
-      },
-    ];
-
     try {
       const url = new URL('/api/v1/admin/users', window.location.origin);
       url.searchParams.set('limit', '50');
@@ -114,21 +66,17 @@ export const AdminDashboard: React.FC = () => {
       }
 
       const data = await res.json();
-      if (data?.data?.items) {
-        setUsers(data.data.items);
-        setTotalCount(data.data.total ?? data.data.items.length);
+      const items: User[] = data?.data?.items ?? [];
+      setUsers(items);
+      setTotalCount(data?.data?.total ?? items.length);
+    } catch (err: unknown) {
+      setUsers([]);
+      setTotalCount(0);
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setUsers(fallbackMockUsers);
-        setTotalCount(fallbackMockUsers.length);
+        setError('Failed to load users from Core API.');
       }
-    } catch {
-      // Graceful local development fallback if not logged in as Admin or Core API is offline
-      let filtered = fallbackMockUsers;
-      if (selectedRole !== 'ALL') {
-        filtered = filtered.filter((u) => u.role === selectedRole);
-      }
-      setUsers(filtered);
-      setTotalCount(filtered.length);
     } finally {
       setLoading(false);
     }

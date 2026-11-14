@@ -1,0 +1,73 @@
+name: SwiftDrop Publish Images
+
+# Builds the five service images and pushes them to GitHub Container Registry,
+# tagged with the short git SHA. Kubernetes pins to that SHA (no :latest).
+# Runs only after a merge to main (or manually), never on pull requests.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # ghcr.io requires a lowercase path. Must match the image names in deploy/kubernetes/.
+  IMAGE_PREFIX: ghcr.io/phantomtroupeead/swiftdrop
+
+jobs:
+  publish:
+    name: Push ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: core-api
+            context: core-api
+            file: core-api/Dockerfile
+          - name: tracking-api
+            context: services/tracking
+            file: services/tracking/Dockerfile
+          - name: messaging
+            context: services/messaging
+            file: services/messaging/Dockerfile
+          - name: ai-assistant
+            context: services/ai-assistant
+            file: services/ai-assistant/Dockerfile
+          - name: web
+            context: web
+            file: web/Dockerfile
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.file }}
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}

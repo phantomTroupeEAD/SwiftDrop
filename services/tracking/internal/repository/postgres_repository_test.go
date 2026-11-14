@@ -314,3 +314,61 @@ func TestPostgresTrackingRepository_Ping(t *testing.T) {
 		}
 	})
 }
+
+func TestPostgresTrackingRepository_FindStatusHistoryByID(t *testing.T) {
+	now := time.Date(2026, 11, 10, 15, 0, 0, 0, time.UTC)
+
+	t.Run("success", func(t *testing.T) {
+		database := registerMockDB("find_history_by_id_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			cols := []string{"id", "parcel_id", "from_status", "to_status", "actor_id", "actor_type", "actor_role", "reason", "occurred_at"}
+			data := [][]driver.Value{
+				{"hist-uuid-001", "parcel-uuid-1", "ASSIGNED", "PICKED_UP", "courier-123", "USER", "COURIER", "Collected from sender", now},
+			}
+			return &testRows{columns: cols, data: data}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresTrackingRepository(database, DefaultPoolConfig())
+		rec, err := repo.FindStatusHistoryByID(context.Background(), "hist-uuid-001")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if rec.ID != "hist-uuid-001" {
+			t.Errorf("expected ID hist-uuid-001, got %s", rec.ID)
+		}
+		if rec.ParcelID != "parcel-uuid-1" {
+			t.Errorf("expected ParcelID parcel-uuid-1, got %s", rec.ParcelID)
+		}
+		if rec.ToStatus != "PICKED_UP" {
+			t.Errorf("expected ToStatus PICKED_UP, got %s", rec.ToStatus)
+		}
+		if rec.FromStatus == nil || *rec.FromStatus != "ASSIGNED" {
+			t.Errorf("expected FromStatus ASSIGNED, got %v", rec.FromStatus)
+		}
+		if rec.ActorID != "courier-123" {
+			t.Errorf("expected ActorID courier-123, got %s", rec.ActorID)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		database := registerMockDB("find_history_by_id_not_found", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			cols := []string{"id", "parcel_id", "from_status", "to_status", "actor_id", "actor_type", "actor_role", "reason", "occurred_at"}
+			return &testRows{columns: cols, data: [][]driver.Value{}}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresTrackingRepository(database, DefaultPoolConfig())
+		_, err := repo.FindStatusHistoryByID(context.Background(), "non-existent-id")
+		if !errors.Is(err, domain.ErrTrackingNotFound) {
+			t.Errorf("expected ErrTrackingNotFound, got %v", err)
+		}
+	})
+
+	t.Run("empty id error", func(t *testing.T) {
+		repo := NewPostgresTrackingRepository(nil, DefaultPoolConfig())
+		_, err := repo.FindStatusHistoryByID(context.Background(), "")
+		if err == nil {
+			t.Error("expected error for empty id, got nil")
+		}
+	})
+}

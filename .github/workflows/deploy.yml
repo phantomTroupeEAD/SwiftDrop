@@ -1,0 +1,117 @@
+name: Deploy to Azure
+
+# Continuous deployment (Member 9). After "SwiftDrop Publish Images" succeeds on main, this deploys
+# the same commit's images to the K3s cluster on the Azure VM:
+#   1. runs on the self-hosted runner ON the VM (outbound only: no cluster port is opened);
+#   2. waits for approval in the GitHub "production" environment (required reviewer);
+#   3. deploy/scripts/deploy.sh: apply prod overlay -> wait for rollouts -> smoke test ->
+#      automatic rollback if anything fails.
+# Never triggered by pull requests. While the VM is deallocated the job waits in the queue and
+# runs when the VM (and its runner) start again.
+on:
+  workflow_run:
+    workflows: ["SwiftDrop Publish Images"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "7-character image tag (git SHA) already published to ghcr.io"
+        required: true
+      smoke_url:
+        description: "Base URL for the smoke test, or 'none' to skip"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# One production deploy at a time; never cancel a running one (it could stop mid-rollout).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.event.workflow_run.head_sha || inputs.sha }}
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, swiftdrop-azure]
+    environment:
+      name: production
+      url: https://swiftdrop.work
+    timeout-minutes: 30
+    steps:
+      - name: Resolve image tag
+        id: tag
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          if [ -n "$RUN_SHA" ]; then SHA="${RUN_SHA:0:7}"; else SHA="$INPUT_SHA"; fi
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{7}$'; then
+            echo "Invalid image tag: '$SHA' (need 7 lowercase hex characters)"; exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Deploying images tagged $SHA"
+
+      # Manifests from the commit that built the images (workflow_run), or from main (manual run).
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      # Source of truth for production secrets = this "production" environment's secrets (never git).
+      # The script fails with the list of missing names if any required one is empty.
+      - name: Sync secrets into the cluster
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          MIGRATOR_PASSWORD: ${{ secrets.MIGRATOR_PASSWORD }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          TRACKING_PASSWORD: ${{ secrets.TRACKING_PASSWORD }}
+          RELAY_PASSWORD: ${{ secrets.RELAY_PASSWORD }}
+          WORKER_PASSWORD: ${{ secrets.WORKER_PASSWORD }}
+          RECONCILER_PASSWORD: ${{ secrets.RECONCILER_PASSWORD }}
+          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MERCHANT_API_KEY_PEPPER: ${{ secrets.MERCHANT_API_KEY_PEPPER }}
+          WEBHOOK_SECRET_ENCRYPTION_KEY: ${{ secrets.WEBHOOK_SECRET_ENCRYPTION_KEY }}
+          SEED_PASSWORD_ADMIN: ${{ secrets.SEED_PASSWORD_ADMIN }}
+          SEED_PASSWORD_DISPATCHER: ${{ secrets.SEED_PASSWORD_DISPATCHER }}
+          SEED_PASSWORD_COURIER: ${{ secrets.SEED_PASSWORD_COURIER }}
+          SEED_PASSWORD_MERCHANT: ${{ secrets.SEED_PASSWORD_MERCHANT }}
+          SEED_PASSWORD_CUSTOMER: ${{ secrets.SEED_PASSWORD_CUSTOMER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          ORIGIN_CERT_PEM: ${{ secrets.ORIGIN_CERT_PEM }}
+          ORIGIN_KEY_PEM: ${{ secrets.ORIGIN_KEY_PEM }}
+          AI_SERVICE_ROLE_TOKEN: ${{ secrets.AI_SERVICE_ROLE_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          SWIFTDROP_API_KEY: ${{ secrets.SWIFTDROP_API_KEY }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          # Mail and proof-photo storage. Each value may be stored as an environment variable or a secret.
+          SMTP_HOST: ${{ vars.SMTP_HOST || secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || secrets.SMTP_PORT }}
+          SMTP_SECURITY: ${{ vars.SMTP_SECURITY || secrets.SMTP_SECURITY }}
+          SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL || secrets.SMTP_FROM_EMAIL }}
+          SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME || secrets.SMTP_FROM_NAME }}
+          OBJECT_STORAGE_DRIVER: ${{ vars.OBJECT_STORAGE_DRIVER || secrets.OBJECT_STORAGE_DRIVER }}
+          OBJECT_STORAGE_BUCKET: ${{ vars.OBJECT_STORAGE_BUCKET || secrets.OBJECT_STORAGE_BUCKET }}
+          OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || secrets.OBJECT_STORAGE_REGION }}
+          OBJECT_STORAGE_PUBLIC_URL: ${{ vars.OBJECT_STORAGE_PUBLIC_URL || secrets.OBJECT_STORAGE_PUBLIC_URL }}
+          OBJECT_STORAGE_ACCOUNT_ID: ${{ secrets.OBJECT_STORAGE_ACCOUNT_ID || vars.OBJECT_STORAGE_ACCOUNT_ID }}
+          OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
+          OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
+        run: bash deploy/scripts/sync-secrets.sh
+
+      - name: Deploy, smoke test, roll back on failure
+        env:
+          SMOKE_URL: ${{ inputs.smoke_url || vars.SMOKE_URL || 'https://swiftdrop.work' }}
+          # The smoke test logs in with the same private passwords the accounts were rotated to.
+          SMOKE_PASSWORD_ADMIN: ${{ secrets.SMOKE_PASSWORD_ADMIN || secrets.SEED_PASSWORD_ADMIN }}
+          SMOKE_PASSWORD_DISPATCHER: ${{ secrets.SMOKE_PASSWORD_DISPATCHER || secrets.SEED_PASSWORD_DISPATCHER }}
+          SMOKE_PASSWORD_COURIER: ${{ secrets.SMOKE_PASSWORD_COURIER || secrets.SEED_PASSWORD_COURIER }}
+          SMOKE_PASSWORD_MERCHANT: ${{ secrets.SMOKE_PASSWORD_MERCHANT || secrets.SEED_PASSWORD_MERCHANT }}
+          SMOKE_PASSWORD_CUSTOMER: ${{ secrets.SMOKE_PASSWORD_CUSTOMER || secrets.SEED_PASSWORD_CUSTOMER }}
+        run: bash deploy/scripts/deploy.sh "${{ steps.tag.outputs.sha }}" "$SMOKE_URL"

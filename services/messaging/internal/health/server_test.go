@@ -44,15 +44,15 @@ func TestHealthServer(t *testing.T) {
 		}
 	})
 
-	t.Run("GET /health/ready initially returns 200 with empty checks", func(t *testing.T) {
+	t.Run("GET /health/ready initially returns 503 when no checks are registered", func(t *testing.T) {
 		resp, err := http.Get(fmt.Sprintf("http://%s/health/ready", addr))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("expected 503 Service Unavailable, got %d", resp.StatusCode)
 		}
 	})
 

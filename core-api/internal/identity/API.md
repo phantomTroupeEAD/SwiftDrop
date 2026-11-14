@@ -220,3 +220,26 @@ Suspends or reactivates an account.
 }
 ```
 *(Options: `"ACTIVE"`, `"SUSPENDED"`)*
+
+---
+
+## 9. Forgot Password / Password Recovery (OTP-Verified)
+
+### Step 1: Request Password Reset OTP (`POST /api/v1/auth/forgot-password/send-otp`)
+- **Auth Required:** None (Public)
+- **Request Body:** `{"email": "alice@example.com"}`
+- **Success Response (`200 OK`):** Always returns `200 OK` for valid email formats (even if not registered, to prevent account enumeration) with `expires_in: 600` and `cooldown_seconds: 60`.
+- **Error Responses:** `400 INVALID_EMAIL`, `429 OTP_COOLDOWN_ACTIVE`.
+
+### Step 2: Verify OTP & Reset Password (`POST /api/v1/auth/forgot-password/reset`)
+- **Auth Required:** None (Public)
+- **Request Body:**
+```json
+{
+  "email": "alice@example.com",
+  "otp": "481920",
+  "new_password": "NewPassword123!"
+}
+```
+- **Success Response (`200 OK`):** `{"data": {"message": "Password has been reset successfully. You can now sign in with your new password."}}`
+- **Error Responses:** `400 INVALID_EMAIL`, `400 WEAK_PASSWORD`, `400 AUTH_OTP_INVALID`, `400 AUTH_OTP_EXPIRED`, `400 AUTH_OTP_MAX_ATTEMPTS`, `403 ACCOUNT_SUSPENDED`.

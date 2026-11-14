@@ -22,6 +22,10 @@ func (m *mockTrackingRepo) FindStatusHistoryByParcelID(ctx context.Context, parc
 	return nil, nil
 }
 
+func (m *mockTrackingRepo) FindStatusHistoryByID(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+	return nil, nil
+}
+
 func (m *mockTrackingRepo) FindTrackingSummary(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
 	if m.findSummaryFunc != nil {
 		return m.findSummaryFunc(ctx, trackingNumber)
