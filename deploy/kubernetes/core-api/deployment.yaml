@@ -25,6 +25,9 @@ spec:
         app.kubernetes.io/part-of: swiftdrop
     spec:
       terminationGracePeriodSeconds: 20
+      # Kubernetes would inject CORE_API_PORT=tcp://<ip>:8080 for the core-api Service; core-api reads
+      # CORE_API_PORT as its listen port and would fail ("too many colons"). Services are reached by DNS.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
