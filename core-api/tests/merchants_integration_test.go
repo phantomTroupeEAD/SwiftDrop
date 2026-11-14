@@ -74,6 +74,7 @@ func (testNoopObserver) StatusChanged(_ string) {}
 func TestMerchantsPostgresRepository_Integration(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
+	db.SetMaxOpenConns(1)
 
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -309,6 +310,7 @@ func TestMerchantsPostgresRepository_Integration(t *testing.T) {
 func TestMerchantsLifecycle_E2E(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
+	db.SetMaxOpenConns(1)
 
 	tokenProv := identityinfra.NewJWTTokenProvider("test-integration-secret-key-32chars")
 	hasher := merchantsinfra.Hasher{
@@ -559,7 +561,10 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 			t.Fatalf("expected 201 Created from B2B order, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		// Second call: Replay with same Idempotency-Key -> returns 200 OK with Idempotent-Replay: true
+		// Allow background credential touch to settle before replay
+		time.Sleep(50 * time.Millisecond)
+
+		// Second call: Replay with same Idempotency-Key -> returns 201 Created with Idempotent-Replay: true
 		reqReplay := httptest.NewRequest(http.MethodPost, "/api/v1/merchant/orders", bytes.NewReader(jsonBytes))
 		reqReplay.Header.Set("X-API-Key", createdPlaintextKey)
 		reqReplay.Header.Set("Idempotency-Key", idempotencyKey)
@@ -576,3 +581,4 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 		}
 	})
 }
+
