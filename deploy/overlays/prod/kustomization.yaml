@@ -8,6 +8,7 @@ kind: Kustomization
 
 resources:
   - ../../kubernetes
+  - block-google-login.yaml
 
 images:
   - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
@@ -68,6 +69,18 @@ patches:
       - op: replace
         path: /spec/routes/9/match
         value: Host(`swiftdrop.work`)
+      # Temporary: refuse Google login until mock tokens are rejected in production (see block-google-login.yaml).
+      - op: add
+        path: /spec/routes/-
+        value:
+          kind: Rule
+          match: Host(`swiftdrop.work`) && Path(`/api/v1/auth/google`)
+          priority: 200
+          middlewares:
+            - name: deny-all
+          services:
+            - name: core-api
+              port: 8080
   # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
   # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
   - target:

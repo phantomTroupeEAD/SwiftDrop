@@ -90,6 +90,19 @@ jobs:
           SWIFTDROP_API_KEY: ${{ secrets.SWIFTDROP_API_KEY }}
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          # Mail and proof-photo storage. Each value may be stored as an environment variable or a secret.
+          SMTP_HOST: ${{ vars.SMTP_HOST || secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || secrets.SMTP_PORT }}
+          SMTP_SECURITY: ${{ vars.SMTP_SECURITY || secrets.SMTP_SECURITY }}
+          SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL || secrets.SMTP_FROM_EMAIL }}
+          SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME || secrets.SMTP_FROM_NAME }}
+          OBJECT_STORAGE_DRIVER: ${{ vars.OBJECT_STORAGE_DRIVER || secrets.OBJECT_STORAGE_DRIVER }}
+          OBJECT_STORAGE_BUCKET: ${{ vars.OBJECT_STORAGE_BUCKET || secrets.OBJECT_STORAGE_BUCKET }}
+          OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || secrets.OBJECT_STORAGE_REGION }}
+          OBJECT_STORAGE_PUBLIC_URL: ${{ vars.OBJECT_STORAGE_PUBLIC_URL || secrets.OBJECT_STORAGE_PUBLIC_URL }}
+          OBJECT_STORAGE_ACCOUNT_ID: ${{ secrets.OBJECT_STORAGE_ACCOUNT_ID || vars.OBJECT_STORAGE_ACCOUNT_ID }}
+          OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
+          OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
         run: bash deploy/scripts/sync-secrets.sh
 
       - name: Deploy, smoke test, roll back on failure
