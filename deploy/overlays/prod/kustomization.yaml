@@ -110,6 +110,14 @@ patches:
         value:
           name: APP_ENV
           value: production
+  # Production LLM chosen by Member 10 (free OpenRouter model; the base ConfigMap keeps its default).
+  - target:
+      kind: ConfigMap
+      name: ai-assistant-config
+    patch: |-
+      - op: replace
+        path: /data/LLM_MODEL
+        value: nvidia/nemotron-3.5-super-vl:free
   - target:
       kind: Deployment
       name: ai-assistant
