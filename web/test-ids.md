@@ -205,6 +205,11 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `admin-audit-summary` | "Showing a–b of N [matching] entries · page x of y" |
 | `admin-audit-per-page`, `admin-audit-prev-btn`, `admin-audit-next-btn` | Rows per page (10/20/50/100), previous and next page |
 | `admin-audit-empty`, `admin-audit-empty-reset-btn` | Filtered empty state and its Reset filters button |
+| `reports-range-form`, `reports-from`, `reports-to` | Report period form and its two Sri Lanka date inputs |
+| `reports-apply-btn`, `reports-last-7-btn`, `reports-last-30-btn`, `reports-refresh-btn` | Show report, the two period presets, refresh |
+| `reports-totals`, `reports-total-delivered`, `reports-total-failed`, `reports-success-rate` | Period totals from the server ("No attempts" when the rate is null) |
+| `reports-table`, `reports-empty`, `reports-period` | Per-day table, empty state, "Period a to b. Source: ..." line |
+| `reports-source-note`, `reports-error` | Stand-in data warning; load error with reference id and Retry (a refused period shows beside the dates instead, `#reports-range-error`) |
 
 ## Ops workspace shell (Member 7)
 

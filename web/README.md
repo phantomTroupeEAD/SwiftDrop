@@ -159,11 +159,11 @@ The router guards ensure strict authorization before any protected view is mount
 | `/ops/dispatch` | `DISPATCHER`, `ADMIN` | Member 7 | Interactive dispatch board: parcel queues, courier workload, assignment. |
 | `/ops/couriers` | `DISPATCHER`, `ADMIN` | Member 7 | Active courier fleet management, load monitoring, availability toggle. |
 | `/ops/zones` | `ADMIN` | Member 7 | Delivery zone geometry, base tariffs, and operational boundary setup. |
-| `/ops/reports` | `ADMIN` | Member 7 | SLA reports, courier performance metrics, and audit log explorer. |
+| `/ops/reports` | `ADMIN`, `DISPATCHER` | Member 7 | Deliveries per day for a Sri Lanka date range (`GET /api/v1/admin/reports/deliveries`). Read only. |
 | `/courier/tasks` | `COURIER` | Member 7 | Mobile-responsive courier route, pickup/delivery tasks, barcode scanner. |
 | `/courier/tasks/:id/pod` | `COURIER` | Member 7 | Proof-of-delivery capture (camera photo upload, recipient signature). |
 
-**Ops workspace status (Member 7):** `/ops/*` is served by `src/features/dispatcher-admin/ops/` for `ADMIN` and `DISPATCHER`. The side menu lists only the pages the signed-in role can open, and a page above the role shows an access message. Built now: `/ops/users`, `/ops/zones`, `/ops/settings`, `/ops/audit` (ADMIN, read only: server-side filters for change, target type, target id, done by and a Sri Lanka date range, with `page`/`per_page` paging). Every other `/ops` page (dispatch, couriers, failed deliveries, merchants, pricing, reports) shows a "not built yet" page with no data. `/admin/dashboard` still serves the admin console. The routes are mounted with one line in `App.tsx` (`{opsRoutes}`, marker `TEMP-M7-OPS-ROUTES`).
+**Ops workspace status (Member 7):** `/ops/*` is served by `src/features/dispatcher-admin/ops/` for `ADMIN` and `DISPATCHER`. The side menu lists only the pages the signed-in role can open, and a page above the role shows an access message. Built now: `/ops/users`, `/ops/zones`, `/ops/settings`, `/ops/reports` (ADMIN and DISPATCHER: delivered, failed, success rate and a per-day table for a date range; the server labels its numbers a stand-in until the parcel and delivery modules connect, and the screen shows that label), `/ops/audit` (ADMIN, read only: server-side filters for change, target type, target id, done by and a Sri Lanka date range, with `page`/`per_page` paging). Every other `/ops` page (dispatch, couriers, failed deliveries, merchants, pricing) shows a "not built yet" page with no data. `/admin/dashboard` still serves the admin console. The routes are mounted with one line in `App.tsx` (`{opsRoutes}`, marker `TEMP-M7-OPS-ROUTES`).
 
 ---
 

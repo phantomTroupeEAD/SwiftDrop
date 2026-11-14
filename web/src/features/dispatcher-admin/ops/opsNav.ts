@@ -90,7 +90,7 @@ export const OPS_NAV: OpsNavItem[] = [
     icon: BarChart3,
     group: 'Operations',
     roles: BOTH,
-    built: false,
+    built: true,
   },
   {
     id: 'users',

@@ -8,6 +8,7 @@ import { AuditLogPanel } from '../admin-console/AuditLogPanel';
 import { SettingsPanel } from '../admin-console/SettingsPanel';
 import { UsersPanel } from '../admin-console/UsersPanel';
 import { Banner } from '../admin-console/ui';
+import { ReportsPanel } from '../reports/ReportsPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
 import { OPS_NAV, homePathFor, isOpsRole } from './opsNav';
 
@@ -95,6 +96,17 @@ export function AuditPage() {
     <>
       <PageHeader title={item.title} description={item.description} />
       <AuditLogPanel token={accessToken} refreshKey={0} />
+    </>
+  );
+}
+
+export function ReportsPage() {
+  const { accessToken } = useAuth();
+  const item = navItem('reports');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      <ReportsPanel token={accessToken} />
     </>
   );
 }

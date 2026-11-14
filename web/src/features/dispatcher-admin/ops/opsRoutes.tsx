@@ -1,6 +1,6 @@
 import { Route } from 'react-router-dom';
 import { OpsLayout } from './OpsLayout';
-import { AuditPage, NotBuiltPage, OpsIndex, OpsNotFound, SettingsPage, UsersPage, ZonesPage } from './OpsPages';
+import { AuditPage, NotBuiltPage, OpsIndex, OpsNotFound, ReportsPage, SettingsPage, UsersPage, ZonesPage } from './OpsPages';
 
 /**
  * Route tree for the ops workspace. App.tsx mounts it with one line: {opsRoutes}.
@@ -14,7 +14,7 @@ export const opsRoutes = (
     <Route path="failed-deliveries" element={<NotBuiltPage id="failed-deliveries" />} />
     <Route path="merchants" element={<NotBuiltPage id="merchants" />} />
     <Route path="merchants/:id" element={<NotBuiltPage id="merchants" />} />
-    <Route path="reports" element={<NotBuiltPage id="reports" />} />
+    <Route path="reports" element={<ReportsPage />} />
     <Route path="users" element={<UsersPage />} />
     <Route path="zones" element={<ZonesPage />} />
     <Route path="pricing" element={<NotBuiltPage id="pricing" />} />
