@@ -189,6 +189,10 @@ definitions:
         $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address'
       businessName:
         type: string
+      contactEmail:
+        type: string
+      contactPhone:
+        type: string
     type: object
   github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest:
     properties:
@@ -428,6 +432,30 @@ paths:
         in: query
         name: per_page
         type: integer
+      - description: Exact action, for example ZONE_CREATED
+        in: query
+        name: action
+        type: string
+      - description: Exact target type, for example ZONE
+        in: query
+        name: target_type
+        type: string
+      - description: Exact target id, for example ZONE_COLOMBO_01
+        in: query
+        name: target_id
+        type: string
+      - description: ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER or SYSTEM
+        in: query
+        name: actor_role
+        type: string
+      - description: First Sri Lanka day to include, YYYY-MM-DD
+        in: query
+        name: from
+        type: string
+      - description: Last Sri Lanka day to include, YYYY-MM-DD
+        in: query
+        name: to
+        type: string
       produces:
       - application/json
       responses:
@@ -451,7 +479,7 @@ paths:
           schema:
             $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
         "422":
-          description: 'VALIDATION_FAILED: bad page or per_page'
+          description: 'VALIDATION_FAILED: bad page, per_page or filter'
           schema:
             $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse'
       security:

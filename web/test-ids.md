@@ -197,6 +197,14 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `admin-setting-preview` | Live rupee amount while typing cents for the cash-on-delivery setting |
 | `admin-setting-conflict`, `admin-setting-conflict-keep-btn`, `admin-setting-conflict-theirs-btn` | Version conflict on a setting: notice, keep my value on the latest version, use their value instead |
 | `admin-audit-table`, `admin-audit-details-btn`, `admin-audit-dialog` | Audit log, row details button (repeated per row), snapshot dialog |
+| `admin-audit-filters` | Audit filter form (`role="search"`) |
+| `admin-audit-filter-action`, `admin-audit-filter-target-type`, `admin-audit-filter-actor-role` | Select filters: change, target type, done by |
+| `admin-audit-filter-target-id`, `admin-audit-filter-from`, `admin-audit-filter-to` | Target id text input and the two Sri Lanka date inputs |
+| `admin-audit-apply-btn`, `admin-audit-reset-btn` | Apply filters, Reset (disabled while nothing is filtered) |
+| `admin-audit-active-filters` | Chips for the filters currently applied |
+| `admin-audit-summary` | "Showing a–b of N [matching] entries · page x of y" |
+| `admin-audit-per-page`, `admin-audit-prev-btn`, `admin-audit-next-btn` | Rows per page (10/20/50/100), previous and next page |
+| `admin-audit-empty`, `admin-audit-empty-reset-btn` | Filtered empty state and its Reset filters button |
 
 ## Ops workspace shell (Member 7)
 

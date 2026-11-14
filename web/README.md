@@ -163,7 +163,7 @@ The router guards ensure strict authorization before any protected view is mount
 | `/courier/tasks` | `COURIER` | Member 7 | Mobile-responsive courier route, pickup/delivery tasks, barcode scanner. |
 | `/courier/tasks/:id/pod` | `COURIER` | Member 7 | Proof-of-delivery capture (camera photo upload, recipient signature). |
 
-**Ops workspace status (Member 7):** `/ops/*` is served by `src/features/dispatcher-admin/ops/` for `ADMIN` and `DISPATCHER`. The side menu lists only the pages the signed-in role can open, and a page above the role shows an access message. Built now: `/ops/users`, `/ops/zones`, `/ops/settings`, `/ops/audit` (ADMIN). Every other `/ops` page (dispatch, couriers, failed deliveries, merchants, pricing, reports) shows a "not built yet" page with no data. `/admin/dashboard` still serves the admin console. The routes are mounted with one line in `App.tsx` (`{opsRoutes}`, marker `TEMP-M7-OPS-ROUTES`).
+**Ops workspace status (Member 7):** `/ops/*` is served by `src/features/dispatcher-admin/ops/` for `ADMIN` and `DISPATCHER`. The side menu lists only the pages the signed-in role can open, and a page above the role shows an access message. Built now: `/ops/users`, `/ops/zones`, `/ops/settings`, `/ops/audit` (ADMIN, read only: server-side filters for change, target type, target id, done by and a Sri Lanka date range, with `page`/`per_page` paging). Every other `/ops` page (dispatch, couriers, failed deliveries, merchants, pricing, reports) shows a "not built yet" page with no data. `/admin/dashboard` still serves the admin console. The routes are mounted with one line in `App.tsx` (`{opsRoutes}`, marker `TEMP-M7-OPS-ROUTES`).
 
 ---
 

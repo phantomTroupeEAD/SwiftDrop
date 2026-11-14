@@ -202,7 +202,7 @@ func TestAuditLogsAreAppendOnly(t *testing.T) {
 		ID: "ZONE_T_APPEND_" + run, Code: "T-APP-" + run, Name: "Append", PostalPrefixes: []string{"95500"}}); err != nil {
 		t.Fatal(err)
 	}
-	rows, _, err := svc.Store.ListAudit(context.Background(), 0, 1)
+	rows, _, err := svc.Store.ListAudit(context.Background(), application.AuditFilter{}, 0, 1)
 	if err != nil || len(rows) != 1 || rows[0].Action != "ZONE_CREATED" {
 		t.Fatalf("latest audit row: %+v %v", rows, err)
 	}
@@ -347,11 +347,11 @@ func TestZonePagingAndAuditPaging(t *testing.T) {
 	}
 
 	// Each create wrote one audit row, newest first.
-	first, auditTotal, err := svc.Store.ListAudit(ctx, 0, 3)
+	first, auditTotal, err := svc.Store.ListAudit(ctx, application.AuditFilter{}, 0, 3)
 	if err != nil || len(first) != 3 || auditTotal < n {
 		t.Fatalf("audit page 1: %d rows, total %d, err %v", len(first), auditTotal, err)
 	}
-	second, _, err := svc.Store.ListAudit(ctx, 3, 3)
+	second, _, err := svc.Store.ListAudit(ctx, application.AuditFilter{}, 3, 3)
 	if err != nil || len(second) == 0 {
 		t.Fatalf("audit page 2: %d rows, err %v", len(second), err)
 	}
@@ -413,5 +413,149 @@ func TestSeedDemoIsRepeatable(t *testing.T) {
 	}
 	if settings != 5 {
 		t.Errorf("want 5 allowlisted settings, have %d", settings)
+	}
+}
+
+// Audit filters: each one narrows the list, the total counts only the matching rows, and paging
+// works inside a filtered list. Audit rows are append-only, so the test uses ids of its own.
+func TestAuditFilters(t *testing.T) {
+	svc, _ := setup(t)
+	ctx := context.Background()
+	run := time.Now().Format("150405")
+	idA, idB := "ZONE_T_AUDF_A_"+run, "ZONE_T_AUDF_B_"+run
+	for i, id := range []string{idA, idB} {
+		if _, err := svc.CreateZone(ctx, adminActor, application.CreateZoneInput{
+			ID: id, Code: fmt.Sprintf("T-AUF%d-%s", i, run), Name: "Audit filter", PostalPrefixes: []string{fmt.Sprintf("72%d20", i)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	renamed := "Audit filter renamed"
+	if _, err := svc.UpdateZone(ctx, adminActor, idA, application.UpdateZoneInput{Version: 1, Name: &renamed, Reason: "audit filter test"}); err != nil {
+		t.Fatal(err)
+	}
+
+	count := func(f application.AuditFilter) (int, []application.AuditRow) {
+		t.Helper()
+		rows, total, err := svc.Store.ListAudit(ctx, f, 0, 50)
+		if err != nil {
+			t.Fatalf("ListAudit(%+v): %v", f, err)
+		}
+		if len(rows) > total {
+			t.Fatalf("more rows (%d) than the total (%d)", len(rows), total)
+		}
+		return total, rows
+	}
+
+	// Target id: zone A has a create and an update row, zone B only a create row.
+	if total, rows := count(application.AuditFilter{TargetID: idA}); total != 2 || len(rows) != 2 {
+		t.Fatalf("target_id A: total %d, rows %d, want 2", total, len(rows))
+	} else {
+		for _, r := range rows {
+			if r.TargetID != idA {
+				t.Fatalf("a row for %s leaked into the filter for %s", r.TargetID, idA)
+			}
+		}
+	}
+	if total, _ := count(application.AuditFilter{TargetID: idB}); total != 1 {
+		t.Fatalf("target_id B: total %d, want 1", total)
+	}
+
+	// Action, and action together with a target.
+	if total, rows := count(application.AuditFilter{TargetID: idA, Action: "ZONE_UPDATED"}); total != 1 || rows[0].Action != "ZONE_UPDATED" {
+		t.Fatalf("action filter: total %d", total)
+	}
+	if total, _ := count(application.AuditFilter{TargetID: idA, Action: "ZONE_ENABLED"}); total != 0 {
+		t.Fatalf("an action that never happened must match nothing, got %d", total)
+	}
+
+	// Target type and actor role.
+	if total, _ := count(application.AuditFilter{TargetType: "ZONE", ActorRole: "ADMIN", TargetID: idA}); total != 2 {
+		t.Fatalf("target_type + actor_role: total %d, want 2", total)
+	}
+	if total, rows := count(application.AuditFilter{ActorRole: "COURIER", TargetID: idA}); total != 0 || rows == nil || len(rows) != 0 {
+		t.Fatalf("no match must give an empty (not nil) list: total %d, rows %v", total, rows)
+	}
+
+	// Date range, as Sri Lanka days: today includes the rows, yesterday alone does not.
+	colombo := time.FixedZone("Asia/Colombo", 5*3600+1800)
+	today := time.Now().In(colombo).Format("2006-01-02")
+	yesterday := time.Now().In(colombo).Add(-24 * time.Hour).Format("2006-01-02")
+	inToday, err := application.ParseAuditFilter("", "", idA, "", today, today)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total, _ := count(inToday); total != 2 {
+		t.Fatalf("today's range: total %d, want 2", total)
+	}
+	onlyYesterday, err := application.ParseAuditFilter("", "", idA, "", yesterday, yesterday)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total, _ := count(onlyYesterday); total != 0 {
+		t.Fatalf("yesterday's range must not include today's rows, got %d", total)
+	}
+
+	// Paging inside a filtered list: the total stays the size of the filtered list.
+	first, total1, err := svc.Store.ListAudit(ctx, application.AuditFilter{TargetID: idA}, 0, 1)
+	if err != nil || len(first) != 1 || total1 != 2 {
+		t.Fatalf("filtered page 1: %d rows, total %d, err %v", len(first), total1, err)
+	}
+	second, total2, err := svc.Store.ListAudit(ctx, application.AuditFilter{TargetID: idA}, 1, 1)
+	if err != nil || len(second) != 1 || total2 != 2 {
+		t.Fatalf("filtered page 2: %d rows, total %d, err %v", len(second), total2, err)
+	}
+	if first[0].ID == second[0].ID {
+		t.Fatal("filtered pages overlap")
+	}
+	if first[0].CreatedAt.Before(second[0].CreatedAt) {
+		t.Fatal("filtered rows are not newest first")
+	}
+	if past, total3, err := svc.Store.ListAudit(ctx, application.AuditFilter{TargetID: idA}, 10, 5); err != nil || len(past) != 0 || total3 != 2 {
+		t.Fatalf("filtered page past the end: %d rows, total %d, err %v", len(past), total3, err)
+	}
+
+	// A value that looks like SQL is only ever a bound parameter: it matches nothing and breaks nothing.
+	if total, _ := count(application.AuditFilter{TargetID: "x' OR '1'='1"}); total != 0 {
+		t.Fatalf("an injection-looking target id must match nothing, got %d", total)
+	}
+	var unfiltered, all int
+	unfiltered, _ = count(application.AuditFilter{})
+	if all, _ = count(application.AuditFilter{ActorRole: "ADMIN"}); all > unfiltered {
+		t.Fatalf("a filter cannot match more rows (%d) than no filter (%d)", all, unfiltered)
+	}
+}
+
+// Regression: rows written by other modules (identity) leave target_type, target_id and the
+// snapshots NULL and use entity_type, entity_id and metadata. Reading them used to fail with
+// "converting NULL to string", which made the whole audit list answer 500.
+func TestAuditListHandlesRowsFromOtherModules(t *testing.T) {
+	svc, conn := setup(t)
+	ctx := context.Background()
+	userID := "USER_T_LEGACY_" + time.Now().Format("150405")
+	if _, err := conn.Exec(`INSERT INTO audit_logs (actor_role, action, entity_type, entity_id, metadata)
+		VALUES ('ADMIN', 'USER_ROLE_UPDATED', 'USER', $1, '{"previous_role": "ADMIN", "new_role": "COURIER"}')`, userID); err != nil {
+		t.Fatalf("insert an identity-style audit row: %v", err)
+	}
+
+	rows, total, err := svc.Store.ListAudit(ctx, application.AuditFilter{}, 0, 50)
+	if err != nil || total == 0 || len(rows) == 0 {
+		t.Fatalf("the unfiltered list must work with such a row present: %d rows, total %d, err %v", len(rows), total, err)
+	}
+
+	for _, f := range []application.AuditFilter{{TargetID: userID}, {TargetType: "USER", TargetID: userID}, {Action: "USER_ROLE_UPDATED", TargetID: userID}} {
+		got, n, err := svc.Store.ListAudit(ctx, f, 0, 10)
+		if err != nil || n != 1 || len(got) != 1 {
+			t.Fatalf("filter %+v: %d rows, total %d, err %v", f, len(got), n, err)
+		}
+		r := got[0]
+		if r.TargetType != "USER" || r.TargetID != userID {
+			t.Fatalf("the legacy target must show: %q %q", r.TargetType, r.TargetID)
+		}
+		if string(r.Before) != `{"role": "ADMIN"}` && string(r.Before) != `{"role":"ADMIN"}` {
+			t.Fatalf("before = %s", r.Before)
+		}
+		if string(r.After) != `{"role": "COURIER"}` && string(r.After) != `{"role":"COURIER"}` {
+			t.Fatalf("after = %s", r.After)
+		}
 	}
 }

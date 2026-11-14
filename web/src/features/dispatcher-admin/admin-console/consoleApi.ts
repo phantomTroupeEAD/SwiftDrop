@@ -84,13 +84,23 @@ export interface AuditPage {
   meta: PageMeta;
 }
 
-/** Newest first. The API pages with page and per_page (api-conventions 2.2). */
-export async function listAuditPage(token: string | null, page: number, perPage: number): Promise<AuditPage> {
-  const res = await request<{ data: AuditRow[]; meta: PageMeta }>(
-    token,
-    'GET',
-    `/api/v1/admin/audit-logs?page=${page}&per_page=${perPage}`,
-  );
+/** Audit filters. A field that is empty or missing does not filter. Dates are Sri Lanka days, YYYY-MM-DD. */
+export interface AuditFilter {
+  action?: string;
+  target_type?: string;
+  target_id?: string;
+  actor_role?: string;
+  from?: string;
+  to?: string;
+}
+
+/** Newest first. The API pages with page and per_page (api-conventions 2.2) and filters in SQL. */
+export async function listAuditPage(token: string | null, page: number, perPage: number, filter: AuditFilter = {}): Promise<AuditPage> {
+  const q = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  for (const [key, value] of Object.entries(filter)) {
+    if (value) q.set(key, value);
+  }
+  const res = await request<{ data: AuditRow[]; meta: PageMeta }>(token, 'GET', `/api/v1/admin/audit-logs?${q.toString()}`);
   return { rows: res.data, meta: res.meta };
 }
 

@@ -272,6 +272,14 @@ Audit rows, newest first, one page at a time. Rows from every module that writes
 | :-- | :-- | :-- |
 | `page` | integer | optional, from 1, default 1 |
 | `per_page` | integer | optional, 1 to 100, default 20 |
+| `action` | string | optional, exact match, capital letters, digits and `_`, for example `ZONE_UPDATED` |
+| `target_type` | string | optional, exact match, for example `ZONE` or `SETTING` |
+| `target_id` | string | optional, exact match, 1 to 64 of letters, digits and `_ . : -`, for example `ZONE_COLOMBO_01` |
+| `actor_role` | string | optional, one of `ADMIN`, `DISPATCHER`, `COURIER`, `MERCHANT`, `CUSTOMER`, `SYSTEM` |
+| `from` | date | optional, `YYYY-MM-DD`, the first Sri Lanka day (Asia/Colombo) to include |
+| `to` | date | optional, `YYYY-MM-DD`, the last Sri Lanka day to include; not before `from` |
+
+Filters combine with AND. An empty value is the same as leaving the parameter out. `meta.total_items` and `meta.total_pages` count only the rows that match the filters, and paging works inside the filtered list. A parameter sent twice is refused. Values are never part of the SQL text, they are bound parameters.
 
 **200:**
 
@@ -298,7 +306,7 @@ Audit rows, newest first, one page at a time. Rows from every module that writes
 
 `previous_state` and `new_state` hold the full zone or `{"value": ...}` for settings; the example is shortened. `actor_id`, `previous_state`, `new_state`, `reason` and `request_id` may be `null`. The client IP and user agent are stored but not returned.
 
-**Errors:** `422 VALIDATION_FAILED` (bad `page` or `per_page`).
+**Errors:** `422 VALIDATION_FAILED` (bad `page`, `per_page` or filter value, a filter sent twice, or `from` after `to`).
 
 ---
 

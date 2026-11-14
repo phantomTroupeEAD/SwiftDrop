@@ -94,7 +94,7 @@ Other modules may write `audit_logs` rows in their own transactions. The columns
 | Layer | File | Covers |
 | :-- | :-- | :-- |
 | Domain | `domain/*_test.go` | value object rules, zone changes and versioning, overlap policy |
-| Application | `application/zones_test.go`, `settings_rules_test.go` | lock taken, audit row per change, rollback when the audit write fails, version and reason rules, settings allowlist |
+| Application | `application/zones_test.go`, `settings_rules_test.go`, `audit_filter_test.go` (filter rules, Colombo day boundaries) | lock taken, audit row per change, rollback when the audit write fails, version and reason rules, settings allowlist |
 | Infrastructure | `infrastructure/redact_test.go` | secrets never reach audit snapshots |
 | Infrastructure (integration) | `infrastructure/postgres_integration_test.go` | 20-way overlapping prefix race (1 wins), 10-way stale version race (1 wins), audit rollback, append-only trigger, settings round trip, public lookup |
 | Transport | `transport/http_test.go`, `transport/reports_test.go` | 401/403 on every admin route, paging (`page`, `per_page`, `meta`, bad values 422), public fields only, error mapping, no leak of SQL text, input limits; report roles (ADMIN and DISPATCHER pass, others 403), date and range validation, stand-in label |
@@ -117,7 +117,7 @@ They apply only the migrations this module needs (identity's `users` table and t
 | :-- | :-- |
 | Zones, postal prefixes, public lookup | Done |
 | System settings (allowlist) | Done |
-| Audit trail (write and read) | Done. Paged with `page` and `per_page`; no filters yet |
+| Audit trail (write and read) | Done. Paged with `page` and `per_page`, and filtered by `action`, `target_type`, `target_id`, `actor_role` and a `from`/`to` date range (Asia/Colombo days). Filters run in SQL as bound parameters |
 | Zone list paging | Done (`page`, `per_page`, `meta`) |
 | Delivery report (`GET /api/v1/admin/reports/deliveries`, ADMIN and DISPATCHER) | Endpoint done. Numbers come from a stand-in until Members 2 and 3 implement `application.ReportReader`; `source` says so |
 | Merchant approval routes (A-11 to A-13) | Served by Member 4's module at the same paths (list, one, action). Not mounted here: a second registration would make Core API panic at startup. Covered by a wiring test |
@@ -137,6 +137,7 @@ They apply only the migrations this module needs (identity's `users` table and t
 | 2026-10-21 | Module baseline created | Architecture setup |
 | 2026-10-25 | Contract draft (surcharges, `/system-settings`) | Post-submission alignment |
 | 2026-11-12 | Added settings `parcels.max_weight_kg` (0.5 to 30) and `parcels.max_cod_cents` (0 to 10M, LKR cents) with migration `20261112000100` (adds `DECIMAL` value type). Added `cmd/seed`: 7 demo zones, prefixes, 5 settings, repeatable, refuses production (Doc 5 section 10.1) | Member 7 |
+| 2026-11-15 | `GET /api/v1/admin/audit-logs` accepts filters `action`, `target_type`, `target_id`, `actor_role`, `from`, `to` next to `page`/`per_page`. Totals count the filtered rows. `Store.ListAudit` now takes an `AuditFilter`. Added unit tests, a transport test and an integration test on real Postgres | Member 7 |
 | 2026-11-12 | `tests/openapi_contract_test.go` now mounts the admin routes (with a DB), because swagger.json documents them and the contract test requires every documented route to exist when `INTEGRATION=1` | Member 7 |
 | 2026-11-12 | Added swag annotations to the 10 admin handlers so they show in Swagger UI (`/swagger/`). Regenerated `docs/swagger.json` and the copy in `internal/events/swagger/` with `make swagger` | Member 7 |
 | 2026-11-09 | Zone and audit lists use `page`/`per_page` with `meta` (api-conventions 2.2) instead of `limit`. Added `GET /api/v1/admin/reports/deliveries` (ADMIN, DISPATCHER) behind a `ReportReader` interface with a labelled stand-in. Merchant approval routes left to Member 4's module (duplicate paths) | Member 7 |
