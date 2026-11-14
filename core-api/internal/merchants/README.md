@@ -27,7 +27,7 @@ The module requires two primary cryptographic secrets configured via environment
 | Variable | Format / Constraint | Purpose & Production Rule |
 | :--- | :--- | :--- |
 | `MERCHANT_API_KEY_PEPPER` | String ($\ge 32$ bytes of entropy) | Server-side HMAC pepper. In production, startup fails if unset or $< 32$ bytes. Never logged. |
-| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Base64-encoded 32-byte binary (AES-256) | Master key encrypting webhook signing secrets at rest. Decoded key must be exactly 32 bytes. Startup fails if missing or malformed in production. Never logged. |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | Base64-encoded 32-byte binary (AES-256, e.g., `openssl rand -base64 32`); 64-char hex accepted as fallback | Master key encrypting webhook signing secrets at rest. Decoded key must be exactly 32 bytes. Startup fails if missing or malformed in production. Never logged. |
 | `MERCHANT_KEY_ENV_PREFIX` | `sd_live_` or `sd_test_` | API key environment prefix. Production strictly enforces `sd_live_`. |
 
 ### 2.2 Merchant Status State Machine
@@ -133,3 +133,4 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-11-07 | Completed Steps 1–4: Migrations, Domain, Application, Infrastructure, Transport & Wiring | Member 4 / Antigravity |
 | 2026-11-07 | Hardened Security & Config: Base64 AES-256 keys, pepper validation, non-panicking DB querier, full prefix DB alignment | Member 4 / Antigravity |
+| 2026-11-13 | Integrated Member 1 (role promotion & audit logs), added hex key fallback, and implemented cross-module integration & E2E tests (`core-api/tests/merchants_integration_test.go`) | Member 4 / Antigravity |
