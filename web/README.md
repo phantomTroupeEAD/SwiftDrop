@@ -21,7 +21,7 @@ Public tracking and registration use the centered blue profile. Customer booking
 - **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
 - **Signed-in tracking:** Customers and merchants can open `/portal/tracking` to look up parcels they can access. Merchant tracking numbers link directly to this view.
 
-Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status and [test-ids.md](test-ids.md) for active selectors.
+Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status, [test-ids.md](test-ids.md) for active selectors, and [M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md](M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md) for the complete audit, redesign and migration guide.
 
 For local integration, Vite forwards tracking requests to the tracking service on port 8081 and the remaining API requests to Core API on port 8080. A real booking test needs a customer session and active pickup and delivery zones with a pricing rule.
 
