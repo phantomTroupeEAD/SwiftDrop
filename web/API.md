@@ -1,5 +1,41 @@
 # SwiftDrop Web Application — Consumed API Specifications & Client Contracts
 
+## Apple-style portal integration checkpoint
+
+Before requesting a booking quote, the web client resolves both five-digit postal codes through `GET /api/v1/zones?postal_code=...`. It uses the returned `data.id` values for pricing and reuses the same zones when submitting that quote's booking.
+
+| Role | Current pages and API integration | Remaining integration |
+| --- | --- | --- |
+| Public | Landing, sign-in, customer registration, public tracking | Verify OTP delivery and tracking updates against deployed services. |
+| Customer | Dashboard, booking, receipts, signed-in tracking, merchant application, AI chat | Verify quote, booking and receipt together with seeded pricing. Verify AI replies and booking prefill against the assistant service. |
+| Merchant | Dashboard, profile, orders and CSV import, API keys, webhooks | Verify tenant isolation and that CSV imports create parcels through the live booking adapter. |
+| Dispatcher | Dispatcher dashboard route | Connect the dispatch board and assignment operations to the dispatch API. |
+| Courier | Courier dashboard route | Replace local task fixtures and status changes with delivery and proof-of-delivery operations. |
+| Admin | Admin dashboard with user management requests | Connect delivery zones, settings, audit logs, delivery reports, and merchant approvals. |
+
+Background event processing, internal service interfaces, and health probes support these workflows through the backend.
+
+SwiftDrop Assistant sends `POST /api/v1/ai/chat` with the customer Bearer token and JSON fields `prompt` and optional `conversation_id`. The service returns `reply`, `conversation_id`, and optional `actions`. The chat renders replies as text and accepts only a recognized booking action. It prefills supported postal codes, weight, and service level. Booking still requests an authoritative quote and requires confirmation.
+
+Retrying the merchant profile repeats only `GET /api/v1/merchants/me` with the current session token. Order and integration requests use their existing endpoints.
+
+The routed portal uses real requests and never substitutes sample quotes, credentials, orders or tracking data. The older design preview and prototype dashboard notes below describe separate pages.
+
+- Booking sends `origin_zone_id`, `destination_zone_id`, `actual_weight_kg`, `dimensions` and `service_level` to the pricing handler. It renders the returned `fee_cents`. The parcel transport on `feature/member-02-http-transport` takes the quote ID, top-level `recipient_name` and `recipient_phone`, parcel dimensions, weight, and pickup and dropoff addresses. The service level belongs to the quote. The client keeps the same idempotency key when retrying an uncertain submission. The pricing and parcel routers still need to be available in the running Core API for live verification. The older examples below describe the original design.
+- Public tracking uses the two URLs in §2.3 and reads the city from `destination.city` in the tracking service response. A `status_update` event triggers a REST refresh. EventSource reconnects automatically, and the page refreshes via REST every 30 seconds while it reconnects.
+- Signed-in customer and merchant tracking uses `GET /api/v1/tracking/{tracking_number}` with the session Bearer token. It displays only the authorized destination and milestone fields and refreshes through REST every 30 seconds after a successful lookup.
+- The customer home requests `GET /api/v1/parcels?page=1&page_size=20` and reads the documented `items` collection. This list route must be enabled for recent customer parcels to appear. The merchant home uses `GET /api/v1/merchant/orders`. Both send the signed-in session token and summarize only the returned records.
+- After booking, the frontend uses the returned parcel ID to request `GET /api/v1/parcels/{id}/receipt` with a Bearer token. It displays the server-issued receipt number, formatted total and payment status. The route is documented in the [parcel contract](../core-api/internal/parcels/API.md) and is pending registration by the parcels module. A missing receipt leaves the booking confirmation and tracking link available.
+- Merchant orders are paginated in the browser after filtering. The current orders endpoint returns one collection and does not implement server-side pagination. Browser address autofill does not require a saved-address endpoint.
+- Merchant requests follow the handler on `dev`. Application submission sends `business_name`, `contact_email`, `contact_phone` and `address: { line1, city, country }`. `GET /merchants/me` retrieves the application status or the signed-in merchant's profile, including `merchant_id`. API key creation sends `label` and `scopes` and displays the returned `api_key` once. The client also accepts `plaintext_key` if returned by the test deployment. Webhook creation sends `url` and `events` from `GET /merchants/webhook-event-types` and displays `signing_secret` once. The portal lists and removes credentials using the matching `/merchants/me/api-keys` and `/merchants/me/webhooks` routes.
+- `GET /merchant/orders` lists tenant orders. CSV import posts individual records to `/merchant/orders` using one idempotency key per record and reuses those keys on retry while the page remains open. The current merchant service uses a booking adapter stub. Verify the real adapter before relying on order creation.
+- On page load, the frontend restores a real session with `POST /api/v1/auth/refresh`. The browser sends the HttpOnly refresh cookie and receives its rotated replacement. The access token stays in memory. Protected routes wait for restoration before redirecting to sign-in.
+- Webhook secret rotation still needs coordinated implementation and verification.
+
+Clean UI update (6 November 2026): presentation cleanup introduces no HTTP contract changes. Booking confirmation, order import and tracking lookup remain unconnected and report that outcome on activation. Quote values are fixed sample data; tracking samples do not mirror typed lookup numbers or private booking addresses. No simulated live-connection state is presented as a real service connection.
+
+Theme-preview update (6 November 2026): the Option 3 signature showcase makes no network requests and introduces no API changes. Its sample booking and tracking forms only update a local status message. It is not evidence of backend integration.
+
 > **Workspace:** `web/`  
 > **Target Audience:** Frontend Developers (Members 6 & 7), QA Engineers (Member 10), and Backend Service Owners  
 > **Base Path Variable:** `VITE_API_BASE_URL` (defaults to `/api/v1` via Traefik Gateway)  
@@ -344,6 +380,8 @@ data: {"tracking_number":"SD-20261026-00142","status":"OUT_FOR_DELIVERY","occurr
 
 ## 3. Standard Error Envelope
 
+Authentication, registration, and portal clients display the error's `correlation_id` as a request reference. If the error body omits it, the client uses the `X-Request-ID` response header when available.
+
 When any backend API request fails, the shared client parses the standard error response:
 
 ```json
@@ -382,3 +420,9 @@ Every interactive form element, trigger button, and status indicator maintains a
 | Tracking Status | `data-testid="tracking-status-badge"` | Current lifecycle badge |
 | Batch CSV Input | `data-testid="batch-csv-file-input"` | Merchant CSV file input |
 | One-Time Key Copy | `data-testid="one-time-key-copy-btn"` | Copies raw API key once |
+
+## Implementation checkpoint — 5 November 2026
+
+This document describes consumed API contracts, not proof that those workflows are integrated. The M6 customer and merchant dashboards currently render prototype data: quotes are calculated locally, booking/receipt actions show alerts, tracking is static, CSV browsing is unwired, and the example key is not an issued one-time credential. These must be replaced with approved service calls before acceptance.
+
+The testability foundation adds DOM selectors and accessible field labels only; it changes no HTTP request, response, authentication or backend contract. See [test-ids.md](test-ids.md) for implemented versus reserved selectors and [design.mdx](design.mdx) for the visual baseline. Shared login integration remains a coordinated M6/M7 task.

@@ -1,0 +1,164 @@
+# SwiftDrop UI design system
+
+## Member 6 dashboard implementation
+
+Use the canonical [shared design specification](design.md) for colors, typography, and component rules. The Member 6 workspace is implemented in [RoleHome.tsx](src/features/dashboards/RoleHome.tsx). It uses the same Apple-style surfaces and shared components for customers and merchants, with the signed-in role applied through `data-role`.
+
+| Area | Pattern |
+| --- | --- |
+| Header | SwiftDrop brand links to `/dashboard`. Sign out stays on the right. |
+| Page layout | Center content at a maximum width of 896px with 16px side padding on phones and 24px on wider screens. Use a neutral canvas, bordered surface cards, and 20px between sections. |
+| Overview | Show the role title and the most useful next action. Use the primary button for that action and outline buttons for supporting links. |
+| Shipment summary | Show three counts from the loaded collection. Stack cards on phones and place them in one row on wider screens. Customer counts cover the latest fetched page. Merchant counts cover the fetched order list. |
+| Recent activity | Use the shared table for tracking number, status, and booking date. Show up to six recent records. Tracking numbers open the signed-in tracking route. |
+| Feedback | Show a loading message while fetching, an empty message for a successful empty response, and an error with **Retry** when fetching fails. Display counts only after a successful response. |
+
+### Role content and access
+
+- **Customer:** Lead with **Book a parcel**. Show recent parcels and signed-in tracking. Put **Apply for a merchant account** under **Account**. Approval and a session with the merchant role are required to access merchant tools.
+- **Merchant:** Lead with **View orders**. Show recent company orders and shipments that need attention. Put API keys and webhooks under **Integrations**.
+- **Public visitor:** Keep public tracking separate. Display only the fields returned by the public tracking endpoint.
+- **Operations roles:** Reuse the shared shell, tokens, and feedback patterns when designing admin, dispatcher, and courier screens. Use Member 7’s routes and workflows for their content.
+
+The frontend chooses the workspace from the authenticated role. The backend enforces parcel ownership and merchant tenant access. The customer workspace uses the documented parcel-list API, which must be enabled to show live records. The merchant workspace uses the merchant orders API. Both workspace layouts and their retry behavior were checked with simulated responses.
+
+The sections below retain the earlier design proposal for reference. For implementation, follow the shared specification and the dashboard patterns above.
+
+- **Version** — 1.0, implementation baseline
+- **Reference** — [Apple-style SwiftDrop prototype](public/scratch-apple.html), using its default Apple variant
+- **Audience** — Frontend contributors and reviewers
+
+The Member 6 portal implements the public, customer, and merchant presets. The dispatcher, courier, and admin presets apply when their respective screens adopt this design system.
+
+Read this guide before designing or implementing a SwiftDrop screen. Every screen inherits the Apple-style foundation and applies the profile for the **user role it serves**. Feature owners maintain screens and document workflow details. A developer's member number never selects a visual profile.
+
+Use the public profile for public tracking and shared account entry screens, even if a signed-in user follows a link to public tracking. On protected screens, use the role from the authenticated session and the route's access rules. Keep permission checks separate from visual styling.
+
+## 1. Shared visual rules
+
+| Role | Value | Use |
+| --- | --- | --- |
+| Canvas | `#F5F5F7` | Page background |
+| Surface | `#FFFFFF` | Cards, dialogs and navigation |
+| Text | `#1D1D1F` | Headings and body |
+| Muted text | `#59595F` | Helpers and secondary labels |
+| Divider | `#D2D2D7` | Card edges and table separators |
+| Control border | `#828289` | Inputs and selects |
+| Apple Blue | `#0071E3` | Brand and keyboard focus |
+| Action Blue | `#0062C5` | Default primary buttons with white text and actionable links |
+| Action hover | `#0057AF` | Default primary button hover |
+| Action tint | `#EAF3FE` | Default secondary actions and selected surfaces |
+
+- Use the system sans-serif stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`). Use 28–40px for page titles, 20px for section headings, 16px for body text, and 14px for form labels. Use tabular numbers for dates, prices and weights in tables.
+- Use a spacing scale of 4, 8, 12, 16, 24, 32 and 48px. Start with 8px between a label and its input, 16px between fields, and 24px between sections.
+- Start with 16px card padding on mobile and 24px on wider screens. Use 16px card corners and 9px control corners. Use a light border to separate surfaces.
+- Use a visible blue focus ring and a clear hover and disabled state. Aim for at least 44px of touch area for primary controls. Use labels, icons where helpful, and color together for status and feedback.
+- Keep mobile layouts single column when space is limited. Give wide tables their own scroll area and keep the page width stable. Respect reduced-motion preferences when adding animation.
+- Reuse existing components and tokens when they match. The current [portal CSS](src/features/customer-merchant/portal/portal.css) is scoped to Member 6 and serves as a reference for future shared styles.
+
+### Role palette presets
+
+Apply the preset through semantic tokens such as `--action-primary`, `--action-on-primary`, `--action-hover`, and `--action-tint`, scoped to the role's shell. Use `#FFFFFF` for on-primary text in every preset. Use the primary color for the main action and the tint for selected surfaces or quiet secondary actions. Keep the canvas, typography, branding, and focus treatment shared.
+
+| Role | Primary action | Hover | Tint |
+| --- | --- | --- | --- |
+| Public visitor | `#0062C5` | `#0057AF` | `#EAF3FE` |
+| `CUSTOMER` | `#0062C5` | `#0057AF` | `#EAF3FE` |
+| `MERCHANT` | `#00695C` | `#005349` | `#E7F5F1` |
+| `DISPATCHER` | `#4D42A8` | `#3D3488` | `#EFEDFC` |
+| `COURIER` | `#265082` | `#1E4068` | `#EAF1FB` |
+| `ADMIN` | `#384659` | `#293648` | `#EDF0F4` |
+
+Use the role accent sparingly. Reserve strong fills for primary actions, quiet tints for selection, and neutral surfaces for data. Check text contrast and focus visibility on the surfaces where they actually appear.
+
+## 2. How actions should work
+
+| Action type | Appearance and behavior |
+| --- | --- |
+| Primary | One prominent action per form or decision area. Use a verb and an object, such as **Confirm booking** or **Assign courier**. |
+| Secondary | Use a tinted or outlined button for actions like **Back**, **Cancel**, and **Reset filters**. |
+| Navigation | Use a link for destinations such as **View order** and **Track parcel**. Use a button for submitting, changing, or retrying an operation. |
+| Destructive or security-sensitive | Name the action and target in the confirmation, such as **Revoke key** or **Remove webhook**. Explain the consequence and offer a clear cancel action. |
+| Unavailable | If the action is temporarily blocked, show why and what the user can do. If the role has no access, omit the control and enforce permissions on the server. |
+
+While a request is pending, show progress and prevent duplicate submissions. After it resolves, show the actual result or an actionable error. Preserve entered values on recoverable errors. Use **Retry** for transient failures and follow the API's retry and idempotency rules.
+
+Use the same words for the same operation across screens. Map server states to readable status labels and use these shared foreground/background pairs in every role:
+
+| Meaning | Foreground | Background | Example |
+| --- | --- | --- | --- |
+| Neutral | `#41454D` | `#EEEFF2` | Pending |
+| Informational | `#13437A` | `#EAF3FE` | In transit |
+| Success | `#185C37` | `#E7F5EC` | Delivered |
+| Attention | `#874400` | `#FFF4DE` | Action needed |
+| Error | `#9E2925` | `#FFF1F0` | Delivery failed |
+
+Use an explicit label for every status. Keep lifecycle badges and destructive actions independent of the role accent.
+
+## 3. Components, phone layouts and feedback
+
+| Component | Shared behavior | What the screen owner can customize |
+| --- | --- | --- |
+| App shell | Keep branding, current section, and account actions predictable. Preserve a logical keyboard order. | Navigation entries and whether the role needs a sidebar, tabs, or a compact mobile header. |
+| Form and stepper | Give every control a visible label. Show errors beside the field and keep the current step clear in text. | Field order, grouping, helpers, step labels, and role-specific actions. |
+| Cards, tables and lists | Make status and key identifiers easy to scan. Put action labels beside icons when the meaning could be unclear. | Columns, sort and filter controls, row density, and whether small screens show a stacked list or a scrollable table. |
+| Dialog and menu | Name the dialog, support keyboard dismissal where safe, and return focus to the trigger. | Confirmation copy, affected item, fields, and secondary choices. |
+| Phone display | Start with a single column, readable labels, and at least 16px horizontal padding at 375px. Keep tap targets and primary actions reachable. | Move filters into a drawer or use a sticky action bar when it helps. Check that it doesn't cover content or focused fields. |
+
+For each screen, specify the states that apply:
+
+- **Loading:** Use a skeleton for predictable content or short text such as “Loading orders…”. Preserve the layout and use a status announcement for assistive technology. For a mutation, show “Saving…” or “Assigning…” on the button and prevent duplicate submission.
+- **Empty:** Explain what is missing and offer the next step. Use “No orders yet” for an empty account and “No orders match your filters” with **Reset filters** for a filtered list.
+- **Validation and errors:** Tell the user what happened and what to do. Use “Enter a pickup address” beside the field and “Couldn't load orders. Try again.” for a request failure. Preserve entered values, show a reference ID if supplied, and never display secrets or raw stack traces.
+- **Success:** Confirm the actual result near the action or in a status region. Use “Booking confirmed” and the tracking number returned by the server. A toast can reinforce the message, with an inline result for details the user needs later.
+- **Animation:** Use 150–220ms for short transitions such as hover, menus, and dialogs. Use opacity or a small position change. Respect `prefers-reduced-motion` by removing nonessential movement and skeleton shimmer. Keep the status text visible.
+
+## 4. Role profiles
+
+Choose the matching profile first. Each profile defines what to prioritize, how the screen adapts to phones, and the next action the user should see. Show a state-changing action only when the role, current workflow state, and backend contract allow it.
+
+| User role | Layout and component emphasis | Phone behavior | Primary action and supporting actions |
+| --- | --- | --- | --- |
+| Public visitor | Centered tracking form, current status, milestone timeline | Search and timeline in one column | **Track parcel**. Retry lookup or enter another tracking number. |
+| Customer | Guided booking stepper, grouped contact fields, clear quote and confirmation | Stack form sections and keep the current step visible | **Get quote**, then **Confirm booking**. Back, edit parcel details, or track the confirmed parcel. |
+| Merchant | Orders table with search, status filters, and distinct import and credentials screens | Show tracking number, status, and next action first. Collapse secondary details. | **Submit orders**, **Create key**, or **Add webhook**, according to screen. Confirm revocation or removal separately. |
+| Dispatcher | Dense assignment queue with status filters and parcel or courier details beside the queue | Stack parcel cards and open details in a separate panel. Keep urgent states easy to scan. | **Assign courier** for eligible parcels. View details, filter, or reassign when allowed. |
+| Courier | Task-first layout with readable addresses, delivery status, and proof controls | Use generous targets and keep the next task action reachable with one hand | **Record delivery** on an eligible task. Add proof or report a failed attempt. |
+| Admin | Searchable records and settings sections with clear audit context | Stack settings and keep record tables in their own scroll region | **Save changes** on editable settings. Review records and confirm permitted sensitive actions. |
+
+Role variants extend the same components. Choose content, density, action order, and messages for the task. For example, a customer sees “Getting quote…” on the booking button while a dispatcher sees “Assigning courier…” on the same button variant. Keep shared keyboard, focus, and error behavior. Public tracking displays only approved public fields.
+
+## 5. Before building a screen
+
+Developers and coding agents should select the role profile, check existing components and the API contract, then fill out this screen brief in the issue or PR before writing UI code.
+
+```text
+User role and preset:
+Screen / route:
+Feature owner or reviewer:
+User goal and allowed actions by workflow state:
+Shared components and role variants:
+Desktop and phone layout (navigation, spacing, table or card display):
+Primary / secondary / destructive actions and confirmation:
+Loading / empty / validation / error / success messages:
+Animation and reduced-motion behavior:
+API, permissions, and new or updated test IDs:
+```
+
+For example, a dispatcher board can use the indigo role palette, a dense desktop table and stacked parcel cards on phones. Show **Assign courier** on assignable parcels, disable duplicate submission during **Assigning…**, and show the updated assignment after the API succeeds.
+
+## 6. Changing the guide together
+
+1. **Screen-specific change:** Customize fields, density, display, motion, messages, and actions within the role profile. Record the choice in the screen brief and check the affected contract.
+2. **Role or shared change:** Update this guide and affected code together in a PR for changes to a role palette, shared component, or common interaction. Include a before and after view and ask affected frontend owners to review.
+3. **Cross-module change:** Coordinate new permissions, status transitions, payloads, or endpoints with the backend owner before relying on them in the UI.
+4. **Testability:** Keep existing selectors stable. Add or update entries in [test-ids.md](test-ids.md) when testable controls or states change.
+
+## 7. Screen review checklist
+
+- [ ] Applies the intended role palette and uses shared typography, controls, and status language.
+- [ ] Makes the next action obvious for the signed-in role and current state.
+- [ ] Handles loading, empty, success, and error states where applicable.
+- [ ] Works with keyboard navigation and visible focus, and fits a 375px viewport.
+- [ ] Uses real API outcomes in product routes and labels sample data in demos.
+- [ ] Documents new or changed test IDs and identifies any contract change.

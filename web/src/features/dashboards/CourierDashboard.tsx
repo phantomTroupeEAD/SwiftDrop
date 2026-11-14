@@ -81,60 +81,60 @@ export const CourierDashboard: React.FC = () => {
       {/* Driver Shift & Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Shift Card */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs text-slate-400">Shift Status</span>
-            <div className="text-base font-bold text-white flex items-center gap-2">
+            <span className="text-xs text-text-muted">Shift Status</span>
+            <div className="text-base font-bold text-text flex items-center gap-2">
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
-                  onDuty ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                  onDuty ? 'bg-status-success-bg animate-pulse' : 'bg-surface-active'
                 }`}
               />
               {onDuty ? 'ON DUTY' : 'OFF DUTY'}
             </div>
-            <div className="text-[11px] text-slate-400">Vehicle: Bike #BK-204</div>
+            <div className="text-[11px] text-text-muted">Vehicle: Bike #BK-204</div>
           </div>
           <button
             onClick={() => setOnDuty(!onDuty)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
               onDuty
-                ? 'bg-rose-950/40 text-rose-300 border-rose-800/50 hover:bg-rose-900/50'
-                : 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/50'
+                ? 'bg-status-error-bg text-status-error-ink border-status-error-border hover:bg-status-error-bg'
+                : 'bg-status-success-bg text-status-success-ink border-status-success-border hover:bg-status-success-bg'
             }`}
           >
             {onDuty ? 'End Shift' : 'Start Shift'}
           </button>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400">Assigned Run</div>
-            <div className="text-2xl font-bold text-white mt-1">3 Stops</div>
-            <div className="text-[11px] text-emerald-400">Zone: Colombo 03-05</div>
+            <div className="text-xs text-text-muted">Assigned Run</div>
+            <div className="text-2xl font-bold text-text mt-1">3 Stops</div>
+            <div className="text-[11px] text-status-success-ink">Zone: Colombo 03-05</div>
           </div>
-          <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400">
+          <div className="p-2.5 bg-primary-tint border border-border rounded-xl text-primary">
             <Navigation className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400">Delivered Today</div>
-            <div className="text-2xl font-bold text-emerald-400 mt-1">1 / 3</div>
-            <div className="text-[11px] text-slate-400">On-Time SLA: 100%</div>
+            <div className="text-xs text-text-muted">Delivered Today</div>
+            <div className="text-2xl font-bold text-status-success-ink mt-1">1 / 3</div>
+            <div className="text-[11px] text-text-muted">On-Time SLA: 100%</div>
           </div>
-          <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+          <div className="p-2.5 bg-status-success-bg border border-status-success-border rounded-xl text-status-success-ink">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400">COD Collected</div>
-            <div className="text-xl font-bold text-amber-400 mt-1">LKR 0.00</div>
-            <div className="text-[11px] text-slate-400">1 COD pending</div>
+            <div className="text-xs text-text-muted">COD Collected</div>
+            <div className="text-xl font-bold text-status-warning-ink mt-1">LKR 0.00</div>
+            <div className="text-[11px] text-text-muted">1 COD pending</div>
           </div>
-          <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+          <div className="p-2.5 bg-status-warning-bg border border-status-warning-border rounded-xl text-status-warning-ink">
             <Clock className="w-5 h-5" />
           </div>
         </div>
@@ -143,8 +143,8 @@ export const CourierDashboard: React.FC = () => {
       {/* Delivery Task Cards List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-white">Today's Stop-by-Stop Run</h2>
-          <span className="text-xs text-slate-400">Tap actions as you reach recipients</span>
+          <h2 className="text-base font-semibold text-text">Today's Stop-by-Stop Run</h2>
+          <span className="text-xs text-text-muted">Tap actions as you reach recipients</span>
         </div>
 
         <div className="space-y-3">
@@ -153,57 +153,57 @@ export const CourierDashboard: React.FC = () => {
               key={task.id}
               className={`p-5 rounded-2xl border transition-all ${
                 task.status === 'DELIVERED'
-                  ? 'bg-slate-950/50 border-slate-800/50 opacity-75'
+                  ? 'bg-canvas border-border opacity-75'
                   : task.status === 'ATTEMPT_FAILED'
-                  ? 'bg-rose-950/20 border-rose-900/50'
-                  : 'bg-slate-900/80 border-slate-800 shadow-md'
+                  ? 'bg-status-error-bg border-status-error-border'
+                  : 'bg-surface border-border '
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-[11px] font-bold text-slate-300 flex items-center justify-center">
+                    <span className="w-5 h-5 rounded-full bg-surface-subtle text-[11px] font-bold text-text flex items-center justify-center">
                       {index + 1}
                     </span>
-                    <span className="font-mono font-bold text-sm text-blue-400">
+                    <span className="font-mono font-bold text-sm text-primary">
                       {task.trackingNumber}
                     </span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                         task.status === 'DELIVERED'
-                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40'
+                          ? 'bg-status-success-bg text-status-success-ink border-status-success-border'
                           : task.status === 'OUT_FOR_DELIVERY'
-                          ? 'bg-blue-950/60 text-blue-300 border-blue-800/40'
+                          ? 'bg-primary-tint text-primary border-border'
                           : task.status === 'ATTEMPT_FAILED'
-                          ? 'bg-rose-950/60 text-rose-300 border-rose-800/40'
-                          : 'bg-amber-950/60 text-amber-300 border-amber-800/40'
+                          ? 'bg-status-error-bg text-status-error-ink border-status-error-border'
+                          : 'bg-status-warning-bg text-status-warning-ink border-status-warning-border'
                       }`}
                     >
                       {task.status.replace(/_/g, ' ')}
                     </span>
                   </div>
 
-                  <div className="text-sm font-semibold text-slate-200">
+                  <div className="text-sm font-semibold text-text">
                     {task.recipientName}
                   </div>
 
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <div className="text-xs text-text-muted flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0" />
                     <span>{task.address}, {task.city}</span>
                   </div>
 
-                  <div className="text-xs text-slate-400 flex items-center gap-3 pt-1">
-                    <span className="flex items-center gap-1 text-slate-300 font-mono">
-                      <Phone className="w-3 h-3 text-slate-500" />
+                  <div className="text-xs text-text-muted flex items-center gap-3 pt-1">
+                    <span className="flex items-center gap-1 text-text font-mono">
+                      <Phone className="w-3 h-3 text-text-muted" />
                       {task.phone}
                     </span>
-                    <span className="text-amber-400 font-semibold">
+                    <span className="text-status-warning-ink font-semibold">
                       COD: {task.codAmount}
                     </span>
                   </div>
 
                   {task.proofType && (
-                    <div className="text-[11px] text-emerald-400 flex items-center gap-1 pt-1 font-mono">
+                    <div className="text-[11px] text-status-success-ink flex items-center gap-1 pt-1 font-mono">
                       <CheckCircle2 className="w-3 h-3" />
                       {task.proofType}
                     </div>
@@ -215,7 +215,7 @@ export const CourierDashboard: React.FC = () => {
                   {task.status === 'ASSIGNED' && (
                     <button
                       onClick={() => updateTaskStatus(task.id, 'PICKED_UP')}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 cursor-pointer"
+                      className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-active text-text rounded-lg text-xs font-semibold border border-border cursor-pointer"
                     >
                       Mark Picked Up
                     </button>
@@ -224,7 +224,7 @@ export const CourierDashboard: React.FC = () => {
                   {task.status === 'PICKED_UP' && (
                     <button
                       onClick={() => updateTaskStatus(task.id, 'OUT_FOR_DELIVERY')}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm cursor-pointer"
+                      className="px-3 py-1.5 bg-primary-tint hover:bg-primary-tint text-text rounded-lg text-xs font-semibold  cursor-pointer"
                     >
                       Out for Delivery
                     </button>
@@ -234,14 +234,14 @@ export const CourierDashboard: React.FC = () => {
                     <>
                       <button
                         onClick={() => setActiveModal({ id: task.id, type: 'POD' })}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        className="px-3 py-1.5 bg-status-success-bg hover:bg-status-success-bg text-text rounded-lg text-xs font-semibold  flex items-center gap-1.5 cursor-pointer"
                       >
                         <PenTool className="w-3.5 h-3.5" />
                         Capture POD
                       </button>
                       <button
                         onClick={() => setActiveModal({ id: task.id, type: 'FAIL' })}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 rounded-lg text-xs font-semibold border border-slate-700 cursor-pointer"
+                        className="px-3 py-1.5 bg-surface-subtle hover:bg-status-error-bg text-text-muted hover:text-status-error-ink rounded-lg text-xs font-semibold border border-border cursor-pointer"
                       >
                         Failed Attempt
                       </button>
@@ -249,7 +249,7 @@ export const CourierDashboard: React.FC = () => {
                   )}
 
                   {task.status === 'DELIVERED' && (
-                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+                    <span className="text-xs text-status-success-ink flex items-center gap-1">
                       <CheckCircle2 className="w-4 h-4" /> Drop Completed
                     </span>
                   )}
@@ -263,30 +263,30 @@ export const CourierDashboard: React.FC = () => {
       {/* Proof of Delivery (POD) Signature Modal Mock */}
       {activeModal && activeModal.type === 'POD' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Camera className="w-5 h-5 text-emerald-400" />
+          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 space-y-4 ">
+            <h3 className="text-base font-bold text-text flex items-center gap-2">
+              <Camera className="w-5 h-5 text-status-success-ink" />
               Capture Proof of Delivery (POD)
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-text-muted">
               Record a recipient electronic signature or photo attachment to complete delivery.
             </p>
 
             <div className="space-y-2">
-              <label className="text-xs text-slate-300 font-medium">Recipient Signature Name</label>
+              <label className="text-xs text-text font-medium">Recipient Signature Name</label>
               <input
                 type="text"
                 placeholder="e.g. Kasun W."
                 value={signatureText}
                 onChange={(e) => setSignatureText(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                className="w-full bg-canvas border border-border rounded-xl px-3 py-2 text-xs text-text outline-none focus:border-border"
               />
             </div>
 
-            <div className="h-28 rounded-xl bg-slate-950 border border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-500 text-xs gap-1">
-              <PenTool className="w-6 h-6 stroke-1 text-slate-400" />
+            <div className="h-28 rounded-xl bg-canvas border border-dashed border-border flex flex-col items-center justify-center text-text-muted text-xs gap-1">
+              <PenTool className="w-6 h-6 stroke-1 text-text-muted" />
               <span>Digital Signature Pad Active</span>
-              <span className="text-[10px] text-slate-600">Touch or stylus canvas area</span>
+              <span className="text-[10px] text-text-muted">Touch or stylus canvas area</span>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -298,13 +298,13 @@ export const CourierDashboard: React.FC = () => {
                     `Signed by ${signatureText || 'Recipient'}`
                   )
                 }
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                className="flex-1 py-2 bg-status-success-bg hover:bg-status-success-bg text-text rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Confirm Delivery
               </button>
               <button
                 onClick={() => setActiveModal(null)}
-                className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-semibold cursor-pointer"
+                className="py-2 px-4 bg-surface-subtle hover:bg-surface-active text-text-muted rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
@@ -316,19 +316,19 @@ export const CourierDashboard: React.FC = () => {
       {/* Failed Delivery Attempt Reason Modal Mock */}
       {activeModal && activeModal.type === 'FAIL' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-rose-400" />
+          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 space-y-4 ">
+            <h3 className="text-base font-bold text-text flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-status-error-ink" />
               Record Delivery Attempt Failure
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-text-muted">
               Select failure reason to reschedule delivery route.
             </p>
 
             <select
               value={failReason}
               onChange={(e) => setFailReason(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none"
+              className="w-full bg-canvas border border-border rounded-xl px-3 py-2 text-xs text-text outline-none"
             >
               <option value="RECIPIENT_UNAVAILABLE">RECIPIENT_UNAVAILABLE (Doorbell unanswered)</option>
               <option value="INVALID_ADDRESS">INVALID_ADDRESS (House number not found)</option>
@@ -345,13 +345,13 @@ export const CourierDashboard: React.FC = () => {
                     `Attempt Failed: ${failReason}`
                   )
                 }
-                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                className="flex-1 py-2 bg-status-error-bg hover:bg-status-error-bg text-text rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Log Attempt & Reschedule
               </button>
               <button
                 onClick={() => setActiveModal(null)}
-                className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-semibold cursor-pointer"
+                className="py-2 px-4 bg-surface-subtle hover:bg-surface-active text-text-muted rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
