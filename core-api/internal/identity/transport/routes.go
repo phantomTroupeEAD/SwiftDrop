@@ -20,6 +20,10 @@ func RegisterRoutes(mux *http.ServeMux, authHandler *AuthHandler, security *Secu
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.Refresh)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
 
+	// ── Public Password Recovery Endpoints (OTP-Verified) ────────────────────
+	mux.HandleFunc("POST /api/v1/auth/forgot-password/send-otp", authHandler.ForgotPasswordSendOTP)
+	mux.HandleFunc("POST /api/v1/auth/forgot-password/reset", authHandler.ResetPassword)
+
 	// ── Protected Auth Endpoints (Bearer JWT required) ────────────────────────
 	mux.Handle("GET /api/v1/auth/me", security.Authenticate(http.HandlerFunc(authHandler.GetMe)))
 	// PUT /me: used for Google Approach A progressive onboarding (phone + terms)

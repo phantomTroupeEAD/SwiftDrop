@@ -14,6 +14,26 @@ import (
 	"github.com/swiftdrop/core-api/internal/identity/transport"
 )
 
+type testOIDCClient struct{}
+
+func (c *testOIDCClient) VerifyIDToken(_ context.Context, idToken string) (*application.OIDCClaims, error) {
+	if idToken == "mock_invalid_token" || idToken == "" {
+		return nil, domain.ErrInvalidToken
+	}
+	email := idToken
+	for _, prefix := range []string{"mock_", "dev_", "google_id_token_"} {
+		if len(email) > len(prefix) && email[:len(prefix)] == prefix {
+			email = email[len(prefix):]
+		}
+	}
+	return &application.OIDCClaims{
+		Subject:       "google_sub_" + email,
+		Email:         email,
+		EmailVerified: true,
+		Name:          "Test Google User",
+	}, nil
+}
+
 func setupTestRouter() (*http.ServeMux, application.TokenProvider, *application.AuthService) {
 	hasher := infrastructure.NewStandardPasswordHasher()
 	tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-at-least-32-chars-long")
@@ -22,7 +42,7 @@ func setupTestRouter() (*http.ServeMux, application.TokenProvider, *application.
 	otpRepo := infrastructure.NewMemoryOTPRepository()
 	emailSender := infrastructure.NewDevEmailSender()
 	oauthRepo := infrastructure.NewMockOAuthRepository()
-	oidcClient := infrastructure.NewGoogleOIDCClient("")
+	oidcClient := &testOIDCClient{}
 
 	authService := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider).
 		WithOTP(otpRepo, emailSender).
@@ -544,6 +564,82 @@ func TestGoogleLogin(t *testing.T) {
 
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("Expected 401 Unauthorized, got %d", rec.Code)
+		}
+	})
+}
+
+func TestAuthHandler_ForgotPassword(t *testing.T) {
+	hasher := infrastructure.NewStandardPasswordHasher()
+	tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-at-least-32-chars-long")
+	userRepo := infrastructure.NewMockUserRepository(hasher)
+	tokenRepo := infrastructure.NewMockTokenRepository()
+	otpRepo := infrastructure.NewMemoryOTPRepository()
+	emailSender := infrastructure.NewDevEmailSender()
+	authService := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider).
+		WithOTP(otpRepo, emailSender)
+	security := transport.NewSecurityMiddleware(tokenProvider)
+	authHandler := transport.NewAuthHandler(authService)
+	mux := http.NewServeMux()
+	transport.RegisterRoutes(mux, authHandler, security)
+
+	t.Run("POST /forgot-password/send-otp returns 200 OK and enforces cooldown", func(t *testing.T) {
+		payload := []byte(`{"email":"customer@swiftdrop.local"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/forgot-password/send-otp", bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Second immediate request hits 429 cooldown
+		req2 := httptest.NewRequest(http.MethodPost, "/api/v1/auth/forgot-password/send-otp", bytes.NewBuffer(payload))
+		req2.Header.Set("Content-Type", "application/json")
+		rec2 := httptest.NewRecorder()
+		mux.ServeHTTP(rec2, req2)
+
+		if rec2.Code != http.StatusTooManyRequests {
+			t.Fatalf("Expected 429 Too Many Requests, got %d: %s", rec2.Code, rec2.Body.String())
+		}
+	})
+
+	t.Run("POST /forgot-password/reset returns 200 OK on valid OTP and updates password", func(t *testing.T) {
+		_ = otpRepo.SaveOTP(context.Background(), "reset:customer@swiftdrop.local", "778899")
+
+		payload := []byte(`{"email":"customer@swiftdrop.local","otp":"778899","new_password":"ResetPassword123!"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/forgot-password/reset", bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Verify login works with new password
+		loginPayload := []byte(`{"email":"customer@swiftdrop.local","password":"ResetPassword123!"}`)
+		loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBuffer(loginPayload))
+		loginReq.Header.Set("Content-Type", "application/json")
+		loginRec := httptest.NewRecorder()
+		mux.ServeHTTP(loginRec, loginReq)
+
+		if loginRec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK on login with new password, got %d: %s", loginRec.Code, loginRec.Body.String())
+		}
+	})
+
+	t.Run("POST /forgot-password/reset returns 400 on invalid OTP", func(t *testing.T) {
+		_ = otpRepo.SaveOTP(context.Background(), "reset:customer@swiftdrop.local", "123456")
+
+		payload := []byte(`{"email":"customer@swiftdrop.local","otp":"000000","new_password":"ResetPassword123!"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/forgot-password/reset", bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("Expected 400 Bad Request, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 }

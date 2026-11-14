@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+/// <reference types="vite/client" />
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthContext';
 import {
@@ -14,8 +15,23 @@ import {
   AlertCircle,
   Phone,
   CheckCircle2,
-  X,
 } from 'lucide-react';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          prompt: () => void;
+        };
+      };
+    };
+  }
+}
 
 export const LoginPage: React.FC = () => {
   const { login, loginWithGoogle, updateProfile } = useAuth();
@@ -28,10 +44,10 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Google Sign-In & Dev Selector State
-  const [googleModalOpen, setGoogleModalOpen] = useState(false);
-  const [googleTokenInput, setGoogleTokenInput] = useState('');
+  // Google Sign-In State
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
   // Progressive Onboarding Modal (Approach A for Google OAuth)
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -80,13 +96,12 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleGoogleSignIn = async (token: string) => {
+  const handleGoogleSignIn = useCallback(async (token: string) => {
     setGoogleLoading(true);
     setError(null);
 
     try {
       const { user: authedUser, requiresPhone } = await loginWithGoogle(token);
-      setGoogleModalOpen(false);
 
       if (requiresPhone) {
         // Approach A: prompt for phone number and terms acceptance
@@ -104,6 +119,50 @@ export const LoginPage: React.FC = () => {
     } finally {
       setGoogleLoading(false);
     }
+  }, [loginWithGoogle]);
+
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id) return;
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          if (response.credential) {
+            void handleGoogleSignIn(response.credential);
+          } else {
+            setError('Google Sign-In did not return a credential.');
+          }
+        },
+      });
+      setGoogleReady(true);
+    };
+
+    if (window.google?.accounts?.id) {
+      initGoogle();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+  }, [googleClientId, handleGoogleSignIn]);
+
+  const handleGoogleButtonClick = () => {
+    setError(null);
+    if (!googleClientId) {
+      setError('Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID.');
+      return;
+    }
+    if (!googleReady || !window.google?.accounts?.id) {
+      setError('Google Sign-In is still loading. Please try again in a moment.');
+      return;
+    }
+    window.google.accounts.id.prompt();
   };
 
   const handleOnboardingSubmit = async (e: React.FormEvent) => {
@@ -238,9 +297,9 @@ export const LoginPage: React.FC = () => {
                   <label className="block text-xs font-medium text-slate-300">
                     Password
                   </label>
-                  <a href="#forgot" className="text-xs text-blue-400 hover:text-blue-300 transition">
+                  <Link to="/auth/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition">
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -305,7 +364,7 @@ export const LoginPage: React.FC = () => {
             {/* Google OAuth Button */}
             <button
               type="button"
-              onClick={() => setGoogleModalOpen(true)}
+              onClick={handleGoogleButtonClick}
               disabled={googleLoading}
               className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 flex items-center justify-center gap-2.5 transition cursor-pointer"
             >
@@ -344,102 +403,6 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* ── Google Sign-In Selector Modal (Dev & Testing Friendly) ── */}
-      {googleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
-            <button
-              onClick={() => setGoogleModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Google Sign-In</h3>
-                <p className="text-slate-400 text-xs">Simulate or authenticate via Google OAuth 2.0</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-400 mb-3">
-              Select a quick 1-click test identity or paste a real/mock ID token:
-            </p>
-
-            {/* Quick 1-click test options */}
-            <div className="space-y-2 mb-4">
-              <button
-                type="button"
-                onClick={() => handleGoogleSignIn('mock_google_id_token_alice')}
-                className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-left text-xs transition cursor-pointer"
-              >
-                <div>
-                  <div className="font-semibold text-white">Alice (New Customer)</div>
-                  <div className="text-slate-500">alice@gmail.com — tests progressive phone onboarding</div>
-                </div>
-                <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded font-mono">New User</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleGoogleSignIn('mock_customer@swiftdrop.local')}
-                className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-left text-xs transition cursor-pointer"
-              >
-                <div>
-                  <div className="font-semibold text-white">Existing Customer</div>
-                  <div className="text-slate-500">customer@swiftdrop.local — tests account linking</div>
-                </div>
-                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Linked</span>
-              </button>
-            </div>
-
-            {/* Custom token input */}
-            <div className="pt-2 border-t border-slate-800">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Or custom ID token / mock token:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={googleTokenInput}
-                  onChange={(e) => setGoogleTokenInput(e.target.value)}
-                  placeholder="e.g. mock_john@example.com"
-                  className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  type="button"
-                  disabled={!googleTokenInput.trim() || googleLoading}
-                  onClick={() => handleGoogleSignIn(googleTokenInput.trim())}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
-                >
-                  Sign In
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Progressive Onboarding Modal (Approach A: Collect Phone & Terms) ── */}
       {onboardingOpen && (

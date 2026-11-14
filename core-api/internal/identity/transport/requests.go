@@ -51,3 +51,15 @@ type UpdateUserStatusRequest struct {
 type GoogleLoginRequest struct {
 	IDToken string `json:"id_token"`
 }
+
+// ForgotPasswordSendOTPRequest defines the JSON payload for requesting a password reset OTP.
+type ForgotPasswordSendOTPRequest struct {
+	Email string `json:"email"`
+}
+
+// ResetPasswordRequest defines the JSON payload for completing an OTP-verified password reset.
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	OTP         string `json:"otp"`
+	NewPassword string `json:"new_password"`
+}
