@@ -55,7 +55,32 @@ Images are published to `ghcr.io/phantomtroupeead/swiftdrop/<service>:<7-char gi
 
 ## 3. Secrets and config (fresh values; never commit them)
 
-Generate random values (PowerShell example: `[Convert]::ToBase64String((1..48 | % { Get-Random -Max 256 }))` or the generator in `deploy/README.md`). Use different values from local development.
+### 3.0 Where the production secrets live (GitHub `production` environment)
+Production secrets are the **GitHub environment secrets** of the `production` environment (Settings → Environments → production → Secrets). On every deploy, `.github/workflows/deploy.yml` runs `deploy/scripts/sync-secrets.sh`, which writes them into the cluster as Kubernetes Secrets (a changed Secret restarts the pods that read it). Nothing is stored in git or in a file on a laptop. The `production` environment only releases them to the `main` branch after the reviewer approves, and each pod reads only the Secrets its own manifest references.
+
+GitHub shows a secret only once, so **keep a private backup of the values** (password manager or paper). A lost value can still be read back from the cluster with `kubectl -n swiftdrop get secret <name> -o jsonpath='{.data.<KEY>}' | base64 -d` (run locally; never paste the output into chat or tickets).
+
+| GitHub secret (names only) | Used for |
+| :--- | :--- |
+| `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` | Superuser/broker password. **Must equal the value the running instance was first started with**; changing it here does not change the password inside Postgres/RabbitMQ. Letters, digits and `. _ ~ -` only. |
+| `MIGRATOR_PASSWORD`, `APP_PASSWORD`, `TRACKING_PASSWORD`, `RELAY_PASSWORD`, `WORKER_PASSWORD`, `RECONCILER_PASSWORD` | One Postgres role per service. The bootstrap Job applies them on every deploy (rotation = change the secret, deploy). Same character rule. |
+| `JWT_SECRET` (≥32 chars), `MERCHANT_API_KEY_PEPPER`, `WEBHOOK_SECRET_ENCRYPTION_KEY` (base64, 32 bytes) | core-api (+ tracking, messaging). Changing the webhook key makes already-stored webhook secrets unreadable. |
+| `SEED_PASSWORD_ADMIN/DISPATCHER/COURIER/MERCHANT/CUSTOMER` (≥12 chars) | New passwords for the five demo accounts (only applied while an account still has its published default password). The smoke test reuses them. |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana login. |
+| `GHCR_PULL_TOKEN` + variable `GHCR_USER` | Pulling private images from ghcr.io (`read:packages`). |
+| `ORIGIN_CERT_PEM`, `ORIGIN_KEY_PEM` | Cloudflare Origin certificate and key (whole PEM text) for `traefik-origin-tls`. |
+| optional: `AI_SERVICE_ROLE_TOKEN`, `LLM_API_KEY`, `SWIFTDROP_API_KEY`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMOKE_PASSWORD_<ROLE>` | ai-assistant / mail / smoke-test overrides. Empty = mock or skipped. |
+
+If a required secret is empty the deploy stops before changing anything and lists the missing names. To rotate a value: edit the GitHub secret, run/approve a deploy.
+
+**First-time or manual alternative: one script creates everything.** It generates strong random values, keeps them consistent (role passwords match their `*_DATABASE_URL`, one webhook key and one JWT secret everywhere), never prints them, leaves existing Secrets unchanged, and saves only the login passwords (demo accounts, Grafana) to `~/swiftdrop-secrets/logins.txt` outside the repo. It asks only for your GitHub token (`read:packages`) and the Cloudflare origin certificate paths.
+```powershell
+$env:KUBECONFIG = "$HOME\.kube\swiftdrop-azure.yaml"
+& "C:\Program Files\Git\bin\bash.exe" deploy/scripts/create-secrets.sh
+```
+> **Windows:** plain `bash` in PowerShell is **WSL**, which does not see `$env:KUBECONFIG` and talks to a different cluster. Use Git Bash as above. Without bash, create `ghcr-pull` with `kubectl create secret docker-registry ghcr-pull --docker-server=ghcr.io --docker-username=<user> --docker-password=<token> -n swiftdrop`.
+
+The manual alternative (templates) follows. Generate random values (PowerShell example: `[Convert]::ToBase64String((1..48 | % { Get-Random -Max 256 }))`). Use different values from local development.
 
 ### 3.1 Namespace
 ```bash

@@ -60,12 +60,45 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
+      # Source of truth for production secrets = this "production" environment's secrets (never git).
+      # The script fails with the list of missing names if any required one is empty.
+      - name: Sync secrets into the cluster
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          MIGRATOR_PASSWORD: ${{ secrets.MIGRATOR_PASSWORD }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          TRACKING_PASSWORD: ${{ secrets.TRACKING_PASSWORD }}
+          RELAY_PASSWORD: ${{ secrets.RELAY_PASSWORD }}
+          WORKER_PASSWORD: ${{ secrets.WORKER_PASSWORD }}
+          RECONCILER_PASSWORD: ${{ secrets.RECONCILER_PASSWORD }}
+          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MERCHANT_API_KEY_PEPPER: ${{ secrets.MERCHANT_API_KEY_PEPPER }}
+          WEBHOOK_SECRET_ENCRYPTION_KEY: ${{ secrets.WEBHOOK_SECRET_ENCRYPTION_KEY }}
+          SEED_PASSWORD_ADMIN: ${{ secrets.SEED_PASSWORD_ADMIN }}
+          SEED_PASSWORD_DISPATCHER: ${{ secrets.SEED_PASSWORD_DISPATCHER }}
+          SEED_PASSWORD_COURIER: ${{ secrets.SEED_PASSWORD_COURIER }}
+          SEED_PASSWORD_MERCHANT: ${{ secrets.SEED_PASSWORD_MERCHANT }}
+          SEED_PASSWORD_CUSTOMER: ${{ secrets.SEED_PASSWORD_CUSTOMER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          ORIGIN_CERT_PEM: ${{ secrets.ORIGIN_CERT_PEM }}
+          ORIGIN_KEY_PEM: ${{ secrets.ORIGIN_KEY_PEM }}
+          AI_SERVICE_ROLE_TOKEN: ${{ secrets.AI_SERVICE_ROLE_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          SWIFTDROP_API_KEY: ${{ secrets.SWIFTDROP_API_KEY }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: bash deploy/scripts/sync-secrets.sh
+
       - name: Deploy, smoke test, roll back on failure
         env:
           SMOKE_URL: ${{ inputs.smoke_url || vars.SMOKE_URL || 'https://swiftdrop.work' }}
-          SMOKE_PASSWORD_ADMIN: ${{ secrets.SMOKE_PASSWORD_ADMIN }}
-          SMOKE_PASSWORD_DISPATCHER: ${{ secrets.SMOKE_PASSWORD_DISPATCHER }}
-          SMOKE_PASSWORD_COURIER: ${{ secrets.SMOKE_PASSWORD_COURIER }}
-          SMOKE_PASSWORD_MERCHANT: ${{ secrets.SMOKE_PASSWORD_MERCHANT }}
-          SMOKE_PASSWORD_CUSTOMER: ${{ secrets.SMOKE_PASSWORD_CUSTOMER }}
+          # The smoke test logs in with the same private passwords the accounts were rotated to.
+          SMOKE_PASSWORD_ADMIN: ${{ secrets.SMOKE_PASSWORD_ADMIN || secrets.SEED_PASSWORD_ADMIN }}
+          SMOKE_PASSWORD_DISPATCHER: ${{ secrets.SMOKE_PASSWORD_DISPATCHER || secrets.SEED_PASSWORD_DISPATCHER }}
+          SMOKE_PASSWORD_COURIER: ${{ secrets.SMOKE_PASSWORD_COURIER || secrets.SEED_PASSWORD_COURIER }}
+          SMOKE_PASSWORD_MERCHANT: ${{ secrets.SMOKE_PASSWORD_MERCHANT || secrets.SEED_PASSWORD_MERCHANT }}
+          SMOKE_PASSWORD_CUSTOMER: ${{ secrets.SMOKE_PASSWORD_CUSTOMER || secrets.SEED_PASSWORD_CUSTOMER }}
         run: bash deploy/scripts/deploy.sh "${{ steps.tag.outputs.sha }}" "$SMOKE_URL"
