@@ -23,6 +23,18 @@ import {
 } from '@/shared/components/ui/card';
 import { withRequestReference } from '@/shared/lib/api-error';
 
+interface AuthApiResponse {
+  data?: {
+    message?: string;
+    cooldown_seconds?: number;
+    [key: string]: unknown;
+  };
+  error?: {
+    message?: string;
+    correlation_id?: string;
+  };
+}
+
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -73,9 +85,9 @@ export const RegisterPage: React.FC = () => {
       });
 
       const text = await res.text();
-      let data: any = null;
+      let data: AuthApiResponse | null = null;
       try {
-        data = text ? JSON.parse(text) : null;
+        data = text ? (JSON.parse(text) as AuthApiResponse) : null;
       } catch {
         // Response was not JSON
       }
@@ -139,9 +151,9 @@ export const RegisterPage: React.FC = () => {
       });
 
       const text = await res.text();
-      let data: any = null;
+      let data: AuthApiResponse | null = null;
       try {
-        data = text ? JSON.parse(text) : null;
+        data = text ? (JSON.parse(text) as AuthApiResponse) : null;
       } catch {
         // Response was not JSON
       }
