@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -103,7 +104,9 @@ func (s *AuthService) SendRegistrationOTP(ctx context.Context, cmd SendRegistrat
 	// 6. Dispatch email (dev mode: printed to stdout)
 	if s.emailSender != nil {
 		if err := s.emailSender.SendOTPEmail(ctx, emailVO.String(), code); err != nil {
-			_ = err
+			log.Printf("[ERROR] Failed to send registration OTP email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Registration OTP [%s] successfully dispatched to %s\n", code, emailVO.String())
 		}
 	}
 
@@ -618,7 +621,9 @@ func (s *AuthService) SendPasswordResetOTP(ctx context.Context, cmd SendPassword
 
 	if s.emailSender != nil {
 		if err := s.emailSender.SendPasswordResetEmail(ctx, emailVO.String(), code); err != nil {
-			_ = err
+			log.Printf("[ERROR] Failed to send password reset email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Password reset OTP [%s] successfully dispatched to %s (valid for 10m)\n", code, emailVO.String())
 		}
 	}
 

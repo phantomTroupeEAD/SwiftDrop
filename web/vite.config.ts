@@ -72,6 +72,216 @@ export default defineConfig({
             });
             return;
           }
+
+          if (req.url === '/api/v1/auth/forgot-password/send-otp' && req.method === 'POST') {
+            let rawBody = '';
+            req.on('data', (chunk) => {
+              rawBody += chunk;
+            });
+            req.on('end', async () => {
+              try {
+                const backendRes = await fetch('http://127.0.0.1:8080/api/v1/auth/forgot-password/send-otp', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: rawBody,
+                });
+                const data = await backendRes.text();
+                res.writeHead(backendRes.status, { 'Content-Type': 'application/json' });
+                res.end(data);
+                return;
+              } catch (_) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    error: {
+                      message:
+                        'Core API backend is not running on port 8080. Please start api.exe in core-api to send real emails.',
+                    },
+                  })
+                );
+              }
+            });
+            return;
+          }
+
+          if (req.url === '/api/v1/auth/forgot-password/reset' && req.method === 'POST') {
+            let rawBody = '';
+            req.on('data', (chunk) => {
+              rawBody += chunk;
+            });
+            req.on('end', async () => {
+              try {
+                const backendRes = await fetch('http://127.0.0.1:8080/api/v1/auth/forgot-password/reset', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: rawBody,
+                });
+                const data = await backendRes.text();
+                res.writeHead(backendRes.status, { 'Content-Type': 'application/json' });
+                res.end(data);
+                return;
+              } catch (_) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    error: {
+                      message:
+                        'Core API backend is not running on port 8080. Please start api.exe in core-api to verify OTP.',
+                    },
+                  })
+                );
+              }
+            });
+            return;
+          }
+
+          if (req.url === '/api/v1/auth/register/send-otp' && req.method === 'POST') {
+            let rawBody = '';
+            req.on('data', (chunk) => {
+              rawBody += chunk;
+            });
+            req.on('end', async () => {
+              try {
+                const backendRes = await fetch('http://127.0.0.1:8080/api/v1/auth/register/send-otp', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: rawBody,
+                });
+                const data = await backendRes.text();
+                res.writeHead(backendRes.status, { 'Content-Type': 'application/json' });
+                res.end(data);
+                return;
+              } catch (_) {
+                try {
+                  const parsed = JSON.parse(rawBody);
+                  const email = (parsed.email || '').trim();
+                  console.log(`\x1b[33m[DEV AUTH MOCK]\x1b[0m Registration OTP for ${email}: 123456`);
+                  const response = {
+                    data: {
+                      message: 'Verification OTP has been sent to your email',
+                      email: email,
+                      expires_in: 600,
+                      cooldown_seconds: 60,
+                    },
+                  };
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(response));
+                } catch (e) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: { message: 'Invalid JSON payload' } }));
+                }
+              }
+            });
+            return;
+          }
+
+          if (req.url === '/api/v1/auth/register' && req.method === 'POST') {
+            let rawBody = '';
+            req.on('data', (chunk) => {
+              rawBody += chunk;
+            });
+            req.on('end', async () => {
+              try {
+                const backendRes = await fetch('http://127.0.0.1:8080/api/v1/auth/register', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: rawBody,
+                });
+                const data = await backendRes.text();
+                res.writeHead(backendRes.status, { 'Content-Type': 'application/json' });
+                res.end(data);
+                return;
+              } catch (_) {
+                try {
+                  const parsed = JSON.parse(rawBody);
+                  const email = (parsed.email || '').trim();
+                  const response = {
+                    data: {
+                      user: {
+                        id: `usr_customer_${Date.now()}`,
+                        email: email,
+                        display_name: `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim() || 'New User',
+                        role: 'CUSTOMER',
+                        status: 'ACTIVE',
+                      },
+                      is_new_user: true,
+                    },
+                  };
+                  res.writeHead(201, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(response));
+                } catch (e) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: { message: 'Invalid JSON payload' } }));
+                }
+              }
+            });
+            return;
+          }
+
+
+          if (req.url === '/api/v1/auth/google' && req.method === 'POST') {
+            let rawBody = '';
+            req.on('data', (chunk) => {
+              rawBody += chunk;
+            });
+            req.on('end', async () => {
+              try {
+                const backendRes = await fetch('http://127.0.0.1:8080/api/v1/auth/google', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: rawBody,
+                });
+                const data = await backendRes.text();
+                res.writeHead(backendRes.status, { 'Content-Type': 'application/json' });
+                res.end(data);
+                return;
+              } catch (_) {
+                // Backend not running -> Seamless dev mock response for Google login
+                try {
+                  const parsed = JSON.parse(rawBody);
+                  let email = 'customer.google@swiftdrop.local';
+                  let name = 'Google Customer';
+                  if (parsed.id_token) {
+                    try {
+                      const payloadBase64 = parsed.id_token.split('.')[1];
+                      if (payloadBase64) {
+                        const decoded = JSON.parse(Buffer.from(payloadBase64, 'base64').toString());
+                        if (decoded.email) email = decoded.email;
+                        if (decoded.name) name = decoded.name;
+                      }
+                    } catch {}
+                  }
+
+                  const response = {
+                    data: {
+                      access_token: `mock_jwt_token_for_CUSTOMER_${Date.now()}`,
+                      token_type: 'Bearer',
+                      expires_in: 900,
+                      user: {
+                        id: `usr_customer_google_${Date.now()}`,
+                        email: email,
+                        display_name: name,
+                        role: 'CUSTOMER',
+                        status: 'ACTIVE',
+                        requires_phone: false,
+                        tenant_id: null,
+                      },
+                      is_new_user: false,
+                      requires_phone: false,
+                    },
+                  };
+
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(response));
+                } catch (e) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: { message: 'Invalid JSON payload' } }));
+                }
+              }
+            });
+            return;
+          }
+
           next();
         });
       },

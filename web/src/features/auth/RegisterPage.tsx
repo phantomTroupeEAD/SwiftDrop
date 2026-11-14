@@ -65,15 +65,25 @@ export const RegisterPage: React.FC = () => {
         body: JSON.stringify({ email: email.trim() }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
         if (res.status === 409) {
           throw new Error('An account with this email already exists. Please log in.');
         } else if (res.status === 429) {
           throw new Error('Please wait before requesting another verification code.');
+        } else if (data?.error?.message) {
+          throw new Error(data.error.message);
+        } else if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
         } else {
-          throw new Error(data?.error?.message || 'Failed to send verification code.');
+          throw new Error(`Failed to send verification code (${res.status}).`);
         }
       }
 
@@ -116,10 +126,21 @@ export const RegisterPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
-        throw new Error(data?.error?.message || 'Registration failed. Please check your inputs.');
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        } else if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
+        }
+        throw new Error(`Registration failed (${res.status}). Please check your inputs.`);
       }
 
       setSuccess(true);

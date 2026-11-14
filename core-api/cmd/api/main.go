@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,8 +36,16 @@ import (
 func main() {
 	config.LoadEnv()
 
-	port := os.Getenv("PORT")
+	port := os.Getenv("CORE_API_PORT")
 	if port == "" {
+		if addr := os.Getenv("HTTP_ADDR"); addr != "" {
+			port = strings.TrimPrefix(addr, ":")
+		}
+	}
+	if port == "" {
+		port = os.Getenv("PORT")
+	}
+	if port == "" || port == "8000" {
 		port = "8080"
 	}
 

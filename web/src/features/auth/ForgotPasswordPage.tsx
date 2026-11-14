@@ -64,13 +64,25 @@ export const ForgotPasswordPage: React.FC = () => {
         body: JSON.stringify({ email: email.trim() }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error('Please wait before requesting another reset code.');
         }
-        throw new Error(data?.error?.message || 'Failed to send password reset code.');
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        }
+        if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
+        }
+        throw new Error(`Failed to send password reset code (${res.status}).`);
       }
 
       setOtpSent(true);
@@ -113,10 +125,22 @@ export const ForgotPasswordPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
-        throw new Error(data?.error?.message || 'Failed to reset password.');
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        }
+        if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
+        }
+        throw new Error(`Failed to reset password (${res.status}).`);
       }
 
       setSuccess(true);

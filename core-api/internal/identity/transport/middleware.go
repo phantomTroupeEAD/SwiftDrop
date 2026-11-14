@@ -132,7 +132,9 @@ func GetTenantID(ctx context.Context) *string {
 }
 
 func writeJSONError(w http.ResponseWriter, statusCode int, code, message string) {
+	envelope := NewErrorEnvelope(code, message)
+	envelope.Error.CorrelationID = w.Header().Get("X-Request-ID")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(NewErrorEnvelope(code, message))
+	_ = json.NewEncoder(w).Encode(envelope)
 }

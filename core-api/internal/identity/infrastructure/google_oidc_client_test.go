@@ -17,45 +17,22 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
 
-func TestGoogleOIDCClient_MockTokens(t *testing.T) {
+func TestGoogleOIDCClient_OnlineVerification(t *testing.T) {
 	ctx := context.Background()
-	client := NewGoogleOIDCClient("")
 
 	t.Run("rejects empty token", func(t *testing.T) {
+		client := NewGoogleOIDCClient("my-client-id")
 		if _, err := client.VerifyIDToken(ctx, "   "); !errors.Is(err, domain.ErrInvalidToken) {
 			t.Errorf("expected ErrInvalidToken, got %v", err)
 		}
 	})
 
-	t.Run("rejects mock_invalid_token", func(t *testing.T) {
-		if _, err := client.VerifyIDToken(ctx, "mock_invalid_token"); !errors.Is(err, domain.ErrInvalidToken) {
+	t.Run("rejects when GOOGLE_CLIENT_ID is unconfigured", func(t *testing.T) {
+		client := NewGoogleOIDCClient("")
+		if _, err := client.VerifyIDToken(ctx, "some-token"); !errors.Is(err, domain.ErrInvalidToken) {
 			t.Errorf("expected ErrInvalidToken, got %v", err)
 		}
 	})
-
-	t.Run("parses mock email token", func(t *testing.T) {
-		claims, err := client.VerifyIDToken(ctx, "mock_alice@gmail.com")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if claims.Email != "alice@gmail.com" || claims.Subject != "google_sub_alice" || !claims.EmailVerified {
-			t.Errorf("unexpected claims: %+v", claims)
-		}
-	})
-
-	t.Run("parses mock_google_id_token_bob", func(t *testing.T) {
-		claims, err := client.VerifyIDToken(ctx, "mock_google_id_token_bob")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if claims.Email != "bob@gmail.com" || claims.Subject != "google_sub_bob" {
-			t.Errorf("unexpected claims: %+v", claims)
-		}
-	})
-}
-
-func TestGoogleOIDCClient_OnlineVerification(t *testing.T) {
-	ctx := context.Background()
 
 	t.Run("validates tokeninfo 200 response and audience", func(t *testing.T) {
 		client := NewGoogleOIDCClient("my-google-client-id")

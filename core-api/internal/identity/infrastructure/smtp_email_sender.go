@@ -7,23 +7,28 @@ import (
 )
 
 // SMTPEmailSender implements application.EmailSender using standard SMTP (net/smtp).
-// Compatible with Gmail SMTP, SendGrid, Mailgun, AWS SES, or any standard SMTP host.
+// Compatible with Gmail SMTP, Brevo (Sendinblue), SendGrid, Mailgun, AWS SES, or any standard SMTP host.
 type SMTPEmailSender struct {
-	host     string
-	port     string
-	username string
-	password string
-	from     string
+	host      string
+	port      string
+	username  string
+	password  string
+	fromEmail string
+	fromName  string
 }
 
 // NewSMTPEmailSender creates a configured SMTPEmailSender.
-func NewSMTPEmailSender(host, port, username, password, from string) *SMTPEmailSender {
+func NewSMTPEmailSender(host, port, username, password, fromEmail, fromName string) *SMTPEmailSender {
+	if fromName == "" {
+		fromName = "SwiftDrop Deliveries"
+	}
 	return &SMTPEmailSender{
-		host:     host,
-		port:     port,
-		username: username,
-		password: password,
-		from:     from,
+		host:      host,
+		port:      port,
+		username:  username,
+		password:  password,
+		fromEmail: fromEmail,
+		fromName:  fromName,
 	}
 }
 
@@ -37,8 +42,9 @@ func (s *SMTPEmailSender) SendOTPEmail(_ context.Context, recipientEmail, code s
 		auth = smtp.PlainAuth("", s.username, s.password, s.host)
 	}
 
+	fromHeader := fmt.Sprintf("%s <%s>", s.fromName, s.fromEmail)
 	subject := "Subject: SwiftDrop — Verify Your Email\r\n"
-	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", s.from, recipientEmail)
+	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", fromHeader, recipientEmail)
 
 	body := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -70,7 +76,7 @@ func (s *SMTPEmailSender) SendOTPEmail(_ context.Context, recipientEmail, code s
 </html>`, code)
 
 	msg := []byte(subject + headers + body)
-	return smtp.SendMail(addr, auth, s.from, []string{recipientEmail}, msg)
+	return smtp.SendMail(addr, auth, s.fromEmail, []string{recipientEmail}, msg)
 }
 
 // SendPasswordResetEmail sends a formatted HTML email containing the 6-digit password reset code.
@@ -82,8 +88,9 @@ func (s *SMTPEmailSender) SendPasswordResetEmail(_ context.Context, recipientEma
 		auth = smtp.PlainAuth("", s.username, s.password, s.host)
 	}
 
+	fromHeader := fmt.Sprintf("%s <%s>", s.fromName, s.fromEmail)
 	subject := "Subject: SwiftDrop — Reset Your Password\r\n"
-	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", s.from, recipientEmail)
+	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", fromHeader, recipientEmail)
 
 	body := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -115,7 +122,7 @@ func (s *SMTPEmailSender) SendPasswordResetEmail(_ context.Context, recipientEma
 </html>`, code)
 
 	msg := []byte(subject + headers + body)
-	return smtp.SendMail(addr, auth, s.from, []string{recipientEmail}, msg)
+	return smtp.SendMail(addr, auth, s.fromEmail, []string{recipientEmail}, msg)
 }
 
 // UnconfiguredEmailSender fails explicitly when SMTP_HOST is not configured.
