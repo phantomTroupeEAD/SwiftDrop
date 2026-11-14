@@ -23,17 +23,19 @@ type PublicDestination struct {
 // PublicMilestone exposes safe chronological milestone events. Internal actor IDs,
 // raw reasons, courier notes, and POD proofs are strictly redacted per SEC-009.
 type PublicMilestone struct {
-	Status      string    `json:"status"`
-	Description string    `json:"description"`
-	Timestamp   time.Time `json:"timestamp"`
+	Status          string    `json:"status"`
+	Description     string    `json:"description"`
+	Timestamp       time.Time `json:"timestamp"`
+	StatusHistoryID string    `json:"-"`
 }
 
 // PublicStatusUpdateEvent encapsulates an allowlisted real-time status update event for SSE streaming.
 // Strictly adheres to SEC-009 public privacy standards and Document 4 §5.2.
 // Sensitive fields (sender ID, recipient name/phone, street address, zone ID, actor ID, notes, fees) are strictly forbidden.
 type PublicStatusUpdateEvent struct {
-	TrackingNumber string    `json:"tracking_number"`
-	Status         string    `json:"status"`
-	Description    string    `json:"description"`
-	Timestamp      time.Time `json:"timestamp"`
+	TrackingNumber  string    `json:"tracking_number"`
+	Status          string    `json:"status"`
+	Description     string    `json:"description"`
+	Timestamp       time.Time `json:"timestamp"`
+	StatusHistoryID string    `json:"-"`
 }

@@ -17,6 +17,7 @@ set +x
 
 NS="swiftdrop"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PYTHON="$(command -v python3 || command -v python)"
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 trap 'rm -rf "$TMP"' EXIT
@@ -30,7 +31,9 @@ REQUIRED=(
   GRAFANA_ADMIN_PASSWORD
 )
 # Optional: GHCR_USER + GHCR_PULL_TOKEN (private images), ORIGIN_CERT_PEM + ORIGIN_KEY_PEM (Cloudflare TLS),
-# AI_SERVICE_ROLE_TOKEN, LLM_API_KEY, SWIFTDROP_API_KEY (ai-assistant), SMTP_USERNAME, SMTP_PASSWORD.
+# AI_SERVICE_ROLE_TOKEN, LLM_API_KEY, SWIFTDROP_API_KEY (ai-assistant),
+# mail: SMTP_HOST, SMTP_PORT, SMTP_SECURITY, SMTP_FROM_EMAIL, SMTP_FROM_NAME, SMTP_USERNAME, SMTP_PASSWORD,
+# proof-photo storage: OBJECT_STORAGE_DRIVER, _ACCOUNT_ID, _BUCKET, _REGION, _ACCESS_KEY, _SECRET_KEY, _PUBLIC_URL.
 
 missing=()
 for v in "${REQUIRED[@]}"; do [[ -n "${!v:-}" ]] || missing+=("$v"); done
@@ -102,6 +105,37 @@ apply_secret ai-assistant-secrets "$TMP/ai-assistant-secrets.env"
 
 echo "GF_SECURITY_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD" > "$TMP/grafana-admin.env"
 apply_secret grafana-admin "$TMP/grafana-admin.env"
+
+# --- Mail and object storage (optional) ---
+# core-api reads its own names (SMTP_USER/PASS/FROM, OBJECT_STORAGE_*) from core-api-integrations;
+# the event-worker reads SMTP_HOST/PORT/SECURITY/FROM_* from the messaging-config ConfigMap and
+# SMTP_USERNAME/PASSWORD from integrations-secrets (above). Only keys that have a value are written.
+: > "$TMP/core-api-integrations.env"
+add_kv() { [[ -n "$2" ]] && printf '%s=%s\n' "$1" "$2" >> "$TMP/core-api-integrations.env"; return 0; }
+if [[ -n "${SMTP_HOST:-}" ]]; then
+  add_kv SMTP_HOST "$SMTP_HOST"; add_kv SMTP_PORT "${SMTP_PORT:-587}"
+  add_kv SMTP_USER "${SMTP_USERNAME:-}"; add_kv SMTP_PASS "${SMTP_PASSWORD:-}"
+  add_kv SMTP_FROM "${SMTP_FROM_EMAIL:-}"
+fi
+if [[ -n "${OBJECT_STORAGE_DRIVER:-}" ]]; then
+  for k in OBJECT_STORAGE_DRIVER OBJECT_STORAGE_ACCOUNT_ID OBJECT_STORAGE_BUCKET OBJECT_STORAGE_REGION \
+           OBJECT_STORAGE_ACCESS_KEY OBJECT_STORAGE_SECRET_KEY OBJECT_STORAGE_PUBLIC_URL; do
+    add_kv "$k" "${!k:-}"
+  done
+fi
+if [[ -s "$TMP/core-api-integrations.env" ]]; then
+  apply_secret core-api-integrations "$TMP/core-api-integrations.env"
+else
+  echo "  core-api-integrations: no mail/storage settings given (OTP printed to log, default storage)"
+fi
+
+if [[ -n "${SMTP_HOST:-}" ]] && kubectl -n "$NS" get configmap messaging-config >/dev/null 2>&1; then
+  patch="$(SMTP_SECURITY="${SMTP_SECURITY:-starttls}" "${PYTHON:-python3}" -c 'import json,os
+keys=["SMTP_HOST","SMTP_PORT","SMTP_SECURITY","SMTP_FROM_EMAIL","SMTP_FROM_NAME"]
+print(json.dumps({"data":{k:os.environ[k] for k in keys if os.environ.get(k)}}))')"
+  out="$(kubectl -n "$NS" patch configmap messaging-config --type merge -p "$patch")"
+  echo "  $out"; [[ "$out" == *"no change"* ]] || CHANGED=1
+fi
 
 # Image pull secret and Cloudflare origin certificate: only when provided.
 if [[ -n "${GHCR_PULL_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then

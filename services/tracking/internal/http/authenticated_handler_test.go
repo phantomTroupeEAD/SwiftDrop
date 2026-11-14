@@ -36,6 +36,9 @@ func (m *mockHTTPRepo) FindParcelByTrackingNumber(_ context.Context, _ string) (
 func (m *mockHTTPRepo) FindStatusHistoryByParcelID(_ context.Context, _ string) ([]domain.MilestoneRecord, error) {
 	return nil, nil
 }
+func (m *mockHTTPRepo) FindStatusHistoryByID(_ context.Context, _ string) (*domain.MilestoneRecord, error) {
+	return nil, nil
+}
 func (m *mockHTTPRepo) FindTrackingSummary(ctx context.Context, tn string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
 	if m.findSummaryFn != nil {
 		return m.findSummaryFn(ctx, tn)

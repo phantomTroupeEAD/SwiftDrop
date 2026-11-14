@@ -11,6 +11,7 @@ import (
 type TrackingRepository interface {
 	FindParcelByTrackingNumber(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, error)
 	FindStatusHistoryByParcelID(ctx context.Context, parcelID string) ([]domain.MilestoneRecord, error)
+	FindStatusHistoryByID(ctx context.Context, historyID string) (*domain.MilestoneRecord, error)
 	FindTrackingSummary(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error)
 	CheckReadiness(ctx context.Context) error
 	Ping(ctx context.Context) error

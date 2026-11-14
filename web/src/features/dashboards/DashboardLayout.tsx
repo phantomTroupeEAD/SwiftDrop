@@ -42,31 +42,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     ADMIN: {
       path: '/admin/dashboard',
       label: 'Admin',
-      badge: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+      badge: 'bg-primary-tint text-primary border-border',
       icon: <Shield className="w-3.5 h-3.5" />,
     },
     DISPATCHER: {
       path: '/dispatcher/dashboard',
       label: 'Dispatcher',
-      badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+      badge: 'bg-primary-tint text-primary border-border',
       icon: <Users className="w-3.5 h-3.5" />,
     },
     COURIER: {
       path: '/courier/dashboard',
       label: 'Courier',
-      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      badge: 'bg-status-success-bg text-status-success-ink border-status-success-border',
       icon: <Truck className="w-3.5 h-3.5" />,
     },
     MERCHANT: {
       path: '/merchant/dashboard',
       label: 'Merchant',
-      badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      badge: 'bg-status-warning-bg text-status-warning-ink border-status-warning-border',
       icon: <Store className="w-3.5 h-3.5" />,
     },
     CUSTOMER: {
       path: '/customer/dashboard',
       label: 'Customer',
-      badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+      badge: 'bg-primary-tint text-primary border-border',
       icon: <User className="w-3.5 h-3.5" />,
     },
   };
@@ -74,23 +74,23 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const currentCfg = roleConfigs[activeRole];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
+    <div data-role={activeRole} className="min-h-screen bg-canvas text-text flex flex-col antialiased">
       {/* Top Application Header */}
-      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
+      <header className="h-16 border-b border-border bg-surface backdrop-blur-md px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-4 sm:gap-6">
           <div
             className="flex items-center gap-2.5 cursor-pointer"
             onClick={() => navigate(currentCfg.path)}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-600/25">
-              <Package className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-surface-subtle   flex items-center justify-center  ">
+              <Package className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white hidden sm:inline">
-              Swift<span className="text-blue-400">Drop</span>
+            <span className="text-xl font-bold tracking-tight text-text hidden sm:inline">
+              Swift<span className="text-primary">Drop</span>
             </span>
           </div>
 
-          <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+          <div className="h-5 w-px bg-surface-subtle hidden sm:block" />
 
           {/* Active Role Console Tag */}
           <div className="flex items-center gap-2">
@@ -105,38 +105,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Global Search & User Profile Controls */}
         <div className="flex items-center gap-3 sm:gap-5">
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-xs text-slate-400 w-56">
-            <Search className="w-3.5 h-3.5 text-slate-500" />
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-canvas border border-border text-xs text-text-muted w-56">
+            <Search className="w-3.5 h-3.5 text-text-muted" />
             <span>Search operations...</span>
           </div>
 
           <button
             title="Notifications"
-            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition"
+            className="p-2 text-text-muted hover:text-text hover:bg-surface-subtle rounded-lg transition"
           >
             <Bell className="w-4 h-4" />
           </button>
 
-          <div className="h-5 w-px bg-slate-800" />
+          <div className="h-5 w-px bg-surface-subtle" />
 
           {/* Current User Info */}
           <div className="text-right hidden sm:block">
-            <div className="text-xs font-semibold text-slate-200">
+            <div className="text-xs font-semibold text-text">
               {user?.display_name || user?.email || 'Authenticated User'}
             </div>
-            <div className="text-[11px] text-slate-400 font-mono">
+            <div className="text-[11px] text-text-muted font-mono">
               {user?.email || 'user@swiftdrop.local'}
             </div>
           </div>
 
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-md">
+          <div className="w-9 h-9 rounded-full    flex items-center justify-center font-bold text-xs text-text ">
             {(user?.display_name || user?.email || 'U').charAt(0).toUpperCase()}
           </div>
 
           <button
             onClick={handleLogout}
             title="Sign Out"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-950/30 border border-slate-800 hover:border-red-900/40 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-muted hover:text-status-error-ink hover:bg-status-error-bg border border-border hover:border-status-error-border transition"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Sign Out</span>
@@ -147,12 +147,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8 space-y-6">
         {/* Real App Title Banner */}
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/20 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-5 rounded-2xl     border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-text tracking-tight">
               {title}
             </h1>
-            <p className="text-xs text-slate-400">{subtitle}</p>
+            <p className="text-xs text-text-muted">{subtitle}</p>
           </div>
         </div>
 
@@ -161,7 +161,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       </main>
 
       {/* Clean Professional Footer */}
-      <footer className="border-t border-slate-900 py-4 px-6 text-center text-xs text-slate-500">
+      <footer className="border-t border-border py-4 px-6 text-center text-xs text-text-muted">
         © 2026 SwiftDrop Logistics Inc. All rights reserved.
       </footer>
     </div>

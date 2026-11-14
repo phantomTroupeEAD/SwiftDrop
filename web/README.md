@@ -1,5 +1,81 @@
 # SwiftDrop Unified Web Application (`web/`)
 
+Read the [SwiftDrop UI design system](design.mdx) before building a screen. Start with the end user's role preset and complete the screen brief.
+
+After sign-in, the customer and merchant home pages share the same layout and display recent shipments and status counts from their account-scoped APIs. Counts describe the returned collection. Merchant integrations and customer business-account applications have separate sections.
+
+The merchant home and orders page display the business profile, tenant ID, and approval status returned by the merchant API.
+
+Customers can open SwiftDrop Assistant using the floating chat icon at the bottom right of their dashboard. The chat uses the current session and keeps its transcript in memory while the dashboard is mounted. For local development, Vite proxies the assistant API to port 8000 by default. Set `SWIFTDROP_AI_API_URL` to use another service origin.
+
+The customer and merchant dashboards share the navigation header with their portal pages. On phones, navigation wraps below the brand and session action. Empty shipment lists link to the next action, and merchant profile errors have an independent retry.
+
+## Member 6 Apple-style frontend
+
+The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
+
+Public tracking and registration use the centered blue profile. Customer booking and merchant applications use the blue customer profile. Merchant orders, API keys, and webhooks use the teal merchant profile. On phones, merchant orders show tracking and status first, with reference and date below.
+
+- **Customer:** Four-step quote and booking flow, server-issued tracking number, and merchant application/status.
+- **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, and webhook registration and removal.
+- **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
+- **Signed-in tracking:** Customers and merchants can open `/portal/tracking` to look up parcels they can access. Merchant tracking numbers link directly to this view.
+
+Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status, [test-ids.md](test-ids.md) for active selectors, and [M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md](M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md) for the complete audit, redesign and migration guide.
+
+For local integration, Vite forwards tracking requests to the tracking service on port 8081 and the remaining API requests to Core API on port 8080. A real booking test needs a customer session and active pickup and delivery zones with a pricing rule.
+
+Reloading a protected page restores a real session using the server-issued refresh cookie. Local demo sign-ins last until reload.
+
+For live integration, start Vite with demo auth unset. By default it connects to Core API on port 8080 and Tracking API on port 8081. Set `SWIFTDROP_CORE_API_URL` and `SWIFTDROP_TRACKING_API_URL` before starting Vite if the team provides different service origins. Use the gateway origin for both variables when it serves both APIs.
+
+For a UI-only preview, set `SWIFTDROP_DEMO_AUTH=1` and bind Vite to loopback. Demo credentials only open the frontend screens. Live API calls require a session issued by the real backend.
+
+Booking prefills the sender's name and phone from the signed-in profile. The sender can edit both fields and enter the pickup address.
+
+Customers enter postal codes in the booking form. SwiftDrop looks up the delivery zones before requesting a quote.
+
+Pickup and delivery forms support browser address autofill with separate sender and recipient sections. Merchant order search and status filters apply to the full fetched list before it is displayed in pages of 20.
+
+After booking, **View receipt** fetches the official receipt using the returned parcel ID when the parcels API supports it.
+
+Clean UI update (6 November 2026): the design-preview routes now render the teal/ivory shipping UI directly. Removed theme-selection chrome, palette specifications, coordination notes, technical banners, reviewer state controls and simulated SSE connectivity. Sidebar navigation, forms, orders filters and the appearance toggle remain. A small **Sample data** label and action-specific feedback preserve honesty about incomplete integration. This change is presentation-only; real APIs and shared M7/auth code are not changed.
+
+Clean UI verification: production build passed; browser checks exercised all four wizard steps and the unconnected confirmation message, orders navigation/search/zero-match result, and page-width checks at 1440px and 375px. No page-level horizontal overflow was observed at those widths. These checks do not establish real API integration or end-to-end authorization.
+
+Theme-preview update (6 November 2026): `/design-preview` shows the earlier **Swift Signature (Teal & Warm Ivory)** direction with sample customer and merchant flows. See [`design.mdx`](design.mdx) for the Apple-style implementation baseline and [`test-ids.md`](test-ids.md) for selector coverage.
+
+### Public Landing Page (`/`) (November 2026)
+Implemented an authoritative, image-heavy public landing page (`src/features/landing/LandingPage.tsx`) mounted at the application root (`/`):
+- **Hero & Utility**: Full-bleed cinematic logistics background with an instant interactive tracking input widget routing directly to `/track/:trackingNumber`.
+- **Performance Strip**: 4-column metric bar featuring SLA percentages, average turnaround times, active dispatch zones, and base tariffs with tabular figures.
+- **Photographic Feature Grid**: 3 photorealistic visual cards capturing doorstep collection (`feature-courier-fleet.jpg`), automated sorting (`feature-smart-sorting.jpg`), and digital proof of delivery (`feature-proof-delivery.jpg`).
+- **Tabbed Solution Engine**: Unified comparison tabs (`Tabs`) displaying personal sender doorstep booking vs. B2B merchant CSV batch ingestion & REST API endpoints.
+- **Island-Wide Dispatch Network**: Zone status grid highlighting Western, Central, Southern, and Express transit corridors.
+- **Strict Compliance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="PUBLIC"` scoping, zero raw elements, and zero arbitrary brackets. Tested cleanly with `npm run lint:ui` and `npm run build`.
+
+### Authentication Screens Refinement (November 2026)
+All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/features/auth/RegisterPage.tsx`, and `src/features/auth/ForgotPasswordPage.tsx`) strictly conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
+- Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
+- Floating solid white/neutral modal cards (`bg-surface rounded-2xl border border-border`) over the cinematic twilight logistics background (`public/login-bg.jpg`) with an ambient blur and contrast veil (`bg-canvas/75 backdrop-blur-sm`).
+- Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
+- Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
+- Google OAuth button integrated directly into the login card using semantic button primitives and standard SVG glyphs.
+- Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).
+- Cleanly verified via `npm run lint:ui` with zero design governance violations.
+
+## Implementation checkpoint — 5 November 2026
+
+The sections below include the target architecture and planned commands. The checked-in app currently implements a login page, five prototype role dashboards, and an isolated design preview studio (`/design-preview`). Actual scripts in `package.json` are `dev`, `build`, and `preview`; lint, unit and E2E scripts/tooling have not been installed. TanStack Query is described below but is not yet a dependency.
+
+
+[`test-ids.md`](test-ids.md) records all implemented customer/merchant prototype selectors, registers the visual preview studio selectors, and reserves canonical IDs for future integrated features. Input labels in the customer prototype and preview studio are properly associated with their controls via `htmlFor`/`id`.
+
+Current customer/merchant content is under `src/features/dashboards/`, rather than the planned `customer-merchant/` structure. Customer pricing is locally calculated example data, booking and receipt actions only show alerts, tracking is static, CSV browsing is a placeholder, and the merchant key is a fixed example. These behaviours do not meet production pricing, tracking, booking or one-time-secret requirements. API integration and the four-step wizard are the next feature slice; see [`API.md`](API.md) for the integration checkpoint.
+
+Foundation verification: `npm run build` passed (`tsc && vite build`). All selector literals are documented, form labels are connected, and the diff contains no whitespace errors. No unit/E2E suite was executed because the corresponding scripts/dependencies are not present.
+
 > **Application Type:** Single-Page Application (SPA)  
 > **Tech Stack:** React 18+, Vite 5+, TypeScript (strict mode), Tailwind CSS, TanStack Query v5, React Router v6  
 > **Primary Ownership:**  
@@ -17,7 +93,7 @@ SwiftDrop adopts a **Unified Single-Page Application** architecture rather than 
 
 ### Why Unified SPA?
 1. **Single Deployment & Port:** Built once into static assets and served via an optimized Nginx container on port `3000` behind the Traefik API Gateway. No complex multi-port routing or cross-origin overhead.
-2. **Unified Authentication & RBAC Shell:** Single login screen (`/auth/login`). Upon JWT authentication, the user is redirected dynamically based on their role (`CUSTOMER`, `MERCHANT` &rarr; `/portal/*` vs `DISPATCHER`, `ADMIN` &rarr; `/ops/*`, `COURIER` &rarr; `/courier/*`).
+2. **Unified Authentication & RBAC Shell:** After sign-in, `/dashboard` displays the customer or merchant home. It routes admins to `/admin/dashboard`, dispatchers to `/dispatcher/dashboard`, and couriers to their delivery tasks at `/courier/dashboard`. Protected routes check the session role before rendering.
 3. **Shared Design System:** A unified component system (buttons, modals, form inputs, status chips, notification toasts) ensures consistent brand visual standards across all portals.
 4. **Feature-Sliced Isolation:** Code is isolated into dedicated feature folders (`customer-merchant` vs `dispatcher-admin`). Member 6 and Member 7 work in decoupled directories without merge conflicts.
 5. **Route-Based Code Splitting:** Vite dynamically splits bundles at route boundaries (`React.lazy`). Customers never download the dispatcher board or admin reporting code.
@@ -91,6 +167,8 @@ The router guards ensure strict authorization before any protected view is mount
 
 ## 4. Shared API Client & Authentication Guarantees
 
+Sign-in, customer registration, profile completion, and customer and merchant portal errors show a request reference when available. Include it when reporting a failed request.
+
 All backend HTTP requests flow through a central client configured in `src/shared/api/`:
 - **Base URL:** Driven by `VITE_API_BASE_URL` (defaulting to `/api/v1` through the reverse proxy).
 - **JWT Storage:** Short-lived access tokens (15 minutes) are stored **only in memory** in React `AuthContext`. Tokens are never written to `localStorage` or `sessionStorage`.
@@ -143,7 +221,25 @@ Every developer and AI agent contributing to `web/` must adhere to the formal ru
 
 ---
 
-## 7. Development & Verification Commands
+## 7. Interactive Design Showcases & Component Studios
+
+The [M6 UI review guide](M6-UI-REVIEW.md) explains how to open the customer and merchant preview and what to review. Two standalone component showcases in `web/public/` can be opened directly or served by Vite:
+
+1. **`web/public/scratch.html` (Option 3 · Swift Signature Showcase)**:
+   - Evaluates the Teal & Warm Ivory design theme.
+   - Comprehensive component catalog with 4-step booking progression, courier POD signature capture, live pricing countdown, and transit milestone tracking.
+
+2. **`web/public/scratch-apple.html` (Apple Cupertino & Shadcn/UI Interactive Studio)**:
+   - **4 Design Archetypes:** Apple Cupertino (`data-style="apple"`), Linear/Craft (`data-style="linear"`), Framed Sheet (`data-style="framed"`), and Swift Signature (`data-style="swiftsig"`).
+   - **Dynamic Accent Color Picker:** 7 calibrated operational accent colors (Apple Blue, Swift Teal, Zinc Slate, Oxford Navy, Amber, Emerald, Crimson) plus arbitrary native hex picker with live CSS custom property updates.
+   - **Shadcn/UI Component Primitives:** Accordion with rotating chevrons, Dialog modal with zoom-in backdrop, Toast notification banner with auto-dismiss, Tooltips, Spring toggle switches, Shimmer skeleton loaders, Tabs, and tactile buttons with active press feedback (`scale(0.98)`).
+   - **Recommended Micro-Animations:** Apple-standard cubic bezier easing (`cubic-bezier(0.16, 1, 0.3, 1)`), 150ms–220ms durations, zero sluggish ease-in animations.
+   - **Embedded Lucide SVG Icons:** High-precision SVG iconography across navigation, actions, form inputs, status chips, and a dedicated 20-icon logistics catalog.
+   - **Taste-Skill Anti-Slop Compliant:** Strictly enforces `color-on-data <= 3%`, zero resting card shadows, zero purple/violet gradients, and verified via `taste-skill/scripts/lint.mjs --app` (`0 FAIL, 0 WARN`).
+
+---
+
+## 8. Development & Verification Commands
 
 ```bash
 # Navigate to web frontend workspace
@@ -179,7 +275,7 @@ npm run preview
 
 ---
 
-## 8. Living Documentation Maintenance Policy
+## 9. Living Documentation Maintenance Policy
 - **Member 6** synchronously updates this document and [`web/API.md`](./API.md) whenever new customer or merchant routes, workflows, or views are introduced.
 - **Member 7** synchronously updates this document and [`web/API.md`](./API.md) whenever new dispatcher boards, courier mobile workflows, or admin views are added.
 - **Zero Drift:** Any change affecting routing, shared API contracts, or role guards must be documented here synchronously with code modifications.

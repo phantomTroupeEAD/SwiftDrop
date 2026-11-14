@@ -47,6 +47,7 @@ flowchart LR
 
 1. **Inspect Before Editing:**
    - Read this file (`AGENTS.md`) and the relevant domain contract in `docs/architecture/domain-boundaries.md`.
+   - Before designing or implementing a frontend screen, read [`web/design.mdx`](web/design.mdx), select the end user's role preset, and complete the screen brief.
    - Inspect existing tests, interfaces, and current Git changes in the module before writing code.
 2. **Formulate a Plan:**
    - Identify which domain owns the change, what files are affected, and which business invariants must be protected.
@@ -229,10 +230,19 @@ If a module or service exposes any HTTP/REST endpoints, it MUST maintain a co-lo
 - Pass `context.Context` to all database, HTTP, and broker calls, honoring timeouts and cancellation.
 - Keep HTTP handlers thin; isolate persistence models from transport DTOs.
 
-### React & TypeScript Frontend
+### React & TypeScript Frontend (Apple HIG + shadcn Substrate Governance)
 - Enable TypeScript `strict` mode. Avoid `any`.
 - Keep API interactions in dedicated client services; do not scatter `fetch` or `axios` calls across components.
 - Frontend must never evaluate domain business logic or calculate delivery fees independently.
+- **Rule 1 — Read `web/design.md` First:** Before designing or implementing any frontend screen, read `web/design.md`, select the end user's role preset (`PUBLIC`, `CUSTOMER`, `MERCHANT`, `DISPATCHER`, `COURIER`, `ADMIN`), and follow the screen brief and token specifications.
+- **Rule 2 — Compose Exclusively from `@/shared/components/ui/`:** All user interface components must compose from the rethemed primitives located in `@/shared/components/ui/`. Direct imports from `@radix-ui/*` in feature code are strictly prohibited.
+- **Rule 3 — Zero Raw Element Substitutes:** Never write raw `<button>`, `<input>`, `<select>`, `<textarea>`, or custom card containers in feature views when an authoritative primitive exists in `@/shared/components/ui/`.
+- **Rule 4 — Foundational File Immutability:** The files `web/components.json`, `web/tailwind.config.js`, `web/src/index.css`, `web/design.md`, and all primitives in `web/src/shared/components/ui/` are frozen foundations. Agents must never modify their tokens, theme variables, or component styles without explicit approval from the design owner.
+- **Rule 5 — Prohibition of Hex Colors & Arbitrary Values:** Never introduce raw hex codes (`#123456`), RGB/HSL literals, or arbitrary Tailwind brackets (`bg-[#...]`, `p-[19px]`) in feature screens. All styling must consume semantic design tokens (`bg-surface`, `text-primary`, `border-border`, `bg-status-success-bg`). Verified automatically via `npm run lint:ui` and enforced on every build via `npm run build`.
+- **Rule 6 — Mandatory `[data-role]` Scoping:** Feature layouts and dashboard shells must set the appropriate `data-role="..."` attribute on their root wrapper so role-based accent palettes automatically cascade.
+- **Rule 7 — Prohibition of `shadcn add`:** Coding agents must never run `npx shadcn add` or dynamically pull unapproved primitives. The component substrate is strictly pre-installed and curated.
+- **Rule 8 — Enforcement via `lint:ui` in CI:** All frontend code must pass UI linting checks (`npm run lint:ui`, wired directly into `npm run build`). Any raw element substitution, arbitrary hex code, rogue radix import, or dependency addition will fail CI validation.
+- **Rule 9 — Frozen Legacy Ledger Immutability:** The legacy exemption ledger in `scripts/lint-ui.mjs` and `.eslintrc.cjs` is strictly **FROZEN** against additions. Entries may **only be removed** via migration PRs that refactor legacy screens to use `@/shared/components/ui/` primitives. Under no circumstances may a coding agent or developer add new or existing files to the legacy ledger.
 
 ### Python AI Service
 - Use type hints, explicit Pydantic schemas, and structured error responses.

@@ -70,6 +70,8 @@ Creates a new parcel booking for an authorized caller (`CUSTOMER`, approved `MER
 - `weight_kg`: Positive finite weight in kg matching the quote's chargeable weight (`max(actual, (L*W*H)/5000) <= 30.00 kg`).
 - `dimensions`: Mandatory object with positive finite `length_cm`, `width_cm`, `height_cm`.
 - `pickup`, `dropoff`: Mandatory objects with non-blank `contact_name`, `contact_phone`, `address_line1`, `city`, `postal_code`, and `zone_id` matching `^ZONE_[A-Z0-9_]{2,27}$` and matching the quote's origin and destination zones.
+- `item_description`: Optional string (maximum 500 characters, trimmed). Describes the contents/category of the parcel.
+- `special_instructions`: Optional string (trimmed). Custom delivery instructions or handling guidance.
 
 ### Success Response (`201 Created`)
 Wrapped in the canonical `httpx.WriteData` single-resource envelope (`{"data": ...}`):
@@ -119,6 +121,8 @@ Wrapped in the canonical `httpx.WriteData` single-resource envelope (`{"data": .
       "zone_id": "ZONE_CENTRAL_01",
       "instructions": "Leave at front security desk"
     },
+    "item_description": "Electronics - Replacement Laptop Battery",
+    "special_instructions": "Handle with care",
     "status": "CREATED",
     "attempt_count": 0,
     "max_attempts": 3,
@@ -238,7 +242,8 @@ Wrapped in `httpx.WriteData` (`{"data": ...}`):
 ## 4. Known Cross-Module Contract Mismatches & Wiring Notes
 - **Startup Wiring (`cmd/api`):** Route registration (`RegisterRoutes`) and HTTP handlers are implemented and verified in `internal/parcels/transport`, pending dependency injection wiring in `cmd/api/wiring.go` in the startup integration milestone.
 - **Member 4 (`internal/merchants` `BookingStub`):** Member 4's merchant order stub remains untouched in this milestone.
-- **Member 6 (`web/API.md`) & Earlier Pre-Implementation Draft Differences:** Earlier planning drafts used unwrapped responses, nested `"price": {"price_cents": ...}`, hyphenated `"ZONE-*"` IDs, client-supplied `"service_level"`, and omitted top-level `recipient_name`/`recipient_phone`. The authoritative implementation wraps responses in `{"data": ...}`, uses flat `delivery_fee_cents`/`pricing_rule_id`/`pricing_rule_version` + `weight.*`, requires `^ZONE_[A-Z0-9_]{2,27}$` underscores, derives `service_level` authoritatively from `quote_id`, and rejects unknown JSON fields and non-UUID `Idempotency-Key` values.
+- **Transactional Outbox Event (`parcel.booked.v1`):** Published atomically upon parcel creation with payload `ParcelBookedPayload`, which includes `item_description` and `special_instructions` alongside tracking number, quote metadata, fee, route zones, service level, weight, dimensions, and addresses.
+- **Member 6 (`web/API.md`) & Earlier Pre-Implementation Draft Differences:** Earlier planning drafts used unwrapped responses, nested `"price": {"price_cents": ...}`, hyphenated `"ZONE-*"` IDs, client-supplied `"service_level"`, and omitted top-level `recipient_name`/`recipient_phone`. The authoritative implementation wraps responses in `{"data": ...}`, uses flat `delivery_fee_cents`/`pricing_rule_id`/`pricing_rule_version` + `weight.*`, requires `^ZONE_[A-Z0-9_]{2,27}$` underscores, derives `service_level` authoritatively from `quote_id`, and rejects unknown JSON fields and non-UUID `Idempotency-Key` values. `item_description` (max 500 characters) and `special_instructions` are persisted end-to-end and returned in `ParcelResponse`.
 - **Member 10 (`services/ai-assistant`):** Any AI tool reading parcel details or booking parcels must pass Bearer JWT headers, unwrap `{"data": ...}`, and conform to the documented field schemas.
 
 ---

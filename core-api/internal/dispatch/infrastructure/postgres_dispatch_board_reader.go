@@ -31,37 +31,19 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 		SELECT 
 			p.id,
 			p.tracking_number,
-			COALESCE(p.weight_kg, 1.0) AS weight_kg,
-			COALESCE(p.recipient_city, '') AS recipient_city,
-			p.current_status,
+			p.actual_weight_kg AS weight_kg,
+			COALESCE(p.dropoff_address->>'city', '') AS recipient_city,
+			p.status,
 			p.created_at
 		FROM parcels p
-		WHERE p.current_status IN ('CREATED', 'ATTEMPT_FAILED')
+		WHERE p.status IN ('CREATED', 'ATTEMPT_FAILED')
 		ORDER BY p.created_at ASC
 		LIMIT 100;
 	`
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		// Fallback for schema variations if optional columns differ
-		fallbackQuery := `
-			SELECT 
-				p.id,
-				p.tracking_number,
-				1.0 AS weight_kg,
-				'' AS recipient_city,
-				p.current_status,
-				p.created_at
-			FROM parcels p
-			WHERE p.current_status IN ('CREATED', 'ATTEMPT_FAILED')
-			ORDER BY p.created_at ASC
-			LIMIT 100;
-		`
-		var fallbackErr error
-		rows, fallbackErr = r.db.QueryContext(ctx, fallbackQuery)
-		if fallbackErr != nil {
-			return nil, fmt.Errorf("failed to query unassigned parcels: %w", err)
-		}
+		return nil, fmt.Errorf("failed to query unassigned parcels: %w", err)
 	}
 	defer rows.Close()
 

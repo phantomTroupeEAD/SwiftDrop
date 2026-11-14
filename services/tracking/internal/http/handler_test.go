@@ -31,6 +31,10 @@ func (m *mockRepoForHTTP) FindStatusHistoryByParcelID(ctx context.Context, parce
 	return nil, nil
 }
 
+func (m *mockRepoForHTTP) FindStatusHistoryByID(ctx context.Context, historyID string) (*domain.MilestoneRecord, error) {
+	return nil, nil
+}
+
 func (m *mockRepoForHTTP) FindTrackingSummary(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
 	if m.findSummaryFunc != nil {
 		return m.findSummaryFunc(ctx, trackingNumber)
