@@ -33,10 +33,6 @@ definitions:
         $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address'
       businessName:
         type: string
-      contactEmail:
-        type: string
-      contactPhone:
-        type: string
     type: object
   github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest:
     properties:
