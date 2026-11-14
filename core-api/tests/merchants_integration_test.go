@@ -519,15 +519,29 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 	// 6. Merchant Books B2B Order with Idempotency Key (POST /api/v1/merchant/orders)
 	t.Run("E2E-6: B2B Order creation with Idempotency-Key", func(t *testing.T) {
 		orderBody := map[string]interface{}{
-			"recipient_name":  "Alice Perera",
-			"recipient_phone": "+94770001122",
-			"delivery_address": map[string]string{
-				"line1":   "250 Kandy Road",
-				"city":    "Kadawatha",
-				"country": "LK",
+			"merchant_reference": "E2E-TEST-ORDER-001",
+			"service_level":      "STANDARD",
+			"pickup": map[string]interface{}{
+				"contact_name":  "E2E Test Store",
+				"contact_phone": "+94771234599",
+				"address": map[string]string{
+					"line1":   "45 Galle Road",
+					"city":    "Colombo",
+					"country": "LK",
+				},
 			},
-			"weight_kg": 2.5,
-			"notes":     "Fragile electronics",
+			"dropoff": map[string]interface{}{
+				"contact_name":  "Alice Perera",
+				"contact_phone": "+94770001122",
+				"address": map[string]string{
+					"line1":   "250 Kandy Road",
+					"city":    "Kadawatha",
+					"country": "LK",
+				},
+			},
+			"parcel": map[string]interface{}{
+				"weight_kg": 2.5,
+			},
 		}
 		jsonBytes, _ := json.Marshal(orderBody)
 		idempotencyKey := "018f4a7c-5001-7000-8000-000000000055"
