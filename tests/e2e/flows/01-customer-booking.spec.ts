@@ -72,7 +72,7 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
       });
     });
 
-    await customerPage.route('**/api/v1/pricing/quote', async (route) => {
+    await customerPage.route('**/api/v1/pricing/quotes', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -81,11 +81,9 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
             quote_id: 'qte_mock_12345',
             pickup_postal_code: '00100',
             delivery_postal_code: '00400',
-            weight_kg: 2.5,
-            service_type: 'STANDARD',
+            fee_cents: 500,
             base_fee_cents: 350,
             weight_surcharge_cents: 150,
-            total_cents: 500,
             currency: 'LKR',
             expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
           },
@@ -93,22 +91,26 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
       });
     });
 
-    await customerPage.route('**/api/v1/parcels/book', async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          data: {
-            id: 'pcl_00100000-0000-0000-0000-000000000001',
-            tracking_number: 'SD-20261114-99881',
-            status: 'BOOKED',
-            quote_id: 'qte_mock_12345',
-            total_cents: 500,
-            currency: 'LKR',
-            created_at: new Date().toISOString(),
-          },
-        }),
-      });
+    await customerPage.route('**/api/v1/parcels', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: {
+              id: 'pcl_00100000-0000-0000-0000-000000000001',
+              tracking_number: 'SD-20261114-99881',
+              status: 'BOOKED',
+              quote_id: 'qte_mock_12345',
+              total_cents: 500,
+              currency: 'LKR',
+              created_at: new Date().toISOString(),
+            },
+          }),
+        });
+      } else {
+        await route.fallback();
+      }
     });
 
     // 2. Perform Customer Authentication
@@ -123,13 +125,13 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
 
     // Step 1: Addresses
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_NAME)).fill('Devinda Perera');
-    await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_PHONE)).fill('+94 77 123 4567');
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_PHONE)).fill('+94771234567');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_ADDRESS)).fill('42 Galle Road');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_CITY)).fill('Colombo');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_PICKUP_POSTAL)).fill('00100');
 
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_NAME)).fill('Kasun Wickrama');
-    await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_PHONE)).fill('+94 71 987 6543');
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_PHONE)).fill('+94719876543');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_ADDRESS)).fill('15/A Havelock Road');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_CITY)).fill('Colombo');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00400');
