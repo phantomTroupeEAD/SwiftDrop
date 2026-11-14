@@ -5,7 +5,7 @@ import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
 import { statusLabel } from './api';
 
-type PortalProfile = 'public' | 'customer' | 'merchant';
+type PortalProfile = 'public' | 'customer' | 'merchant' | 'dispatcher';
 
 export function PortalHeader({ profile }: { profile: PortalProfile }) {
   const { user, logout } = useAuth();
@@ -20,7 +20,7 @@ export function PortalHeader({ profile }: { profile: PortalProfile }) {
           ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
           : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
         <nav aria-label="Portal navigation">
-          {profile !== 'public' && <NavLink to="/dashboard" end>Home</NavLink>}
+          {profile !== 'public' && profile !== 'dispatcher' && <NavLink to="/dashboard" end>Home</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/merchants/apply">Merchant application</NavLink>}
           {profile === 'merchant' && <>
@@ -30,7 +30,7 @@ export function PortalHeader({ profile }: { profile: PortalProfile }) {
           </>}
           {profile === 'public'
             ? <NavLink to="/track">Track a parcel</NavLink>
-            : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+            : profile === 'dispatcher' ? <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink> : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
         </nav>
       </header>

@@ -18,7 +18,6 @@ module.exports = {
     'src/features/dashboards/AdminDashboard.tsx',
     'src/features/dashboards/CourierDashboard.tsx',
     'src/features/dashboards/DashboardLayout.tsx',
-    'src/features/dashboards/DispatcherDashboard.tsx',
     'src/features/dashboards/MerchantDashboard.tsx',
   ],
   parser: '@typescript-eslint/parser',

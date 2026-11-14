@@ -174,3 +174,10 @@ These IDs are required by the M6 alignment guide. They are not promises that the
 The clean shipping UI components (`/design-preview`) are fully verified locally without altering prototype dashboards or shared M7 code.
 
 Verification: `npm run build` passed (`tsc && vite build`). All 31 active selector literals across `SwiftSignatureTheme.tsx` and `LoginPage.tsx` are documented in this register. Input controls in the UI are linked to visible labels with `htmlFor` / `id`. Retired design-comparison and forced-state selectors are documented explicitly. Unit/E2E test scripts remain absent from the package manifest, so no journey-test passes are claimed.
+
+| Dispatcher selector | Purpose |
+| --- | --- |
+| `dispatcher-board` | Loaded assignment queue and courier roster |
+| `dispatcher-courier-select` | Eligible courier selection within a parcel row |
+| `dispatcher-assign-btn` | Submit the selected parcel and courier |
+| `dispatcher-retry-btn` | Reload the dispatch board after a failed request |

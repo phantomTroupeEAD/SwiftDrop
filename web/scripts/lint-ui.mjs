@@ -62,7 +62,6 @@ const LEGACY_PRE_SHADCN_FILES = new Set([
   'src/features/dashboards/AdminDashboard.tsx',
   'src/features/dashboards/CourierDashboard.tsx',
   'src/features/dashboards/DashboardLayout.tsx',
-  'src/features/dashboards/DispatcherDashboard.tsx',
   'src/features/dashboards/MerchantDashboard.tsx',
 ].map((p) => path.normalize(p)));
 
