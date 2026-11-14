@@ -118,3 +118,29 @@ func (r *PostgresDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneI
 
 	return list, rows.Err()
 }
+
+func (r *PostgresDispatchBoardReader) GetAssignedParcels(ctx context.Context, zoneID string) ([]application.AssignedParcelDTO, error) {
+	if r.db == nil {
+		return nil, db.ErrNilDB
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT p.id, p.tracking_number, p.actual_weight_kg, COALESCE(p.dropoff_address->>'city', ''),
+		       p.status, p.created_at, a.courier_id
+		FROM courier_assignments a JOIN parcels p ON p.id = a.parcel_id
+		WHERE a.status = 'ACTIVE' AND ($1 = '' OR p.destination_zone_id = $1)
+		ORDER BY a.assigned_at DESC, a.id DESC LIMIT 100
+	`, zoneID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query assigned parcels: %w", err)
+	}
+	defer rows.Close()
+	var parcels []application.AssignedParcelDTO
+	for rows.Next() {
+		var p application.AssignedParcelDTO
+		if err := rows.Scan(&p.ID, &p.TrackingNumber, &p.WeightKg, &p.RecipientCity, &p.Status, &p.CreatedAt, &p.CourierID); err != nil {
+			return nil, err
+		}
+		parcels = append(parcels, p)
+	}
+	return parcels, rows.Err()
+}

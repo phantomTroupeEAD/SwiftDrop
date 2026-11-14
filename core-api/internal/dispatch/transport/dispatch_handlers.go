@@ -107,6 +107,7 @@ func (h *DispatchHandler) GetDispatchBoard(w http.ResponseWriter, r *http.Reques
 	resp := DispatchBoardResponse{
 		ZoneID:            board.ZoneID,
 		UnassignedParcels: board.UnassignedParcels,
+		AssignedParcels:   board.AssignedParcels,
 		CourierLoads:      board.ActiveCouriers,
 	}
 

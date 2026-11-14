@@ -75,6 +75,7 @@ type RegisterCourierCommand struct {
 // DispatchBoardDTO is the response envelope for the dispatcher board query.
 type DispatchBoardDTO struct {
 	ZoneID            string                `json:"zone_id"`
+	AssignedParcels   []AssignedParcelDTO   `json:"assigned_parcels"`
 	UnassignedParcels []UnassignedParcelDTO `json:"unassigned_parcels"`
 	ActiveCouriers    []CourierLoadDTO      `json:"active_couriers"`
 }

@@ -30,50 +30,26 @@ func (r *PostgresManifestReader) GetActiveManifest(ctx context.Context, courierI
 		SELECT 
 			ca.parcel_id::text,
 			p.tracking_number,
-			p.current_status,
-			COALESCE(pa.zone_id, '') AS destination_zone,
-			COALESCE(pa.contact_name, '') AS recipient_name,
-			COALESCE(pa.contact_phone, '') AS recipient_phone,
-			COALESCE(pa.address_line1, '') AS delivery_street,
-			COALESCE(pa.city, '') AS delivery_city,
-			COALESCE(p.weight_kg, 1.0) AS weight_kg,
-			COALESCE(p.handling_instructions, '') AS handling_instructions,
+			p.status,
+			COALESCE(p.dropoff_address->>'zone_id', '') AS destination_zone,
+			COALESCE(p.dropoff_address->>'contact_name', '') AS recipient_name,
+			COALESCE(p.dropoff_address->>'contact_phone', '') AS recipient_phone,
+			COALESCE(p.dropoff_address->>'address_line1', '') AS delivery_street,
+			COALESCE(p.dropoff_address->>'city', '') AS delivery_city,
+			COALESCE(p.actual_weight_kg, 1.0) AS weight_kg,
+			COALESCE(p.dropoff_address->>'handling_instructions', '') AS handling_instructions,
 			p.attempt_count,
 			ca.assigned_at
 		FROM courier_assignments ca
 		JOIN parcels p ON p.id = ca.parcel_id
-		LEFT JOIN parcel_addresses pa ON pa.parcel_id = p.id AND pa.address_type = 'DROPOFF'
+
 		WHERE ca.courier_id = $1 AND ca.status = 'ACTIVE'
 		ORDER BY ca.assigned_at ASC;
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, courierID)
 	if err != nil {
-		// Fallback query if parcel_addresses or extended columns do not exist in test stubs
-		fallbackQuery := `
-			SELECT 
-				ca.parcel_id::text,
-				p.tracking_number,
-				p.current_status,
-				'' AS destination_zone,
-				'' AS recipient_name,
-				'' AS recipient_phone,
-				'' AS delivery_street,
-				'' AS delivery_city,
-				1.0 AS weight_kg,
-				'' AS handling_instructions,
-				p.attempt_count,
-				ca.assigned_at
-			FROM courier_assignments ca
-			JOIN parcels p ON p.id = ca.parcel_id
-			WHERE ca.courier_id = $1 AND ca.status = 'ACTIVE'
-			ORDER BY ca.assigned_at ASC;
-		`
-		var fallbackErr error
-		rows, fallbackErr = r.db.QueryContext(ctx, fallbackQuery, courierID)
-		if fallbackErr != nil {
-			return nil, fmt.Errorf("failed to query courier manifest for %s: %w", courierID, err)
-		}
+		return nil, fmt.Errorf("failed to query courier manifest: %w", err)
 	}
 	defer rows.Close()
 

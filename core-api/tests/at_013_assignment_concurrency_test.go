@@ -249,3 +249,7 @@ func TestAT013_AssignmentConcurrencyRace(t *testing.T) {
 	assert.Equal(t, 1, activeCount, "AT-013: Exactly ONE active assignment must exist in persistence for target parcel")
 	assert.Equal(t, "ASSIGNED", storage.statuses[targetParcelID], "AT-013: Parcel status must be ASSIGNED")
 }
+
+func (*concurrentMockAssignmentStorage) GetAssignedParcels(context.Context, string) ([]dispatchApp.AssignedParcelDTO, error) {
+	return nil, nil
+}

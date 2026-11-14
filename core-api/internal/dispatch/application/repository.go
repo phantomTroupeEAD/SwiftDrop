@@ -49,7 +49,13 @@ type CourierLoadDTO struct {
 }
 
 // DispatchBoardReader provides optimized, read-only queries for the Dispatcher Board.
+type AssignedParcelDTO struct {
+	UnassignedParcelDTO
+	CourierID string `json:"courier_id"`
+}
+
 type DispatchBoardReader interface {
+	GetAssignedParcels(ctx context.Context, zoneID string) ([]AssignedParcelDTO, error)
 	GetUnassignedParcels(ctx context.Context, zoneID string) ([]UnassignedParcelDTO, error)
 	GetCourierLoads(ctx context.Context, zoneID string) ([]CourierLoadDTO, error)
 }

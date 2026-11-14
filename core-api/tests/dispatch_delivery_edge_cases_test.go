@@ -791,3 +791,7 @@ func TestDispatchAndDelivery_AllEndpointsAndEdgeCases(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "attempt_count")
 	})
 }
+
+func (*comprehensiveMockStorage) GetAssignedParcels(context.Context, string) ([]dispatchApp.AssignedParcelDTO, error) {
+	return nil, nil
+}

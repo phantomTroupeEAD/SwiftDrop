@@ -475,3 +475,7 @@ func TestDispatchHandler_RegisterCourier_Validation(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "CR-1015")
 	})
 }
+
+func (*mockDispatchBoardReader) GetAssignedParcels(context.Context, string) ([]application.AssignedParcelDTO, error) {
+	return nil, nil
+}
