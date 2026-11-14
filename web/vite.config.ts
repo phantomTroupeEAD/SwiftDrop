@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -11,85 +11,87 @@ const MOCK_USERS: Record<string, { role: string; name: string; tenant_id: string
   'customer@swiftdrop.local': { role: 'CUSTOMER', name: 'Nimal Fernando', tenant_id: null },
 };
 
-const demoAuth = process.env.SWIFTDROP_DEMO_AUTH === '1';
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'SWIFTDROP_');
+  const demoAuth = env.SWIFTDROP_DEMO_AUTH === '1';
+  return {
+    plugins: [
+      react(),
+      {
+        name: 'dev-demo-auth-middleware',
+        configureServer(server) {
+          if (!demoAuth) return;
+          server.middlewares.use((req, res, next) => {
+            if (req.url === '/api/v1/auth/refresh' && req.method === 'POST') {
+              res.writeHead(401, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: { message: 'Demo sessions end on reload.' } }));
+              return;
+            }
+            if (req.url === '/api/v1/auth/login' && req.method === 'POST') {
+              let rawBody = '';
+              req.on('data', (chunk) => {
+                rawBody += chunk;
+              });
+              req.on('end', () => {
+                try {
+                  const parsed = JSON.parse(rawBody);
+                  const email = (parsed.email || '').trim().toLowerCase();
+                  const mock = MOCK_USERS[email] || {
+                    role: 'CUSTOMER',
+                    name: 'Demo User',
+                    tenant_id: null,
+                  };
 
-export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: 'dev-demo-auth-middleware',
-      configureServer(server) {
-        if (!demoAuth) return;
-        server.middlewares.use((req, res, next) => {
-          if (req.url === '/api/v1/auth/refresh' && req.method === 'POST') {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: { message: 'Demo sessions end on reload.' } }));
-            return;
-          }
-          if (req.url === '/api/v1/auth/login' && req.method === 'POST') {
-            let rawBody = '';
-            req.on('data', (chunk) => {
-              rawBody += chunk;
-            });
-            req.on('end', () => {
-              try {
-                const parsed = JSON.parse(rawBody);
-                const email = (parsed.email || '').trim().toLowerCase();
-                const mock = MOCK_USERS[email] || {
-                  role: 'CUSTOMER',
-                  name: 'Demo User',
-                  tenant_id: null,
-                };
-
-                const response = {
-                  data: {
-                    access_token: `mock_jwt_token_for_${mock.role}_${Date.now()}`,
-                    token_type: 'Bearer',
-                    expires_in: 900,
-                    user: {
-                      id: `usr_${mock.role.toLowerCase()}_001`,
-                      email: email || 'customer@swiftdrop.local',
-                      display_name: mock.name,
-                      role: mock.role,
-                      tenant_id: mock.tenant_id,
+                  const response = {
+                    data: {
+                      access_token: `mock_jwt_token_for_${mock.role}_${Date.now()}`,
+                      token_type: 'Bearer',
+                      expires_in: 900,
+                      user: {
+                        id: `usr_${mock.role.toLowerCase()}_001`,
+                        email: email || 'customer@swiftdrop.local',
+                        display_name: mock.name,
+                        role: mock.role,
+                        tenant_id: mock.tenant_id,
+                      },
                     },
-                  },
-                };
+                  };
 
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(response));
-              } catch {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: { message: 'Invalid JSON payload' } }));
-              }
-            });
-            return;
-          }
-          next();
-        });
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify(response));
+                } catch {
+                  res.writeHead(400, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: { message: 'Invalid JSON payload' } }));
+                }
+              });
+              return;
+            }
+            next();
+          });
+        },
+      },
+    ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
       },
     },
-  ],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  server: {
-    port: 3000,
-    proxy: {
-      '/api/v1/ai': {
-        target: process.env.SWIFTDROP_AI_API_URL || 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
-      '/api/v1/tracking': {
-        target: process.env.SWIFTDROP_TRACKING_API_URL || 'http://127.0.0.1:8081',
-        changeOrigin: true,
-      },
-      '/api': {
-        target: process.env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
-        changeOrigin: true,
+    server: {
+      port: 3000,
+      proxy: {
+        '/api/v1/ai': {
+          target: env.SWIFTDROP_AI_API_URL || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+        '/api/v1/tracking': {
+          target: env.SWIFTDROP_TRACKING_API_URL || 'http://127.0.0.1:8081',
+          changeOrigin: true,
+        },
+        '/api': {
+          target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
       },
     },
-  },
+  };
 });

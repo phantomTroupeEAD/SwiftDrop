@@ -59,19 +59,8 @@ if (depDiffAdded.length > 0 || depDiffRemoved.length > 0) {
 // Primitives in src/shared/components/ui/ are the substrate and are exempt.
 // Legacy pre-shadcn files are isolated in a tracked exemption ledger until migrated.
 const LEGACY_PRE_SHADCN_FILES = new Set([
-  'src/features/auth/LoginPage.tsx',
-  'src/features/auth/RegisterPage.tsx',
-  'src/features/customer-merchant/portal/BookingPage.tsx',
-  'src/features/customer-merchant/portal/MerchantOrderImport.tsx',
-  'src/features/customer-merchant/portal/MerchantPage.tsx',
-  'src/features/customer-merchant/portal/PortalLayout.tsx',
-  'src/features/customer-merchant/portal/RegisterPage.tsx',
-  'src/features/customer-merchant/portal/TrackingPage.tsx',
-  'src/features/customer-merchant/preview/DesignPreviewPage.tsx',
-  'src/features/customer-merchant/preview/SwiftSignatureTheme.tsx',
   'src/features/dashboards/AdminDashboard.tsx',
   'src/features/dashboards/CourierDashboard.tsx',
-  'src/features/dashboards/CustomerDashboard.tsx',
   'src/features/dashboards/DashboardLayout.tsx',
   'src/features/dashboards/DispatcherDashboard.tsx',
   'src/features/dashboards/MerchantDashboard.tsx',

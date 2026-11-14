@@ -11,13 +11,14 @@
 | `booking-{weight,length,width,height,description}-input`, `booking-service-select` | Parcel details |
 | `booking-next-btn`, `booking-back-btn`, `quote-price-cents`, `booking-submit-btn`, `booking-confirmation`, `booking-receipt-btn`, `booking-receipt` | Booking navigation, authoritative quote, submission, result and official receipt |
 | `booking-confirmation-tracking-no` | Tracking number returned after booking |
+| `booking-quote-countdown` | Time remaining before the quote expires |
 | `tracking-search-input`, `tracking-search-btn`, `tracking-status-badge`, `tracking-timeline` | Public tracking search and results |
 | `merchant-application-{business_name,contact_email,contact_phone,line1,city,country}-input`, `merchant-application-submit-btn`, `merchant-application-status` | Merchant application and status |
 | `merchant-order-search`, `merchant-order-filter`, `merchant-order-table`, `merchant-order-empty`, `merchant-order-reset-btn`, `merchant-retry-btn` | Tenant order list, filtering, empty state, filter reset and load retry |
 | `batch-csv-file-input`, `batch-csv-submit-btn` | CSV selection and order submission or retry |
 | `merchant-key-label-input`, `merchant-key-read-scope`, `merchant-key-create-scope`, `merchant-key-revoke-btn` | API key creation fields and revoke actions |
 | `merchant-profile-retry-btn` | Retries a failed merchant profile request on the dashboard or orders page |
-| `assistant-open-btn`, `assistant-prompt-input`, `assistant-send-btn` | Opens the customer assistant, enters a message, and submits it |
+| `assistant-panel`, `assistant-prompt-input`, `assistant-send-btn` | Embedded customer chat, message field, and submit action |
 | `merchant-webhook-url-input`, `merchant-webhook-event-{eventType}`, `merchant-webhook-delete-btn` | Webhook registration fields and remove actions |
 | `merchant-credential-create-btn`, `merchant-credential-confirm-btn`, `one-time-key-copy-btn`, `merchant-secret-close-btn` | Credential mutations, one-time copy and dismissal |
 
@@ -42,7 +43,6 @@ Routes: `/design-preview` and `/preview/design`.
 | --- | --- | --- |
 | `signature-theme-root` | Root container for the clean shipping UI | Always mounted on `/design-preview` |
 | `signature-night-toggle` | Appearance toggle: light daylight ivory vs dark evening palette (`aria-pressed`) | Topbar header control |
-| `login-theme-preview-link` | Direct link on `/auth/login` to preview customer/merchant UI | Always mounted on `/auth/login` |
 | `signature-booking-step-1` | Stepper item: Step 1 (Addresses) | Customer booking wizard |
 | `signature-booking-step-2` | Stepper item: Step 2 (Parcel details) | Customer booking wizard |
 | `signature-booking-step-3` | Stepper item: Step 3 (Quote) | Customer booking wizard |
@@ -167,7 +167,7 @@ These IDs are required by the M6 alignment guide. They are not promises that the
 | `batch-csv-submit-btn` | Submit validated CSV orders |
 | `generate-api-key-btn` | Request a new merchant API key |
 | `one-time-key-copy-btn` | Copy a newly issued key in transient modal |
-| `dismiss-key-modal-checkbox` | Confirm newly issued key is saved |
+| `dismiss-key-modal-checkbox` | Confirm the newly issued API key or webhook secret is saved before dismissing its dialog |
 
 ## Verification status
 

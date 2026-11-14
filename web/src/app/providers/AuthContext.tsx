@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { useCallback, createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, LoginResponseData, GoogleLoginResponseData } from '@/shared/types/auth';
 import { withRequestReference } from '@/shared/lib/api-error';
 
@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   loginWithGoogle: (idToken: string) => Promise<{ user: User; isNewUser: boolean; requiresPhone: boolean }>;
   updateProfile: (phone: string, termsAccepted: boolean) => Promise<User>;
+  refreshSession: () => Promise<User | null>;
   logout: () => void;
 }
 
@@ -65,6 +66,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsRestoringSession(false);
     });
     return () => { active = false; };
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const session = await restoreSession();
+    if (!session) return null;
+    setAccessToken(session.access_token);
+    setUser(session.user);
+    return session.user;
   }, []);
 
   const login = async (email: string, password: string): Promise<User> => {
@@ -204,6 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         loginWithGoogle,
         updateProfile,
+        refreshSession,
         logout,
       }}
     >

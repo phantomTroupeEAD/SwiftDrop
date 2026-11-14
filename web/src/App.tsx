@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
@@ -9,11 +9,15 @@ import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
 import { CourierDashboard } from '@/features/dashboards/CourierDashboard';
 import { RoleHome } from '@/features/dashboards/RoleHome';
 import type { Role } from '@/shared/types/auth';
-import { DesignPreviewPage } from '@/features/customer-merchant/preview/DesignPreviewPage';
 import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+
+function CustomerBookingAlias() {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: '/portal/book', search }} replace />;
+}
 
 // Protected Route Guard
 function SignedInHome() {
@@ -26,12 +30,29 @@ function SignedInHome() {
   }
 }
 
+function MerchantSessionGate({ children }: { children: React.ReactNode }) {
+  const { user, refreshSession } = useAuth();
+  const [attempted, setAttempted] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user?.role !== 'CUSTOMER') return;
+    let active = true;
+    void refreshSession().finally(() => { if (active) setAttempted(true); });
+    return () => { active = false; };
+  }, [user?.id, user?.role, refreshSession]);
+
+  if (user?.role === 'MERCHANT') return <>{children}</>;
+  if (user?.role === 'CUSTOMER' && !attempted) return <p role="status">Checking merchant access…</p>;
+  return <Navigate to="/dashboard" replace />;
+}
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: Role }> = ({ children, role }) => {
   const { isAuthenticated, isRestoringSession, user } = useAuth();
   if (isRestoringSession) return <p role="status">Restoring your session…</p>;
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />;
   }
+  if (role === 'MERCHANT') return <MerchantSessionGate>{children}</MerchantSessionGate>;
   if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
@@ -47,14 +68,11 @@ export const AppRoutes: React.FC = () => {
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
       <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
+      <Route path="/customer/book" element={<CustomerBookingAlias />} />
       <Route path="/portal/merchants/apply" element={<ProtectedRoute role="CUSTOMER"><MerchantApplication /></ProtectedRoute>} />
       <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
       <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
       <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
-
-      {/* Visual Foundation & Design Preview (Unauthenticated evaluation studio) */}
-      <Route path="/design-preview" element={<DesignPreviewPage />} />
-      <Route path="/preview/design" element={<DesignPreviewPage />} />
 
       {/* Dev-Only Design System Parity Studio (Gated out of production) */}
       {import.meta.env.DEV && (

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/components/ui/dialog';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { errorMessage, portalRequest } from './api';
@@ -23,6 +22,10 @@ function bookingLink(actions?: BookingAction[]) {
   }
   const weight = data?.weight_kg;
   if (typeof weight === 'number' && weight >= 0.01 && weight <= 30) params.set('weight_kg', String(weight));
+  for (const key of ['length_cm', 'width_cm', 'height_cm']) {
+    const dimension = data?.[key];
+    if (typeof dimension === 'number' && dimension >= 0.01 && dimension <= 150) params.set(key, String(dimension));
+  }
   if (data?.service_type === 'EXPRESS') params.set('service_type', 'EXPRESS');
   return params.size ? `/portal/book?${params}` : '/portal/book';
 }
@@ -67,22 +70,14 @@ export function AssistantChat({ token }: { token: string }) {
     }
   }
 
-  return <Dialog>
-    <DialogTrigger asChild>
-      <Button type="button" size="icon" className="assistant-chat-launcher" aria-label="Open SwiftDrop Assistant"
-        title="SwiftDrop Assistant" data-testid="assistant-open-btn">
-        <MessageCircle aria-hidden="true" className="assistant-chat-bubble" />
-        <Sparkles aria-hidden="true" className="assistant-chat-sparkle" />
-      </Button>
-    </DialogTrigger>
-    <DialogContent data-role="CUSTOMER" className="assistant-chat-panel max-w-full sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>SwiftDrop Assistant</DialogTitle>
-        <DialogDescription>Ask about tracking, delivery prices, or shipping policies.</DialogDescription>
-      </DialogHeader>
-      <div ref={transcript} role="log" aria-label="Conversation" className="min-h-0 max-h-96 space-y-4 overflow-y-auto p-4">
+  return (
+    <section aria-labelledby="assistant-chat-title" className="overflow-hidden rounded-lg border border-border bg-surface" data-testid="assistant-panel">
+      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Sparkles className="size-4 text-primary" aria-hidden="true" />
+        <h2 id="assistant-chat-title" className="text-lg font-semibold">SwiftDrop Assistant</h2>
+      </header>
+      <div ref={transcript} role="log" aria-label="Conversation" className="min-h-28 max-h-80 space-y-4 overflow-y-auto p-4">
         {!turns.length && <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled={pending} onClick={() => setDraft('I want to track a parcel.')}>Track a parcel</Button>
           <Button type="button" variant="outline" disabled={pending} onClick={() => setDraft('Can you help me estimate a delivery fee?')}>Estimate delivery cost</Button>
         </div>}
         {turns.map((turn, index) => <div key={index} className="space-y-3">
@@ -103,6 +98,6 @@ export function AssistantChat({ token }: { token: string }) {
           <Button type="submit" data-testid="assistant-send-btn" disabled={pending || !draft.trim()}><Send aria-hidden="true" /> Send</Button>
         </div>
       </form>
-    </DialogContent>
-  </Dialog>;
+    </section>
+  );
 }

@@ -261,7 +261,7 @@ export const LoginPage: React.FC = () => {
               <div className="space-y-3 pt-1">
                 <div className="relative flex items-center justify-center">
                   <Separator className="w-full" />
-                  <span className="absolute bg-surface px-2 text-[10px] uppercase tracking-wider text-text-muted">
+                  <span className="absolute bg-surface px-2 text-xs uppercase tracking-wider text-text-muted">
                     developer testing
                   </span>
                 </div>
@@ -306,13 +306,6 @@ export const LoginPage: React.FC = () => {
               </Button>
             </p>
 
-            {import.meta.env.DEV && (
-              <Button asChild variant="link" size="sm" className="text-[11px] text-text-muted hover:text-text h-auto p-0">
-                <Link to="/design-preview" data-testid="login-theme-preview-link">
-                  Open design preview studio
-                </Link>
-              </Button>
-            )}
           </CardFooter>
         </Card>
 
