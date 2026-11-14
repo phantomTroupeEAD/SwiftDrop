@@ -17,7 +17,25 @@ test.describe('Flow 3: Courier Mobile Run & POD Capture E2E Flow', () => {
   test('should execute stop-by-stop mobile transit milestones and complete electronic signature POD', async ({
     courierPage,
   }) => {
-    // 1. Mock Courier Authentication
+    // 1. Mock Courier Authentication & Session Refresh
+    await courierPage.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            access_token: 'mock-courier-jwt-token',
+            user: {
+              id: 'cr010000-0000-0000-0000-000000000001',
+              email: 'courier@swiftdrop.io',
+              role: 'COURIER',
+              full_name: 'Saman Kumara',
+            },
+          },
+        }),
+      });
+    });
+
     await courierPage.route('**/api/v1/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -57,7 +75,7 @@ test.describe('Flow 3: Courier Mobile Run & POD Capture E2E Flow', () => {
     }
 
     // Step B: Locate parcel in OUT_FOR_DELIVERY status and trigger "Capture POD"
-    const capturePodBtn = courierPage.getByRole('button', { name: 'Capture POD' });
+    const capturePodBtn = courierPage.getByRole('button', { name: 'Capture POD' }).first();
     await expect(capturePodBtn).toBeVisible();
     await capturePodBtn.click();
 
@@ -77,6 +95,6 @@ test.describe('Flow 3: Courier Mobile Run & POD Capture E2E Flow', () => {
 
     // Step D: Verify Drop Completed status and captured signature badge
     await expect(courierPage.getByText('Signed by Kasun Wickramasinghe')).toBeVisible();
-    await expect(courierPage.getByText('Drop Completed')).toBeVisible();
+    await expect(courierPage.getByText('Drop Completed').first()).toBeVisible();
   });
 });

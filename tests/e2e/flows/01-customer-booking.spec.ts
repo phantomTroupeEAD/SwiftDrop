@@ -19,6 +19,24 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
     customerPage,
   }) => {
     // 1. Intercept backend REST API calls with deterministic mock responses
+    await customerPage.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            access_token: 'mock-customer-jwt-token',
+            user: {
+              id: 'c0010000-0000-0000-0000-000000000001',
+              email: 'customer@swiftdrop.io',
+              role: 'CUSTOMER',
+              full_name: 'Devinda Perera',
+            },
+          },
+        }),
+      });
+    });
+
     await customerPage.route('**/api/v1/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -33,6 +51,22 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
               role: 'CUSTOMER',
               full_name: 'Devinda Perera',
             },
+          },
+        }),
+      });
+    });
+
+    await customerPage.route('**/api/v1/zones?postal_code=*', async (route) => {
+      const url = new URL(route.request().url());
+      const postal = url.searchParams.get('postal_code');
+      const zoneId = postal === '00100' ? 'ZONE_COLOMBO_CENTRAL' : 'ZONE_COLOMBO_SOUTH';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            id: zoneId,
+            name: zoneId === 'ZONE_COLOMBO_CENTRAL' ? 'Colombo Central' : 'Colombo South',
           },
         }),
       });
@@ -100,9 +134,15 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_CITY)).fill('Colombo');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00400');
 
-    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
+    // Wait for postal zones to be resolved and displayed
+    await expect(customerPage.getByText('✓ ZONE_COLOMBO_CENTRAL')).toBeVisible();
+    await expect(customerPage.getByText('✓ ZONE_COLOMBO_SOUTH')).toBeVisible();
+
+    // Advance to Step 1 (Parcel Details)
+    await customerPage.getByRole('button', { name: 'Continue' }).click();
 
     // Step 2: Parcel Details
+    await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT))).toBeVisible();
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT)).fill('2.5');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_LENGTH)).fill('20');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WIDTH)).fill('15');
@@ -110,11 +150,15 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DESCRIPTION)).fill('Electronics component parcel');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.SELECT_SERVICE)).selectOption('STANDARD');
 
-    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
+    // Advance to Step 2 (Quote)
+    await customerPage.getByRole('button', { name: 'Get quote' }).click();
 
     // Step 3: Authoritative Dynamic Quote Verification
     const quotePriceLocator = customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS));
     await expect(quotePriceLocator).toBeVisible();
+
+    // Advance to Step 3 (Review / Confirm)
+    await customerPage.getByRole('button', { name: 'Continue' }).click();
 
     // Step 4: Submit Booking
     await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_SUBMIT_BOOKING)).click();
