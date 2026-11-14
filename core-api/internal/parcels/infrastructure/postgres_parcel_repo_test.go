@@ -23,24 +23,26 @@ func validTestParcel() domain.Parcel {
 	dropoff, _ := domain.NewAddress("Sunil", "+94719876543", "12 Kandy Rd", "", "Kandy", "20000", "ZONE_CENTRAL_01", "Call upon arrival")
 
 	p, _ := domain.NewParcel(domain.CreateParcelParams{
-		ID:                 "parcel-uuid-001",
-		TrackingNumber:     tn,
-		SenderID:           strPtr("sender-001"),
-		MerchantID:         nil,
-		RecipientName:      "Sunil",
-		RecipientPhone:     "+94719876543",
-		QuoteID:            "quote-001",
-		PricingRuleID:      "rule-001",
-		PricingRuleVersion: 1,
-		DeliveryFee:        fee,
-		OriginZoneID:       "ZONE_WESTERN_01",
-		DestinationZoneID:  "ZONE_CENTRAL_01",
-		ServiceLevel:       domain.ServiceLevelStandard,
-		Weight:             weight,
-		Dimensions:         dims,
-		PickupAddress:      pickup,
-		DropoffAddress:     dropoff,
-		CreatedAt:          now,
+		ID:                  "parcel-uuid-001",
+		TrackingNumber:      tn,
+		SenderID:            strPtr("sender-001"),
+		MerchantID:          nil,
+		RecipientName:       "Sunil",
+		RecipientPhone:      "+94719876543",
+		QuoteID:             "quote-001",
+		PricingRuleID:       "rule-001",
+		PricingRuleVersion:  1,
+		DeliveryFee:         fee,
+		OriginZoneID:        "ZONE_WESTERN_01",
+		DestinationZoneID:   "ZONE_CENTRAL_01",
+		ServiceLevel:        domain.ServiceLevelStandard,
+		Weight:              weight,
+		Dimensions:          dims,
+		PickupAddress:       pickup,
+		DropoffAddress:      dropoff,
+		ItemDescription:     "Documents and certificates",
+		SpecialInstructions: "Do not bend",
+		CreatedAt:           now,
 	})
 	return p
 }
@@ -70,8 +72,8 @@ func TestPostgresParcelRepository_Save_OwnershipAndJSONB(t *testing.T) {
 			t.Errorf("expected SQL to use attempt_count instead of delivery_attempts, got: %s", executedQuery)
 		}
 
-		if len(capturedArgs) != 27 {
-			t.Fatalf("expected 27 arguments, got %d", len(capturedArgs))
+		if len(capturedArgs) != 29 {
+			t.Fatalf("expected 29 arguments, got %d", len(capturedArgs))
 		}
 		if capturedArgs[0].Value != parcel.ID {
 			t.Errorf("expected arg 1 to be %s, got %v", parcel.ID, capturedArgs[0].Value)
@@ -97,12 +99,21 @@ func TestPostgresParcelRepository_Save_OwnershipAndJSONB(t *testing.T) {
 		if pickupMap["address_line1"] != "45 Galle Rd" || pickupMap["instructions"] != "Ring front bell" || pickupMap["zone_id"] != "ZONE_WESTERN_01" {
 			t.Errorf("unexpected snake_case pickup JSONB: %v", pickupMap)
 		}
+
+		if capturedArgs[22].Value != "Documents and certificates" {
+			t.Errorf("expected arg 23 (item_description) to be 'Documents and certificates', got %v", capturedArgs[22].Value)
+		}
+		if capturedArgs[23].Value != "Do not bend" {
+			t.Errorf("expected arg 24 (special_instructions) to be 'Do not bend', got %v", capturedArgs[23].Value)
+		}
 	})
 
 	t.Run("merchant-only parcel persists SQL NULL sender_id", func(t *testing.T) {
 		parcel := validTestParcel()
 		parcel.SenderID = nil
 		parcel.MerchantID = strPtr("merchant-001")
+		parcel.ItemDescription = ""
+		parcel.SpecialInstructions = ""
 
 		var capturedArgs []driver.NamedValue
 		database := registerMockDB("save_parcel_merchant_only", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
@@ -121,6 +132,12 @@ func TestPostgresParcelRepository_Save_OwnershipAndJSONB(t *testing.T) {
 		}
 		if capturedArgs[3].Value != "merchant-001" {
 			t.Errorf("expected arg 4 (merchant_id) to be merchant-001, got %v", capturedArgs[3].Value)
+		}
+		if capturedArgs[22].Value != nil {
+			t.Errorf("expected arg 23 (item_description) to be nil for empty description, got %v", capturedArgs[22].Value)
+		}
+		if capturedArgs[23].Value != nil {
+			t.Errorf("expected arg 24 (special_instructions) to be nil for empty instructions, got %v", capturedArgs[23].Value)
 		}
 	})
 
@@ -154,6 +171,7 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 		"origin_zone_id", "destination_zone_id", "service_level",
 		"actual_weight_kg", "volumetric_weight_kg", "chargeable_weight_kg",
 		"length_cm", "width_cm", "height_cm", "pickup_address", "dropoff_address",
+		"item_description", "special_instructions",
 		"status", "attempt_count", "version", "created_at", "updated_at",
 	}
 
@@ -170,6 +188,7 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 				"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "EXPRESS",
 				2.5, 1.8, 2.5,
 				30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+				"Electronics and gadgets", "Fragile handle with care",
 				"IN_TRANSIT", int64(2), int64(4), now, updatedAt,
 			}}
 			return &testRows{columns: columns, data: data}, nil, nil
@@ -200,6 +219,12 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 		if parcel.DropoffAddress.Instructions != "" || parcel.DropoffAddress.ZoneID != "ZONE_CENTRAL_01" {
 			t.Errorf("unexpected dropoff address round-trip: %+v", parcel.DropoffAddress)
 		}
+		if parcel.ItemDescription != "Electronics and gadgets" {
+			t.Errorf("expected ItemDescription 'Electronics and gadgets', got %q", parcel.ItemDescription)
+		}
+		if parcel.SpecialInstructions != "Fragile handle with care" {
+			t.Errorf("expected SpecialInstructions 'Fragile handle with care', got %q", parcel.SpecialInstructions)
+		}
 	})
 
 	t.Run("reconstitutes sender-only parcel with SQL NULL merchant_id", func(t *testing.T) {
@@ -210,6 +235,7 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 				"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
 				2.5, 1.8, 2.5,
 				30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+				nil, nil,
 				"CREATED", int64(0), int64(1), now, now,
 			}}
 			return &testRows{columns: columns, data: data}, nil, nil
@@ -227,6 +253,12 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 		if parcel.MerchantID != nil {
 			t.Errorf("expected nil MerchantID, got %v", *parcel.MerchantID)
 		}
+		if parcel.ItemDescription != "" {
+			t.Errorf("expected empty ItemDescription, got %q", parcel.ItemDescription)
+		}
+		if parcel.SpecialInstructions != "" {
+			t.Errorf("expected empty SpecialInstructions, got %q", parcel.SpecialInstructions)
+		}
 	})
 
 	t.Run("rejects corrupt row missing both owners", func(t *testing.T) {
@@ -237,6 +269,7 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 				"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
 				2.5, 1.8, 2.5,
 				30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+				nil, nil,
 				"CREATED", int64(0), int64(1), now, now,
 			}}
 			return &testRows{columns: columns, data: data}, nil, nil
@@ -246,6 +279,87 @@ func TestPostgresParcelRepository_FindByID(t *testing.T) {
 		repo := NewPostgresParcelRepository(database)
 		if _, err := repo.FindByID(context.Background(), nil, "parcel-uuid-003"); !errors.Is(err, domain.ErrInvalidOwner) {
 			t.Fatalf("expected ErrInvalidOwner for corrupt row missing both owners, got: %v", err)
+		}
+	})
+}
+
+func TestPostgresParcelRepository_FindByTrackingNumber(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	tn, _ := domain.FormatTrackingNumber(now, "000001")
+
+	columns := []string{
+		"id", "tracking_number", "sender_id", "merchant_id", "recipient_name", "recipient_phone",
+		"quote_id", "pricing_rule_id", "pricing_rule_version", "delivery_fee_cents", "currency",
+		"origin_zone_id", "destination_zone_id", "service_level",
+		"actual_weight_kg", "volumetric_weight_kg", "chargeable_weight_kg",
+		"length_cm", "width_cm", "height_cm", "pickup_address", "dropoff_address",
+		"item_description", "special_instructions",
+		"status", "attempt_count", "version", "created_at", "updated_at",
+	}
+
+	pickupJSON := []byte(`{"contact_name":"Kasun","contact_phone":"+94771234567","address_line1":"45 Galle Rd","address_line2":"Apt 3","city":"Colombo","postal_code":"00300","zone_id":"ZONE_WESTERN_01","instructions":"Gate code 44"}`)
+	dropoffJSON := []byte(`{"contact_name":"Sunil","contact_phone":"+94719876543","address_line1":"12 Kandy Rd","address_line2":"","city":"Kandy","postal_code":"20000","zone_id":"ZONE_CENTRAL_01"}`)
+
+	t.Run("reconstitutes parcel by tracking number with item details", func(t *testing.T) {
+		var executedQuery string
+		var capturedArgs []driver.NamedValue
+		database := registerMockDB("find_parcel_by_tn_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			executedQuery = query
+			capturedArgs = args
+			data := [][]driver.Value{{
+				"parcel-uuid-001", tn.String(), "usr-001", nil, "Sunil", "+94719876543",
+				"quote-001", "rule-001", int64(1), int64(55000), "LKR",
+				"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
+				2.5, 1.8, 2.5,
+				30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+				"Spare parts and tools", "Fragile handle with care",
+				"CREATED", int64(0), int64(1), now, now,
+			}}
+			return &testRows{columns: columns, data: data}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		parcel, err := repo.FindByTrackingNumber(context.Background(), nil, tn)
+		if err != nil {
+			t.Fatalf("unexpected error finding parcel by tracking number: %v", err)
+		}
+
+		if !strings.Contains(executedQuery, "WHERE tracking_number = $1") {
+			t.Errorf("expected SELECT to query by tracking_number, got: %s", executedQuery)
+		}
+		if len(capturedArgs) != 1 || capturedArgs[0].Value != tn.String() {
+			t.Errorf("expected arg 1 to be %s, got: %v", tn.String(), capturedArgs)
+		}
+		if parcel.TrackingNumber.String() != tn.String() {
+			t.Errorf("expected tracking number %s, got %s", tn.String(), parcel.TrackingNumber.String())
+		}
+		if parcel.ItemDescription != "Spare parts and tools" {
+			t.Errorf("expected ItemDescription 'Spare parts and tools', got %q", parcel.ItemDescription)
+		}
+		if parcel.SpecialInstructions != "Fragile handle with care" {
+			t.Errorf("expected SpecialInstructions 'Fragile handle with care', got %q", parcel.SpecialInstructions)
+		}
+	})
+
+	t.Run("returns ErrInvalidTrackingNumber when not found", func(t *testing.T) {
+		database := registerMockDB("find_parcel_by_tn_not_found", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			return &testRows{columns: columns, data: [][]driver.Value{}}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		_, err := repo.FindByTrackingNumber(context.Background(), nil, tn)
+		if !errors.Is(err, domain.ErrInvalidTrackingNumber) {
+			t.Fatalf("expected ErrInvalidTrackingNumber, got: %v", err)
+		}
+	})
+
+	t.Run("returns error when tracking number is invalid", func(t *testing.T) {
+		repo := NewPostgresParcelRepository(nil)
+		_, err := repo.FindByTrackingNumber(context.Background(), nil, domain.TrackingNumber(""))
+		if err == nil {
+			t.Fatal("expected error for empty tracking number, got nil")
 		}
 	})
 }
