@@ -70,6 +70,8 @@ npx playwright install chromium
 
 | Command | Environment | Description |
 | :--- | :---: | :--- |
+| **`npm run test:live`** | Real Stack | **Master 5-Window Live System E2E** running against real Core API, live PostgreSQL DB, and physical daemons with zero route mocks. |
+| **`npm run test:live-guardrails`** | Real Stack | **Live Security Guardrails** (Real Courier IDOR 403, RBAC 403, Tenant Isolation 403/404, Tracking PII masking). |
 | **`npm run test:realtime`** | Live/Mocked | Master System 5-Window Real-Time Orchestration test across Customer, Applicant/Merchant, Admin, Dispatcher, and Courier simultaneously. |
 | **`npm run test:security`** | Live/Mocked | Strict authorization guardrails: Courier IDOR protection, Merchant tenant isolation, RBAC routing gates, SEC-009 public PII masking. |
 | **`npm run test:dry-run`** | Offline | Runs the harness self-check verifying browser launch and multi-actor context isolation across all 5 profiles (**10/10 passing**). |

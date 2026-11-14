@@ -192,3 +192,58 @@ All engineering activities in `tests/e2e/` are logged below:
   - *Context:* When `server.test.ts` used `app.listen(9998)` and `http.request('http://localhost:9998')`, Node.js threw `code: 'EACCES'` in `internalConnectMultiple (node:net:1139:18)` on Windows due to sandbox/firewall loopback socket restrictions.
   - *Resolution:* Converted unit test suite to in-memory execution. It tests `verifyHmac`, cryptographic tampering, tenant isolation, and store states in-process with zero network sockets.
   - *Result:* Test execution dropped from 800ms to 7ms, passing 5/5 tests in standard sandbox without requiring elevated socket permissions.
+
+---
+
+## 9. Real-Environment Multi-Actor System Verification & Code Coverage (Milestone Complete)
+
+### 9.1 Physical Stack & Service Architecture
+The system test suite was executed against a live physical topology with **zero route mocks**:
+- **PostgreSQL 16 (`swiftdrop-postgres` on port `5433`):** Authoritative database store holding delivery zones (`ZONE_COLOMBO_01`, `ZONE_KANDY_01`), zone postal codes (`00100`, `00400`, `20000`), active tariff matrix (`rule_colombo_standard`), and user accounts with canonical salted password hashes.
+- **RabbitMQ 3.13 (`swiftdrop-rabbitmq` on port `5672`):** AMQP message broker with dead-letter exchanges and durable queues.
+- **Core API (`core-api/cmd/api` on port `8080`):** Go modular monolith backend exposing Identity, Parcels, Dispatch, Pricing, Merchants, and Delivery endpoints.
+- **Tracking Service (`services/tracking/cmd/tracking` on port `8081`):** Read-only SSE projection and public tracking lookup service.
+- **Frontend Portal (`web/` on port `3000`):** React 18 / TypeScript SPA proxying API traffic to Core API and Tracking API.
+- **Mock Webhook Receiver & Examiner Dashboard (`tests/e2e/mock-webhook` on port `9999`):** Multi-tenant event collector and visual dashboard.
+
+### 9.2 5 Concurrent Browser Windows Live Lifecycle Test (`realtime-live-system.spec.ts`)
+- **Window 1 (Customer Portal - Customer A):** Authenticates via real credentials (`customer@swiftdrop.local`), steps through the 4-step Booking Wizard, queries real pricing engine in PostgreSQL, commits parcel booking, and generates tracking number (`SD-YYYYMMDD-XXXXXX`).
+- **Window 2 (Public User B -> Merchant Applicant):** Signs in as `applicant@swiftdrop.local`, submits business merchant application for "Apex Retailers Ltd" with address and telephone into PostgreSQL `merchants` table.
+- **Window 3 (Admin Operations Console):** Authenticates as `admin@swiftdrop.local`, inspects pending merchant applications via `/api/v1/admin/merchants?status=PENDING`, and executes status transition `/api/v1/admin/merchants/{id}/approve`, promoting the user and granting merchant credentials.
+- **Window 2 (Merchant Portal Refresh):** Re-authenticates to receive upgraded JWT with `role: MERCHANT`, navigates to Webhooks configuration, registers an endpoint with AES-encrypted signing secret.
+- **Window 4 (Dispatcher Operations Board):** Authenticates as `dispatcher@swiftdrop.local`, monitors real unassigned parcel from Customer A on the dispatch board, chooses on-shift courier (`CR-0012`), and assigns parcel via `POST /api/v1/dispatch/assignments`.
+- **Window 5 (Courier Mobile PWA):** Authenticates as `courier@swiftdrop.local`, inspects assigned manifest, initiates run (`POST /api/v1/courier/parcels/{id}/start-run` -> `OUT_FOR_DELIVERY`), and completes delivery with cryptographic Proof of Delivery (SVG signature data $\ge 50$ chars via `POST /api/v1/deliveries/{id}/complete`).
+- **Verification (Public Tracking):** Customer visits `/track/{trackingNumber}`, asserting real-time transition to `DELIVERED` status without route mocking.
+
+### 9.3 Strict Live Authorization Guardrails (`realtime-live-guardrails.spec.ts`)
+- **LIVE-SEC-01 (Courier IDOR):** Proves Courier B (`courier2@swiftdrop.local`) cannot deliver or complete Courier A's assigned parcel -> rejected with `403 FORBIDDEN_COURIER_MISMATCH`.
+- **LIVE-SEC-02 (RBAC Protection):** Customer account attempting to invoke Admin operations (`/api/v1/admin/users`) is barred with `403 FORBIDDEN`.
+- **LIVE-SEC-03 (Tenant Isolation):** Merchant attempting cross-tenant order access on foreign tenant IDs is rejected with `403`/`404`.
+- **LIVE-SEC-04 (Public PII Masking):** Public tracking endpoint masks recipient street addresses and telephone numbers (`SEC-009`).
+
+### 9.4 Verification Execution Output
+```
+Running 5 tests using 1 worker
+
+  ok 1 [admin-portal] › flows\realtime-live-guardrails.spec.ts:18:7 › Live Real-Environment Authorization Guardrails (Zero Mocks) › LIVE-SEC-01: Real Courier IDOR - Foreign courier is rejected with 403 FORBIDDEN_COURIER_MISMATCH (1.6s)
+  ok 2 [admin-portal] › flows\realtime-live-guardrails.spec.ts:65:7 › Live Real-Environment Authorization Guardrails (Zero Mocks) › LIVE-SEC-02: Real RBAC Protection - Customer calling Admin API is barred with 403 Forbidden (1.3s)
+  ok 3 [admin-portal] › flows\realtime-live-guardrails.spec.ts:101:7 › Live Real-Environment Authorization Guardrails (Zero Mocks) › LIVE-SEC-03: Real Tenant Isolation - Merchant cannot access cross-tenant orders (1.6s)
+  ok 4 [admin-portal] › flows\realtime-live-guardrails.spec.ts:136:7 › Live Real-Environment Authorization Guardrails (Zero Mocks) › LIVE-SEC-04: Real Public Tracking PII Masking - Customer phone and address are masked (965ms)
+  ok 5 [admin-portal] › flows\realtime-live-system.spec.ts:20:7 › Live Real-Environment Master System E2E (5 Concurrent Windows) › should execute complete live multi-actor transaction with real database persistence (9.0s)
+
+  5 passed (17.9s)
+```
+
+### 9.5 Measurable Go Backend Code Coverage
+```
+Package Coverage Summary:
+- parcels/domain: 89.5%
+- pricing/domain: 88.3%
+- dispatch/domain: 89.0%
+- delivery/domain: 89.3%
+- admin/domain: 98.3%
+- merchants/domain: 95.1%
+- platform/middleware: 94.1%
+- platform/config: 90.2%
+- Total Statement Coverage: 52.7%
+```

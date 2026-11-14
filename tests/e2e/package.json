@@ -5,6 +5,8 @@
   "description": "Cross-module end-to-end acceptance tests for SwiftDrop",
   "scripts": {
     "test": "playwright test",
+    "test:live": "playwright test flows/realtime-live-system.spec.ts --project=admin-portal",
+    "test:live-guardrails": "playwright test flows/realtime-live-guardrails.spec.ts --project=admin-portal",
     "test:realtime": "playwright test flows/realtime-orchestration.spec.ts --project=admin-portal",
     "test:security": "playwright test flows/realtime-auth-guardrails.spec.ts --project=admin-portal",
     "test:ui": "playwright test --ui",
