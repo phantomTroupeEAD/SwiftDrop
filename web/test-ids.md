@@ -174,3 +174,35 @@ These IDs are required by the M6 alignment guide. They are not promises that the
 The clean shipping UI components (`/design-preview`) are fully verified locally without altering prototype dashboards or shared M7 code.
 
 Verification: `npm run build` passed (`tsc && vite build`). All 31 active selector literals across `SwiftSignatureTheme.tsx` and `LoginPage.tsx` are documented in this register. Input controls in the UI are linked to visible labels with `htmlFor` / `id`. Retired design-comparison and forced-state selectors are documented explicitly. Unit/E2E test scripts remain absent from the package manifest, so no journey-test passes are claimed.
+
+## Admin console (Member 7)
+
+Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin/`. Owner: Member 7. Update this table whenever a selector is added, renamed or removed.
+
+| IDs | Purpose |
+| --- | --- |
+| `admin-forbidden`, `admin-notice`, `admin-signout-btn` | Non-admin message, success notice, sign out |
+| `admin-tab-zones`, `admin-tab-users`, `admin-tab-settings`, `admin-tab-audit` | Section tabs |
+| `admin-zones-table`, `admin-zone-new-btn`, `admin-zone-edit-btn`, `admin-zone-status-btn` | Zone list and row actions (repeated per row) |
+| `admin-zone-form`, `admin-zone-{id,code,name,description,prefixes,reason}-input`, `admin-zone-save-btn` | Create and edit zone dialog |
+| `admin-zone-status-dialog`, `admin-zone-status-reason-input`, `admin-zone-status-confirm-btn` | Enable or disable a zone |
+| `admin-users-table`, `admin-users-search`, `admin-users-role-filter` | User list, search and role filter |
+| `admin-user-role-btn`, `admin-user-reactivate-btn`, `admin-user-suspend-btn` | User row actions (repeated per row) |
+| `admin-user-role-dialog`, `admin-user-role-select`, `admin-user-role-save-btn` | Change role dialog |
+| `admin-user-suspend-dialog`, `admin-user-suspend-confirm-btn` | Suspend confirmation |
+| `admin-settings-table`, `admin-setting-edit-btn` | Settings list and row action (repeated per row) |
+| `admin-setting-dialog`, `admin-setting-value-input`, `admin-setting-reason-input`, `admin-setting-save-btn` | Change a setting |
+| `admin-audit-table`, `admin-audit-details-btn`, `admin-audit-dialog` | Audit log, row details button (repeated per row), snapshot dialog |
+
+## Ops workspace shell (Member 7)
+
+Routes `/ops/*` for ADMIN and DISPATCHER, built in `src/features/dispatcher-admin/ops/`. The admin screens inside it reuse the `admin-*` IDs above.
+
+| IDs | Purpose |
+| --- | --- |
+| `ops-sidebar` | Desktop side menu (the role-filtered list of pages) |
+| `ops-nav-{dispatch,couriers,failed-deliveries,merchants,reports,users,zones,pricing,settings,audit}` | One link per page in the side menu; only pages the role can open exist |
+| `ops-menu-btn`, `ops-menu-{id}` | Phone menu button and its items |
+| `ops-role-badge`, `ops-signout-btn` | Role badge and sign out in the header |
+| `ops-notice` | Success message on an ops page |
+| `ops-not-built`, `ops-forbidden`, `ops-not-found` | Placeholder for an unbuilt page, access message for a role without access, unknown address |

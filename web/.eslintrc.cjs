@@ -15,7 +15,6 @@ module.exports = {
     'scripts',
     'src/shared/components/ui/**',
     // Tracked legacy pre-shadcn prototype screens (to be migrated in post-foundation phase)
-    'src/features/dashboards/AdminDashboard.tsx',
     'src/features/dashboards/CourierDashboard.tsx',
     'src/features/dashboards/DashboardLayout.tsx',
     'src/features/dashboards/DispatcherDashboard.tsx',
