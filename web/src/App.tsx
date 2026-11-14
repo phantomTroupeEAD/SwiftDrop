@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
 import { LandingPage } from '@/features/landing/LandingPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
@@ -63,6 +64,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/register" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/forgot-password" element={<Navigate to="/auth/forgot-password" replace />} />
       <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />

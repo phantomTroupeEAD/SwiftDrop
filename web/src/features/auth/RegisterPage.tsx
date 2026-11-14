@@ -23,6 +23,18 @@ import {
 } from '@/shared/components/ui/card';
 import { withRequestReference } from '@/shared/lib/api-error';
 
+interface AuthApiResponse {
+  data?: {
+    message?: string;
+    cooldown_seconds?: number;
+    [key: string]: unknown;
+  };
+  error?: {
+    message?: string;
+    correlation_id?: string;
+  };
+}
+
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -72,16 +84,26 @@ export const RegisterPage: React.FC = () => {
         body: JSON.stringify({ email: email.trim() }),
       });
 
-      const data = await res.json().catch(() => null);
+      const text = await res.text();
+      let data: AuthApiResponse | null = null;
+      try {
+        data = text ? (JSON.parse(text) as AuthApiResponse) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
         let message = data?.error?.message || 'Failed to send verification code.';
         if (res.status === 409) {
           message = 'An account with this email already exists. Please log in.';
         } else if (res.status === 429) {
-          message = 'Please wait before requesting another verification code.';
-        } else if (!data) {
-          message = 'Email verification is unavailable right now. Please try again later.';
+          throw new Error('Please wait before requesting another verification code.');
+        } else if (data?.error?.message) {
+          throw new Error(data.error.message);
+        } else if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
+        } else {
+          throw new Error(`Failed to send verification code (${res.status}).`);
         }
         throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
       }
@@ -128,11 +150,21 @@ export const RegisterPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json().catch(() => null);
+      const text = await res.text();
+      let data: AuthApiResponse | null = null;
+      try {
+        data = text ? (JSON.parse(text) as AuthApiResponse) : null;
+      } catch {
+        // Response was not JSON
+      }
 
       if (!res.ok) {
-        const message = data?.error?.message || 'Registration is unavailable right now. Please try again later.';
-        throw new Error(withRequestReference(message, res, data?.error?.correlation_id));
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        } else if (res.status === 502 || res.status === 504 || res.status === 500) {
+          throw new Error('Backend server is unreachable. Please ensure the Core API is running on port 8080.');
+        }
+        throw new Error(`Registration failed (${res.status}). Please check your inputs.`);
       }
 
       if (!data?.data) {

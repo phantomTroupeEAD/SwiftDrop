@@ -374,13 +374,33 @@ func TestAuthService_RefreshSession_and_Logout(t *testing.T) {
 	})
 }
 
+type testOIDCClient struct{}
+
+func (c *testOIDCClient) VerifyIDToken(_ context.Context, idToken string) (*application.OIDCClaims, error) {
+	if idToken == "mock_invalid_token" || idToken == "" {
+		return nil, domain.ErrInvalidToken
+	}
+	email := idToken
+	for _, prefix := range []string{"mock_", "dev_", "google_id_token_"} {
+		if len(email) > len(prefix) && email[:len(prefix)] == prefix {
+			email = email[len(prefix):]
+		}
+	}
+	return &application.OIDCClaims{
+		Subject:       "google_sub_" + email,
+		Email:         email,
+		EmailVerified: true,
+		Name:          "Test Google User",
+	}, nil
+}
+
 func TestAuthService_LoginWithGoogle(t *testing.T) {
 	hasher := infrastructure.NewStandardPasswordHasher()
 	tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-key-at-least-32-chars-long")
 	userRepo := infrastructure.NewMockUserRepository(hasher)
 	tokenRepo := infrastructure.NewMockTokenRepository()
 	oauthRepo := infrastructure.NewMockOAuthRepository()
-	oidcClient := infrastructure.NewGoogleOIDCClient("")
+	oidcClient := &testOIDCClient{}
 
 	svc := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider).
 		WithOAuth(oauthRepo, oidcClient)
@@ -473,6 +493,117 @@ func TestAuthService_LoginWithGoogle(t *testing.T) {
 		})
 		if err != domain.ErrAccountSuspended {
 			t.Errorf("Expected ErrAccountSuspended, got %v", err)
+		}
+	})
+}
+
+func TestAuthService_ForgotPassword(t *testing.T) {
+	ctx := context.Background()
+
+	newTestSvc := func() (*application.AuthService, *infrastructure.MemoryOTPRepository) {
+		hasher := infrastructure.NewStandardPasswordHasher()
+		tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-at-least-32-chars-long")
+		userRepo := infrastructure.NewMockUserRepository(hasher)
+		tokenRepo := infrastructure.NewMockTokenRepository()
+		otpRepo := infrastructure.NewMemoryOTPRepository()
+		emailSender := infrastructure.NewDevEmailSender()
+		svc := application.NewAuthService(userRepo, tokenRepo, hasher, tokenProvider).
+			WithOTP(otpRepo, emailSender)
+		return svc, otpRepo
+	}
+
+	t.Run("SendPasswordResetOTP rejects invalid email", func(t *testing.T) {
+		svc, _ := newTestSvc()
+		_, err := svc.SendPasswordResetOTP(ctx, application.SendPasswordResetOTPCommand{Email: "not-an-email"})
+		if err != domain.ErrInvalidEmail {
+			t.Errorf("Expected ErrInvalidEmail, got %v", err)
+		}
+	})
+
+	t.Run("SendPasswordResetOTP returns uniform success for non-existent email", func(t *testing.T) {
+		svc, _ := newTestSvc()
+		res, err := svc.SendPasswordResetOTP(ctx, application.SendPasswordResetOTPCommand{Email: "unknown@swiftdrop.local"})
+		if err != nil {
+			t.Fatalf("Expected nil error to prevent enumeration, got %v", err)
+		}
+		if res.ExpiresIn != 600 || res.CooldownSeconds != 60 {
+			t.Errorf("Unexpected OTP metadata: %+v", res)
+		}
+	})
+
+	t.Run("SendPasswordResetOTP enforces 60s cooldown for existing user", func(t *testing.T) {
+		svc, _ := newTestSvc()
+		if _, err := svc.SendPasswordResetOTP(ctx, application.SendPasswordResetOTPCommand{Email: "customer@swiftdrop.local"}); err != nil {
+			t.Fatalf("First send failed: %v", err)
+		}
+		_, err := svc.SendPasswordResetOTP(ctx, application.SendPasswordResetOTPCommand{Email: "customer@swiftdrop.local"})
+		if err != domain.ErrOTPCooldownActive {
+			t.Errorf("Expected ErrOTPCooldownActive, got %v", err)
+		}
+	})
+
+	t.Run("ResetPassword updates password and allows login with new password", func(t *testing.T) {
+		svc, otpRepo := newTestSvc()
+		email := "customer@swiftdrop.local"
+		_ = otpRepo.SaveOTP(ctx, "reset:"+email, "654321")
+
+		err := svc.ResetPassword(ctx, application.ResetPasswordCommand{
+			Email:       email,
+			OTP:         "654321",
+			NewPassword: "NewCustomerPassword123!",
+		})
+		if err != nil {
+			t.Fatalf("ResetPassword failed: %v", err)
+		}
+
+		// Old password must fail
+		if _, err := svc.Login(ctx, application.LoginCommand{
+			Email:    email,
+			Password: "CustomerPassword123!",
+		}); err != domain.ErrInvalidCredentials {
+			t.Errorf("Expected old password to fail with ErrInvalidCredentials, got %v", err)
+		}
+
+		// New password must succeed
+		if _, err := svc.Login(ctx, application.LoginCommand{
+			Email:    email,
+			Password: "NewCustomerPassword123!",
+		}); err != nil {
+			t.Errorf("Expected login with new password to succeed, got %v", err)
+		}
+
+		// OTP is single-use: reusing it must fail
+		if err := svc.ResetPassword(ctx, application.ResetPasswordCommand{
+			Email:       email,
+			OTP:         "654321",
+			NewPassword: "AnotherPassword123!",
+		}); err != domain.ErrOTPInvalid {
+			t.Errorf("Expected ErrOTPInvalid on OTP reuse, got %v", err)
+		}
+	})
+
+	t.Run("ResetPassword rejects weak password without consuming OTP", func(t *testing.T) {
+		svc, otpRepo := newTestSvc()
+		email := "customer@swiftdrop.local"
+		_ = otpRepo.SaveOTP(ctx, "reset:"+email, "112233")
+
+		err := svc.ResetPassword(ctx, application.ResetPasswordCommand{
+			Email:       email,
+			OTP:         "112233",
+			NewPassword: "weak",
+		})
+		if err != domain.ErrWeakPassword {
+			t.Errorf("Expected ErrWeakPassword, got %v", err)
+		}
+
+		// OTP should still be valid after weak-password rejection
+		err = svc.ResetPassword(ctx, application.ResetPasswordCommand{
+			Email:       email,
+			OTP:         "112233",
+			NewPassword: "StrongPassword123!",
+		})
+		if err != nil {
+			t.Errorf("Expected valid reset after weak-password rejection, got %v", err)
 		}
 	})
 }

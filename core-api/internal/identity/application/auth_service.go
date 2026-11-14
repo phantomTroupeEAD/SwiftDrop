@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -103,7 +104,9 @@ func (s *AuthService) SendRegistrationOTP(ctx context.Context, cmd SendRegistrat
 	// 6. Dispatch email (dev mode: printed to stdout)
 	if s.emailSender != nil {
 		if err := s.emailSender.SendOTPEmail(ctx, emailVO.String(), code); err != nil {
-			_ = err
+			log.Printf("[ERROR] Failed to send registration OTP email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Registration OTP [%s] successfully dispatched to %s\n", code, emailVO.String())
 		}
 	}
 
@@ -570,6 +573,102 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 		IsNewUser:     isNewUser,
 		RequiresPhone: user.RequiresPhone(),
 	}, nil
+}
+
+const passwordResetOTPKeyPrefix = "reset:"
+
+// ─────────────────────────────────────────────
+// Password Reset Use Cases
+// ─────────────────────────────────────────────
+
+// SendPasswordResetOTP issues a 6-digit password reset code if an active account
+// exists for the email. Returns a uniform response even when the email is not
+// registered to prevent user enumeration.
+func (s *AuthService) SendPasswordResetOTP(ctx context.Context, cmd SendPasswordResetOTPCommand) (*SendPasswordResetOTPResult, error) {
+	emailVO, err := domain.NewEmail(cmd.Email)
+	if err != nil {
+		return nil, domain.ErrInvalidEmail
+	}
+
+	result := &SendPasswordResetOTPResult{
+		Email:           emailVO.String(),
+		ExpiresIn:       600,
+		CooldownSeconds: 60,
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, emailVO.String())
+	if err != nil || !user.IsActive() {
+		return result, nil
+	}
+
+	resetKey := passwordResetOTPKeyPrefix + emailVO.String()
+	if s.otpRepo != nil {
+		if err := s.otpRepo.CheckCooldown(ctx, resetKey); err != nil {
+			return nil, err
+		}
+	}
+
+	code, err := generateSixDigitOTP()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate otp: %w", err)
+	}
+
+	if s.otpRepo != nil {
+		if err := s.otpRepo.SaveOTP(ctx, resetKey, code); err != nil {
+			return nil, fmt.Errorf("failed to save otp: %w", err)
+		}
+	}
+
+	if s.emailSender != nil {
+		if err := s.emailSender.SendPasswordResetEmail(ctx, emailVO.String(), code); err != nil {
+			log.Printf("[ERROR] Failed to send password reset email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Password reset OTP [%s] successfully dispatched to %s (valid for 10m)\n", code, emailVO.String())
+		}
+	}
+
+	return result, nil
+}
+
+// ResetPassword verifies the password reset OTP, enforces password complexity,
+// and updates the user's password hash.
+func (s *AuthService) ResetPassword(ctx context.Context, cmd ResetPasswordCommand) error {
+	emailVO, err := domain.NewEmail(cmd.Email)
+	if err != nil {
+		return domain.ErrInvalidEmail
+	}
+
+	if err := domain.ValidatePlaintextPassword(cmd.NewPassword); err != nil {
+		return err
+	}
+
+	resetKey := passwordResetOTPKeyPrefix + emailVO.String()
+	if s.otpRepo != nil {
+		if err := s.otpRepo.VerifyAndConsumeOTP(ctx, resetKey, strings.TrimSpace(cmd.OTP)); err != nil {
+			return err
+		}
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, emailVO.String())
+	if err != nil {
+		return domain.ErrOTPInvalid
+	}
+
+	if !user.IsActive() {
+		return domain.ErrAccountSuspended
+	}
+
+	passwordHash, err := s.hasher.HashPassword(cmd.NewPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user.ChangePassword(passwordHash)
+	if err := s.userRepo.Save(ctx, user); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return nil
 }
 
 // ─────────────────────────────────────────────
