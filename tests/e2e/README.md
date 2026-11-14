@@ -100,7 +100,12 @@ tests/e2e/
 │   └── evidence.ts                # Automated full-page screenshot & .zip trace bundler for grading
 │
 ├── flows/                         # End-to-End Journey Specifications
-│   └── dry-run.spec.ts            # Offline verification test (10/10 passed)
+│   ├── dry-run.spec.ts            # Offline verification test (10/10 passed)
+│   ├── 01-customer-booking.spec.ts# Flow 1: Customer booking wizard, dynamic quote & receipt
+│   ├── 02-dispatcher-assignment.spec.ts # Flow 2: Dispatcher board & courier capacity assignment
+│   ├── 03-courier-delivery.spec.ts# Flow 3: Mobile PWA transit milestones & electronic signature POD
+│   ├── 04-tracking-and-ai.spec.ts # Flow 4: Public tracking PII masking & grounded AI assistant
+│   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
 ├── mock-webhook/                  # Standalone Webhook Receiver & Examiner Dashboard (:9999)
 │   ├── Dockerfile                 # Alpine container image for deploy/docker-compose.yml

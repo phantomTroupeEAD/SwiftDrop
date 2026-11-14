@@ -143,6 +143,11 @@ All engineering activities in `tests/e2e/` are logged below:
 | **2026-11-04T23:06:00+05:30** | `DOCS` | `tests/e2e/README.md` | Created authoritative developer entrypoint, command reference, and multi-actor viewport table. | **SUCCESS** |
 | **2026-11-04T23:07:00+05:30** | `MILESTONE` | Phase 1 Grounding Locked | Complete grounding foundation delivered. Live journey specs deferred until upstream modules (Core API/Web) are deployed. | **SUCCESS** |
 | **2026-11-04T23:15:00+05:30** | `ADR` | `tests/e2e/LIVING_DOCUMENT.md` | Formalized ADR-004 defining the Frontend AI Chatbot Adversarial & Generative UI Verification Contract. | **SUCCESS** |
+| **2026-11-14T22:56:00+05:30** | `SPEC` | `tests/e2e/flows/01-customer-booking.spec.ts` | Implemented Flow 1 Customer Booking Wizard, dynamic quote calculation, and official receipt confirmation. | **SUCCESS** |
+| **2026-11-14T22:56:30+05:30** | `SPEC` | `tests/e2e/flows/02-dispatcher-assignment.spec.ts` | Implemented Flow 2 Dispatcher Board unassigned parcel queue, on-shift courier assignment, and capacity update. | **SUCCESS** |
+| **2026-11-14T22:57:00+05:30** | `SPEC` | `tests/e2e/flows/03-courier-delivery.spec.ts` | Implemented Flow 3 Courier Mobile stop-by-stop transit run (Pixel 7 touch) and digital signature POD capture. | **SUCCESS** |
+| **2026-11-14T22:57:30+05:30** | `SPEC` | `tests/e2e/flows/04-tracking-and-ai.spec.ts` | Implemented Flow 4 Public Tracking PII masking (SEC-009) and grounded FastMCP AI assistant chat navigation. | **SUCCESS** |
+| **2026-11-14T22:58:00+05:30** | `DOCS` | `tests/e2e/README.md` & `LIVING_DOCUMENT.md` | Synchronously updated living specifications, component tables, and selector registries (Phase 4). | **SUCCESS** |
 
 ---
 
@@ -158,11 +163,14 @@ All engineering activities in `tests/e2e/` are logged below:
 | **REST Gateway Client**| `tests/e2e/fixtures/gatewayClient.ts` | TypeScript | **COMPLETE** | Polling, retry, and health check resilience |
 | **SSE Listener** | `tests/e2e/helpers/sseListener.ts` | TypeScript / EventSource | **COMPLETE** | Real-time tracking verification |
 | **Evidence Capturer** | `tests/e2e/helpers/evidence.ts` | TypeScript | **COMPLETE** | Full-page milestone screenshots & trace attachment |
-| **Offline Dry-Run Spec**| `tests/e2e/flows/dry-run.spec.ts` | TypeScript / Playwright | **COMPLETE** | 10/10 tests passing offline in 11.4s |
+| **Offline Dry-Run Spec**| `tests/e2e/flows/dry-run.spec.ts` | TypeScript / Playwright | **COMPLETE** | 10/10 tests passing offline in 11.3s |
 | **Mock Webhook Backend**| `tests/e2e/mock-webhook/src/server.ts` | TypeScript / Express | **COMPLETE** | HMAC-SHA256, DLQ chaos, tenant isolation |
 | **Mock Visual Dashboard**| `tests/e2e/mock-webhook/public/dashboard.html`| HTML / Tailwind | **COMPLETE** | Live tenant isolation badge & 1-click test triggers |
 | **Entry Point Guide** | `tests/e2e/README.md` | Markdown | **COMPLETE** | Industry-standard developer guide |
-| **Live Flow Journeys (1-4)**| `tests/e2e/flows/flow*.spec.ts` | TypeScript / Playwright | **PAUSED (Awaiting Upstream)** | Deferred until Core API & Web UI screens are built |
+| **Flow 1 (Customer Booking)**| `tests/e2e/flows/01-customer-booking.spec.ts` | TypeScript / Playwright | **COMPLETE** | 4-step wizard, dynamic quote, tracking # capture |
+| **Flow 2 (Dispatcher Board)**| `tests/e2e/flows/02-dispatcher-assignment.spec.ts` | TypeScript / Playwright | **COMPLETE** | Unassigned table, courier selection & assignment |
+| **Flow 3 (Courier Mobile Run)**| `tests/e2e/flows/03-courier-delivery.spec.ts` | TypeScript / Playwright | **COMPLETE** | Pixel 7 touch emulation, milestone progression, POD |
+| **Flow 4 (Tracking & AI Chat)**| `tests/e2e/flows/04-tracking-and-ai.spec.ts` | TypeScript / Playwright | **COMPLETE** | SEC-009 PII masking & grounded AI assistant deep link |
 
 ---
 
