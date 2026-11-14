@@ -329,13 +329,51 @@ func (s *Store) ListSettings(ctx context.Context) ([]application.Setting, error)
 	return out, mapPG(rows.Err())
 }
 
-func (s *Store) ListAudit(ctx context.Context, offset, limit int) ([]application.AuditRow, int, error) {
+// auditWhere builds the WHERE clause for a filter. Column names are constants and every
+// value is a bound parameter, so nothing the user typed is ever part of the SQL text.
+func auditWhere(f application.AuditFilter) (string, []any) {
+	var conds []string
+	var args []any
+	add := func(cond string, v any) {
+		args = append(args, v)
+		conds = append(conds, fmt.Sprintf(cond, len(args)))
+	}
+	if f.Action != "" {
+		add("action = $%d", f.Action)
+	}
+	if f.TargetType != "" {
+		add("COALESCE(target_type, entity_type) = $%d", f.TargetType)
+	}
+	if f.TargetID != "" {
+		add("COALESCE(target_id, entity_id) = $%d", f.TargetID)
+	}
+	if f.ActorRole != "" {
+		add("actor_role = $%d", f.ActorRole)
+	}
+	if f.From != nil {
+		add("created_at >= $%d", *f.From)
+	}
+	if f.To != nil {
+		add("created_at < $%d", *f.To)
+	}
+	if len(conds) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(conds, " AND "), args
+}
+
+func (s *Store) ListAudit(ctx context.Context, f application.AuditFilter, offset, limit int) ([]application.AuditRow, int, error) {
+	where, args := auditWhere(f)
 	var total int
-	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_logs").Scan(&total); err != nil {
+	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_logs"+where, args...).Scan(&total); err != nil {
 		return nil, 0, mapPG(err)
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT id::text, actor_id::text, actor_role, action, target_type, target_id, previous_state, new_state,
-		reason, request_id, created_at FROM audit_logs ORDER BY created_at DESC, id LIMIT $1 OFFSET $2`, limit, offset)
+	pageArgs := append(append([]any{}, args...), limit, offset)
+	// target_type, target_id and the snapshots are NULL on rows written by other modules, which
+	// still use entity_type, entity_id and metadata, so read those as a fallback.
+	rows, err := s.DB.QueryContext(ctx, `SELECT id::text, actor_id::text, actor_role, action,
+		COALESCE(target_type, entity_type, ''), COALESCE(target_id, entity_id, ''), previous_state, new_state, metadata,
+		reason, request_id, created_at FROM audit_logs`+where+fmt.Sprintf(" ORDER BY created_at DESC, id LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2), pageArgs...)
 	if err != nil {
 		return nil, 0, mapPG(err)
 	}
@@ -344,15 +382,46 @@ func (s *Store) ListAudit(ctx context.Context, offset, limit int) ([]application
 	for rows.Next() {
 		var a application.AuditRow
 		var actorID, reason, requestID sql.NullString
-		var before, after []byte
-		if err := rows.Scan(&a.ID, &actorID, &a.ActorRole, &a.Action, &a.TargetType, &a.TargetID, &before, &after, &reason, &requestID, &a.CreatedAt); err != nil {
+		var before, after, metadata []byte
+		if err := rows.Scan(&a.ID, &actorID, &a.ActorRole, &a.Action, &a.TargetType, &a.TargetID, &before, &after, &metadata, &reason, &requestID, &a.CreatedAt); err != nil {
 			return nil, 0, mapPG(err)
 		}
 		a.ActorID, a.Reason, a.RequestID = strPtr(actorID), strPtr(reason), strPtr(requestID)
-		a.Before, a.After = before, after
+		a.Before, a.After = legacySnapshots(before, after, metadata)
 		out = append(out, a)
 	}
 	return out, total, mapPG(rows.Err())
+}
+
+// legacySnapshots returns the before and after snapshots of an audit row. Rows from this module
+// carry them in previous_state and new_state. Rows from modules that only fill metadata, such as
+// {"previous_role": "ADMIN", "new_role": "COURIER"}, are turned into {"role": "ADMIN"} and
+// {"role": "COURIER"}. Secret-looking values are redacted either way.
+func legacySnapshots(before, after, metadata []byte) (json.RawMessage, json.RawMessage) {
+	if len(before) > 0 || len(after) > 0 {
+		return before, after
+	}
+	var meta map[string]any
+	if len(metadata) == 0 || json.Unmarshal(metadata, &meta) != nil || len(meta) == 0 {
+		return nil, nil
+	}
+	prev, next := map[string]any{}, map[string]any{}
+	for k, v := range redactForAudit(meta) {
+		switch {
+		case strings.HasPrefix(k, "previous_"):
+			prev[strings.TrimPrefix(k, "previous_")] = v
+		case strings.HasPrefix(k, "new_"):
+			next[strings.TrimPrefix(k, "new_")] = v
+		}
+	}
+	var b, a json.RawMessage
+	if len(prev) > 0 {
+		b, _ = json.Marshal(prev)
+	}
+	if len(next) > 0 {
+		a, _ = json.Marshal(next)
+	}
+	return b, a
 }
 
 func strPtr(n sql.NullString) *string {

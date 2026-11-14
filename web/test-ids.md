@@ -176,6 +176,74 @@ The clean shipping UI components (`/design-preview`) are fully verified locally 
 
 Verification: `npm run build` passed (`tsc && vite build`). All 31 active selector literals across `SwiftSignatureTheme.tsx` and `LoginPage.tsx` are documented in this register. Input controls in the UI are linked to visible labels with `htmlFor` / `id`. Retired design-comparison and forced-state selectors are documented explicitly. Unit/E2E test scripts remain absent from the package manifest, so no journey-test passes are claimed.
 
+## Admin console (Member 7)
+
+Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin/`. Owner: Member 7. Update this table whenever a selector is added, renamed or removed.
+
+| IDs | Purpose |
+| --- | --- |
+| `admin-forbidden`, `admin-notice`, `admin-signout-btn` | Non-admin message, success notice, sign out |
+| `admin-tab-zones`, `admin-tab-users`, `admin-tab-settings`, `admin-tab-audit` | Section tabs |
+| `admin-zones-table`, `admin-zone-new-btn`, `admin-zone-edit-btn`, `admin-zone-status-btn` | Zone list and row actions (repeated per row) |
+| `admin-zone-form`, `admin-zone-{id,code,name,description,prefixes,reason}-input`, `admin-zone-save-btn` | Create and edit zone dialog |
+| `admin-zone-status-dialog`, `admin-zone-status-reason-input`, `admin-zone-status-confirm-btn` | Enable or disable a zone |
+| `admin-zone-conflict`, `admin-zone-conflict-keep-btn`, `admin-zone-conflict-discard-btn` | Version conflict while editing a zone: notice, keep my changes on the latest version, discard my changes |
+| `admin-zone-status-conflict`, `admin-zone-status-conflict-continue-btn`, `admin-zone-status-conflict-close-btn` | Version conflict while enabling or disabling a zone |
+| `admin-users-table`, `admin-users-search`, `admin-users-role-filter` | User list, search and role filter |
+| `admin-user-role-btn`, `admin-user-reactivate-btn`, `admin-user-suspend-btn`, `admin-user-self-badge` | User row actions (repeated per row). The signed-in admin's own row shows the self badge instead of Change role and Suspend |
+| `admin-user-role-dialog`, `admin-user-role-select`, `admin-user-role-save-btn` | Change role dialog |
+| `admin-user-suspend-dialog`, `admin-user-suspend-confirm-btn` | Suspend confirmation |
+| `admin-settings-table`, `admin-setting-edit-btn` | Settings list and row action (repeated per row) |
+| `admin-setting-dialog`, `admin-setting-value-input`, `admin-setting-reason-input`, `admin-setting-save-btn` | Change a setting |
+| `admin-setting-preview` | Live rupee amount while typing cents for the cash-on-delivery setting |
+| `admin-setting-conflict`, `admin-setting-conflict-keep-btn`, `admin-setting-conflict-theirs-btn` | Version conflict on a setting: notice, keep my value on the latest version, use their value instead |
+| `admin-audit-table`, `admin-audit-details-btn`, `admin-audit-dialog` | Audit log, row details button (repeated per row), snapshot dialog |
+| `admin-audit-filters` | Audit filter form (`role="search"`) |
+| `admin-audit-filter-action`, `admin-audit-filter-target-type`, `admin-audit-filter-actor-role` | Select filters: change, target type, done by |
+| `admin-audit-filter-target-id`, `admin-audit-filter-from`, `admin-audit-filter-to` | Target id text input and the two Sri Lanka date inputs |
+| `admin-audit-apply-btn`, `admin-audit-reset-btn` | Apply filters, Reset (disabled while nothing is filtered) |
+| `admin-audit-active-filters` | Chips for the filters currently applied |
+| `admin-audit-summary` | "Showing a–b of N [matching] entries · page x of y" |
+| `admin-audit-per-page`, `admin-audit-prev-btn`, `admin-audit-next-btn` | Rows per page (10/20/50/100), previous and next page |
+| `admin-audit-empty`, `admin-audit-empty-reset-btn` | Filtered empty state and its Reset filters button |
+| `reports-range-form`, `reports-from`, `reports-to` | Report period form and its two Sri Lanka date inputs |
+| `reports-apply-btn`, `reports-last-7-btn`, `reports-last-30-btn`, `reports-refresh-btn` | Show report, the two period presets, refresh |
+| `reports-totals`, `reports-total-delivered`, `reports-total-failed`, `reports-success-rate` | Period totals from the server ("No attempts" when the rate is null) |
+| `reports-table`, `reports-empty`, `reports-period` | Per-day table, empty state, "Period a to b. Source: ..." line |
+| `reports-source-note`, `reports-error` | Stand-in data warning; load error with reference id and Retry (a refused period shows beside the dates instead, `#reports-range-error`) |
+| `fleet-filters`, `fleet-filter-zone`, `fleet-filter-shift`, `fleet-reset-btn` | Fleet filters (zone is sent to the server, shift filters the loaded list) and Reset |
+| `fleet-add-btn`, `fleet-empty-add-btn`, `fleet-refresh-btn` | Add courier (header and empty state), refresh |
+| `fleet-table`, `fleet-row`, `fleet-summary` | Courier table, one row per courier (repeated), "N of M couriers" line |
+| `fleet-empty`, `fleet-empty-reset-btn`, `fleet-error` | Empty state (none yet, or none match), its Reset button, load error with reference id and Retry |
+| `fleet-add-dialog`, `fleet-add-user`, `fleet-add-code`, `fleet-add-vehicle`, `fleet-add-capacity`, `fleet-add-zone`, `fleet-add-save-btn` | Add courier dialog. `fleet-add-user` is a Select for ADMIN and a text input for DISPATCHER. Field errors: `#fleet-user-error`, `#fleet-code-error`, `#fleet-capacity-error`, `#fleet-zone-error` |
+| `fleet-add-no-accounts`, `fleet-add-error` | Every Courier account already has a profile; add failed with a non-field error |
+| `dispatch-zone`, `dispatch-refresh-btn`, `dispatch-updated` | Zone picker (sent to the server), refresh now, "Updated hh:mm:ss" line |
+| `dispatch-error` | Load error with reference id and Retry; with data on screen it is the "couldn't refresh" warning |
+| `dispatch-parcels-table`, `dispatch-parcel-row`, `dispatch-parcels-summary`, `dispatch-parcels-empty` | Waiting parcels table, one row per parcel (repeated), count line, empty state |
+| `dispatch-assign-btn` | Assign (new parcel) or Reassign (failed attempt), repeated per row |
+| `dispatch-couriers`, `dispatch-courier`, `dispatch-couriers-summary`, `dispatch-couriers-empty` | Courier list, one item per courier (repeated), count line, empty state with link to Fleet |
+| `dispatch-assign-dialog`, `dispatch-assign-courier`, `dispatch-assign-notes`, `dispatch-assign-save-btn` | Assign window: courier Select (ineligible couriers disabled with the reason), notes, submit. Errors: `#dispatch-courier-error`, `#dispatch-notes-error` |
+| `dispatch-assign-error`, `dispatch-assign-gone`, `dispatch-assign-no-couriers` | Non-field error with reference id; parcel no longer waiting; no courier can take a parcel |
+| `failed-filters`, `failed-filter-reason`, `failed-reset-btn`, `failed-refresh-btn` | Failed deliveries: reason filter (matches the last failure), Reset, refresh |
+| `failed-table`, `failed-row`, `failed-summary` | Table, one row per parcel (repeated), count line |
+| `failed-history-btn`, `failed-retry-btn` | Per row: view attempts (disabled while the history is missing), Schedule retry |
+| `failed-empty`, `failed-empty-reset-btn`, `failed-error` | Empty state (none, or none match), its Reset button, error with reference id and Retry |
+| `failed-history-dialog`, `failed-history-item` | Attempts window and one item per attempt (repeated) |
+| `failed-retry-context` | Last failure reason and note shown in the retry window (the window itself uses the `dispatch-assign-*` ids) |
+
+## Ops workspace shell (Member 7)
+
+Routes `/ops/*` for ADMIN and DISPATCHER, built in `src/features/dispatcher-admin/ops/`. The admin screens inside it reuse the `admin-*` IDs above.
+
+| IDs | Purpose |
+| --- | --- |
+| `ops-sidebar` | Desktop side menu (the role-filtered list of pages) |
+| `ops-nav-{dispatch,couriers,failed-deliveries,merchants,reports,users,zones,pricing,settings,audit}` | One link per page in the side menu; only pages the role can open exist |
+| `ops-menu-btn`, `ops-menu-{id}` | Phone menu button and its items |
+| `ops-role-badge`, `ops-signout-btn` | Role badge and sign out in the header |
+| `ops-notice` | Success message on an ops page |
+| `ops-not-built`, `ops-forbidden`, `ops-not-found` | Placeholder for an unbuilt page, access message for a role without access, unknown address |
+
 | Dispatcher selector | Purpose |
 | --- | --- |
 | `dispatcher-board` | Loaded assignment queue and courier roster |

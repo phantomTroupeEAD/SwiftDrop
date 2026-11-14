@@ -57,6 +57,8 @@ type stubStore struct {
 	// paging: the total the store reports, and the offset and limit it was asked for
 	total               int
 	gotOffset, gotLimit int
+	gotFilter           application.AuditFilter
+	auditCalls          int
 	settings            []application.Setting
 }
 
@@ -82,8 +84,9 @@ func (s *stubStore) ZoneForPostalCode(context.Context, string) (application.Publ
 func (s *stubStore) ListSettings(context.Context) ([]application.Setting, error) {
 	return s.settings, nil
 }
-func (s *stubStore) ListAudit(_ context.Context, offset, limit int) ([]application.AuditRow, int, error) {
-	s.gotOffset, s.gotLimit = offset, limit
+func (s *stubStore) ListAudit(_ context.Context, f application.AuditFilter, offset, limit int) ([]application.AuditRow, int, error) {
+	s.gotOffset, s.gotLimit, s.gotFilter = offset, limit, f
+	s.auditCalls++
 	return nil, s.total, s.listErr
 }
 

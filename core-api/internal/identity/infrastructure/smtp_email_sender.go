@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/smtp"
 )
 
@@ -73,7 +74,7 @@ func (s *SMTPEmailSender) SendOTPEmail(_ context.Context, recipientEmail, code s
     <div class="footer">&copy; SwiftDrop Logistics Platform. All rights reserved.</div>
   </div>
 </body>
-</html>`, code)
+</html>`, html.EscapeString(code))
 
 	msg := []byte(subject + headers + body)
 	return smtp.SendMail(addr, auth, s.fromEmail, []string{recipientEmail}, msg)
@@ -119,7 +120,7 @@ func (s *SMTPEmailSender) SendPasswordResetEmail(_ context.Context, recipientEma
     <div class="footer">&copy; SwiftDrop Logistics Platform. All rights reserved.</div>
   </div>
 </body>
-</html>`, code)
+</html>`, html.EscapeString(code))
 
 	msg := []byte(subject + headers + body)
 	return smtp.SendMail(addr, auth, s.fromEmail, []string{recipientEmail}, msg)

@@ -44,6 +44,42 @@
                         "description": "Items per page, 1-100",
                         "name": "per_page",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact action, for example ZONE_CREATED",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact target type, for example ZONE",
+                        "name": "target_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact target id, for example ZONE_COLOMBO_01",
+                        "name": "target_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER or SYSTEM",
+                        "name": "actor_role",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "First Sri Lanka day to include, YYYY-MM-DD",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last Sri Lanka day to include, YYYY-MM-DD",
+                        "name": "to",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -81,7 +117,7 @@
                         }
                     },
                     "422": {
-                        "description": "VALIDATION_FAILED: bad page or per_page",
+                        "description": "VALIDATION_FAILED: bad page, per_page or filter",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
                         }
@@ -2428,6 +2464,12 @@
                     "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address"
                 },
                 "businessName": {
+                    "type": "string"
+                },
+                "contactEmail": {
+                    "type": "string"
+                },
+                "contactPhone": {
                     "type": "string"
                 }
             }
