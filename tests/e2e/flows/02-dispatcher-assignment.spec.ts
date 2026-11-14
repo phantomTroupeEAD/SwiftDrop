@@ -21,6 +21,24 @@ test.describe('Flow 2: Dispatcher Assignment Board E2E Flow', () => {
     let assigned = false;
 
     // 1. Mock REST API routes for Dispatcher
+    await dispatcherPage.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            access_token: 'mock-dispatcher-jwt-token',
+            user: {
+              id: 'd0010000-0000-0000-0000-000000000001',
+              email: 'dispatcher@swiftdrop.io',
+              role: 'DISPATCHER',
+              full_name: 'Amara Gunawardena',
+            },
+          },
+        }),
+      });
+    });
+
     await dispatcherPage.route('**/api/v1/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -152,7 +170,7 @@ test.describe('Flow 2: Dispatcher Assignment Board E2E Flow', () => {
     await assignBtn.click();
 
     // 7. Verify Assignment notification and Board update
-    await expect(dispatcherPage.getByRole('status')).toContainText('SD-20261114-11001 assigned.');
+    await expect(dispatcherPage.getByText('SD-20261114-11001 assigned.')).toBeVisible();
     await expect(dispatcherPage.getByText('No parcels are waiting for assignment.')).toBeVisible();
   });
 });

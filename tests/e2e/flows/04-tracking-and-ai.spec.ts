@@ -49,6 +49,24 @@ test.describe('Flow 4: Public Tracking & AI Assistant Grounding E2E Flow', () =>
     });
 
     // 2. Mock Customer Auth & AI Chat API
+    await customerPage.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            access_token: 'mock-customer-jwt-token',
+            user: {
+              id: 'c0010000-0000-0000-0000-000000000001',
+              email: 'customer@swiftdrop.io',
+              role: 'CUSTOMER',
+              full_name: 'Devinda Perera',
+            },
+          },
+        }),
+      });
+    });
+
     await customerPage.route('**/api/v1/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
