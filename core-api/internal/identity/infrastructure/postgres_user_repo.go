@@ -189,49 +189,42 @@ func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) er
 
 // ListUsers returns paginated users with optional role, status, and search query filters.
 func (r *PostgresUserRepository) ListUsers(ctx context.Context, filter application.UserFilter, limit int, offset int) ([]*domain.User, int, error) {
-	var conditions []string
-	var args []interface{}
-	argIdx := 1
-
+	roleParam := sql.NullString{Valid: false}
 	if filter.Role != nil {
-		conditions = append(conditions, fmt.Sprintf("role = $%d", argIdx))
-		args = append(args, string(*filter.Role))
-		argIdx++
+		roleParam = sql.NullString{String: string(*filter.Role), Valid: true}
 	}
 
+	statusParam := sql.NullString{Valid: false}
 	if filter.Status != nil {
-		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
-		args = append(args, string(*filter.Status))
-		argIdx++
+		statusParam = sql.NullString{String: string(*filter.Status), Valid: true}
 	}
 
-	if q := strings.TrimSpace(filter.Search); q != "" {
-		conditions = append(conditions, fmt.Sprintf("(email ILIKE $%d OR display_name ILIKE $%d)", argIdx, argIdx))
-		args = append(args, "%"+q+"%")
-		argIdx++
-	}
+	searchParam := strings.TrimSpace(filter.Search)
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	const countQuery = `
+		SELECT COUNT(*)
+		FROM users
+		WHERE ($1::text IS NULL OR role = $1)
+		  AND ($2::text IS NULL OR status = $2)
+		  AND ($3::text = '' OR email ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%');
+	`
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s;", whereClause)
 	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, countQuery, roleParam, statusParam, searchParam).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count users: %w", err)
 	}
 
-	listQuery := fmt.Sprintf(`
+	const listQuery = `
 		SELECT id, email, password_hash, display_name, phone, role, tenant_id, status, created_at, updated_at
 		FROM users
-		%s
+		WHERE ($1::text IS NULL OR role = $1)
+		  AND ($2::text IS NULL OR status = $2)
+		  AND ($3::text = '' OR email ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%')
 		ORDER BY created_at DESC
-		LIMIT $%d OFFSET $%d;
-	`, whereClause, argIdx, argIdx+1)
+		LIMIT $4 OFFSET $5;
+	`
 
-	listArgs := append(args, limit, offset)
-	rows, err := r.db.QueryContext(ctx, listQuery, listArgs...)
+	rows, err := r.db.QueryContext(ctx, listQuery, roleParam, statusParam, searchParam, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
