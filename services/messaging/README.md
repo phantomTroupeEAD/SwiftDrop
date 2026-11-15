@@ -19,10 +19,11 @@ The **SwiftDrop Messaging Service** provides the asynchronous integration backbo
 2. **Zero In-Transaction Network I/O:** Database transactions never block on external network I/O (SMTP or HTTP webhooks).
 3. **Strict Outbox Relay Singleton:** Exactly one outbox relay instance runs (`replicas: 1`) to guarantee ordered event sequence per aggregate and prevent connection contention.
 4. **Idempotent Consumers:** All consumers must be strictly idempotent using `processed_events` deduplication (`consumer_name` + `event_id`).
-5. **SSRF Hardened Webhooks:** Outbound webhooks block all non-public CIDRs (private, loopback, link-local, cloud metadata `169.254.169.254`, CGNAT, IPv6 ULA) and disable HTTP redirect following.
-6. **Payload Sanitization (Decision D4):** Customer email addresses in delivery records are masked on read (`k***@domain.com`). No passwords, tokens, API keys, courier phone numbers, or private delivery notes may ever be exposed via merchant webhooks or tracking queues.
-7. **Dead-Letter Safety:** Poison messages that fail JSON schema validation or unrecoverable processing are rejected directly to `swiftdrop.dlq` without tight retry loops.
-8. **Resilient Broker Connection & Cold-Start Recovery:** RabbitMQ connection manager retries with exponential backoff on cold starts and starts an asynchronous background retry loop if the initial dial fails. Outbox relay and worker daemons wait on broker readiness before polling or opening consumer channels, preventing crash loops and false outbox delivery failures during infrastructure boots.
+5. **SSRF Hardened Webhooks:** Outbound webhooks block all non-public CIDRs (private, loopback, link-local, cloud metadata `169.254.169.254`, CGNAT, IPv6 ULA) and disable HTTP redirect following. `SafeClient` resolves hostnames, checks all resolved addresses against SSRF blacklists, and dials safe IPs in sequence (supporting dual-stack IPv4/IPv6 fallback).
+6. **Secret Decryption & Rotation:** Signing secrets are encrypted with AES-256-GCM. Decryptor supports primary and fallback key rings with graceful AAD backward compatibility.
+7. **Payload Sanitization (Decision D4):** Customer email addresses in delivery records are masked on read (`k***@domain.com`). No passwords, tokens, API keys, courier phone numbers, or private delivery notes may ever be exposed via merchant webhooks or tracking queues.
+8. **Dead-Letter Safety:** Poison messages that fail JSON schema validation or unrecoverable processing are rejected directly to `swiftdrop.dlq` without tight retry loops.
+9. **Resilient Broker Connection & Cold-Start Recovery:** RabbitMQ connection manager retries with exponential backoff on cold starts and starts an asynchronous background retry loop if the initial dial fails. Outbox relay and worker daemons wait on broker readiness before polling or opening consumer channels, preventing crash loops and false outbox delivery failures during infrastructure boots.
 
 ---
 

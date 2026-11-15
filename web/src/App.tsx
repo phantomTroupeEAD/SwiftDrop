@@ -55,7 +55,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: Role }> = ({ 
     return <Navigate to="/auth/login" replace />;
   }
   if (role === 'MERCHANT') return <MerchantSessionGate>{children}</MerchantSessionGate>;
-  if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
+  if (role && user?.role !== role && !(role === 'CUSTOMER' && user?.role === 'MERCHANT')) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 

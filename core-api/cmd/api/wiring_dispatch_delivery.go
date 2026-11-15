@@ -133,6 +133,10 @@ func (a *dispatchToDeliveryParcelAdapter) GetStatusWithLock(ctx context.Context,
 	return a.updater.GetStatusWithLock(ctx, tx, parcelID)
 }
 
+func (a *dispatchToDeliveryParcelAdapter) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return a.updater.GetMerchantID(ctx, tx, parcelID)
+}
+
 type dispatchToDeliveryOutboxAdapter struct {
 	writer dispatchApp.OutboxWriter
 }

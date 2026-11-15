@@ -116,6 +116,9 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 			"assigned_by":   asgn.AssignedBy.String(),
 			"assigned_at":   asgn.AssignedAt.Format(time.RFC3339),
 		}
+		if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+			eventPayload["merchant_id"] = *mID
+		}
 		err = uc.outboxWriter.Write(
 			ctx,
 			tx,

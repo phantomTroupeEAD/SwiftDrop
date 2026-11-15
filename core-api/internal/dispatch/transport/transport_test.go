@@ -124,6 +124,10 @@ func (m *mockParcelUpdater) GetStatusWithLock(ctx context.Context, tx *sql.Tx, p
 	return s, m.attempts[parcelID], nil
 }
 
+func (m *mockParcelUpdater) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 type mockOutboxWriter struct{}
 
 func (m *mockOutboxWriter) Write(ctx context.Context, tx *sql.Tx, aggregateType string, aggregateID uuid.UUID, aggregateVersion int, eventType string, payload any, correlationID string) error {

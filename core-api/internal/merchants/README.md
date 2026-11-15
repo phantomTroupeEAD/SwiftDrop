@@ -59,8 +59,8 @@ stateDiagram-v2
 6. **Scopes:** Supported scopes: `parcels:create`, `parcels:read`.
 
 ### 2.4 Webhook Security & SSRF Protection
-1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production (configurable override for local dev).
-2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. Any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately.
+1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production. In local development/testing (`allowHTTP: true`), plain `http://` and explicit custom ports (e.g. mock webhook receivers on port 9999) are permitted; default HTTPS port 443 over plain HTTP is rejected.
+2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. In production, any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately. In local development/testing, private hosts can be explicitly whitelisted (e.g. `localhost`, `127.0.0.1`) strictly when `!config.IsProduction()`.
 3. **DNS Address Limit:** DNS responses returning more than 16 IP addresses are rejected to prevent address smuggling.
 4. **Secret Generation:** Webhook signing secrets (`whsec_[0-9A-Za-z]{43}`) are generated server-side using `crypto/rand`. Callers cannot specify custom secrets.
 5. **Secret Encryption at Rest:** Signing secrets are encrypted with AES-256-GCM (`nonce || ciphertext || tag`) before persisting to `webhook_endpoints.secret_ciphertext`. Minimum ciphertext length (`nonceSize + tagSize`) is strictly validated.

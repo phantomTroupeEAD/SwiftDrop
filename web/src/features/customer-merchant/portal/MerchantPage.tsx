@@ -134,7 +134,10 @@ export function MerchantPage({ section }: { section: Section }) {
         const events = data.getAll('event');
         if (!events.length) throw new PortalError('Select at least one event.', 400);
         const url = String(data.get('url'));
-        if (!url.startsWith('https://')) throw new PortalError('Enter an HTTPS endpoint.', 400);
+        const allowHttpDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!url.startsWith('https://') && !(allowHttpDev && (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')))) {
+          throw new PortalError('Enter an HTTPS endpoint.', 400);
+        }
         const result = await portalRequest<{ signing_secret: string }>(path, {
           token: accessToken, method: 'POST', body: { url, events },
         });

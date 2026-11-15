@@ -69,9 +69,9 @@ function handleWebhook(tenant: 'alpha' | 'beta') {
     }
 
     const record: WebhookRecord = {
-      id: parsedPayload.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: parsedPayload.event_id || parsedPayload.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       tenant,
-      type: parsedPayload.type || 'parcel.unknown',
+      type: parsedPayload.event_type || parsedPayload.type || 'parcel.unknown',
       payload: parsedPayload,
       hmacValid,
       receivedAt: new Date().toISOString(),
@@ -128,6 +128,23 @@ app.post('/api/reset', (_req: Request, res: Response) => {
   return res.json({ reset: true });
 });
 
+// Configure dynamic webhook secret from UI/test
+app.post('/api/secret', (req: Request, res: Response) => {
+  let body: any = {};
+  try {
+    body = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    body = req.body;
+  }
+  const tenant = body.tenant || 'alpha';
+  const secret = body.secret;
+  if (secret) {
+    SECRETS[tenant] = secret;
+    return res.json({ success: true, tenant, secretConfigured: true });
+  }
+  return res.status(400).json({ error: 'Secret required' });
+});
+
 // 5. 1-Click Test Trigger (For live examiner demo)
 app.post('/api/test-trigger', (req: Request, res: Response) => {
   const tenant = (req.query.tenant as 'alpha' | 'beta') || 'alpha';
@@ -172,8 +189,8 @@ app.get('/dashboard', (_req: Request, res: Response) => {
 });
 
 export function start(port: number = Number(process.env.PORT) || 9999) {
-  return app.listen(port, '0.0.0.0', () => {
-    console.log(`[mock-webhook] Receiver & Visual Dashboard running on http://0.0.0.0:${port}`);
+  return app.listen(port, () => {
+    console.log(`[mock-webhook] Receiver & Visual Dashboard running on port ${port}`);
   });
 }
 

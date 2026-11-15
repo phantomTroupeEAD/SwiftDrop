@@ -31,6 +31,13 @@ type ParcelLifecycleUpdater interface {
 		tx *sql.Tx,
 		parcelID uuid.UUID,
 	) (currentStatus string, attemptCount int, err error)
+
+	// GetMerchantID retrieves the merchant ID for a parcel if it is a merchant shipment.
+	GetMerchantID(
+		ctx context.Context,
+		tx *sql.Tx,
+		parcelID uuid.UUID,
+	) (merchantID *string, err error)
 }
 
 // OutboxWriter is implemented by Member 8 (internal/events)

@@ -424,14 +424,14 @@ func (c *RabbitMQConsumer) connectAndConsume(ctx context.Context) (*amqp.Connect
 		return nil, nil, nil, fmt.Errorf("set amqp qos: %w", err)
 	}
 
-	// Ensure durable queue exists before consuming
+	// Ensure durable queue exists before consuming (matching messaging topology with DLX)
 	_, err = ch.QueueDeclare(
 		c.queueName,
 		true,  // durable
 		false, // autoDelete
 		false, // exclusive
 		false, // noWait
-		nil,   // arguments
+		amqp.Table{"x-dead-letter-exchange": "swiftdrop.dlq.exchange"}, // arguments
 	)
 	if err != nil {
 		_ = ch.Close()
