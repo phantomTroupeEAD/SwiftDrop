@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ApiError } from '../api';
 import type { PageMeta } from '../admin-console/consoleApi';
 import { Banner, formatWhen } from '../admin-console/ui';
-import { MerchantDetailModal } from './MerchantDetailModal';
 import { MerchantStatusBadge, statusLabel } from './MerchantStatusBadge';
 import { MERCHANT_STATUSES, listMerchants, type Merchant } from './merchantsApi';
 
@@ -22,13 +21,11 @@ const DEFAULT_PER_PAGE = 20;
 
 interface MerchantsPanelProps {
   token: string | null;
-  /** The merchant whose details are open (from the address /ops/merchants/:id). */
-  openId?: string;
+  /** Opens one merchant (the page /ops/merchants/:id). */
   onOpen: (id: string) => void;
-  onCloseDetail: () => void;
 }
 
-export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, openId, onOpen, onCloseDetail }) => {
+export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, onOpen }) => {
   const [rows, setRows] = useState<Merchant[]>([]);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [status, setStatus] = useState(ANY);
@@ -67,7 +64,7 @@ export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, openId, o
         <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div className="grid gap-1.5">
             <CardTitle id="merchants-title">Merchant accounts</CardTitle>
-            <CardDescription>Every merchant that applied, newest first. Open one to read its details.</CardDescription>
+            <CardDescription>Every merchant that applied, newest first. Open one to review it.</CardDescription>
           </div>
           <Button type="button" variant="outline" size="icon" onClick={() => void load()} disabled={loading} aria-label="Refresh merchants" title="Refresh merchants" data-testid="merchants-refresh-btn">
             <RefreshCw className={loading ? 'animate-spin' : undefined} aria-hidden="true" />
@@ -165,7 +162,7 @@ export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, openId, o
                     <TableHead>Phone</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>Applied</TableHead>
-                    <TableHead className="text-right">Details</TableHead>
+                    <TableHead className="text-right">Review</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -205,8 +202,8 @@ export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, openId, o
                           <TableCell>{m.address?.city || <span className="text-text-muted">Not provided</span>}</TableCell>
                           <TableCell className="whitespace-nowrap font-mono tabular-nums">{formatWhen(m.created_at)}</TableCell>
                           <TableCell className="text-right">
-                            <Button type="button" variant="outline" size="sm" className="touch:min-h-[44px]" onClick={() => onOpen(m.merchant_id)} aria-label={`View details of ${m.business_name}`} data-testid="merchants-view-btn">
-                              View
+                            <Button type="button" variant="outline" size="sm" className="touch:min-h-[44px]" onClick={() => onOpen(m.merchant_id)} aria-label={`Open ${m.business_name}`} data-testid="merchants-view-btn">
+                              Open
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -263,7 +260,6 @@ export const MerchantsPanel: React.FC<MerchantsPanelProps> = ({ token, openId, o
         </CardContent>
       </Card>
 
-      {openId && <MerchantDetailModal token={token} merchantId={openId} preview={rows.find((m) => m.merchant_id === openId)} onClose={onCloseDetail} />}
     </>
   );
 };

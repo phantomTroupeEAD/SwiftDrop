@@ -11,7 +11,9 @@ import { Banner } from '../admin-console/ui';
 import { DispatchBoardPanel } from '../dispatch/DispatchBoardPanel';
 import { FailedDeliveriesPanel } from '../failed/FailedDeliveriesPanel';
 import { FleetPanel } from '../fleet/FleetPanel';
+import { MerchantDetailPage } from '../merchants/MerchantDetailPage';
 import { MerchantsPanel } from '../merchants/MerchantsPanel';
+import { PricingPanel } from '../pricing/PricingPanel';
 import { ReportsPanel } from '../reports/ReportsPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
 import { OPS_NAV, homePathFor, isOpsRole } from './opsNav';
@@ -148,10 +150,24 @@ export function MerchantsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const item = navItem('merchants');
+  if (id) return <MerchantDetailPage token={accessToken} merchantId={id} />;
   return (
     <>
       <PageHeader title={item.title} description={item.description} />
-      <MerchantsPanel token={accessToken} openId={id} onOpen={(m) => navigate(`/ops/merchants/${encodeURIComponent(m)}`)} onCloseDetail={() => navigate('/ops/merchants')} />
+      <MerchantsPanel token={accessToken} onOpen={(m) => navigate(`/ops/merchants/${encodeURIComponent(m)}`)} />
+    </>
+  );
+}
+
+export function PricingPage() {
+  const { accessToken } = useAuth();
+  const { banner, show } = useNotice();
+  const item = navItem('pricing');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      {banner}
+      <PricingPanel token={accessToken} onNotice={show} />
     </>
   );
 }

@@ -35,7 +35,7 @@ interface ErrorBody {
   };
 }
 
-export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT';
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 export async function request<T>(
   token: string | null,

@@ -304,7 +304,7 @@ Filters combine with AND. An empty value is the same as leaving the parameter ou
 }
 ```
 
-`previous_state` and `new_state` hold the full zone or `{"value": ...}` for settings; the example is shortened. `actor_id`, `previous_state`, `new_state`, `reason` and `request_id` may be `null`. The client IP and user agent are stored but not returned.
+`previous_state` and `new_state` hold the full zone or `{"value": ...}` for settings; the example is shortened. `actor_id`, `previous_state`, `new_state`, `reason` and `request_id` may be `null`. Rows written by other modules keep their snapshots in `metadata` (flat `previous_*` and `new_*` keys, or nested `previous` and `new` objects); the list turns both into `previous_state` and `new_state`, redacts secret-looking values, and uses `new_state.reason` as `reason` when the reason column is empty. The client IP and user agent are stored but not returned.
 
 **Errors:** `422 VALIDATION_FAILED` (bad `page`, `per_page` or filter value, a filter sent twice, or `from` after `to`).
 
