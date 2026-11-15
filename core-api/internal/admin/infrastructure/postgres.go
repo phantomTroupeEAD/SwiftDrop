@@ -371,6 +371,8 @@ func (s *Store) ListAudit(ctx context.Context, f application.AuditFilter, offset
 	pageArgs := append(append([]any{}, args...), limit, offset)
 	// target_type, target_id and the snapshots are NULL on rows written by other modules, which
 	// still use entity_type, entity_id and metadata, so read those as a fallback.
+	// #nosec G202 -- "where" is built by auditWhere from constant column conditions and $n
+	// placeholders only; every filter value travels as a bound parameter, never in the SQL text.
 	rows, err := s.DB.QueryContext(ctx, `SELECT id::text, actor_id::text, actor_role, action,
 		COALESCE(target_type, entity_type, ''), COALESCE(target_id, entity_id, ''), previous_state, new_state, metadata,
 		reason, request_id, created_at FROM audit_logs`+where+fmt.Sprintf(" ORDER BY created_at DESC, id LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2), pageArgs...)
