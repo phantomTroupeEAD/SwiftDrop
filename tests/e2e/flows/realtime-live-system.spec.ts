@@ -165,7 +165,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
 
     await expect(applicantPage).toHaveURL(/\/dashboard/, { timeout: 10000 });
     await applicantPage.getByRole('link', { name: 'Webhooks' }).click();
-    await expect(applicantPage.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 10000 });
+    await expect(applicantPage.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible({ timeout: 10000 });
 
     await applicantPage.getByTestId('merchant-webhook-url-input').fill('https://example.com/webhooks/merchant-alpha');
     // Select first event checkbox
