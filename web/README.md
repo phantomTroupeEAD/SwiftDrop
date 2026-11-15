@@ -55,13 +55,15 @@ Implemented an authoritative, image-heavy public landing page (`src/features/lan
 - **Strict Compliance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="PUBLIC"` scoping, zero raw elements, and zero arbitrary brackets. Tested cleanly with `npm run lint:ui` and `npm run build`.
 
 ### Authentication Screens Refinement (November 2026)
-Both the primary sign-in screen (`src/features/auth/LoginPage.tsx`) and the registration screen (`src/features/auth/RegisterPage.tsx`) conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
+All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/features/auth/RegisterPage.tsx`, and `src/features/auth/ForgotPasswordPage.tsx`) strictly conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
 - Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
 - Floating solid white/neutral modal cards (`bg-surface rounded-2xl border border-border`) over the cinematic twilight logistics background (`public/login-bg.jpg`) with an ambient blur and contrast veil (`bg-canvas/75 backdrop-blur-sm`).
 - Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
 - Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
+- Google OAuth button integrated directly into the login card using semantic button primitives and standard SVG glyphs.
 - Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).
-- Cleanly verified via `npm run lint:ui` and `npm run build`.
+- Cleanly verified via `npm run lint:ui` with zero design governance violations.
 
 ## Implementation checkpoint — 5 November 2026
 

@@ -264,7 +264,7 @@ const applicationFields = [
 ] as const;
 
 export function MerchantApplication() {
-  const { accessToken, refreshSession } = useAuth();
+  const { accessToken } = useAuth();
   const [profile, setProfile] = useState<Profile>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -277,7 +277,7 @@ export function MerchantApplication() {
     setLookupFailed(false);
     setError('');
     void portalRequest<Profile>('/merchants/me', { token: accessToken, signal: controller.signal })
-      .then(setProfile)
+      .then(result => { if (!controller.signal.aborted) setProfile(result); })
       .catch(cause => {
         if (!controller.signal.aborted && !(cause instanceof PortalError && cause.status === 404)) {
           setError(errorMessage(cause));
@@ -287,19 +287,20 @@ export function MerchantApplication() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [accessToken, retry]);
-  useEffect(() => {
-    if (profile?.status === 'APPROVED') void refreshSession();
-  }, [profile?.status, refreshSession]);
-
-  return <PortalLayout title="Merchant application" profile="customer">
+  return <PortalLayout title="Merchant application" profile="customer"
+    applicationStatus={loading || lookupFailed ? undefined : profile?.status ?? null}>
     <section className="m6-card">
-      <p className="m6-muted">Apply for a business account to manage shipments in bulk. Merchant tools become available after approval.</p>
+
       <PortalErrorMessage message={error} />
       {loading ? <p role="status">Checking application status…</p> : lookupFailed
         ? <Button onClick={() => setRetry(current => current + 1)}>Retry lookup</Button>
         : profile ? <div data-testid="merchant-application-status">
           <div className="m6-result-heading"><h2>{profile.business_name}</h2><PortalStatus status={profile.status} /></div>
-          {profile.status === 'APPROVED' && <p><Link to="/portal/merchants/orders">Open merchant workspace</Link></p>}
+          {profile.status === 'PENDING' && <>
+            <p>You have already applied for a merchant account. Your application is under review.</p>
+            <Button variant="outline" type="button" onClick={() => setRetry(current => current + 1)}>Check status</Button>
+          </>}
+          {profile.status === 'APPROVED' && <Button asChild><Link to="/merchant/dashboard">Open merchant dashboard</Link></Button>}
         </div>
         : <form onSubmit={async event => {
           event.preventDefault();
@@ -314,7 +315,10 @@ export function MerchantApplication() {
                 address: { line1: data.get('line1'), city: data.get('city'), country: String(data.get('country')).toUpperCase() },
               },
             }));
-          } catch (cause) { setError(errorMessage(cause)); }
+          } catch (cause) {
+            if (cause instanceof PortalError && cause.status === 409) setRetry(current => current + 1);
+            else setError(errorMessage(cause));
+          }
           finally { setPending(false); }
         }}>
           <fieldset className="m6-grid" disabled={pending}>

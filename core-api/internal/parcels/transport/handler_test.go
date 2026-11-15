@@ -158,6 +158,17 @@ func (f *fakeParcelRepo) FindByID(_ context.Context, _ db.Querier, id string) (d
 	return p, nil
 }
 
+func (f *fakeParcelRepo) FindByTrackingNumber(_ context.Context, _ db.Querier, tn domain.TrackingNumber) (domain.Parcel, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.parcels {
+		if p.TrackingNumber.String() == tn.String() {
+			return p, nil
+		}
+	}
+	return domain.Parcel{}, domain.ErrInvalidTrackingNumber
+}
+
 func (f *fakeParcelRepo) UpdateStatus(_ context.Context, _ db.Querier, parcel domain.Parcel, expectedVersion int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -801,6 +812,12 @@ func TestBookParcel_CustomerSuccessAndCorrelationID(t *testing.T) {
 	if data["pricing_rule_id"] != "rule_west_central_v2" || int(data["pricing_rule_version"].(float64)) != 2 {
 		t.Fatalf("unexpected pricing rule metadata: %v", data)
 	}
+	if data["item_description"] != "Laptop battery pack" {
+		t.Fatalf("expected item_description 'Laptop battery pack', got %v", data["item_description"])
+	}
+	if data["special_instructions"] != "Handle with care" {
+		t.Fatalf("expected special_instructions 'Handle with care', got %v", data["special_instructions"])
+	}
 	if th.outboxWriter.Count() != 1 {
 		t.Fatalf("expected 1 outbox event written, got %d", th.outboxWriter.Count())
 	}
@@ -1021,6 +1038,12 @@ func TestBookParcel_QuoteAndValidationErrors(t *testing.T) {
 		assertParcelErrorEnvelope(t, th.doJSON(t, http.MethodPost, "/api/v1/parcels", custToken, testIdemKey1, blankPhone), http.StatusUnprocessableEntity, "INVALID_RECIPIENT")
 	})
 
+	t.Run("oversized_item_description", func(t *testing.T) {
+		oversized := strings.Repeat("x", 501)
+		oversizedJSON := strings.Replace(validBookingJSON(testCustomerQuoteID), `"Laptop battery pack"`, fmt.Sprintf("%q", oversized), 1)
+		assertParcelErrorEnvelope(t, th.doJSON(t, http.MethodPost, "/api/v1/parcels", custToken, testIdemKey1, oversizedJSON), http.StatusUnprocessableEntity, "INVALID_PARCEL")
+	})
+
 	// All errors above rolled back atomically so valid quote stays unused!
 	if th.quoteConsumer.quotes[testCustomerQuoteID].used {
 		t.Fatal("expected quote to remain unused after failed booking validations")
@@ -1155,6 +1178,12 @@ func TestGetParcelAndHistory_AuthorizedIDORAndValidation(t *testing.T) {
 			got := assertParcelDataEnvelope(t, rec, http.StatusOK)
 			if got["id"] != custParcelID || got["tracking_number"] != custBook["tracking_number"] {
 				t.Fatalf("unexpected parcel payload: %v", got)
+			}
+			if got["item_description"] != "Laptop battery pack" {
+				t.Fatalf("expected item_description 'Laptop battery pack', got %v", got["item_description"])
+			}
+			if got["special_instructions"] != "Handle with care" {
+				t.Fatalf("expected special_instructions 'Handle with care', got %v", got["special_instructions"])
 			}
 
 			histRec := th.doJSON(t, http.MethodGet, "/api/v1/parcels/"+custParcelID+"/history", tc.token, "", "")

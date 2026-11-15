@@ -113,17 +113,17 @@ export function RoleHome() {
           </div>
         </section>
         <div className="grid items-start gap-4 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:col-span-2">
+        <div className={merchant ? "min-w-0 space-y-4 lg:col-span-2" : "min-w-0 space-y-4 lg:col-span-3"}>
         {(user.role === 'CUSTOMER' || user.role === 'MERCHANT') && accessToken && (
           <ShipmentOverview key={`${user.id}:${user.role}:${user.tenant_id ?? ''}`} merchant={user.role === 'MERCHANT'} token={accessToken} />
         )}
         </div>
-        <aside className="min-w-0 space-y-4">
-        {user.role === 'CUSTOMER' && accessToken && <AssistantChat key={user.id} token={accessToken} />}
+        {merchant && <aside className="min-w-0 space-y-4">
         {user.role === 'MERCHANT' && accessToken && <MerchantProfileBanner key={accessToken} token={accessToken} />}
-        </aside>
+        </aside>}
         </div>
       </main>
+      {!merchant && accessToken && <AssistantChat key={user.id} token={accessToken} />}
     </div>
   );
 }

@@ -14,7 +14,10 @@ The `tracking` service is a standalone read-optimized projection service designe
 - Authenticated tracking lookup with ownership authorization (`GET /api/v1/tracking/{tracking_number}`).
 - Canonical Server-Sent Events (SSE) streaming (`GET /api/v1/tracking/public/{tracking_number}/stream`).
 - Strict SEC-009 public data sanitization and PII redaction.
-- Decoupled real-time event source abstraction (`TrackingEventSource`) for Redis Pub/Sub / RabbitMQ integration in Phase 5.
+- Production RabbitMQ consumer (`q.tracking.updates`) ingesting parcel lifecycle events.
+- Redis 7 Pub/Sub horizontal fan-out on channel `tracking:updates` across Tracking API replicas.
+- History correlation linking outbox `status_history_id` to authoritative `parcel_status_history.id`.
+- Bounded in-memory idempotency deduplication and deterministic milestone replay.
 - Truthful health checks (`/health/live`, `/health/ready`).
 
 ---
@@ -36,3 +39,4 @@ The `tracking` service is a standalone read-optimized projection service designe
 | 2026-11-10 | Phase 2 | Public tracking REST API, PostgreSQL repository adapter, SEC-009 privacy | Member 5 |
 | 2026-11-10 | Phase 3 | Authenticated Tracking REST API, HS256 JWT verification, customer & merchant ownership authorization | Member 5 |
 | 2026-11-10 | Phase 4 | Standalone SSE streaming infrastructure, heartbeat, reconnect, backpressure, event source abstraction | Member 5 |
+| 2026-11-10 | Phase 5 | Production RabbitMQ consumer (`q.tracking.updates`), Redis Pub/Sub (`tracking:updates`), `status_history_id` correlation, idempotency deduplicator, and live SSE integration | Member 5 |

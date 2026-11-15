@@ -1,3 +1,4 @@
+import { friendlyApiError } from '@/shared/lib/api-error';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from './DashboardLayout';
 import { useAuth } from '@/app/providers/AuthContext';
@@ -45,54 +46,6 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const fallbackMockUsers: User[] = [
-      {
-        id: 'usr_01HADMIN000000000000000001',
-        display_name: 'System Administrator',
-        email: 'admin@swiftdrop.local',
-        role: 'ADMIN',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-21T00:00:00Z',
-      },
-      {
-        id: 'usr_01HDISPATCH00000000000002',
-        display_name: 'Central Dispatcher',
-        email: 'dispatcher@swiftdrop.local',
-        role: 'DISPATCHER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-22T00:00:00Z',
-      },
-      {
-        id: 'usr_01HCOURIER00000000000003',
-        display_name: 'Kamal Perera',
-        email: 'courier@swiftdrop.local',
-        role: 'COURIER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-24T00:00:00Z',
-      },
-      {
-        id: 'usr_01HMERCHANT00000000000004',
-        display_name: 'Colombo Tech Stores',
-        email: 'merchant@vendor.com',
-        role: 'MERCHANT',
-        status: 'ACTIVE',
-        tenant_id: 'mrc_01HMERCHANTTENANT00001',
-        created_at: '2026-10-25T00:00:00Z',
-      },
-      {
-        id: 'usr_01HCUSTOMER00000000000005',
-        display_name: 'Nimal Fernando',
-        email: 'customer@swiftdrop.local',
-        role: 'CUSTOMER',
-        status: 'ACTIVE',
-        tenant_id: null,
-        created_at: '2026-10-26T00:00:00Z',
-      },
-    ];
-
     try {
       const url = new URL('/api/v1/admin/users', window.location.origin);
       url.searchParams.set('limit', '50');
@@ -109,25 +62,21 @@ export const AdminDashboard: React.FC = () => {
 
       const res = await fetch(url.toString(), { headers });
       if (!res.ok) {
-        throw new Error(`Core API responded with HTTP ${res.status}`);
+        throw new Error(friendlyApiError(res));
       }
 
       const data = await res.json();
-      if (data?.data?.items) {
-        setUsers(data.data.items);
-        setTotalCount(data.data.total ?? data.data.items.length);
+      const items: User[] = data?.data?.items ?? [];
+      setUsers(items);
+      setTotalCount(data?.data?.total ?? items.length);
+    } catch (err: unknown) {
+      setUsers([]);
+      setTotalCount(0);
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setUsers(fallbackMockUsers);
-        setTotalCount(fallbackMockUsers.length);
+        setError('Failed to load users from Core API.');
       }
-    } catch {
-      // Graceful local development fallback if not logged in as Admin or Core API is offline
-      let filtered = fallbackMockUsers;
-      if (selectedRole !== 'ALL') {
-        filtered = filtered.filter((u) => u.role === selectedRole);
-      }
-      setUsers(filtered);
-      setTotalCount(filtered.length);
     } finally {
       setLoading(false);
     }
@@ -176,7 +125,7 @@ export const AdminDashboard: React.FC = () => {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error?.message || `Failed to update role (${res.status})`);
+        throw new Error(friendlyApiError(res, errorData?.error?.code, 'Could not update the role. Please try again.'));
       }
 
       const responseData = await res.json();
@@ -191,7 +140,7 @@ export const AdminDashboard: React.FC = () => {
       setSuccessMessage(`Role for ${selectedUser.email} successfully updated to ${targetRole}.`);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setRoleError(err.message);
       } else {
         setRoleError('Failed to update user role.');
@@ -217,7 +166,7 @@ export const AdminDashboard: React.FC = () => {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error?.message || `Failed to change status (${res.status})`);
+        throw new Error(friendlyApiError(res, errorData?.error?.code, 'Could not change the account status. Please try again.'));
       }
 
       setUsers((prev) =>
@@ -226,7 +175,7 @@ export const AdminDashboard: React.FC = () => {
       setSuccessMessage(`Account ${user.email} is now ${nextStatus}.`);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof Error && !(err instanceof TypeError)) {
         setError(err.message);
       } else {
         setError('Failed to update account status.');
