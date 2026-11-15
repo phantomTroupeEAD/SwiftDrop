@@ -1,4 +1,5 @@
 import { test as base, Page, BrowserContext } from '@playwright/test';
+import * as path from 'path';
 
 /**
  * Custom Playwright test fixture providing 5 concurrent browser contexts
@@ -11,6 +12,7 @@ import { test as base, Page, BrowserContext } from '@playwright/test';
  * 5. courierContext / courierPage (Driver Mobile PWA - Stop run & Signature POD)
  *
  * INVARIANT: Each actor runs in a completely isolated browser context with zero session crosstalk.
+ * Full-motion screen recording (video) is captured for each individual actor window.
  */
 
 type SystemOrchestrationFixtures = {
@@ -37,6 +39,10 @@ export const test = base.extend<SystemOrchestrationFixtures>({
       baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 SwiftDrop-E2E-Window1-Customer',
+      recordVideo: {
+        dir: path.resolve(__dirname, '../artifacts/videos/window-1-customer'),
+        size: { width: 1280, height: 800 },
+      },
     });
     await use(context);
     await context.close();
@@ -52,6 +58,10 @@ export const test = base.extend<SystemOrchestrationFixtures>({
       baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 SwiftDrop-E2E-Window2-ApplicantMerchant',
+      recordVideo: {
+        dir: path.resolve(__dirname, '../artifacts/videos/window-2-merchant-applicant'),
+        size: { width: 1280, height: 800 },
+      },
     });
     await use(context);
     await context.close();
@@ -67,6 +77,10 @@ export const test = base.extend<SystemOrchestrationFixtures>({
       baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1440, height: 900 },
       userAgent: 'Mozilla/5.0 SwiftDrop-E2E-Window3-Admin',
+      recordVideo: {
+        dir: path.resolve(__dirname, '../artifacts/videos/window-3-admin'),
+        size: { width: 1440, height: 900 },
+      },
     });
     await use(context);
     await context.close();
@@ -82,6 +96,10 @@ export const test = base.extend<SystemOrchestrationFixtures>({
       baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1440, height: 900 },
       userAgent: 'Mozilla/5.0 SwiftDrop-E2E-Window4-Dispatcher',
+      recordVideo: {
+        dir: path.resolve(__dirname, '../artifacts/videos/window-4-dispatcher'),
+        size: { width: 1440, height: 900 },
+      },
     });
     await use(context);
     await context.close();
@@ -99,6 +117,10 @@ export const test = base.extend<SystemOrchestrationFixtures>({
       isMobile: true,
       hasTouch: true,
       userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) SwiftDrop-E2E-Window5-Courier',
+      recordVideo: {
+        dir: path.resolve(__dirname, '../artifacts/videos/window-5-courier-mobile'),
+        size: { width: 375, height: 812 },
+      },
     });
     await use(context);
     await context.close();
