@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
 
@@ -167,7 +168,7 @@ func (s *AuthService) Register(ctx context.Context, cmd RegisterCustomerCommand)
 	}
 
 	// 9. Build user aggregate
-	userID := "usr_" + generateRandomHex(16)
+	userID := newEntityID()
 	displayName := firstName + " " + lastName
 	newUser := domain.NewUser(
 		userID,
@@ -270,7 +271,7 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := newEntityID()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -281,7 +282,8 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			// Login still succeeds, but without a stored session the refresh token cannot be used.
+			log.Printf("[WARN] failed to persist refresh-token session for user %s: %v", user.ID, err)
 		}
 	}
 
@@ -348,7 +350,7 @@ func (s *AuthService) RefreshSession(ctx context.Context, cmd RefreshSessionComm
 		return nil, fmt.Errorf("failed to generate rotated refresh token: %w", err)
 	}
 
-	newSessionID := "ses_" + generateRandomHex(16)
+	newSessionID := newEntityID()
 	newSession := domain.NewRefreshTokenSession(
 		newSessionID,
 		user.ID,
@@ -448,7 +450,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 			// Account exists -> link Google identity
 			user = existingUser
 			link := domain.NewOAuthIdentity(
-				"oai_"+generateRandomHex(16),
+				newEntityID(),
 				user.ID,
 				domain.ProviderGoogle,
 				claims.Subject,
@@ -484,7 +486,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 				return nil, fmt.Errorf("failed to hash password: %w", err)
 			}
 
-			userID := "usr_" + generateRandomHex(16)
+			userID := newEntityID()
 			displayName := strings.TrimSpace(firstName + " " + lastName)
 			if displayName == "" {
 				displayName = firstName
@@ -511,7 +513,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 			}
 
 			link := domain.NewOAuthIdentity(
-				"oai_"+generateRandomHex(16),
+				newEntityID(),
 				newUser.ID,
 				domain.ProviderGoogle,
 				claims.Subject,
@@ -549,7 +551,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := newEntityID()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -560,7 +562,8 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			// Login still succeeds, but without a stored session the refresh token cannot be used.
+			log.Printf("[WARN] failed to persist refresh-token session for user %s: %v", user.ID, err)
 		}
 	}
 
@@ -698,6 +701,13 @@ func generateOpaqueToken() (raw string, hash string, err error) {
 	sum := sha256.Sum256([]byte(raw))
 	hash = hex.EncodeToString(sum[:])
 	return raw, hash, nil
+}
+
+// newEntityID returns a random UUID (v4) for users, refresh-token sessions and OAuth links.
+// Their primary keys are UUID columns in PostgreSQL (users.id, refresh_tokens.id,
+// oauth_identities.id); prefixed IDs such as "usr_<hex>" are rejected by the database.
+func newEntityID() string {
+	return uuid.NewString()
 }
 
 func generateRandomHex(byteCount int) string {

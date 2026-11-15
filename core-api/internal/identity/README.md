@@ -94,3 +94,4 @@ internal/identity/
 | :--- | :--- | :--- |
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-10-29 | Implemented Login lifecycle, JWT provider, RBAC middlewares, 5 mock accounts & migrations | Member 1 |
+| 2026-11-15 | New user, refresh-token session and OAuth link IDs are UUIDs (`users.id`, `refresh_tokens.id`, `oauth_identities.id` are UUID columns; `usr_`/`ses_`/`oai_` IDs were rejected by PostgreSQL, so sign-up failed and refresh sessions were not saved). A failed session save is now logged. Agreed with Member 1. | Member 9 |

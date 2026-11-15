@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/identity/application"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/identity/infrastructure"
@@ -293,6 +294,10 @@ func TestAuthService_Register(t *testing.T) {
 		}
 		if !result.IsNewUser {
 			t.Error("Expected IsNewUser to be true")
+		}
+		// users.id is a UUID column in PostgreSQL: a prefixed ID such as "usr_<hex>" is rejected.
+		if _, err := uuid.Parse(result.User.ID); err != nil {
+			t.Errorf("Expected user ID to be a UUID, got %q", result.User.ID)
 		}
 
 		// Step 4: OTP must be consumed â€” reuse must fail
