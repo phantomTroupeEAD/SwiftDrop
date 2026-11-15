@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
 
@@ -167,7 +168,7 @@ func (s *AuthService) Register(ctx context.Context, cmd RegisterCustomerCommand)
 	}
 
 	// 9. Build user aggregate
-	userID := "usr_" + generateRandomHex(16)
+	userID := uuid.New().String()
 	displayName := firstName + " " + lastName
 	newUser := domain.NewUser(
 		userID,
@@ -270,7 +271,7 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := uuid.New().String()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -281,7 +282,7 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			return nil, fmt.Errorf("failed to persist refresh token session: %w", err)
 		}
 	}
 
@@ -348,7 +349,7 @@ func (s *AuthService) RefreshSession(ctx context.Context, cmd RefreshSessionComm
 		return nil, fmt.Errorf("failed to generate rotated refresh token: %w", err)
 	}
 
-	newSessionID := "ses_" + generateRandomHex(16)
+	newSessionID := uuid.New().String()
 	newSession := domain.NewRefreshTokenSession(
 		newSessionID,
 		user.ID,
@@ -484,7 +485,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 				return nil, fmt.Errorf("failed to hash password: %w", err)
 			}
 
-			userID := "usr_" + generateRandomHex(16)
+			userID := uuid.New().String()
 			displayName := strings.TrimSpace(firstName + " " + lastName)
 			if displayName == "" {
 				displayName = firstName
@@ -549,7 +550,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := uuid.New().String()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -560,7 +561,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			return nil, fmt.Errorf("failed to persist refresh token session: %w", err)
 		}
 	}
 

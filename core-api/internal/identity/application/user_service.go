@@ -33,7 +33,9 @@ func (s *UserService) AssignRole(ctx context.Context, userID string, newRole dom
 		return err
 	}
 
-	if tenantID != nil {
+	if newRole != domain.RoleMerchant {
+		user.TenantID = nil
+	} else if tenantID != nil {
 		user.TenantID = tenantID
 	}
 
@@ -46,8 +48,8 @@ func (s *UserService) AssignRole(ctx context.Context, userID string, newRole dom
 		meta := map[string]interface{}{
 			"new_role": string(newRole),
 		}
-		if tenantID != nil {
-			meta["tenant_id"] = *tenantID
+		if user.TenantID != nil {
+			meta["tenant_id"] = *user.TenantID
 		}
 		_ = s.auditWriter.WriteAuditLog(ctx, AuditEntry{
 			ActorID:    "system_or_admin",
@@ -62,10 +64,21 @@ func (s *UserService) AssignRole(ctx context.Context, userID string, newRole dom
 	return nil
 }
 
+// RevokeMerchantRole demotes a merchant user back to CUSTOMER and clears their tenant context.
+// Implements the RoleAssigner port interface used when merchants are suspended or disabled.
+func (s *UserService) RevokeMerchantRole(ctx context.Context, userID string) error {
+	return s.AssignRole(ctx, userID, domain.RoleCustomer, nil)
+}
+
 // UpdateUserRole handles administrative role change requests with actor security verification.
 func (s *UserService) UpdateUserRole(ctx context.Context, actor Principal, targetUserID string, newRole domain.Role, tenantID *string) error {
 	if actor.Role != domain.RoleAdmin {
 		return domain.ErrForbidden
+	}
+
+	// Governance rule: Prevent self-demotion from ADMIN
+	if actor.UserID == targetUserID && newRole != domain.RoleAdmin {
+		return domain.ErrSelfDemotion
 	}
 
 	user, err := s.userRepo.FindByID(ctx, targetUserID)
@@ -78,7 +91,9 @@ func (s *UserService) UpdateUserRole(ctx context.Context, actor Principal, targe
 		return err
 	}
 
-	if tenantID != nil {
+	if newRole != domain.RoleMerchant {
+		user.TenantID = nil
+	} else if tenantID != nil {
 		user.TenantID = tenantID
 	}
 
@@ -112,21 +127,26 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*domain.Us
 	return s.userRepo.FindByID(ctx, userID)
 }
 
-// ListUsers retrieves paginated user records with optional role filtering (Admin only).
-func (s *UserService) ListUsers(ctx context.Context, role *domain.Role, limit int, offset int) ([]*domain.User, int, error) {
+// ListUsers retrieves paginated user records with optional search and role/status filtering (Admin only).
+func (s *UserService) ListUsers(ctx context.Context, filter UserFilter, limit int, offset int) ([]*domain.User, int, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	return s.userRepo.ListUsers(ctx, role, limit, offset)
+	return s.userRepo.ListUsers(ctx, filter, limit, offset)
 }
 
 // UpdateUserStatus changes a user's account status (ACTIVE / SUSPENDED) with audit logging.
 func (s *UserService) UpdateUserStatus(ctx context.Context, actor Principal, targetUserID string, newStatus domain.UserStatus) error {
 	if actor.Role != domain.RoleAdmin {
 		return domain.ErrForbidden
+	}
+
+	// Governance rule: Prevent administrators from suspending their own accounts
+	if actor.UserID == targetUserID && newStatus == domain.StatusSuspended {
+		return domain.ErrSelfSuspension
 	}
 
 	user, err := s.userRepo.FindByID(ctx, targetUserID)

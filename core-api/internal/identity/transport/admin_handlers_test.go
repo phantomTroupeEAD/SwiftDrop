@@ -155,4 +155,96 @@ func TestAdminHandler_ListUsers_and_UpdateRole(t *testing.T) {
 			t.Fatalf("Expected 200 OK on reactivate, got %d: %s", rec2.Code, rec2.Body.String())
 		}
 	})
+
+	t.Run("GET /admin/users with search query and status filter", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?q=admin&status=ACTIVE", nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var res struct {
+			Data struct {
+				Items []transport.UserDTO `json:"items"`
+				Total int                 `json:"total"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		if res.Data.Total != 1 || len(res.Data.Items) != 1 {
+			t.Errorf("Expected 1 matched user, got total=%d len=%d", res.Data.Total, len(res.Data.Items))
+		}
+	})
+
+	t.Run("GET /admin/users/{id} retrieves single user", func(t *testing.T) {
+		adminUser, _ := userRepo.FindByEmail(ctx, "admin@swiftdrop.local")
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/"+adminUser.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var res struct {
+			Data transport.UserDTO `json:"data"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+		if res.Data.ID != adminUser.ID || res.Data.Email != "admin@swiftdrop.local" {
+			t.Errorf("Unexpected user returned: %+v", res.Data)
+		}
+	})
+
+	t.Run("GET /admin/users/{id} returns 404 for nonexistent user", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/nonexistent-id", nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("Expected 404 Not Found, got %d", rec.Code)
+		}
+	})
+
+	t.Run("PUT /admin/users/{id}/role blocks admin self-demotion (400)", func(t *testing.T) {
+		adminUser, _ := userRepo.FindByEmail(ctx, "admin@swiftdrop.local")
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"role": "CUSTOMER",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/users/"+adminUser.ID+"/role", bytes.NewBuffer(payload))
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("Expected 400 Bad Request on self-demotion, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("PUT /admin/users/{id}/status blocks admin self-suspension (400)", func(t *testing.T) {
+		adminUser, _ := userRepo.FindByEmail(ctx, "admin@swiftdrop.local")
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"status": "SUSPENDED",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/users/"+adminUser.ID+"/status", bytes.NewBuffer(payload))
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("Expected 400 Bad Request on self-suspension, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
 }

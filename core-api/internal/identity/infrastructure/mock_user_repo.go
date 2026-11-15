@@ -149,17 +149,30 @@ func (r *MockUserRepository) Save(_ context.Context, user *domain.User) error {
 	return nil
 }
 
-// ListUsers returns paginated users with optional role filtering.
-func (r *MockUserRepository) ListUsers(_ context.Context, role *domain.Role, limit int, offset int) ([]*domain.User, int, error) {
+// ListUsers returns paginated users with optional role, status, and search filters.
+func (r *MockUserRepository) ListUsers(_ context.Context, filter application.UserFilter, limit int, offset int) ([]*domain.User, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	q := strings.ToLower(strings.TrimSpace(filter.Search))
 	var matched []*domain.User
 	for _, u := range r.users {
-		if role == nil || u.Role == *role {
-			clone := *u
-			matched = append(matched, &clone)
+		if filter.Role != nil && u.Role != *filter.Role {
+			continue
 		}
+		if filter.Status != nil && u.Status != *filter.Status {
+			continue
+		}
+		if q != "" {
+			nameMatch := strings.Contains(strings.ToLower(u.DisplayName), q)
+			emailMatch := strings.Contains(strings.ToLower(string(u.Email)), q)
+			idMatch := strings.Contains(strings.ToLower(u.ID), q)
+			if !nameMatch && !emailMatch && !idMatch {
+				continue
+			}
+		}
+		clone := *u
+		matched = append(matched, &clone)
 	}
 
 	total := len(matched)

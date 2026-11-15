@@ -24,17 +24,33 @@ func NewAdminHandler(userService *application.UserService) *AdminHandler {
 }
 
 // ListUsers handles GET /api/v1/admin/users
-// Supports query params: role (ADMIN, COURIER, etc.), limit (default 20), offset (default 0).
+// Supports query params: role (ADMIN, COURIER, etc.), status (ACTIVE, SUSPENDED), search / q, limit (default 20), offset (default 0).
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	var roleFilter *domain.Role
 	roleQuery := strings.TrimSpace(r.URL.Query().Get("role"))
-	if roleQuery != "" {
+	if roleQuery != "" && roleQuery != "ALL" {
 		parsedRole, err := domain.ParseRole(roleQuery)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "INVALID_ROLE", "Unrecognized role filter parameter")
 			return
 		}
 		roleFilter = &parsedRole
+	}
+
+	var statusFilter *domain.UserStatus
+	statusQuery := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("status")))
+	if statusQuery != "" && statusQuery != "ALL" {
+		if statusQuery != string(domain.StatusActive) && statusQuery != string(domain.StatusSuspended) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_STATUS", "Status filter must be ACTIVE or SUSPENDED")
+			return
+		}
+		st := domain.UserStatus(statusQuery)
+		statusFilter = &st
+	}
+
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	if search == "" {
+		search = strings.TrimSpace(r.URL.Query().Get("q"))
 	}
 
 	limit := 20
@@ -51,7 +67,13 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	users, total, err := h.userService.ListUsers(r.Context(), roleFilter, limit, offset)
+	filter := application.UserFilter{
+		Role:   roleFilter,
+		Status: statusFilter,
+		Search: search,
+	}
+
+	users, total, err := h.userService.ListUsers(r.Context(), filter, limit, offset)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve user directory")
 		return
@@ -71,6 +93,32 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			"limit":  limit,
 			"offset": offset,
 		},
+	})
+}
+
+// GetUser handles GET /api/v1/admin/users/{id}
+// Retrieves a single user profile by ID.
+func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	targetUserID := strings.TrimSpace(r.PathValue("id"))
+	if targetUserID == "" {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_USER_ID", "Target user ID parameter is required")
+		return
+	}
+
+	user, err := h.userService.GetProfile(r.Context(), targetUserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			writeJSONError(w, http.StatusNotFound, "USER_NOT_FOUND", "Target user does not exist")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve user profile")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SingleDataEnvelope{
+		Data: toUserDTO(user),
 	})
 }
 
@@ -111,6 +159,8 @@ func (h *AdminHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, domain.ErrUserNotFound):
 			writeJSONError(w, http.StatusNotFound, "USER_NOT_FOUND", "Target user does not exist")
+		case errors.Is(err, domain.ErrSelfDemotion):
+			writeJSONError(w, http.StatusBadRequest, "SELF_DEMOTION_BLOCKED", "Administrators cannot demote their own role")
 		case errors.Is(err, domain.ErrForbidden):
 			writeJSONError(w, http.StatusForbidden, "AUTH_FORBIDDEN", "Only Administrators can modify user roles")
 		default:
@@ -163,6 +213,8 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, domain.ErrUserNotFound):
 			writeJSONError(w, http.StatusNotFound, "USER_NOT_FOUND", "Target user does not exist")
+		case errors.Is(err, domain.ErrSelfSuspension):
+			writeJSONError(w, http.StatusBadRequest, "SELF_SUSPENSION_BLOCKED", "Administrators cannot suspend their own account")
 		case errors.Is(err, domain.ErrForbidden):
 			writeJSONError(w, http.StatusForbidden, "AUTH_FORBIDDEN", "Only Administrators can modify user status")
 		default:

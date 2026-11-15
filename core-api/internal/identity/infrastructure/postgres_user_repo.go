@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/swiftdrop/core-api/internal/identity/application"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
 
@@ -186,51 +187,53 @@ func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) er
 	return nil
 }
 
-// ListUsers returns paginated users with optional role filtering.
-func (r *PostgresUserRepository) ListUsers(ctx context.Context, role *domain.Role, limit int, offset int) ([]*domain.User, int, error) {
-	var countQuery string
-	var listQuery string
+// ListUsers returns paginated users with optional role, status, and search query filters.
+func (r *PostgresUserRepository) ListUsers(ctx context.Context, filter application.UserFilter, limit int, offset int) ([]*domain.User, int, error) {
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
 
-	if role != nil {
-		countQuery = `SELECT COUNT(*) FROM users WHERE role = $1;`
-		listQuery = `
-			SELECT id, email, password_hash, display_name, phone, role, tenant_id, status, created_at, updated_at
-			FROM users
-			WHERE role = $1
-			ORDER BY created_at DESC
-			LIMIT $2 OFFSET $3;
-		`
-	} else {
-		countQuery = `SELECT COUNT(*) FROM users;`
-		listQuery = `
-			SELECT id, email, password_hash, display_name, phone, role, tenant_id, status, created_at, updated_at
-			FROM users
-			ORDER BY created_at DESC
-			LIMIT $1 OFFSET $2;
-		`
+	if filter.Role != nil {
+		conditions = append(conditions, fmt.Sprintf("role = $%d", argIdx))
+		args = append(args, string(*filter.Role))
+		argIdx++
 	}
 
+	if filter.Status != nil {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, string(*filter.Status))
+		argIdx++
+	}
+
+	if q := strings.TrimSpace(filter.Search); q != "" {
+		conditions = append(conditions, fmt.Sprintf("(email ILIKE $%d OR display_name ILIKE $%d)", argIdx, argIdx))
+		args = append(args, "%"+q+"%")
+		argIdx++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s;", whereClause)
 	var total int
-	if role != nil {
-		if err := r.db.QueryRowContext(ctx, countQuery, string(*role)).Scan(&total); err != nil {
-			return nil, 0, err
-		}
-	} else {
-		if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
-			return nil, 0, err
-		}
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
 	}
 
-	var listArgs []interface{}
-	if role != nil {
-		listArgs = []interface{}{string(*role), limit, offset}
-	} else {
-		listArgs = []interface{}{limit, offset}
-	}
+	listQuery := fmt.Sprintf(`
+		SELECT id, email, password_hash, display_name, phone, role, tenant_id, status, created_at, updated_at
+		FROM users
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d;
+	`, whereClause, argIdx, argIdx+1)
 
+	listArgs := append(args, limit, offset)
 	rows, err := r.db.QueryContext(ctx, listQuery, listArgs...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
 	defer rows.Close()
 

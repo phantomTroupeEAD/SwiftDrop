@@ -82,4 +82,48 @@ func TestUserService_AssignRole(t *testing.T) {
 			t.Errorf("Expected role DISPATCHER, got %s", reloaded.Role)
 		}
 	})
+
+	t.Run("UpdateUserRole blocks self-demotion from ADMIN", func(t *testing.T) {
+		adminUser, _ := userRepo.FindByEmail(ctx, "admin@swiftdrop.local")
+		adminActor := application.Principal{
+			UserID: adminUser.ID,
+			Email:  "admin@swiftdrop.local",
+			Role:   domain.RoleAdmin,
+		}
+
+		err := svc.UpdateUserRole(ctx, adminActor, adminUser.ID, domain.RoleCustomer, nil)
+		if err != domain.ErrSelfDemotion {
+			t.Errorf("Expected ErrSelfDemotion, got %v", err)
+		}
+	})
+
+	t.Run("UpdateUserStatus blocks self-suspension for ADMIN", func(t *testing.T) {
+		adminUser, _ := userRepo.FindByEmail(ctx, "admin@swiftdrop.local")
+		adminActor := application.Principal{
+			UserID: adminUser.ID,
+			Email:  "admin@swiftdrop.local",
+			Role:   domain.RoleAdmin,
+		}
+
+		err := svc.UpdateUserStatus(ctx, adminActor, adminUser.ID, domain.StatusSuspended)
+		if err != domain.ErrSelfSuspension {
+			t.Errorf("Expected ErrSelfSuspension, got %v", err)
+		}
+	})
+
+	t.Run("RevokeMerchantRole demotes merchant to CUSTOMER and clears tenant_id", func(t *testing.T) {
+		merchantUser, _ := userRepo.FindByEmail(ctx, "merchant@vendor.com")
+		err := svc.RevokeMerchantRole(ctx, merchantUser.ID)
+		if err != nil {
+			t.Fatalf("RevokeMerchantRole failed: %v", err)
+		}
+
+		reloaded, _ := userRepo.FindByID(ctx, merchantUser.ID)
+		if reloaded.Role != domain.RoleCustomer {
+			t.Errorf("Expected role CUSTOMER, got %s", reloaded.Role)
+		}
+		if reloaded.TenantID != nil {
+			t.Errorf("Expected nil TenantID, got %v", *reloaded.TenantID)
+		}
+	})
 }

@@ -14,12 +14,19 @@ type Principal struct {
 	TenantID *string     `json:"tenant_id,omitempty"`
 }
 
+// UserFilter specifies criteria for querying and filtering the user directory.
+type UserFilter struct {
+	Role   *domain.Role
+	Status *domain.UserStatus
+	Search string
+}
+
 // UserRepository defines the persistence port for User aggregates.
 type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByID(ctx context.Context, id string) (*domain.User, error)
 	Save(ctx context.Context, user *domain.User) error
-	ListUsers(ctx context.Context, role *domain.Role, limit int, offset int) ([]*domain.User, int, error)
+	ListUsers(ctx context.Context, filter UserFilter, limit int, offset int) ([]*domain.User, int, error)
 }
 
 // TokenRepository defines persistence for refresh token sessions.
@@ -57,9 +64,10 @@ type EmailSender interface {
 }
 
 // RoleAssigner enables other bounded contexts (e.g., Member 4 Merchant Integration,
-// Member 7 Admin Approval) to grant or promote user roles.
+// Member 7 Admin Approval) to grant, promote, or revoke user roles.
 type RoleAssigner interface {
 	AssignRole(ctx context.Context, userID string, newRole domain.Role, tenantID *string) error
+	RevokeMerchantRole(ctx context.Context, userID string) error
 }
 
 // AuditEntry encapsulates an immutable audit record for sensitive operations.

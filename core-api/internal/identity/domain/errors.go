@@ -28,4 +28,8 @@ var (
 	ErrOTPCooldownActive = errors.New("please wait before requesting another verification code")
 	ErrOTPMaxAttempts    = errors.New("too many invalid otp attempts, please request a new code")
 	ErrTermsNotAccepted  = errors.New("you must accept the terms and conditions to register")
+
+	// Self-modification governance errors
+	ErrSelfDemotion   = errors.New("administrators cannot demote their own account")
+	ErrSelfSuspension = errors.New("administrators cannot suspend their own account")
 )

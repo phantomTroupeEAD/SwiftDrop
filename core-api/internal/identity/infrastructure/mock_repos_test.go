@@ -15,7 +15,7 @@ func TestMockUserRepository(t *testing.T) {
 	repo := NewMockUserRepository(hasher)
 
 	t.Run("pre-seeded 5 role accounts are queryable", func(t *testing.T) {
-		users, total, err := repo.ListUsers(ctx, nil, 10, 0)
+		users, total, err := repo.ListUsers(ctx, application.UserFilter{}, 10, 0)
 		if err != nil {
 			t.Fatalf("ListUsers failed: %v", err)
 		}
@@ -62,9 +62,9 @@ func TestMockUserRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("ListUsers filters by role and paginates", func(t *testing.T) {
+	t.Run("ListUsers filters by role, status, search, and paginates", func(t *testing.T) {
 		courierRole := domain.RoleCourier
-		couriers, total, err := repo.ListUsers(ctx, &courierRole, 10, 0)
+		couriers, total, err := repo.ListUsers(ctx, application.UserFilter{Role: &courierRole}, 10, 0)
 		if err != nil {
 			t.Fatalf("ListUsers failed: %v", err)
 		}
@@ -72,12 +72,25 @@ func TestMockUserRepository(t *testing.T) {
 			t.Errorf("expected 1 courier, got total=%d len=%d", total, len(couriers))
 		}
 
-		paged, _, err := repo.ListUsers(ctx, nil, 2, 1)
+		paged, _, err := repo.ListUsers(ctx, application.UserFilter{}, 2, 1)
 		if err != nil {
 			t.Fatalf("ListUsers pagination failed: %v", err)
 		}
 		if len(paged) != 2 {
 			t.Errorf("expected 2 users on page, got %d", len(paged))
+		}
+
+		// Test search filter
+		searchResults, sTotal, err := repo.ListUsers(ctx, application.UserFilter{Search: "admin"}, 10, 0)
+		if err != nil || sTotal != 1 || len(searchResults) != 1 {
+			t.Fatalf("ListUsers search failed: got %d, err: %v", sTotal, err)
+		}
+
+		// Test status filter
+		activeStatus := domain.StatusActive
+		activeResults, aTotal, err := repo.ListUsers(ctx, application.UserFilter{Status: &activeStatus}, 10, 0)
+		if err != nil || aTotal != 6 || len(activeResults) != 6 {
+			t.Fatalf("ListUsers status filter failed: got %d, err: %v", aTotal, err)
 		}
 	})
 

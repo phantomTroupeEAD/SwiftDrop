@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
-  const { accessToken } = useAuth();
+  const { accessToken, user: currentUser } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -30,6 +30,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Filters
   const [selectedRole, setSelectedRole] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Role Edit Modal State
@@ -50,6 +51,12 @@ export const AdminDashboard: React.FC = () => {
       url.searchParams.set('limit', '50');
       if (selectedRole !== 'ALL') {
         url.searchParams.set('role', selectedRole);
+      }
+      if (selectedStatus !== 'ALL') {
+        url.searchParams.set('status', selectedStatus);
+      }
+      if (searchQuery.trim()) {
+        url.searchParams.set('search', searchQuery.trim());
       }
 
       const headers: Record<string, string> = {
@@ -80,10 +87,13 @@ export const AdminDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, selectedRole]);
+  }, [accessToken, selectedRole, selectedStatus, searchQuery]);
 
   useEffect(() => {
-    fetchUsers();
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 200);
+    return () => clearTimeout(timer);
   }, [fetchUsers]);
 
   // Handle Role Change Modal Open
@@ -99,6 +109,11 @@ export const AdminDashboard: React.FC = () => {
   const handleRoleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
+
+    if (selectedUser.id === currentUser?.id && targetRole !== 'ADMIN') {
+      setRoleError('Administrators cannot demote their own account.');
+      return;
+    }
 
     if (targetRole === 'MERCHANT' && !targetTenantID.trim()) {
       setRoleError('Tenant ID is required when assigning the MERCHANT role.');
@@ -184,14 +199,8 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Filter users by search query
-  const filteredUsers = users.filter((u) => {
-    const q = searchQuery.toLowerCase();
-    const nameMatch = (u.display_name || '').toLowerCase().includes(q);
-    const emailMatch = u.email.toLowerCase().includes(q);
-    const idMatch = u.id.toLowerCase().includes(q);
-    return nameMatch || emailMatch || idMatch;
-  });
+  // Authoritative server-side filtered list
+  const filteredUsers = users;
 
   return (
     <DashboardLayout
@@ -310,23 +319,46 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-              <span className="text-text-muted flex items-center gap-1 text-[11px] pr-1">
-                <Filter className="w-3 h-3" /> Role:
-              </span>
-              {['ALL', 'CUSTOMER', 'COURIER', 'DISPATCHER', 'MERCHANT', 'ADMIN'].map((role) => (
-                <button
-                  key={role}
-                  onClick={() => setSelectedRole(role)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer shrink-0 ${
-                    selectedRole === role
-                      ? 'bg-primary-tint text-text  '
-                      : 'bg-canvas text-text-muted hover:text-text border border-border'
-                  }`}
-                >
-                  {role === 'ALL' ? 'All Roles' : role}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1 text-xs">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-text-muted flex items-center gap-1 text-[11px] pr-1">
+                  <Filter className="w-3 h-3" /> Role:
+                </span>
+                {['ALL', 'CUSTOMER', 'COURIER', 'DISPATCHER', 'MERCHANT', 'ADMIN'].map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => setSelectedRole(role)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                      selectedRole === role
+                        ? 'bg-primary-tint text-text'
+                        : 'bg-canvas text-text-muted hover:text-text border border-border'
+                    }`}
+                  >
+                    {role === 'ALL' ? 'All Roles' : role}
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-4 w-[1px] bg-border mx-1 hidden sm:block" />
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-text-muted flex items-center gap-1 text-[11px] pr-1">
+                  Status:
+                </span>
+                {['ALL', 'ACTIVE', 'SUSPENDED'].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setSelectedStatus(st)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                      selectedStatus === st
+                        ? 'bg-primary-tint text-text'
+                        : 'bg-canvas text-text-muted hover:text-text border border-border'
+                    }`}
+                  >
+                    {st === 'ALL' ? 'All Statuses' : st}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -392,24 +424,35 @@ export const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => openRoleModal(u)}
-                            className="px-2 py-1 rounded-md text-[11px] font-medium text-text bg-surface-subtle hover:bg-surface-active border border-border transition flex items-center gap-1 cursor-pointer"
-                            title="Promote or Change Role"
-                          >
-                            <Edit3 className="w-3 h-3 text-primary" />
-                            Role
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(u)}
-                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition border cursor-pointer ${
-                              u.status !== 'SUSPENDED'
-                                ? 'text-status-error-ink bg-status-error-bg border-status-error-border hover:bg-status-error-bg'
-                                : 'text-status-success-ink bg-status-success-bg border-status-success-border hover:bg-status-success-bg'
-                            }`}
-                          >
-                            {u.status !== 'SUSPENDED' ? 'Suspend' : 'Reactivate'}
-                          </button>
+                          {(() => {
+                            const isSelf = u.id === currentUser?.id;
+                            return (
+                              <>
+                                <button
+                                  onClick={() => openRoleModal(u)}
+                                  className="px-2 py-1 rounded-md text-[11px] font-medium text-text bg-surface-subtle hover:bg-surface-active border border-border transition flex items-center gap-1 cursor-pointer"
+                                  title={isSelf ? 'Manage Role (Self-demotion blocked)' : 'Promote or Change Role'}
+                                >
+                                  <Edit3 className="w-3 h-3 text-primary" />
+                                  Role
+                                </button>
+                                <button
+                                  onClick={() => handleToggleStatus(u)}
+                                  disabled={isSelf}
+                                  title={isSelf ? 'Administrators cannot suspend their own account' : undefined}
+                                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition border ${
+                                    isSelf ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                                  } ${
+                                    u.status !== 'SUSPENDED'
+                                      ? 'text-status-error-ink bg-status-error-bg border-status-error-border hover:bg-status-error-bg'
+                                      : 'text-status-success-ink bg-status-success-bg border-status-success-border hover:bg-status-success-bg'
+                                  }`}
+                                >
+                                  {u.status !== 'SUSPENDED' ? 'Suspend' : 'Reactivate'}
+                                </button>
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
@@ -489,6 +532,13 @@ export const AdminDashboard: React.FC = () => {
               <div className="text-text-muted font-mono text-[11px]">{selectedUser.email}</div>
               <div className="text-text-muted font-mono text-[10px]">ID: {selectedUser.id}</div>
             </div>
+
+            {selectedUser.id === currentUser?.id && (
+              <div className="p-3 rounded-xl bg-status-warning-bg border border-status-warning-border text-status-warning-ink text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Self-demotion blocked: You cannot demote your own administrator account.</span>
+              </div>
+            )}
 
             {roleError && (
               <div className="p-3 rounded-xl bg-status-error-bg border border-status-error-border text-status-error-ink text-xs flex items-center gap-2">

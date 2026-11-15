@@ -38,8 +38,10 @@ func RegisterAdminRoutes(mux *http.ServeMux, adminHandler *AdminHandler, securit
 	}
 
 	// ── Admin Governance Endpoints (RoleAdmin Only) ──────────────────────────
-	// List users with role filtering & pagination
+	// List users with role filtering, status filtering, search & pagination
 	mux.Handle("GET /api/v1/admin/users", adminGuard(adminHandler.ListUsers))
+	// Retrieve a single user profile by ID
+	mux.Handle("GET /api/v1/admin/users/{id}", adminGuard(adminHandler.GetUser))
 	// Promote or reassign user role & merchant tenant ID
 	mux.Handle("PUT /api/v1/admin/users/{id}/role", adminGuard(adminHandler.UpdateRole))
 	// Suspend or reactivate user account
