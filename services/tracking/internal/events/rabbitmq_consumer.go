@@ -424,7 +424,40 @@ func (c *RabbitMQConsumer) connectAndConsume(ctx context.Context) (*amqp.Connect
 		return nil, nil, nil, fmt.Errorf("set amqp qos: %w", err)
 	}
 
-	// Consume from pre-declared queue q.tracking.updates
+	// Ensure durable queue exists before consuming
+	_, err = ch.QueueDeclare(
+		c.queueName,
+		true,  // durable
+		false, // autoDelete
+		false, // exclusive
+		false, // noWait
+		nil,   // arguments
+	)
+	if err != nil {
+		_ = ch.Close()
+		_ = conn.Close()
+		return nil, nil, nil, fmt.Errorf("declare queue %s: %w", c.queueName, err)
+	}
+
+	// Ensure topic exchange exists and bind queue to parcel events
+	_ = ch.ExchangeDeclare(
+		"swiftdrop.events.topic",
+		"topic",
+		true,  // durable
+		false, // autoDelete
+		false, // internal
+		false, // noWait
+		nil,
+	)
+	_ = ch.QueueBind(
+		c.queueName,
+		"parcel.#",
+		"swiftdrop.events.topic",
+		false,
+		nil,
+	)
+
+	// Consume from queue q.tracking.updates
 	deliveries, err := ch.Consume(
 		c.queueName,
 		"",    // consumer tag (auto-generated)
