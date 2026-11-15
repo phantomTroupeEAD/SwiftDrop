@@ -185,6 +185,7 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, parcelID, courierID
 | `ErrCancellationNotAllowed` | Domain | Attempted to cancel parcel when status != CREATED | `409 Conflict` |
 | `ErrMaxDeliveryAttemptsExceeded` | Domain | Attempted 4th delivery run after 3 failures | `409 Conflict` |
 | `ErrTerminalState` | Domain | Attempted to mutate DELIVERED, RETURNED, or CANCELLED parcel | `409 Conflict` |
+| `ErrItemDescriptionTooLong` | Domain | Item description exceeds maximum allowed length of 500 characters | `422 Unprocessable Entity` |
 | `ErrIdempotencyPayloadMismatch` | Application | Reused idempotency key within 24h with differing request hash/operation | `409 Conflict` |
 | `ErrIdempotencyConflict` | Application | Concurrent/active unexpired idempotency key conflict | `409 Conflict` |
 | `ErrInvalidIdempotencyKey` / `ErrInvalidCallerScope` / `ErrInvalidIdempotencyOperation` / `ErrInvalidRequestHash` | Application | Missing or malformed idempotency metadata (`Idempotency-Key`, `caller_scope`, `operation`, SHA-256 hex `request_hash`) | `400 Bad Request` |
@@ -198,6 +199,7 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, parcelID, courierID
   - `20261110000001_create_pricing_tables.{up,down}.sql`: `pricing_rules`, `pricing_quotes`
   - `20261110000002_create_parcel_tables.{up,down}.sql`: `parcels`, `parcel_status_history`
   - `20261110000003_create_idempotency_keys.{up,down}.sql`: `idempotency_keys` (`key`, `caller_scope`, `operation`, `request_hash`, `response_status`, `response_body`, `created_resource_id`, `created_at`, `expires_at`; composite `PRIMARY KEY (key, caller_scope)`, index `idx_idempotency_keys_expires_at (expires_at ASC)`)
+  - `20261113000001_add_parcel_item_details.{up,down}.sql`: adds `item_description TEXT NULL` and `special_instructions TEXT NULL` to `parcels`
 - **Primary Aggregate Table:** `parcels`
 - **Audit Table:** `parcel_status_history`
 - **Idempotency Table:** `idempotency_keys` (24-hour TTL; expired keys (`expires_at <= now`) are treated as fresh requests and atomically replaced via `ON CONFLICT (key, caller_scope) DO UPDATE ... WHERE idempotency_keys.expires_at <= ...`)
@@ -209,7 +211,7 @@ Every state change commits a versioned event (`schema_version: "1.0.0"`) to `out
 
 | Event Type | Triggering Transition | Aggregates & Routing Key | Payload Structure |
 | :--- | :--- | :--- | :--- |
-| `parcel.booked.v1` | Initial parcel booking | `aggregate_type: "parcel"` | `application.ParcelBookedPayload` |
+| `parcel.booked.v1` | Initial parcel booking | `aggregate_type: "parcel"` | `application.ParcelBookedPayload` (includes `item_description`, `special_instructions`) |
 | `parcel.assigned.v1` | CREATED → ASSIGNED | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
 | `parcel.picked_up.v1` | ASSIGNED → PICKED_UP | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
 | `parcel.in_transit.v1` | PICKED_UP → IN_TRANSIT | `aggregate_type: "parcel"` | `application.ParcelStatusChangedPayload` (includes `status_history_id`) |
@@ -236,3 +238,4 @@ Every state change commits a versioned event (`schema_version: "1.0.0"`) to `out
 | 2026-11-11 | Phase 1 Read & Ownership Foundation: Added `FindByParcelID` to `StatusHistoryRepository`, `MerchantReader` port + `MerchantRepoAdapter`, `ErrForbiddenParcelAccess` & caller/merchant authorization sentinels, `GetParcelUseCase`, `GetParcelHistoryUseCase`, `ResolveParcelCallerForBooking`, and comprehensive unit tests enforcing CUSTOMER/approved-MERCHANT/ADMIN access and strict COURIER/DISPATCHER denial. | Member 2 |
 | 2026-11-11 | Phase 2 Parcel HTTP Transport: Implemented `internal/parcels/transport` (`dto.go`, `handler.go`, `routes.go`, `handler_test.go`) exposing `POST /api/v1/parcels`, `GET /api/v1/parcels/{id}`, and `GET /api/v1/parcels/{id}/history` with Bearer JWT + role authorization, `APPROVED` merchant tenant checks, UUID `Idempotency-Key` validation, 64 KB body cap + raw SHA-256 hashing + `Idempotent-Replay: true` replays, strict unknown-field JSON rejection, `httpx` data/error envelopes, `swag` annotations, and updated `API.md`/`README.md`. | Member 2 |
 | 2026-11-13 | Phase 3 API Startup Wiring & Swagger Integration: Implemented `cmd/api/wiring_member02.go` (`registerPricingModule`, `registerParcelsModule`), wired both modules into `cmd/api/wiring.go` under `if dbConn != nil` guard with production fatal checks and local fallback notices, added `cmd/api/wiring_member02_test.go` verifying route registration and security middleware enforcement, regenerated unified OpenAPI specs via `swag init`, and synchronized `docs/swagger.json`, `docs/swagger.yaml`, and `internal/events/swagger/swagger.json`. | Member 2 |
+| 2026-11-13 | Parcel item details persistence: Preserved item_description and special_instructions across domain aggregate, application usecase, outbox event (parcel.booked.v1), PostgreSQL schema migration (20261113000001_add_parcel_item_details), repository save/find queries, and transport DTOs (POST & GET responses) with 500-character domain length validation. | Member 2 |

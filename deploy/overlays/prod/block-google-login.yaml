@@ -1,0 +1,15 @@
+# Temporary production block (Member 9) for POST /api/v1/auth/google.
+# The Google ID-token verifier accepts "mock_"/"dev_" test tokens without contacting Google and then
+# links that email to an existing account, so anyone could sign in as any user (including admin).
+# Traefik answers 403 for this path before it reaches core-api. Remove this file, its entry in
+# kustomization.yaml and the route patch once Member 1's fix (no mock tokens in production) is deployed.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: deny-all
+  namespace: swiftdrop
+spec:
+  # No real client connects from 127.0.0.1 through the gateway, so every request is refused (403).
+  ipAllowList:
+    sourceRange:
+      - 127.0.0.1/32

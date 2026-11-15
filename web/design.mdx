@@ -162,3 +162,17 @@ For example, a dispatcher board can use the indigo role palette, a dense desktop
 - [ ] Works with keyboard navigation and visible focus, and fits a 375px viewport.
 - [ ] Uses real API outcomes in product routes and labels sample data in demos.
 - [ ] Documents new or changed test IDs and identifies any contract change.
+
+## Courier screens
+
+The mobile-first delivery workspace opens at `/courier/dashboard`.
+
+| Screen or section | Core API |
+| --- | --- |
+| Shift controls | POST /api/v1/courier/shift |
+| Assigned deliveries, recipient contact, directions | GET /api/v1/courier/parcels |
+| Start one delivery or a selected batch | POST /api/v1/courier/parcels/{id}/start-run and POST /api/v1/courier/runs/start-batch |
+| Photo proof and delivery confirmation | POST /api/v1/deliveries/{id}/proof-photo and POST /api/v1/deliveries/{id}/complete |
+| Failed attempt form | POST /api/v1/deliveries/{id}/failed |
+
+Delivery attempt history remains pending. The tested endpoint returned an error for a parcel with no attempts, and the courier history route needs parcel-level authorization verification before the UI exposes it.

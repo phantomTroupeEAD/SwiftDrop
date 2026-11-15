@@ -63,7 +63,7 @@ Streams real-time milestone events and 15-second heartbeat keepalive frames. Str
 
 ### Wire Protocol & Framing
 ```text
-id: SD-20261025-A8F3K2:OUT_FOR_DELIVERY:1730036700
+id: SD-20261025-A8F3K2:OUT_FOR_DELIVERY:1730036700:0192e2b3-7c8a-7890-a123-000000000042
 event: status_update
 data: {"tracking_number":"SD-20261025-A8F3K2","status":"OUT_FOR_DELIVERY","description":"Courier is out for final doorstep delivery.","timestamp":"2026-10-25T13:45:00Z"}
 
@@ -73,9 +73,9 @@ data: {"tracking_number":"SD-20261025-A8F3K2","status":"OUT_FOR_DELIVERY","descr
 ### Protocol Specifications
 1. **Initial Hydration:** Pushes the current parcel state upon connection.
 2. **Event Type:** `event: status_update`
-3. **Event Identifier:** `id: {tracking_number}:{status}:{unix_timestamp}`
+3. **Event Identifier:** `id: {tracking_number}:{status}:{unix_timestamp}[:{status_history_id}]` (incorporates Member 2's `status_history_id` as tiebreaker).
 4. **Heartbeats:** Comment frame `:keepalive\n\n` emitted every 15 seconds to prevent gateway timeout.
-5. **Reconnection & Replay:** Client sends `Last-Event-ID`. Unseen milestones from committed status history are replayed.
+5. **Reconnection & Replay:** Client sends `Last-Event-ID`. Unseen milestones from committed status history are replayed chronologically without gaps or skipped duplicates.
 6. **Privacy Invariant (SEC-009):** Only safe allowlisted fields (`tracking_number`, `status`, `description`, `timestamp`) are sent. PII, addresses, notes, and internal actor IDs are strictly excluded.
 7. **Unavailable Event Source:** When the real-time event broker is unconfigured, the endpoint explicitly returns HTTP 503 `DEPENDENCY_UNAVAILABLE` rather than accepting dead streams.
 

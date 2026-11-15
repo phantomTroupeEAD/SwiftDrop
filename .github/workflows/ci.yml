@@ -73,11 +73,18 @@ jobs:
           args: --timeout=5m
         if: hashFiles('core-api/go.mod') != ''
 
+      # Integration tests in several packages apply the migrations in parallel against this one
+      # database. pgcrypto is database-wide: two concurrent "CREATE EXTENSION IF NOT EXISTS" can both
+      # miss it and one fails (pg_extension_name_index). Create it once up front so they all find it.
+      - name: Prepare test database (pgcrypto)
+        if: hashFiles('core-api/go.mod') != ''
+        run: PGPASSWORD=swiftdrop_password psql -h localhost -U swiftdrop_user -d swiftdrop_db -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto'
+
       - name: Run Tests (-race)
         env:
           INTEGRATION: "1"
           DATABASE_URL: "postgres://swiftdrop_user:swiftdrop_password@localhost:5432/swiftdrop_db?sslmode=disable"
-        run: cd core-api && go test -v -race -ldflags="-w -s" ./...
+        run: cd core-api && go test -p 1 -v -race -ldflags="-w -s" ./...
         if: hashFiles('core-api/go.mod') != ''
 
       - name: Verify Swagger Documentation Sync

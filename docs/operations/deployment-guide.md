@@ -69,7 +69,10 @@ GitHub shows a secret only once, so **keep a private backup of the values** (pas
 | `GRAFANA_ADMIN_PASSWORD` | Grafana login. |
 | `GHCR_PULL_TOKEN` + variable `GHCR_USER` | Pulling private images from ghcr.io (`read:packages`). |
 | `ORIGIN_CERT_PEM`, `ORIGIN_KEY_PEM` | Cloudflare Origin certificate and key (whole PEM text) for `traefik-origin-tls`. |
-| optional: `AI_SERVICE_ROLE_TOKEN`, `LLM_API_KEY`, `SWIFTDROP_API_KEY`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMOKE_PASSWORD_<ROLE>` | ai-assistant / mail / smoke-test overrides. Empty = mock or skipped. |
+| optional: `AI_SERVICE_ROLE_TOKEN`, `LLM_API_KEY`, `SWIFTDROP_API_KEY`, `SMOKE_PASSWORD_<ROLE>` | ai-assistant / smoke-test overrides. Empty = mock or skipped. |
+| optional mail: secrets `SMTP_USERNAME`, `SMTP_PASSWORD`; variables `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`starttls`/`tls`), `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | core-api OTP emails (Secret `core-api-integrations`, mapped to `SMTP_USER/PASS/FROM`) and event-worker notifications (`messaging-config` + `integrations-secrets`). Without `SMTP_HOST` core-api prints OTPs to its log. |
+| optional storage: variables `OBJECT_STORAGE_DRIVER` (`r2`), `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_PUBLIC_URL`; secrets `OBJECT_STORAGE_ACCOUNT_ID`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY` | Proof-of-delivery photos (Secret `core-api-integrations`). Do **not** set `OBJECT_STORAGE_ENDPOINT` or `S3_*` for R2: they override the endpoint built from the account ID. |
+| not wired yet: `GOOGLE_CLIENT_ID` (+ secret, redirect URI) | `/api/v1/auth/google` is blocked at the gateway in production until mock tokens are rejected there (`deploy/overlays/prod/block-google-login.yaml`). |
 
 If a required secret is empty the deploy stops before changing anything and lists the missing names. To rotate a value: edit the GitHub secret, run/approve a deploy.
 

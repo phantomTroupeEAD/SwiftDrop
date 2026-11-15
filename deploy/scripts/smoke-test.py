@@ -19,6 +19,7 @@ Exit code 0 = no failure. Standard library only. Never prints passwords or token
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,9 +53,22 @@ KNOWN = {}
 results = {"PASS": 0, "FAIL": 0, "KNOWN": 0}
 
 
+LOGIN_CALLS = 0
+# Member 7's gateway allows 5 logins/min per IP with a burst of 3 (login-ratelimit). Through the
+# gateway, pace the logins after the first two so the test stays inside that limit (~1 min total).
+LOGIN_PACE_SECONDS = 0 if IS_LOCAL else 13
+
+
 def call(method, path, body=None, token=None):
+    global LOGIN_CALLS
+    if path == "/api/v1/auth/login":
+        if LOGIN_CALLS >= 2 and LOGIN_PACE_SECONDS:
+            time.sleep(LOGIN_PACE_SECONDS)
+        LOGIN_CALLS += 1
     req = urllib.request.Request(BASE + path, method=method)
     req.add_header("Content-Type", "application/json")
+    # Cloudflare's Browser Integrity Check blocks the default "Python-urllib" agent (403, error 1010).
+    req.add_header("User-Agent", "SwiftDrop-SmokeTest/1.0 (+deploy)")
     if token:
         req.add_header("Authorization", "Bearer " + token)
     data = json.dumps(body).encode() if body is not None else None

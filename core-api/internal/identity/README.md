@@ -31,24 +31,6 @@ The `identity` module serves as the authoritative security boundary for SwiftDro
 | **`MERCHANT`** | `merchant@vendor.com` | `Merchant123!` | Colombo Tech Stores | `mrc_01HMERCHANTTENANT00001` | `usr_01HMERCHANT00000000000004` |
 | **`CUSTOMER`** | `customer@swiftdrop.local` | `CustomerPassword123!` | Nimal Fernando | *None* (`null`) | `usr_01HCUSTOMER00000000000005` |
 
-> The user IDs above are the in-memory mock repository's. PostgreSQL uses the IDs from migration `20261021000002_seed_mock_users`.
-
-### Demo accounts in production (`APP_ENV=production`)
-These passwords are published in the repo, so on every start in production core-api runs `application.SecureSeedAccounts` (`application/seed_accounts.go`):
-
-| Demo account still has its published password and… | Result |
-| :--- | :--- |
-| `SEED_PASSWORD_<ROLE>` is set (≥ 12 characters) | Password is replaced with that value and the account is active |
-| no usable `SEED_PASSWORD_<ROLE>` | Account is **suspended** (`AUTH_ACCOUNT_SUSPENDED`) |
-| password was already changed earlier | Left alone |
-
-Roles: `ADMIN`, `DISPATCHER`, `COURIER`, `MERCHANT`, `CUSTOMER`. Local, test and staging keep the easy logins above. Passwords are never logged; the start-up log prints only which roles were rotated, suspended or unchanged.
-
-### Production start-up rules (`cmd/api/wiring.go`, `wiring_security.go`)
-In production core-api refuses to start (exit 1, `[FATAL]` log) instead of falling back:
-- PostgreSQL unreachable or `DATABASE_URL` invalid → no in-memory mock accounts in production.
-- `JWT_SECRET` missing, shorter than 32 characters, or equal to the public development key.
-
 ---
 
 ## 3. How Other Team Members Integrate Auth (Middleware Guide)
@@ -75,7 +57,6 @@ mux.Handle("POST /api/v1/admin/zones", security.Authenticate(
 ```
 
 ### Step 3: Enforce Merchant Multi-Tenancy using `transport.RequireTenant()`
-Platform Admins have no tenant, so a route behind `RequireTenant()` returns `403 AUTH_TENANT_REQUIRED` for them even when `RequireRole` lists `RoleAdmin` (example: the demo route `GET /api/v1/merchant/portal`).
 ```go
 // Guarantees caller has a valid tenant_id
 mux.Handle("POST /api/v1/merchants/orders", security.Authenticate(
@@ -113,4 +94,3 @@ internal/identity/
 | :--- | :--- | :--- |
 | 2026-10-21 | Initial module architecture baseline created | Architecture Setup |
 | 2026-10-29 | Implemented Login lifecycle, JWT provider, RBAC middlewares, 5 mock accounts & migrations | Member 1 |
-| 2026-11-13 | Production safety: demo accounts rotated/suspended in production (`SecureSeedAccounts`), fail-fast on missing DB or weak `JWT_SECRET`, `correlation_id` in every error envelope, merchant-portal docs (Admin → 403). Requested by Member 1. | Member 9 |

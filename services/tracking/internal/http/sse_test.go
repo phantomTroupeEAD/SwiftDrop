@@ -1135,3 +1135,807 @@ func TestSSE_HubShutdownTerminatesStream(t *testing.T) {
 		t.Fatal("stream did not terminate after hub close")
 	}
 }
+
+// Phase 5 Replay & Deduplication Tests
+func TestSSE_Phase5_StatusHistoryID_TiebreakerReplay(t *testing.T) {
+	tn := "SD-20261110-000001"
+	tnObj, _ := domain.NewTrackingNumber(tn)
+	baseTime := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "parcel-uuid-1",
+		TrackingNumber:  tnObj,
+		Status:          domain.StatusAttemptFailed,
+		DestinationCity: "Colombo",
+		CreatedAt:       baseTime,
+		UpdatedAt:       baseTime.Add(3 * time.Hour),
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "hist-uuid-001",
+			ParcelID:  "parcel-uuid-1",
+			ToStatus:  "CREATED",
+			Timestamp: baseTime,
+		},
+		{
+			ID:        "hist-uuid-002",
+			ParcelID:  "parcel-uuid-1",
+			ToStatus:  "OUT_FOR_DELIVERY",
+			Timestamp: baseTime.Add(1 * time.Hour),
+		},
+		{
+			ID:        "hist-uuid-003",
+			ParcelID:  "parcel-uuid-1",
+			ToStatus:  "ATTEMPT_FAILED",
+			Timestamp: baseTime.Add(2 * time.Hour),
+		},
+		{
+			ID:        "hist-uuid-004",
+			ParcelID:  "parcel-uuid-1",
+			ToStatus:  "OUT_FOR_DELIVERY",
+			Timestamp: baseTime.Add(3 * time.Hour),
+		},
+		{
+			ID:        "hist-uuid-005",
+			ParcelID:  "parcel-uuid-1",
+			ToStatus:  "ATTEMPT_FAILED",
+			Timestamp: baseTime.Add(4 * time.Hour),
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Client reconnects sending Last-Event-ID matching the FIRST ATTEMPT_FAILED (hist-uuid-003)
+	lastEventID := fmt.Sprintf("%s:ATTEMPT_FAILED:%d:hist-uuid-003", tn, baseTime.Add(2*time.Hour).Unix())
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	req.Header.Set("Last-Event-ID", lastEventID)
+
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Frame 1 must be the second OUT_FOR_DELIVERY (hist-uuid-004)
+	frame1, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read replayed frame 1: %v", err)
+	}
+	expectedID1 := fmt.Sprintf("%s:OUT_FOR_DELIVERY:%d:hist-uuid-004", tn, baseTime.Add(3*time.Hour).Unix())
+	if frame1["id"] != expectedID1 {
+		t.Errorf("expected frame 1 id %q, got %q", expectedID1, frame1["id"])
+	}
+
+	// Frame 2 must be the second ATTEMPT_FAILED (hist-uuid-005)
+	frame2, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read replayed frame 2: %v", err)
+	}
+	expectedID2 := fmt.Sprintf("%s:ATTEMPT_FAILED:%d:hist-uuid-005", tn, baseTime.Add(4*time.Hour).Unix())
+	if frame2["id"] != expectedID2 {
+		t.Errorf("expected frame 2 id %q, got %q", expectedID2, frame2["id"])
+	}
+}
+
+func TestSSE_Phase5_SameTimestampTiebreakerReplay(t *testing.T) {
+	tn := "SD-20261110-000002"
+	tnObj, _ := domain.NewTrackingNumber(tn)
+	sameTime := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "parcel-uuid-2",
+		TrackingNumber:  tnObj,
+		Status:          domain.StatusInTransit,
+		DestinationCity: "Galle",
+		CreatedAt:       sameTime,
+		UpdatedAt:       sameTime,
+	}
+
+	// Two milestones with the EXACT same timestamp in the same wall-clock second
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "hist-uuid-A",
+			ParcelID:  "parcel-uuid-2",
+			ToStatus:  "PICKED_UP",
+			Timestamp: sameTime,
+		},
+		{
+			ID:        "hist-uuid-B",
+			ParcelID:  "parcel-uuid-2",
+			ToStatus:  "IN_TRANSIT",
+			Timestamp: sameTime,
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Client reconnects having acknowledged hist-uuid-A
+	lastEventID := fmt.Sprintf("%s:PICKED_UP:%d:hist-uuid-A", tn, sameTime.Unix())
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	req.Header.Set("Last-Event-ID", lastEventID)
+
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Frame must be hist-uuid-B even though its timestamp is identical!
+	frame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read replayed frame: %v", err)
+	}
+
+	expectedID := fmt.Sprintf("%s:IN_TRANSIT:%d:hist-uuid-B", tn, sameTime.Unix())
+	if frame["id"] != expectedID {
+		t.Errorf("expected replayed frame id %q, got %q", expectedID, frame["id"])
+	}
+}
+
+func TestSSE_Phase5_LiveStatusHistoryID_Deduplication(t *testing.T) {
+	tn := "SD-20261110-000003"
+	tnObj, _ := domain.NewTrackingNumber(tn)
+	baseTime := time.Date(2026, 11, 10, 14, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "parcel-uuid-3",
+		TrackingNumber:  tnObj,
+		Status:          domain.StatusAttemptFailed,
+		DestinationCity: "Jaffna",
+		CreatedAt:       baseTime,
+		UpdatedAt:       baseTime,
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "hist-uuid-first-attempt",
+			ParcelID:  "parcel-uuid-3",
+			ToStatus:  "ATTEMPT_FAILED",
+			Timestamp: baseTime,
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Initial frame (first attempt)
+	initFrame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read initial frame: %v", err)
+	}
+	if !strings.Contains(initFrame["id"], "hist-uuid-first-attempt") {
+		t.Errorf("expected initial frame to contain hist-uuid-first-attempt, got %s", initFrame["id"])
+	}
+
+	// 1. Broadcast event with the SAME status_history_id: must be deduplicated
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "ATTEMPT_FAILED",
+		Description:     domain.SafeStatusDescription("ATTEMPT_FAILED"),
+		Timestamp:       baseTime,
+		StatusHistoryID: "hist-uuid-first-attempt",
+	})
+
+	// 2. Broadcast event with a NEW status_history_id even with identical status: must be delivered!
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "ATTEMPT_FAILED",
+		Description:     domain.SafeStatusDescription("ATTEMPT_FAILED"),
+		Timestamp:       baseTime.Add(time.Hour),
+		StatusHistoryID: "hist-uuid-second-attempt",
+	})
+
+	// Read next frame from stream
+	nextFrame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read next frame: %v", err)
+	}
+
+	// Must be second-attempt, not duplicate of first
+	if !strings.Contains(nextFrame["id"], "hist-uuid-second-attempt") {
+		t.Errorf("expected next frame to be second attempt, got: %s", nextFrame["id"])
+	}
+}
+
+func TestSSE_DelayedOutOfOrderEventDoesNotRegressStatus(t *testing.T) {
+	tn := "SD-20261110-000004"
+	tnObj, _ := domain.NewTrackingNumber(tn)
+	baseTime := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "parcel-uuid-4",
+		TrackingNumber:  tnObj,
+		Status:          domain.StatusDelivered,
+		DestinationCity: "Galle",
+		CreatedAt:       baseTime,
+		UpdatedAt:       baseTime.Add(3 * time.Hour),
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "ms-001",
+			ParcelID:  "parcel-uuid-4",
+			ToStatus:  "CREATED",
+			Timestamp: baseTime,
+		},
+		{
+			ID:        "ms-002",
+			ParcelID:  "parcel-uuid-4",
+			ToStatus:  "PICKED_UP",
+			Timestamp: baseTime.Add(1 * time.Hour),
+		},
+		{
+			ID:        "ms-003",
+			ParcelID:  "parcel-uuid-4",
+			ToStatus:  "IN_TRANSIT",
+			Timestamp: baseTime.Add(2 * time.Hour),
+		},
+		{
+			ID:        "ms-004",
+			ParcelID:  "parcel-uuid-4",
+			ToStatus:  "DELIVERED",
+			Timestamp: baseTime.Add(3 * time.Hour),
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNum string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	handler, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect to SSE stream: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Read initial hydrated frame (DELIVERED, ms-004)
+	initFrame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read initial frame: %v", err)
+	}
+	if !strings.Contains(initFrame["id"], "DELIVERED") || !strings.Contains(initFrame["id"], "ms-004") {
+		t.Fatalf("expected initial frame DELIVERED ms-004, got: %s", initFrame["id"])
+	}
+
+	// Now broadcast an out-of-order delayed event: ms-002 (PICKED_UP at 11:00)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "PICKED_UP",
+		Description:     domain.SafeStatusDescription("PICKED_UP"),
+		Timestamp:       baseTime.Add(1 * time.Hour),
+		StatusHistoryID: "ms-002",
+	})
+
+	// Also broadcast a non-terminal event with an older timestamp than DELIVERED
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "IN_TRANSIT",
+		Description:     domain.SafeStatusDescription("IN_TRANSIT"),
+		Timestamp:       baseTime.Add(2 * time.Hour),
+		StatusHistoryID: "ms-delayed-new",
+	})
+
+	// Neither of these older/regressive events should be emitted over SSE.
+	// Verify by expecting EOF or timeout when reading with short deadline.
+	frameChan := make(chan map[string]string, 1)
+	go func() {
+		f, err := readSSEFrame(reader)
+		if err == nil {
+			frameChan <- f
+		}
+	}()
+
+	select {
+	case regressedFrame := <-frameChan:
+		t.Fatalf("CRITICAL BUG: Delayed out-of-order event regressed parcel status: id=%s data=%s",
+			regressedFrame["id"], regressedFrame["data"])
+	case <-time.After(150 * time.Millisecond):
+		// SUCCESS: regressive events were correctly ignored!
+	}
+}
+
+func TestSSE_MultipleReconnectCycles_SameTimestampAndRepeatedStatuses(t *testing.T) {
+	tn := "SD-20261110-000005"
+	tnObj, _ := domain.NewTrackingNumber(tn)
+	sameSec := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+
+	// State progression managed dynamically for multi-cycle reconnect testing
+	var mu sync.Mutex
+	milestones := []domain.MilestoneRecord{
+		{
+			ID:        "ms-cycle-1",
+			ParcelID:  "prcl-cycle-5",
+			ToStatus:  "OUT_FOR_DELIVERY",
+			Timestamp: sameSec,
+		},
+		{
+			ID:        "ms-cycle-2",
+			ParcelID:  "prcl-cycle-5",
+			ToStatus:  "ATTEMPT_FAILED",
+			Timestamp: sameSec, // Same second as ms-cycle-1!
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNum string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			p := &domain.ParcelTrackingInfo{
+				ID:              "prcl-cycle-5",
+				TrackingNumber:  tnObj,
+				Status:          domain.ParcelStatus(milestones[len(milestones)-1].ToStatus),
+				DestinationCity: "Kandy",
+				CreatedAt:       sameSec,
+				UpdatedAt:       sameSec,
+			}
+			msCopy := make([]domain.MilestoneRecord, len(milestones))
+			copy(msCopy, milestones)
+			return p, msCopy, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	handler, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// --- Cycle 1: Initial connection without Last-Event-ID ---
+	req1, _ := http.NewRequestWithContext(context.Background(), "GET", server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	resp1, err := server.Client().Do(req1)
+	if err != nil {
+		t.Fatalf("Cycle 1 connect failed: %v", err)
+	}
+	reader1 := bufio.NewReader(resp1.Body)
+
+	// Read initial hydrated frame
+	f1, err := readSSEFrame(reader1)
+	if err != nil {
+		t.Fatalf("Cycle 1 read failed: %v", err)
+	}
+	resp1.Body.Close()
+
+	// Initial frame should be ms-cycle-2 (ATTEMPT_FAILED)
+	lastEventID1 := f1["id"]
+	if !strings.Contains(lastEventID1, "ms-cycle-2") {
+		t.Fatalf("expected cycle 1 frame to be ms-cycle-2, got: %s", lastEventID1)
+	}
+
+	// --- Progression: 2nd failed attempt occurs in the exact same second ---
+	mu.Lock()
+	milestones = append(milestones, domain.MilestoneRecord{
+		ID:        "ms-cycle-3",
+		ParcelID:  "prcl-cycle-5",
+		ToStatus:  "ATTEMPT_FAILED", // Repeated status, exact same timestamp!
+		Timestamp: sameSec,
+	})
+	mu.Unlock()
+
+	// --- Cycle 2: Client reconnects using Last-Event-ID containing ms-cycle-2 ---
+	req2, _ := http.NewRequestWithContext(context.Background(), "GET", server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	req2.Header.Set("Last-Event-ID", lastEventID1)
+	resp2, err := server.Client().Do(req2)
+	if err != nil {
+		t.Fatalf("Cycle 2 connect failed: %v", err)
+	}
+	reader2 := bufio.NewReader(resp2.Body)
+
+	// Server should replay ms-cycle-3 (the second ATTEMPT_FAILED)
+	f2, err := readSSEFrame(reader2)
+	if err != nil {
+		t.Fatalf("Cycle 2 read failed: %v", err)
+	}
+	resp2.Body.Close()
+
+	lastEventID2 := f2["id"]
+	if !strings.Contains(lastEventID2, "ms-cycle-3") {
+		t.Fatalf("expected cycle 2 replayed frame to be ms-cycle-3, got: %s", lastEventID2)
+	}
+
+	// --- Progression: 3rd cycle parcel is delivered ---
+	mu.Lock()
+	milestones = append(milestones, domain.MilestoneRecord{
+		ID:        "ms-cycle-4",
+		ParcelID:  "prcl-cycle-5",
+		ToStatus:  "DELIVERED",
+		Timestamp: sameSec.Add(2 * time.Hour),
+	})
+	mu.Unlock()
+
+	// --- Cycle 3: Client reconnects with Last-Event-ID containing ms-cycle-3 ---
+	req3, _ := http.NewRequestWithContext(context.Background(), "GET", server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	req3.Header.Set("Last-Event-ID", lastEventID2)
+	resp3, err := server.Client().Do(req3)
+	if err != nil {
+		t.Fatalf("Cycle 3 connect failed: %v", err)
+	}
+	defer resp3.Body.Close()
+	reader3 := bufio.NewReader(resp3.Body)
+
+	f3, err := readSSEFrame(reader3)
+	if err != nil {
+		t.Fatalf("Cycle 3 read failed: %v", err)
+	}
+
+	if !strings.Contains(f3["id"], "ms-cycle-4") || !strings.Contains(f3["id"], "DELIVERED") {
+		t.Fatalf("expected cycle 3 replayed frame to be ms-cycle-4 DELIVERED, got: %s", f3["id"])
+	}
+}
+
+// 21. Non-linear lifecycle transitions: delivery failure, rescheduling re-attempt, return to sender, and terminal lock
+func TestSSE_NonLinearLifecycleTransitions(t *testing.T) {
+	tn := "SD-20261110-000006"
+	trackingNum, _ := domain.NewTrackingNumber(tn)
+	baseTime := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "prcl-nonlinear-1",
+		TrackingNumber:  trackingNum,
+		Status:          domain.StatusOutForDelivery,
+		DestinationCity: "Galle",
+		CreatedAt:       baseTime,
+		UpdatedAt:       baseTime,
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "ms-nl-01",
+			ParcelID:  parcel.ID,
+			ToStatus:  string(domain.StatusOutForDelivery),
+			Timestamp: baseTime,
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Initial hydration frame (OUT_FOR_DELIVERY)
+	initFrame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read initial frame: %v", err)
+	}
+	var initData dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(initFrame["data"]), &initData)
+	if initData.Status != "OUT_FOR_DELIVERY" {
+		t.Fatalf("expected initial status OUT_FOR_DELIVERY, got %s", initData.Status)
+	}
+
+	// 1. First delivery attempt fails (OUT_FOR_DELIVERY -> ATTEMPT_FAILED)
+	t1 := baseTime.Add(1 * time.Hour)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "ATTEMPT_FAILED",
+		StatusHistoryID: "ms-nl-02",
+		Timestamp:       t1,
+	})
+
+	f1, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read attempt failed frame: %v", err)
+	}
+	var d1 dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(f1["data"]), &d1)
+	if d1.Status != "ATTEMPT_FAILED" {
+		t.Fatalf("expected status ATTEMPT_FAILED, got %s", d1.Status)
+	}
+
+	// 2. Rescheduling re-attempt (ATTEMPT_FAILED -> OUT_FOR_DELIVERY)
+	// Must NOT be rejected as a regression by arbitrary rank comparisons!
+	t2 := baseTime.Add(2 * time.Hour)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "OUT_FOR_DELIVERY",
+		StatusHistoryID: "ms-nl-03",
+		Timestamp:       t2,
+	})
+
+	f2, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read rescheduled frame: %v", err)
+	}
+	var d2 dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(f2["data"]), &d2)
+	if d2.Status != "OUT_FOR_DELIVERY" {
+		t.Fatalf("expected rescheduled status OUT_FOR_DELIVERY, got %s", d2.Status)
+	}
+
+	// 3. Second delivery attempt fails (OUT_FOR_DELIVERY -> ATTEMPT_FAILED)
+	t3 := baseTime.Add(3 * time.Hour)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "ATTEMPT_FAILED",
+		StatusHistoryID: "ms-nl-04",
+		Timestamp:       t3,
+	})
+
+	f3, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read 2nd attempt failed frame: %v", err)
+	}
+	var d3 dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(f3["data"]), &d3)
+	if d3.Status != "ATTEMPT_FAILED" {
+		t.Fatalf("expected status ATTEMPT_FAILED, got %s", d3.Status)
+	}
+
+	// 4. Return to sender (ATTEMPT_FAILED -> RETURNED terminal state)
+	t4 := baseTime.Add(4 * time.Hour)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "RETURNED",
+		StatusHistoryID: "ms-nl-05",
+		Timestamp:       t4,
+	})
+
+	f4, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read returned frame: %v", err)
+	}
+	var d4 dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(f4["data"]), &d4)
+	if d4.Status != "RETURNED" {
+		t.Fatalf("expected status RETURNED, got %s", d4.Status)
+	}
+
+	// 5. Subsequent delayed event (e.g. out-of-order OUT_FOR_DELIVERY or IN_TRANSIT)
+	// Must be ignored because RETURNED is terminal!
+	t5 := baseTime.Add(5 * time.Hour)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "OUT_FOR_DELIVERY",
+		StatusHistoryID: "ms-nl-delayed",
+		Timestamp:       t5,
+	})
+
+	// To verify no event is emitted, send a keepalive or check with a short timeout
+	readDone := make(chan struct{})
+	go func() {
+		_, _ = readSSEFrame(reader)
+		close(readDone)
+	}()
+
+	select {
+	case <-readDone:
+		t.Fatal("expected no further events after terminal RETURNED status, but frame was received")
+	case <-time.After(150 * time.Millisecond):
+		// Expected: no event emitted
+	}
+}
+
+// 22. Reconnection when up-to-date correctly blocks delayed out-of-order live events
+func TestSSE_Reconnection_UpToDate_DelayedEventRejected(t *testing.T) {
+	tn := "SD-20261110-000007"
+	trackingNum, _ := domain.NewTrackingNumber(tn)
+	tFinal := time.Date(2026, 11, 10, 16, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "prcl-uptodate-1",
+		TrackingNumber:  trackingNum,
+		Status:          domain.StatusDelivered,
+		DestinationCity: "Colombo",
+		CreatedAt:       tFinal.Add(-3 * time.Hour),
+		UpdatedAt:       tFinal,
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "ms-utd-01",
+			ParcelID:  parcel.ID,
+			ToStatus:  string(domain.StatusDelivered),
+			Timestamp: tFinal,
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Client reconnects with Last-Event-ID matching the terminal DELIVERED status
+	lastEventID := fmt.Sprintf("%s:DELIVERED:%d:ms-utd-01", tn, tFinal.Unix())
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	req.Header.Set("Last-Event-ID", lastEventID)
+
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+
+	// Delayed event arrives: PICKED_UP from hours earlier
+	delayedEvent := dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "PICKED_UP",
+		StatusHistoryID: "ms-old-delayed",
+		Timestamp:       tFinal.Add(-2 * time.Hour),
+	}
+	hub.Broadcast(delayedEvent)
+
+	// Verify no frame is transmitted to client
+	readDone := make(chan map[string]string, 1)
+	go func() {
+		f, _ := readSSEFrame(reader)
+		readDone <- f
+	}()
+
+	select {
+	case f := <-readDone:
+		t.Fatalf("expected delayed event to be rejected on reconnected client, but frame was received: %+v", f)
+	case <-time.After(150 * time.Millisecond):
+		// Expected: suppressed
+	}
+}
+
+// 23. Identical timestamp ordering: valid non-linear transition accepted, invalid regression rejected
+func TestSSE_IdenticalTimestamp_ValidTransitionVsRegression(t *testing.T) {
+	tn := "SD-20261110-000008"
+	trackingNum, _ := domain.NewTrackingNumber(tn)
+	sharedTime := time.Date(2026, 11, 10, 15, 0, 0, 0, time.UTC)
+
+	parcel := &domain.ParcelTrackingInfo{
+		ID:              "prcl-same-sec-1",
+		TrackingNumber:  trackingNum,
+		Status:          domain.StatusOutForDelivery,
+		DestinationCity: "Colombo",
+		CreatedAt:       sharedTime.Add(-1 * time.Hour),
+		UpdatedAt:       sharedTime,
+	}
+
+	history := []domain.MilestoneRecord{
+		{
+			ID:        "ms-ss-01",
+			ParcelID:  parcel.ID,
+			ToStatus:  string(domain.StatusOutForDelivery),
+			Timestamp: sharedTime,
+		},
+	}
+
+	mockRepo := &mockRepoForHTTP{
+		findSummaryFunc: func(ctx context.Context, trackingNumber string) (*domain.ParcelTrackingInfo, []domain.MilestoneRecord, error) {
+			return parcel, history, nil
+		},
+	}
+
+	hub := events.NewEventHub()
+	router, _ := setupTestSSEInfrastructure(mockRepo, hub, 15*time.Second)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tracking/public/"+tn+"/stream", nil)
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	// Read initial OUT_FOR_DELIVERY frame
+	_, err = readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read initial frame: %v", err)
+	}
+
+	// 1. Broadcast invalid regression on the exact same timestamp (OUT_FOR_DELIVERY -> IN_TRANSIT)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "IN_TRANSIT",
+		StatusHistoryID: "ms-ss-regress",
+		Timestamp:       sharedTime, // Same timestamp!
+	})
+
+	// 2. Broadcast valid non-linear transition on the exact same timestamp (OUT_FOR_DELIVERY -> ATTEMPT_FAILED)
+	hub.Broadcast(dto.PublicStatusUpdateEvent{
+		TrackingNumber:  tn,
+		Status:          "ATTEMPT_FAILED",
+		StatusHistoryID: "ms-ss-02",
+		Timestamp:       sharedTime, // Same timestamp!
+	})
+
+	// The reader MUST receive ATTEMPT_FAILED (the invalid IN_TRANSIT regression must be skipped)
+	frame, err := readSSEFrame(reader)
+	if err != nil {
+		t.Fatalf("failed to read frame: %v", err)
+	}
+	var data dto.PublicStatusUpdateEvent
+	_ = json.Unmarshal([]byte(frame["data"]), &data)
+	if data.Status != "ATTEMPT_FAILED" {
+		t.Fatalf("expected status ATTEMPT_FAILED, got %s (regression was not properly discarded!)", data.Status)
+	}
+}

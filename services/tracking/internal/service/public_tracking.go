@@ -45,18 +45,20 @@ func (s *PublicTrackingService) GetPublicTracking(ctx context.Context, rawTracki
 	milestones := make([]dto.PublicMilestone, 0, len(history))
 	for _, h := range history {
 		milestones = append(milestones, dto.PublicMilestone{
-			Status:      h.ToStatus,
-			Description: domain.SafeStatusDescription(h.ToStatus),
-			Timestamp:   h.Timestamp,
+			Status:          h.ToStatus,
+			Description:     domain.SafeStatusDescription(h.ToStatus),
+			Timestamp:       h.Timestamp,
+			StatusHistoryID: h.ID,
 		})
 	}
 
 	// If history is empty, synthesize initial milestone from parcel creation
 	if len(milestones) == 0 {
 		milestones = append(milestones, dto.PublicMilestone{
-			Status:      string(parcel.Status),
-			Description: domain.SafeStatusDescription(string(parcel.Status)),
-			Timestamp:   parcel.CreatedAt,
+			Status:          string(parcel.Status),
+			Description:     domain.SafeStatusDescription(string(parcel.Status)),
+			Timestamp:       parcel.CreatedAt,
+			StatusHistoryID: "",
 		})
 	}
 

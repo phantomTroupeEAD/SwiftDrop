@@ -100,3 +100,24 @@ type GoogleLoginResult struct {
 	IsNewUser     bool
 	RequiresPhone bool
 }
+
+// SendPasswordResetOTPCommand encapsulates the email for a password reset OTP request.
+type SendPasswordResetOTPCommand struct {
+	Email string
+}
+
+// SendPasswordResetOTPResult contains metadata about the password reset OTP request.
+type SendPasswordResetOTPResult struct {
+	Email           string
+	ExpiresIn       int
+	CooldownSeconds int
+}
+
+// ResetPasswordCommand encapsulates the OTP-verified password reset payload.
+type ResetPasswordCommand struct {
+	Email       string
+	OTP         string
+	NewPassword string
+	ClientIP    string
+	UserAgent   string
+}

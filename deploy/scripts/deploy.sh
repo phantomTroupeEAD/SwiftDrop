@@ -49,10 +49,22 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
+# Revision of every app Deployment BEFORE this deploy. Rollback returns to exactly these revisions:
+# a plain "rollout undo" would only step back one revision, and the core-api restart below adds one.
+declare -A PREV_REV
+for d in "${APP_DEPLOYMENTS[@]}"; do
+  PREV_REV[$d]="$(kubectl -n "$NS" get deployment "$d" -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
+done
+
 rollback() {
-  log "ROLLBACK: restoring the previous revision of every app Deployment"
+  log "ROLLBACK: restoring every app Deployment to its revision before this deploy"
   for d in "${APP_DEPLOYMENTS[@]}"; do
-    kubectl -n "$NS" rollout undo "deployment/$d" 2>/dev/null && echo "  undo $d" || echo "  $d: no previous revision (first deploy?)"
+    if [[ -n "${PREV_REV[$d]}" ]]; then
+      kubectl -n "$NS" rollout undo "deployment/$d" --to-revision="${PREV_REV[$d]}" >/dev/null 2>&1 \
+        && echo "  $d -> revision ${PREV_REV[$d]}" || echo "  $d: already at revision ${PREV_REV[$d]} or undo failed"
+    else
+      echo "  $d: did not exist before this deploy, nothing to restore"
+    fi
   done
   for d in "${APP_DEPLOYMENTS[@]}"; do
     kubectl -n "$NS" rollout status "deployment/$d" --timeout="$TIMEOUT" >/dev/null 2>&1 || echo "  $d not healthy after undo"
