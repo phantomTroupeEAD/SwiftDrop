@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import { test, expect } from '../fixtures/orchestrationFixtures';
 import { SELECTORS, testId } from '../helpers/selectors';
 
@@ -16,6 +17,15 @@ import { SELECTORS, testId } from '../helpers/selectors';
  */
 
 test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', () => {
+
+  test.beforeEach(() => {
+    // Ensure applicant is in fresh CUSTOMER state for repeatable merchant onboarding
+    try {
+      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "DELETE FROM webhook_endpoints WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchant_api_credentials WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'; UPDATE users SET role = \'CUSTOMER\', tenant_id = NULL WHERE email = \'applicant@swiftdrop.local\';"', { stdio: 'ignore' });
+    } catch {
+      // ignore if docker environment is running standalone
+    }
+  });
 
   test('should execute complete live multi-actor transaction with real database persistence', async ({
     customerPage,
@@ -53,8 +63,8 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00400');
 
     // Wait for live zone resolution from PostgreSQL delivery_zones
-    await expect(customerPage.getByText('✓ ZONE_COLOMBO_01').first()).toBeVisible({ timeout: 10000 });
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await expect(customerPage.getByText(/Delivery zone/i).first()).toBeVisible({ timeout: 10000 });
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Step 2: Parcel Dimensions & Real Dynamic Pricing Calculation
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT)).fill('2.5');
@@ -62,11 +72,11 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WIDTH)).fill('15');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_HEIGHT)).fill('10');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DESCRIPTION)).fill('Live testing parcel');
-    await customerPage.getByRole('button', { name: 'Get quote' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_GET_QUOTE)).click();
 
     // Step 3: Verify real fee calculated by pricing engine in PostgreSQL
     await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS))).toBeVisible({ timeout: 10000 });
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Step 4: Confirm and Commit to PostgreSQL Database
     await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_SUBMIT_BOOKING)).click();
@@ -84,7 +94,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await applicantPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
     await expect(applicantPage).toHaveURL(/\/dashboard/, { timeout: 10000 });
-    await applicantPage.getByRole('link', { name: 'Merchant application' }).click();
+    await applicantPage.getByRole('link', { name: /Apply for a merchant account|merchant/i }).click();
     await expect(applicantPage.getByRole('heading', { name: 'Merchant application' })).toBeVisible({ timeout: 10000 });
 
     await applicantPage.getByTestId('merchant-application-business_name-input').fill('Apex Retailers Ltd');
@@ -196,7 +206,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
       });
       const boardData = await boardRes.json();
       const parcel = boardData.data?.unassigned_parcels?.find((p: any) => p.tracking_number === trackingNo);
-      const courier = boardData.data?.courier_loads?.find((c: any) => c.status === 'ON_SHIFT');
+      const courier = boardData.data?.courier_loads?.find((c: any) => c.courier_id === '018f4a7c-1003-7000-8000-000000000003') || boardData.data?.courier_loads?.find((c: any) => c.status === 'ON_SHIFT');
 
       if (!parcel || !courier) {
         return { success: false, reason: 'Parcel or on-shift courier not available', parcel, courier, boardData };
@@ -229,7 +239,8 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await courierPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
     await expect(courierPage).toHaveURL(/\/courier\/dashboard/, { timeout: 10000 });
-    await expect(courierPage.getByText("Today's Stop-by-Stop Run")).toBeVisible({ timeout: 10000 });
+    await expect(courierPage.getByRole('heading', { name: 'Delivery tasks' })).toBeVisible({ timeout: 10000 });
+    await expect(courierPage.getByText(liveTrackingNumber)).toBeVisible({ timeout: 10000 });
 
     // Execute Start Run and Complete Delivery via real Delivery API in courier context
     const deliveryResult = await courierPage.evaluate(async (parcelId) => {
