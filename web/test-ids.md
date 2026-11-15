@@ -230,6 +230,11 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `failed-empty`, `failed-empty-reset-btn`, `failed-error` | Empty state (none, or none match), its Reset button, error with reference id and Retry |
 | `failed-history-dialog`, `failed-history-item` | Attempts window and one item per attempt (repeated) |
 | `failed-retry-context` | Last failure reason and note shown in the retry window (the window itself uses the `dispatch-assign-*` ids) |
+| `merchants-filters`, `merchants-filter-status`, `merchants-reset-btn`, `merchants-refresh-btn` | Merchant list: status filter (sent to the server), Reset, refresh |
+| `merchants-table`, `merchants-row`, `merchants-view-btn`, `merchants-summary` | Table, one row per merchant (repeated), View button (repeated), "Showing a–b of N" line |
+| `merchants-per-page`, `merchants-prev-btn`, `merchants-next-btn` | Rows per page (10/20/50/100), previous and next page |
+| `merchants-empty`, `merchants-empty-reset-btn`, `merchants-error` | Empty state (none, or none match), its Reset button, load error with reference id and Retry |
+| `merchants-detail-dialog`, `merchants-detail`, `merchants-detail-error` | Read-only details window, its fields, load error ("No merchant has this id." for a 404) |
 
 ## Ops workspace shell (Member 7)
 
