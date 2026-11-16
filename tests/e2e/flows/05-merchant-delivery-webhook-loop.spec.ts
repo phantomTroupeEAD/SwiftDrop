@@ -301,9 +301,9 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
     // -------------------------------------------------------------------------
     // 8. Auditing Mock Webhook Receiver on Port 9999 (The Definitive Test)
     // -------------------------------------------------------------------------
-    // Wait for asynchronous outbox relay + event worker dispatch loop (poll up to 15s)
+    // Wait for asynchronous outbox relay + event worker dispatch loop (poll up to 20s)
     let deliveredEvents: any[] = [];
-    const maxPolls = 30;
+    const maxPolls = 40;
 
     for (let p = 0; p < maxPolls; p++) {
       try {
@@ -311,7 +311,8 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
         const json = await res.json();
         if (Array.isArray(json)) {
           deliveredEvents = json;
-          if (json.length >= 4) {
+          // Wait until the final delivered milestone and all 7 lifecycle events arrive
+          if (json.some((e: any) => e.type === 'parcel.delivered.v1') && json.length >= 7) {
             break;
           }
         }
@@ -326,7 +327,7 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
     for (const evt of deliveredEvents) {
       console.log(`[E2E Audit] -> Received Event: ${evt.type} (hmacValid: ${evt.hmacValid}, id: ${evt.id})`);
     }
-    expect(deliveredEvents.length).toBeGreaterThanOrEqual(4);
+    expect(deliveredEvents.length).toBeGreaterThanOrEqual(7);
 
     // Assert that every received event has cryptographic HMAC valid verification
     for (const evt of deliveredEvents) {
