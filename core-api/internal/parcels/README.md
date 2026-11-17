@@ -5,7 +5,7 @@ The receipt endpoint uses the same access checks as parcel detail and reads the 
 > **Domain:** Parcel Aggregate Root, Lifecycle State Machine & Booking  
 > **Primary Owner:** Member 2 — Parcel Management & Pricing  
 > **Clean Architecture Boundary:** Modular Monolith Internal Module  
-> **Status:** Booking, parcel detail, history, and receipts implemented. List and cancellation deferred.
+> **Status:** Booking, parcel detail, history, receipts, and paginated list implemented. Cancellation deferred.
 
 ---
 
@@ -239,3 +239,4 @@ Every state change commits a versioned event (`schema_version: "1.0.0"`) to `out
 | 2026-11-11 | Phase 2 Parcel HTTP Transport: Implemented `internal/parcels/transport` (`dto.go`, `handler.go`, `routes.go`, `handler_test.go`) exposing `POST /api/v1/parcels`, `GET /api/v1/parcels/{id}`, and `GET /api/v1/parcels/{id}/history` with Bearer JWT + role authorization, `APPROVED` merchant tenant checks, UUID `Idempotency-Key` validation, 64 KB body cap + raw SHA-256 hashing + `Idempotent-Replay: true` replays, strict unknown-field JSON rejection, `httpx` data/error envelopes, `swag` annotations, and updated `API.md`/`README.md`. | Member 2 |
 | 2026-11-13 | Phase 3 API Startup Wiring & Swagger Integration: Implemented `cmd/api/wiring_member02.go` (`registerPricingModule`, `registerParcelsModule`), wired both modules into `cmd/api/wiring.go` under `if dbConn != nil` guard with production fatal checks and local fallback notices, added `cmd/api/wiring_member02_test.go` verifying route registration and security middleware enforcement, regenerated unified OpenAPI specs via `swag init`, and synchronized `docs/swagger.json`, `docs/swagger.yaml`, and `internal/events/swagger/swagger.json`. | Member 2 |
 | 2026-11-13 | Parcel item details persistence: Preserved item_description and special_instructions across domain aggregate, application usecase, outbox event (parcel.booked.v1), PostgreSQL schema migration (20261113000001_add_parcel_item_details), repository save/find queries, and transport DTOs (POST & GET responses) with 500-character domain length validation. | Member 2 |
+| 2026-11-17 | Paginated parcel listing endpoint (`GET /api/v1/parcels`): Implemented `ListParcelsUseCase`, `List` in `ParcelRepository` and `PostgresParcelRepository`, `Handler.ListParcels`, and registered `GET /api/v1/parcels` with role-based scoping (CUSTOMER scoped by sender_id, MERCHANT scoped by merchant_id, ADMIN all parcels), `data.items` and `meta` paginated envelope, and Swagger docstrings. | Member 2 / Member 10 |

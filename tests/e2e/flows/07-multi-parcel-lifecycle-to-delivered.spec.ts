@@ -262,28 +262,45 @@ test.describe('Flow 7: Multi-Parcel Real Lifecycle (Zero Mocks)', () => {
     }
 
     // Step 6.2: Visually verify on Customer Portal Dashboard
+    console.log('[Flow 7] 6.2: Navigating to Customer Portal Dashboard to visually verify recent parcels...');
     await page.goto('/dashboard');
-    await page.reload();
     await expect(page.getByText('Recent parcels')).toBeVisible({ timeout: 10000 });
+
+    // Verify summary metric cards
+    await expect(page.getByText('Parcels on latest page')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Delivered', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+    // Verify that every single booked parcel appears in the table with its tracking number and DELIVERED badge
+    for (const p of bookedParcels) {
+      const row = page.getByRole('row', { name: new RegExp(p.trackingNumber, 'i') });
+      await expect(row, `Table row for ${p.trackingNumber} should be visible in UI table`).toBeVisible({ timeout: 10000 });
+      await expect(row.getByText(/delivered/i), `Row for ${p.trackingNumber} should show delivered badge`).toBeVisible({ timeout: 10000 });
+      console.log(`[Flow 7] 👁️ Visually Verified in UI Table: ${p.trackingNumber} is DELIVERED`);
+    }
+
     console.log('[Flow 7] All 6 parcels confirmed DELIVERED on live system without mocks!');
   });
 
   test.afterAll(async () => {
-    // Clean up temporary user and parcels from database
-    try {
-      const { execSync } = await import('node:child_process');
-      execSync(
-        `docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "
-          DELETE FROM delivery_attempts WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
-          DELETE FROM courier_assignments WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
-          DELETE FROM parcel_status_history WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
-          DELETE FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}');
-          DELETE FROM pricing_quotes WHERE requester_id IN (SELECT id FROM users WHERE email = '${customerEmail}');
-          DELETE FROM users WHERE email = '${customerEmail}';
-        "`
-      );
-    } catch {
-      // ignore
+    // Clean up temporary user and parcels only if explicitly requested
+    if (process.env.CLEANUP === 'true') {
+      try {
+        const { execSync } = await import('node:child_process');
+        execSync(
+          `docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "
+            DELETE FROM delivery_attempts WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
+            DELETE FROM courier_assignments WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
+            DELETE FROM parcel_status_history WHERE parcel_id IN (SELECT id FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}'));
+            DELETE FROM parcels WHERE sender_id IN (SELECT id FROM users WHERE email = '${customerEmail}');
+            DELETE FROM pricing_quotes WHERE requester_id IN (SELECT id FROM users WHERE email = '${customerEmail}');
+            DELETE FROM users WHERE email = '${customerEmail}';
+          "`
+        );
+      } catch {
+        // ignore
+      }
+    } else {
+      console.log(`[Flow 7] ℹ️ Test customer preserved for browser inspection: ${customerEmail} / ${customerPassword}`);
     }
   });
 });

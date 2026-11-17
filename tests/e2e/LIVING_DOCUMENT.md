@@ -274,4 +274,6 @@ Flow 7 proves the authoritative, multi-actor parcel delivery journey across the 
 4. **Courier Mobile Milestones:** Courier starts route manifest, transitioning parcels to `OUT_FOR_DELIVERY`.
 5. **Electronic Proof of Delivery (POD):** Courier submits SVG digital signature captures ($\ge 50$ chars) and recipient handoff records, transitioning parcels to `DELIVERED`.
 6. **Delivery Verification:** Customer verifies that all 6 parcels reached `DELIVERED` status on the live platform.
-- **Test Result:** 1 passed (3.7s) — 100% Pass Rate across all 6 parcels.
+7. **Customer Home Page Visual Verification:** Customer navigates to `/dashboard` and confirms all 6 parcels render in the "Recent parcels" table with tracking number links, booking timestamps, and `DELIVERED` status badges, alongside summary metrics cards (`Parcels on latest page: 6`, `Delivered: 6`).
+- **Endpoint Implementation:** Implemented `GET /api/v1/parcels` in `core-api/internal/parcels` (`ListParcelsUseCase`, `PostgresParcelRepository.List`, `Handler.ListParcels`) with role-based scoping (`CUSTOMER` filtered by `sender_id`, `MERCHANT` filtered by `merchant_id`, `ADMIN` global view).
+- **Test Result:** 1 passed (3.7s) — 100% Pass Rate across all 6 parcels with complete UI table rendering verified.

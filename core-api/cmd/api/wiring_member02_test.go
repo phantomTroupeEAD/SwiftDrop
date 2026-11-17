@@ -85,6 +85,7 @@ func TestMember02Wiring_RouteRegistrationAndSecurity(t *testing.T) {
 	}{
 		{method: http.MethodPost, path: "/api/v1/pricing/quotes", pattern: "POST /api/v1/pricing/quotes"},
 		{method: http.MethodPost, path: "/api/v1/parcels", pattern: "POST /api/v1/parcels"},
+		{method: http.MethodGet, path: "/api/v1/parcels", pattern: "GET /api/v1/parcels"},
 		{method: http.MethodGet, path: "/api/v1/parcels/pcl_01HXYZ1234567890", pattern: "GET /api/v1/parcels/{id}"},
 		{method: http.MethodGet, path: "/api/v1/parcels/pcl_01HXYZ1234567890/history", pattern: "GET /api/v1/parcels/{id}/history"},
 	}

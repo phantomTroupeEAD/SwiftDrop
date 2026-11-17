@@ -34,6 +34,12 @@ type QuoteConsumer interface {
 	ConsumeQuote(ctx context.Context, q db.Querier, quoteID string, acceptedAt time.Time) (AcceptedQuoteSnapshot, error)
 }
 
+// ParcelFilter defines criteria for filtering parcels in paginated list queries.
+type ParcelFilter struct {
+	SenderID   *string
+	MerchantID *string
+}
+
 // ParcelRepository defines the persistence port for the Parcel aggregate root.
 type ParcelRepository interface {
 	Save(ctx context.Context, q db.Querier, parcel domain.Parcel) error
@@ -41,6 +47,7 @@ type ParcelRepository interface {
 	FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error)
 	FindByTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (domain.Parcel, error)
 	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
+	List(ctx context.Context, q db.Querier, filter ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error)
 }
 
 // StatusHistoryRepository defines the append-only persistence and chronological query port for status audit entries.

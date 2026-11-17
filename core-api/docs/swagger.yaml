@@ -1480,6 +1480,47 @@ paths:
       tags:
       - merchants
   /api/v1/parcels:
+    get:
+      description: Returns a paginated list of parcels for the authenticated customer
+        (scoped by sender_id), approved merchant (scoped by merchant_id), or admin
+        (all parcels).
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20, max 100)
+        in: query
+        name: page_size
+        type: integer
+      - description: Alternative query parameter for page_size
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated parcels list wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal list lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List parcels visible to caller
+      tags:
+      - parcels
     post:
       consumes:
       - application/json
