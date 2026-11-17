@@ -44,7 +44,7 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
           : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
         <nav aria-label="Portal navigation">
           {(profile === 'customer' || profile === 'merchant') && <NavLink to="/dashboard" end>Home</NavLink>}
-          {(profile === 'customer' || profile === 'merchant') && <NavLink to="/portal/book">Book a parcel</NavLink>}
+          {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
           {profile === 'customer' && <NavLink to={status === 'APPROVED' ? '/merchant/dashboard' : '/portal/merchants/apply'}>
             {status === 'APPROVED' ? 'Open merchant dashboard' : status === null ? 'Apply for a merchant account' : 'View application'}
           </NavLink>}
