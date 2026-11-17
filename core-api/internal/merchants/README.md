@@ -118,7 +118,7 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 
 | Dependency | Owner | Current Implementation Status |
 | :--- | :--- | :--- |
-| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` and `roleAssignerAdapter` in `cmd/api/wiring_merchants.go` to Member 1's `UserService.AssignRole`. |
+| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` and `roleAssignerAdapter` in `cmd/api/wiring_merchants.go` to Member 1's `UserService.AssignRole` and `UserService.RevokeMerchantRole` (demotes disabled merchants to CUSTOMER). |
 | **Audit Logging** | Member 1 / Platform | Wired via `infrastructure.AuditWriter` inserting into canonical `audit_logs` table (`20261109000001_create_audit_logs.up.sql`). |
 | **Parcel Booking Engine** | Member 2 (Parcels) | Integrated with `infrastructure.BookingStub`; will switch to Member 2's `ParcelService` once published. |
 | **Admin UI & Action Endpoints** | Member 7 (Admin) | Stand-in handlers implemented at `/api/v1/admin/merchants/*`; ready for gateway routing. |
@@ -134,3 +134,4 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 | 2026-11-07 | Completed Steps 1–4: Migrations, Domain, Application, Infrastructure, Transport & Wiring | Member 4 / Antigravity |
 | 2026-11-07 | Hardened Security & Config: Base64 AES-256 keys, pepper validation, non-panicking DB querier, full prefix DB alignment | Member 4 / Antigravity |
 | 2026-11-13 | Integrated Member 1 (role promotion & audit logs), added hex key fallback, and implemented cross-module integration & E2E tests (`core-api/tests/merchants_integration_test.go`) | Member 4 / Antigravity |
+| 2026-11-15 | Implemented Member 1 two-way role management (`RevokeMerchantRole` on disablement), added Swagger request parameter models for API keys and webhooks | Member 4 / Antigravity |

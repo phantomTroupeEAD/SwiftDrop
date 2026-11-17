@@ -1513,6 +1513,17 @@
                     "merchants"
                 ],
                 "summary": "Generate a new merchant API key",
+                "parameters": [
+                    {
+                        "description": "API key parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_transport.CreateKeyRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -1625,6 +1636,17 @@
                     "merchants"
                 ],
                 "summary": "Register a new webhook subscription",
+                "parameters": [
+                    {
+                        "description": "Webhook subscription parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_transport.RegisterWebhookRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -2141,6 +2163,54 @@
         }
     },
     "definitions": {
+        "github_com_swiftdrop_core-api_internal_merchants_transport.CreateKeyRequest": {
+            "type": "object",
+            "required": [
+                "label"
+            ],
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Production Warehouse Key"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "parcels:create",
+                        "parcels:read"
+                    ]
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_merchants_transport.RegisterWebhookRequest": {
+            "type": "object",
+            "required": [
+                "url",
+                "events"
+            ],
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "parcel.delivered.v1",
+                        "parcel.delivery_failed.v1"
+                    ]
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://httpbin.org/post"
+                }
+            }
+        },
         "github_com_swiftdrop_core-api_internal_admin_application.AuditRow": {
             "type": "object",
             "properties": {
