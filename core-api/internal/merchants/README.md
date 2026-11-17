@@ -134,3 +134,4 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 | 2026-11-07 | Completed Steps 1–4: Migrations, Domain, Application, Infrastructure, Transport & Wiring | Member 4 / Antigravity |
 | 2026-11-07 | Hardened Security & Config: Base64 AES-256 keys, pepper validation, non-panicking DB querier, full prefix DB alignment | Member 4 / Antigravity |
 | 2026-11-13 | Integrated Member 1 (role promotion & audit logs), added hex key fallback, and implemented cross-module integration & E2E tests (`core-api/tests/merchants_integration_test.go`) | Member 4 / Antigravity |
+| 2026-11-17 | Aligned canonical seed merchant tenant UUID (`018f4a7c-1004-7000-9000-000000000004`) via migration `20261117000001` to resolve UUID type mismatch on portal endpoints | Member 4 / Antigravity |

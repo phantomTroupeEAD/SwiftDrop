@@ -12,6 +12,7 @@ import { RoleHome } from '@/features/dashboards/RoleHome';
 import type { Role } from '@/shared/types/auth';
 import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
+import { MerchantDocs } from '@/features/customer-merchant/portal/MerchantDocs';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
 
@@ -77,6 +78,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
       <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
       <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/docs" element={<ProtectedRoute role="MERCHANT"><MerchantDocs /></ProtectedRoute>} />
 
       {/* Dev-Only Design System Parity Studio (Gated out of production) */}
       {import.meta.env.DEV && (

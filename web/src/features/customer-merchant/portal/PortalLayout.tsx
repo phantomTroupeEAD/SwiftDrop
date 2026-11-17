@@ -52,6 +52,7 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
             <NavLink to="/portal/merchants/orders">Orders</NavLink>
             <NavLink to="/portal/merchants/api-keys">API keys</NavLink>
             <NavLink to="/portal/merchants/webhooks">Webhooks</NavLink>
+            <NavLink to="/portal/merchants/docs">API docs</NavLink>
           </>}
           {profile === 'public'
             ? <NavLink to="/track">Track a parcel</NavLink>

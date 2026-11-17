@@ -17,7 +17,7 @@ The customer and merchant workflows use `public/scratch-apple.html` as their vis
 Public tracking and registration use the centered blue profile. Customer booking and merchant applications use the blue customer profile. Merchant orders, API keys, and webhooks use the teal merchant profile. On phones, merchant orders show tracking and status first, with reference and date below.
 
 - **Customer:** Four-step quote and booking flow, server-issued tracking number, and merchant application/status.
-- **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, and webhook registration and removal.
+- **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, webhook registration and removal, and in-portal B2B integration documentation (`/portal/merchants/docs`) with interactive code samples (cURL, Node.js, Python), schema accordions, and HMAC verification guides.
 - **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
 - **Signed-in tracking:** Customers and merchants can open `/portal/tracking` to look up parcels they can access. Merchant tracking numbers link directly to this view.
 

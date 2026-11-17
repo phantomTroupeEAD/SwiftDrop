@@ -25,7 +25,7 @@ func NewMockUserRepository(hasher application.PasswordHasher) *MockUserRepositor
 		byID:  make(map[string]*domain.User),
 	}
 
-	merchantTenant := "mrc_01HMERCHANTTENANT00001"
+	merchantTenant := "018f4a7c-1004-7000-9000-000000000004"
 	now := time.Now().UTC()
 
 	// Seed 5 accounts (one for each role)
