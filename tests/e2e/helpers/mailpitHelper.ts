@@ -39,11 +39,31 @@ export async function getRegistrationOTPFromMailpit(email: string, timeoutMs = 1
           const detailRes = await fetch(`http://localhost:8025/api/v1/message/${latest.ID}`);
           if (detailRes.ok) {
             const detail = (await detailRes.json()) as { HTML?: string; Text?: string; Snippet?: string };
-            const textToScan = `${detail.HTML || ''} ${detail.Text || ''} ${detail.Snippet || ''}`;
-            const match = textToScan.match(/\b\d{6}\b/);
-            if (match) {
-              console.log(`[Mailpit Helper] Successfully retrieved OTP [${match[0]}] from Mailpit email message (ID: ${latest.ID})`);
-              return match[0];
+            
+            // 1. Target the specific OTP container in the HTML template (<div class="otp-code">123456</div>)
+            const htmlOtpMatch = detail.HTML?.match(/class="otp-code"[^>]*>\s*(\d{6})\s*</i);
+            if (htmlOtpMatch) {
+              console.log(`[Mailpit Helper] Retrieved OTP [${htmlOtpMatch[1]}] from HTML .otp-code container`);
+              return htmlOtpMatch[1];
+            }
+
+            // 2. Target plain-text email body (free of CSS hex colors like #111827)
+            if (detail.Text) {
+              const textMatch = detail.Text.match(/\b\d{6}\b/);
+              if (textMatch) {
+                console.log(`[Mailpit Helper] Retrieved OTP [${textMatch[0]}] from plain-text body`);
+                return textMatch[0];
+              }
+            }
+
+            // 3. Target message snippet
+            if (detail.Snippet || latest.Snippet) {
+              const snippetText = detail.Snippet || latest.Snippet || '';
+              const snippetMatch = snippetText.match(/\b\d{6}\b/);
+              if (snippetMatch) {
+                console.log(`[Mailpit Helper] Retrieved OTP [${snippetMatch[0]}] from snippet`);
+                return snippetMatch[0];
+              }
             }
           } else {
             const match = latest.Snippet?.match(/\b\d{6}\b/);

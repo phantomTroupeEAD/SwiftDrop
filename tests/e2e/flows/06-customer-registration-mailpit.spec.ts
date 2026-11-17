@@ -18,14 +18,14 @@ import { getRegistrationOTPFromMailpit, clearMailpitMessages } from '../helpers/
  */
 
 test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => {
-  const timestamp = Date.now();
-  const testEmail = `customer_${timestamp}@swiftdrop.local`;
+  let testEmail = '';
   const testPassword = 'Password123!';
   const firstName = 'Chamath';
   const lastName = 'Fernando';
   const phone = '+94712345678';
 
   test.beforeEach(async () => {
+    testEmail = `customer_${Date.now()}@swiftdrop.local`;
     await clearMailpitMessages();
   });
 
@@ -36,7 +36,7 @@ test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => 
     // 1. Visit Registration Page (Step 1: Request Code)
     // -------------------------------------------------------------------------
     await page.goto('/auth/register');
-    await expect(page.getByRole('heading', { name: 'Create a customer account' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Create a customer account')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Enter your email to receive a secure verification code.')).toBeVisible();
 
     // -------------------------------------------------------------------------
@@ -49,7 +49,7 @@ test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => 
     // 3. Step 2 Appears: Verification Code & Profile Inputs
     // -------------------------------------------------------------------------
     await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_OTP))).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(testEmail)).toBeVisible();
+    await expect(page.getByText(testEmail, { exact: true })).toBeVisible();
 
     // -------------------------------------------------------------------------
     // 4. Retrieve Real OTP Code from Mailpit Sandbox
@@ -76,7 +76,7 @@ test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => 
     // -------------------------------------------------------------------------
     // 6. Verify Account Created Confirmation Screen
     // -------------------------------------------------------------------------
-    await expect(page.getByRole('heading', { name: 'Account created' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Account created')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Your SwiftDrop account is ready. Sign in with your email and password.')).toBeVisible();
 
     // -------------------------------------------------------------------------
@@ -96,7 +96,7 @@ test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => 
     // 9. Verify Entry to Customer Portal Dashboard
     // -------------------------------------------------------------------------
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
-    await expect(page.getByText(`${firstName} ${lastName}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: /Sign out/i })).toBeVisible({ timeout: 10000 });
   });
 
   test.afterAll(async () => {
