@@ -20,6 +20,17 @@ export const SELECTORS = {
     BTN_LOGOUT: 'btn-logout',
     USER_PROFILE_MENU: 'user-profile-menu',
     AUTH_ERROR_ALERT: 'auth-error-alert',
+
+    // Registration (Step 1 & Step 2)
+    REGISTER_EMAIL: 'register-email-input',
+    REGISTER_SEND_OTP_BTN: 'register-send-otp-btn',
+    REGISTER_OTP: 'register-otp-input',
+    REGISTER_FIRST_NAME: 'register-first-name-input',
+    REGISTER_LAST_NAME: 'register-last-name-input',
+    REGISTER_PHONE: 'register-phone-input',
+    REGISTER_PASSWORD: 'register-password-input',
+    REGISTER_TERMS_CHECKBOX: 'register-terms-checkbox',
+    REGISTER_SUBMIT_BTN: 'register-submit-btn',
   },
 
   // ---------------------------------------------------------------------------

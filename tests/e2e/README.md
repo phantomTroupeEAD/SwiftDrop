@@ -112,6 +112,7 @@ tests/e2e/
 │   ├── 03-courier-delivery.spec.ts# Flow 3: Mobile PWA transit milestones & electronic signature POD
 │   ├── 04-tracking-and-ai.spec.ts # Flow 4: Public tracking PII masking & grounded AI assistant
 │   ├── 05-merchant-delivery-webhook-loop.spec.ts # Flow 5: Full-circle merchant webhook, courier delivery retry & messaging audit
+│   ├── 06-customer-registration-mailpit.spec.ts # Flow 6: Customer registration & real email OTP verification via Mailpit
 │   ├── edge-01-booking-validation.spec.ts through edge-08-assistant-adversarial.spec.ts # Complete Edge Case Suite (8 Specs)
 │   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
