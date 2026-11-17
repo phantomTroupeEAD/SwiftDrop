@@ -54,9 +54,10 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
             <NavLink to="/portal/merchants/webhooks">Webhooks</NavLink>
             <NavLink to="/portal/merchants/docs">API docs</NavLink>
           </>}
-          {profile === 'public'
-            ? <NavLink to="/track">Track a parcel</NavLink>
-            : profile === 'courier' ? <NavLink to="/courier/dashboard" end>Delivery tasks</NavLink> : profile === 'dispatcher' ? <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink> : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+          {profile === 'customer' && <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+          {profile === 'public' && <NavLink to="/track">Track a parcel</NavLink>}
+          {profile === 'courier' && <NavLink to="/courier/dashboard" end>Delivery tasks</NavLink>}
+          {profile === 'dispatcher' && <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
         </nav>
       </header>
