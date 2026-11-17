@@ -29,6 +29,7 @@ import {
   Package,
   ShieldCheck,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { PortalLayout } from './PortalLayout';
 
@@ -207,6 +208,14 @@ def verify_webhook_signature(payload_bytes, received_signature, secret):
   }
 }`;
 
+  const csvTemplateHeader =
+    'merchant_reference,pickup_name,pickup_phone,pickup_address,pickup_city,pickup_zone_id,dropoff_name,dropoff_phone,dropoff_address,dropoff_city,dropoff_zone_id,weight_kg,length_cm,width_cm,height_cm,description\\r\\n';
+
+  const sampleCsvData = `merchant_reference,pickup_name,pickup_phone,pickup_address,pickup_city,pickup_zone_id,dropoff_name,dropoff_phone,dropoff_address,dropoff_city,dropoff_zone_id,weight_kg,length_cm,width_cm,height_cm,description
+"ORD-2026-1001","Colombo Tech Stores","+94770000004","42, Galle Road","Colombo","LK-11","Nimal Fernando","+94770000005","12, Peradeniya Road","Kandy","LK-21","1.50","25.0","15.0","10.0","Electronics - Wireless Keyboard"
+"ORD-2026-1002","Colombo Tech Stores","+94770000004","42, Galle Road","Colombo","LK-11","Sunil Jayasinghe","+94771234567","88, Main Street","Galle","LK-31","0.75","30.0","20.0","5.0","Apparel - Cotton Shirts"
+"ORD-2026-1003","Colombo Tech Stores","+94770000004","42, Galle Road","Colombo","LK-11","Anoma Perera","+94719876543","5, Temple Road","Kurunegala","LK-61","3.20","40.0","30.0","20.0","Home Appliances - Electric Kettle"`;
+
   return (
     <PortalLayout title="API & Integration Guide" profile="merchant">
       <div className="space-y-4" data-testid="merchant-docs-container">
@@ -229,6 +238,9 @@ def verify_webhook_signature(payload_bytes, received_signature, secret):
             </Button>
             <Button asChild variant="outline" size="sm">
               <a href="#orders-api">B2B Parcel Orders</a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href="#csv-import">Bulk CSV Import</a>
             </Button>
             <Button asChild variant="outline" size="sm">
               <a href="#webhooks">Webhooks</a>
@@ -419,11 +431,188 @@ def verify_webhook_signature(payload_bytes, received_signature, secret):
           </div>
         </section>
 
-        {/* Section 3: Webhooks & Delivery Events */}
+        {/* Section 3: Bulk CSV Order Ingestion */}
+        <section id="csv-import" className="m6-card scroll-mt-6">
+          <div className="flex items-center gap-2 mb-2">
+            <FileSpreadsheet className="w-5 h-5 text-primary" aria-hidden="true" />
+            <h2 className="!mb-0">3. Bulk CSV Order Ingestion</h2>
+          </div>
+          <p className="text-sm text-text-muted">
+            Batch-upload multiple parcel shipments using UTF-8 comma-separated files. Merchants can upload CSV files directly via the <strong>Import orders</strong> panel in the Merchant Portal or integrate bulk CSV exports from their warehouse management systems.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2 my-3">
+            <Badge variant="outline">UTF-8 CSV</Badge>
+            <Badge variant="outline">1 – 100 Orders / Batch</Badge>
+            <Badge variant="outline">Max 256 KB</Badge>
+            <Badge variant="secondary">Double-quote escaped</Badge>
+          </div>
+
+          <div className="rounded-md border border-border bg-surface-subtle p-3 my-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-foreground text-sm">Specification & Rules</span>
+              <a
+                download="swiftdrop-orders-template.csv"
+                href={`data:text/csv;charset=utf-8,${encodeURIComponent(csvTemplateHeader)}`}
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                Download CSV template
+              </a>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-xs text-text-muted pl-1">
+              <li>Header row must contain all 16 column names in exact order. Extra or missing columns will cause rejection.</li>
+              <li>Every field except <code className="font-mono">merchant_reference</code> is strictly required.</li>
+              <li>Enclose values containing commas (e.g. street addresses) in double quotes: <code className="font-mono">&quot;42, Galle Road&quot;</code>.</li>
+              <li>Phone numbers must follow E.164 international format: <code className="font-mono">+94771234567</code>.</li>
+              <li>Weight must be between <code className="font-mono">0.01</code> and <code className="font-mono">30.00</code> kg; parcel dimensions must be between <code className="font-mono">0.01</code> and <code className="font-mono">150.00</code> cm.</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2 mt-4">
+            <h3 className="font-semibold text-sm">16-Column Schema Reference</h3>
+            <div className="m6-scroll" tabIndex={0} role="region" aria-label="CSV columns reference table">
+              <Table className="m6-table" aria-label="CSV column reference">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Index</TableHead>
+                    <TableHead>Column Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Required</TableHead>
+                    <TableHead>Description & Example</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">1</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">merchant_reference</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="outline">Optional</Badge></TableCell>
+                    <TableCell>Internal tracking or invoice number (e.g. <code className="font-mono">ORD-2026-1001</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">2</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">pickup_name</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Warehouse contact or sender name (e.g. <code className="font-mono">Colombo Tech Stores</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">3</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">pickup_phone</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>E.164 phone format (e.g. <code className="font-mono">+94770000004</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">4</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">pickup_address</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Pickup street address. Quote if commas present (e.g. <code className="font-mono">&quot;42, Galle Road&quot;</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">5</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">pickup_city</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Pickup city (e.g. <code className="font-mono">Colombo</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">6</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">pickup_zone_id</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Origin dispatch zone identifier (e.g. <code className="font-mono">LK-11</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">7</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">dropoff_name</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Customer or recipient full name (e.g. <code className="font-mono">Nimal Fernando</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">8</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">dropoff_phone</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Recipient contact in E.164 format (e.g. <code className="font-mono">+94770000005</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">9</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">dropoff_address</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Destination delivery address (e.g. <code className="font-mono">&quot;12, Peradeniya Road&quot;</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">10</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">dropoff_city</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Destination municipality or city (e.g. <code className="font-mono">Kandy</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">11</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">dropoff_zone_id</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Destination dispatch zone identifier (e.g. <code className="font-mono">LK-21</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">12</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">weight_kg</TableCell>
+                    <TableCell>Decimal</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Gross weight in kg, range <code className="font-mono">0.01</code> to <code className="font-mono">30.00</code> (e.g. <code className="font-mono">1.50</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">13</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">length_cm</TableCell>
+                    <TableCell>Decimal</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Package length in cm, range <code className="font-mono">0.01</code> to <code className="font-mono">150.00</code> (e.g. <code className="font-mono">25.0</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">14</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">width_cm</TableCell>
+                    <TableCell>Decimal</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Package width in cm, range <code className="font-mono">0.01</code> to <code className="font-mono">150.00</code> (e.g. <code className="font-mono">15.0</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">15</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">height_cm</TableCell>
+                    <TableCell>Decimal</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Package height in cm, range <code className="font-mono">0.01</code> to <code className="font-mono">150.00</code> (e.g. <code className="font-mono">10.0</code>).</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">16</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold">description</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="default">Required</Badge></TableCell>
+                    <TableCell>Item contents summary (e.g. <code className="font-mono">Electronics - Wireless Keyboard</code>).</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          <div className="space-y-2 mt-4">
+            <h3 className="font-semibold text-sm">Real E-Commerce CSV Batch Example</h3>
+            <p className="text-xs text-text-muted">
+              Copy this standard batch payload or save it as <code className="font-mono">orders.csv</code> to import directly via the Merchant Portal.
+            </p>
+            <CodeBlock code={sampleCsvData} language="csv" testId="csv-sample-code" />
+          </div>
+        </section>
+
+        {/* Section 4: Webhooks & Delivery Events */}
         <section id="webhooks" className="m6-card scroll-mt-6">
           <div className="flex items-center gap-2 mb-2">
             <Webhook className="w-5 h-5 text-primary" aria-hidden="true" />
-            <h2 className="!mb-0">3. Webhook Subscriptions & Event Catalog</h2>
+            <h2 className="!mb-0">4. Webhook Subscriptions & Event Catalog</h2>
           </div>
           <p className="text-sm text-text-muted">
             Receive instant HTTP callbacks whenever a parcel transitions across transit milestones.
@@ -499,11 +688,11 @@ def verify_webhook_signature(payload_bytes, received_signature, secret):
           </div>
         </section>
 
-        {/* Section 4: Error Handling */}
+        {/* Section 5: Error Handling */}
         <section id="error-codes" className="m6-card scroll-mt-6">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="w-5 h-5 text-primary" aria-hidden="true" />
-            <h2 className="!mb-0">4. Error Reference & Status Codes</h2>
+            <h2 className="!mb-0">5. Error Reference & Status Codes</h2>
           </div>
           <p className="text-sm text-text-muted">
             SwiftDrop uses conventional HTTP response codes and a standard error JSON envelope for all semantic failures:
