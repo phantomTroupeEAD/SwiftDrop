@@ -113,6 +113,7 @@ tests/e2e/
 │   ├── 04-tracking-and-ai.spec.ts # Flow 4: Public tracking PII masking & grounded AI assistant
 │   ├── 05-merchant-delivery-webhook-loop.spec.ts # Flow 5: Full-circle merchant webhook, courier delivery retry & messaging audit
 │   ├── 06-customer-registration-mailpit.spec.ts # Flow 6: Customer registration & real email OTP verification via Mailpit
+│   ├── 07-multi-parcel-lifecycle-to-delivered.spec.ts # Flow 7: Multi-parcel real lifecycle (registration -> book 6 parcels -> full delivery loop to DELIVERED)
 │   ├── edge-01-booking-validation.spec.ts through edge-09-auth-security-and-edge-cases.spec.ts # Complete Edge Case Suite (9 Specs: Booking, Pricing, Fleet, Exceptions, CSV, Security, Tracking, AI, Auth)
 │   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
@@ -260,6 +261,7 @@ Total statements covered across all packages: **52.4% aggregate** with domain co
 | `04-tracking-and-ai.spec.ts` | Public Visitor | SEC-009 sanitized public tracking, AI Assistant grounded delivery inquiries | **PASSED** |
 | `05-merchant-delivery-webhook-loop.spec.ts` | Merchant Portal, Dispatcher, Courier | Full-circle delivery cycle, dual attempt retry after failure, 4-stage webhook delivery verification on mock receiver port 9999 | **PASSED** |
 | `06-customer-registration-mailpit.spec.ts` | Customer Portal, Mailpit API | End-to-end customer registration flow with real email 6-digit OTP delivery through Mailpit (`:8025`), verification, and immediate login | **PASSED** |
+| `07-multi-parcel-lifecycle-to-delivered.spec.ts` | Customer, Dispatcher, Courier | Full real-system lifecycle: dynamic user registration with real Mailpit OTP, booking 6 parcels, dispatcher assignment, courier run initiation, electronic POD signature completion, and verification that all 6 parcels reach DELIVERED status (Zero Mocks) | **PASSED** |
 | `edge-01` through `edge-08` | Edge Cases (All Portals) | Fallback unmapped postal codes, quote expiration (410), max capacity rejection, 3-attempt ceiling transition, CSV bulk validation, one-time secret modal, SSE degradation, AI adversarial prompt injection | **PASSED** |
 | `edge-09-auth-security-and-edge-cases.spec.ts` | Customer Portal (Auth Matrix) | 18-test exhaustive security & edge matrix: SQLi injection, XSS evasion, user enumeration defense, suspended accounts, whitespace normalization, role routing, malformed email gating, duplicate 409 conflict, OTP rate limiting (429), weak password policy, terms gating, OTP attempt ceiling (3 attempts), OTP single-use replay prevention, E.164 phone formats, state reset | **PASSED** |
 

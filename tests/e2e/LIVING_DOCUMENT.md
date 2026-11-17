@@ -261,3 +261,17 @@ Suite 9 enforces 18 exhaustive security and edge invariants protecting the compl
 - **Mandatory Terms & Conditions Gating:** Prevents account submission without explicit checkbox agreement.
 - **Suspended & Inactive Account Bar:** Barred accounts cannot authenticate.
 - **Test Result:** 18 passed (34.7s) — 100% Pass Rate across all attack vectors.
+
+---
+
+## 11. Multi-Parcel Full Delivery Lifecycle (`07-multi-parcel-lifecycle-to-delivered.spec.ts`)
+
+### 11.1 Operational Flow & Physical Services Architecture
+Flow 7 proves the authoritative, multi-actor parcel delivery journey across the entire physical stack with **zero mocks**:
+1. **Dynamic Account Creation:** Registers a real customer account (`multibook_<timestamp>@swiftdrop.local`), receives real SMTP email in Mailpit, parses 6-digit OTP, accepts terms, and logs in.
+2. **Multi-Parcel Booking (> 5 Parcels):** Customer generates pricing quotes and commits 6 distinct parcel bookings (`SD-YYYYMMDD-XXXXXX`), calculating volumetric and dimensional tariffs with atomic PostgreSQL persistence and outbox event creation.
+3. **Dispatcher Assignment:** Dispatcher queries active fleet, selects courier `CR-0012` (`Sunil Fernando`), and atomically assigns all 6 parcels via pessimistic row locks.
+4. **Courier Mobile Milestones:** Courier starts route manifest, transitioning parcels to `OUT_FOR_DELIVERY`.
+5. **Electronic Proof of Delivery (POD):** Courier submits SVG digital signature captures ($\ge 50$ chars) and recipient handoff records, transitioning parcels to `DELIVERED`.
+6. **Delivery Verification:** Customer verifies that all 6 parcels reached `DELIVERED` status on the live platform.
+- **Test Result:** 1 passed (3.7s) — 100% Pass Rate across all 6 parcels.
