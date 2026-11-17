@@ -9,6 +9,7 @@
     "test:live-guardrails": "playwright test flows/realtime-live-guardrails.spec.ts --project=admin-portal",
     "test:realtime": "playwright test flows/realtime-orchestration.spec.ts --project=admin-portal",
     "test:security": "playwright test flows/realtime-auth-guardrails.spec.ts --project=admin-portal",
+    "test:merchant-orders": "playwright test flows/08-merchant-portal-orders.spec.ts --project=merchant-portal",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:dry-run": "playwright test flows/dry-run.spec.ts",

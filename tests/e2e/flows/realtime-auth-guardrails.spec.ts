@@ -159,7 +159,7 @@ test.describe('Security & Authorization Guardrails', () => {
     // 2. Attempt to navigate directly to Dispatcher Board
     await page.goto('/dispatcher/dashboard');
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.locator(testId(SELECTORS.DISPATCHER.BOARD_ROOT))).not.toBeVisible();
+    await expect(page.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).not.toBeVisible();
   });
 
   test('SEC-04: Public Tracking Data Masking (SEC-009) - Phone & street address are masked', async ({ page }) => {

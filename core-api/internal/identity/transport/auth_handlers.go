@@ -26,7 +26,18 @@ func NewAuthHandler(authService *application.AuthService) *AuthHandler {
 // Registration Handlers
 // ─────────────────────────────────────────────────────
 
-// SendRegistrationOTP handles POST /api/v1/auth/register/send-otp
+// SendRegistrationOTP godoc
+// @Summary      Request email verification code for registration
+// @Description  Sends a cryptographically secure 6-digit OTP code to the provided email address via SMTP.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body SendOTPRequest true "Registration email payload"
+// @Success      200 {object} OTPResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid email or validation error"
+// @Failure      409 {object} ErrorEnvelope "Email already registered"
+// @Failure      429 {object} ErrorEnvelope "OTP cooldown active"
+// @Router       /api/v1/auth/register/send-otp [post]
 func (h *AuthHandler) SendRegistrationOTP(w http.ResponseWriter, r *http.Request) {
 	var req SendOTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,7 +79,17 @@ func (h *AuthHandler) SendRegistrationOTP(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// Register handles POST /api/v1/auth/register
+// Register godoc
+// @Summary      Verify registration OTP and create customer account
+// @Description  Verifies the 6-digit email OTP and registers a new customer profile.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body RegisterRequest true "Registration payload"
+// @Success      201 {object} RegisterResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid OTP, weak password, or missing fields"
+// @Failure      409 {object} ErrorEnvelope "Email already registered"
+// @Router       /api/v1/auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -197,7 +218,19 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GoogleLogin handles POST /api/v1/auth/google
+// GoogleLogin godoc
+// @Summary      Sign in or register with Google OAuth ID token
+// @Description  Verifies a Google OAuth ID token and issues session tokens.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body GoogleLoginRequest true "Google ID token payload"
+// @Success      200 {object} GoogleLoginResponse
+// @Success      201 {object} GoogleLoginResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid token or email"
+// @Failure      401 {object} ErrorEnvelope "Invalid Google credentials"
+// @Failure      403 {object} ErrorEnvelope "Account suspended"
+// @Router       /api/v1/auth/google [post]
 func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	var req GoogleLoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -254,7 +287,17 @@ func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Refresh handles POST /api/v1/auth/refresh (ADR-003: Single-Use Token Rotation)
+// Refresh godoc
+// @Summary      Rotate session tokens using refresh token
+// @Description  Single-use refresh token rotation issuing a new access JWT and new refresh token cookie.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body RefreshTokenRequest false "Refresh token payload (optional if cookie present)"
+// @Success      200 {object} LoginResponse
+// @Failure      401 {object} ErrorEnvelope "Invalid, expired, revoked, or reused refresh token"
+// @Failure      403 {object} ErrorEnvelope "Account suspended"
+// @Router       /api/v1/auth/refresh [post]
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var rawToken string
 
@@ -318,7 +361,15 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Logout handles POST /api/v1/auth/logout
+// Logout godoc
+// @Summary      Revoke active refresh token and sign out
+// @Description  Invalidates the session refresh token and clears the authentication cookie.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body RefreshTokenRequest false "Refresh token payload (optional if cookie present)"
+// @Success      200 {object} MessageResponse
+// @Router       /api/v1/auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	var rawToken string
 	if cookie, err := r.Cookie("swiftdrop_refresh_token"); err == nil && cookie.Value != "" {
@@ -377,7 +428,18 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateMe handles PUT /api/v1/auth/me (Protected by AuthMiddleware)
+// UpdateMe godoc
+// @Summary      Update current user profile
+// @Description  Updates profile details (e.g. phone number and terms acceptance).
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body UpdateProfileRequest true "Profile update payload"
+// @Success      200 {object} UserProfileResponse
+// @Failure      400 {object} ErrorEnvelope "Validation failed"
+// @Failure      401 {object} ErrorEnvelope "Unauthorized"
+// @Router       /api/v1/auth/me [put]
 func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	principal, ok := GetPrincipal(r.Context())
 	if !ok || principal == nil {
@@ -424,7 +486,17 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 // Password Recovery Handlers
 // ─────────────────────────────────────────────────────
 
-// ForgotPasswordSendOTP handles POST /api/v1/auth/forgot-password/send-otp
+// ForgotPasswordSendOTP godoc
+// @Summary      Request password reset verification code
+// @Description  Dispatches a 6-digit OTP code to the verified user email for password recovery.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body ForgotPasswordSendOTPRequest true "Password reset request payload"
+// @Success      200 {object} OTPResponse
+// @Failure      400 {object} ErrorEnvelope "Validation failed"
+// @Failure      429 {object} ErrorEnvelope "OTP cooldown active"
+// @Router       /api/v1/auth/forgot-password/send-otp [post]
 func (h *AuthHandler) ForgotPasswordSendOTP(w http.ResponseWriter, r *http.Request) {
 	var req ForgotPasswordSendOTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -464,7 +536,16 @@ func (h *AuthHandler) ForgotPasswordSendOTP(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// ResetPassword handles POST /api/v1/auth/forgot-password/reset
+// ResetPassword godoc
+// @Summary      Reset password using verified OTP code
+// @Description  Verifies the password recovery OTP and updates the user account password.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body ResetPasswordRequest true "Password reset completion payload"
+// @Success      200 {object} MessageResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid OTP, weak password, or validation error"
+// @Router       /api/v1/auth/forgot-password/reset [post]
 func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var req ResetPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
