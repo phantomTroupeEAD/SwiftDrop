@@ -177,6 +177,7 @@ All backend HTTP requests flow through a central client configured in `src/share
 - **Tenant Context:** Multi-tenant isolation is derived server-side from authenticated JWT claims (`tenant_id`); client-supplied headers cannot override server-verified tenant identity.
 - **Zero Client-Side Calculation:** Frontend components **never calculate delivery fees or determine valid status transitions independently**. All prices and statuses are fetched authoritatively from Core API endpoints.
 - **One-Time Secret Display:** Newly created API keys (`sd_live_*`) and webhook secrets (`whsec_*`) are presented in an emergency modal dialog and held only in transient component memory; they are permanently purged upon closing.
+- **Credential & Webhook Removal Modal:** Revoking an API key or deleting a webhook opens a centered modal confirmation dialog (`Dialog`) warning of traffic/authentication cessation, preventing accidental credential deletion without inline card shifts.
 - **Idempotency Header:** All non-idempotent mutation requests (`POST /api/v1/parcels`, etc.) MUST inject `Idempotency-Key: <uuid-v4>`.
 - **Public Masking:** Public tracking views (`/track/:trackingNumber`) MUST redact recipient phone, full street address, and proof attachments.
 
