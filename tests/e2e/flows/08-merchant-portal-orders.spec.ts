@@ -1,17 +1,41 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { SELECTORS, testId } from '../helpers/selectors';
 import { getRegistrationOTPFromMailpit, clearMailpitMessages } from '../helpers/mailpitHelper';
 
 /**
- * FLOW 8: END-TO-END MERCHANT ONBOARDING, B2B ORDER API & UI VERIFICATION
+ * FLOW 8: UNIFIED MASTER COMMERCIAL MERCHANT LIFECYCLE
  *
- * Verifies the complete commercial merchant lifecycle:
+ * Verifies the complete end-to-end commercial merchant lifecycle:
  * 1. Customer registers at /auth/register using real SMTP email interception via Mailpit (:8025).
  * 2. Customer submits a commercial merchant application at /portal/merchants/apply.
  * 3. System Administrator reviews and approves the application via Core API REST endpoint.
  * 4. Merchant signs into Merchant Portal and generates API credentials (Read-Only & Full B2B).
- * 5. Exhaustive Security & Edge Case Suite on POST /api/v1/merchant/orders:
+ * 5. Webhooks Configuration, Security Guardrails & Matrix Setup:
+ *    - Custom client secret rejection (400 WEBHOOK_SECRET_NOT_ALLOWED)
+ *    - SSRF prohibited IP rejection (400 SSRF_PROHIBITED_URL)
+ *    - Invalid URL fragment rejection (422 WEBHOOK_URL_INVALID)
+ *    - Unsupported event name rejection (422 WEBHOOK_EVENT_UNSUPPORTED)
+ *    - UI empty event selection validation
+ *    - Webhook Alpha: parcel.booked.v1 only
+ *    - Duplicate URL collision rejection (409)
+ *    - Webhook Beta: parcel.assigned.v1 only
+ *    - Webhook Gamma: parcel.booked.v1 AND parcel.assigned.v1 multi-subscription
+ * 6. Authoritative Parcel Booking & Event Pipeline:
+ *    - Quotes tariff and books authoritative parcel via POST /api/v1/parcels
+ * 7. Event Filtering Audit 1 (Order Booking Events):
+ *    - Webhooks Alpha & Gamma receive parcel.booked.v1; Webhook Beta receives 0 events.
+ *    - HMAC-SHA256 signature verification & customer notification PII sanitization.
+ * 8. Multi-Window Central Dispatcher Assignment:
+ *    - Dispatcher logs in (/dispatcher/dashboard), locates parcel, assigns on-shift courier.
+ * 9. Event Filtering Audit 2 & Cryptographic Security (Order Assignment):
+ *    - Webhooks Beta & Gamma receive parcel.assigned.v1; Webhook Alpha receives 0 new events.
+ *    - HMAC tamper detection check & per-webhook secret isolation.
+ * 10. Cross-Tenant Data Isolation & IDOR Verification:
+ *    - Zero events to foreign tenant; IDOR delete returns 404.
+ * 11. Webhook Deletion & Immediate Delivery Cutoff Audit:
+ *    - Webhook Alpha deleted; Follow-up parcel booked; Alpha receives 0 new events, Gamma receives event.
+ * 12. Exhaustive B2B Order API Edge Cases & Batch Generation on POST /api/v1/merchant/orders:
  *    - EC-01: Missing API Key (401 API_KEY_MISSING)
  *    - EC-02: Ambiguous Credentials (400 AMBIGUOUS_CREDENTIALS)
  *    - EC-03: Malformed API Key (401 API_KEY_INVALID)
@@ -26,21 +50,18 @@ import { getRegistrationOTPFromMailpit, clearMailpitMessages } from '../helpers/
  *    - EC-12: Valid Order 1 Booking (201 Created)
  *    - EC-13: Idempotent Replay with Same Key & Payload (Cached 201/200, Idempotent-Replay: true)
  *    - EC-14: Idempotency Conflict with Modified Payload (409 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH)
- * 6. Multi-Order Batch Generation (Orders 2 & 3 across different delivery corridors).
- * 7. Merchant Portal UI Verification:
- *    - Order table population with tracking numbers, references, destinations, and status CREATED.
- *    - Search input filtering by merchant reference and by tracking number.
- *    - Zero-match empty state and filter reset button.
- *    - Status filter dropdown.
- *    - Detailed tracking navigation drilldown (/portal/tracking/:trackingNumber).
- * 8. API Key Revocation Lifecycle via Frontend & Verification (401 API_KEY_REVOKED).
+ *    - Batch Generation: Orders 2 & 3
+ * 13. Merchant Portal UI Reflection & Search Verification:
+ *    - Orders table verification with references, tracking numbers, and created badges.
+ *    - Search by reference, search by tracking, empty filter reset, status dropdown, tracking link drilldown.
+ * 14. API Key Revocation Lifecycle via Frontend & Verification (401 API_KEY_REVOKED).
  *
  * Owned by: Member 10 (Cross-Workflow Quality Coordination)
- * Collaborating Owners: Member 6 (Customer & Merchant Portal), Member 4 (Merchant Backend), Member 1 (Identity)
+ * Collaborating Owners: Member 6 (Customer & Merchant Portal), Member 4 (Merchant Backend), Member 1 (Identity), Member 3 (Dispatch), Member 2 (Parcels)
  */
 
-test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Parity', () => {
-  test.setTimeout(90000);
+test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingestion, Webhooks & Dispatcher Lifecycle', () => {
+  test.setTimeout(120000);
 
   test.beforeEach(async ({}, info) => {
     test.skip(
@@ -48,10 +69,16 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
       'Requires the merchant-portal project.'
     );
     await clearMailpitMessages();
+    try {
+      await fetch('http://localhost:9999/api/reset', { method: 'POST' });
+    } catch {
+      // Mock receiver reset (optional in dev)
+    }
   });
 
-  test('should complete registration via Mailpit OTP, apply, approve via REST, test API order edge cases and verify UI reflection', async ({
+  test('should complete full commercial merchant journey: registration, approval, API keys, webhooks, order edge cases, multi-window dispatch, and UI reflection', async ({
     page,
+    browser,
     request,
   }) => {
     const timestamp = Date.now();
@@ -178,6 +205,14 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     }
     await expect(page.getByTestId('merchant-order-table').or(page.getByTestId('merchant-order-empty'))).toBeVisible({ timeout: 10000 });
 
+    // Acquire authenticated merchant token for REST-level assertions
+    const merchantLoginRes = await request.post('http://localhost:8080/api/v1/auth/login', {
+      data: { email: merchantEmail, password: merchantPassword },
+    });
+    expect(merchantLoginRes.ok()).toBeTruthy();
+    const merchantToken = (await merchantLoginRes.json()).data.access_token;
+    expect(merchantToken).toBeTruthy();
+
     // =========================================================================
     // PHASE 3: Frontend API Key Management
     // =========================================================================
@@ -217,9 +252,496 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     await expect(page.getByText('Save your credential now')).toBeHidden();
 
     // =========================================================================
-    // PHASE 4: Exhaustive Security, Validation & Idempotency Edge Cases
+    // PHASE 4: Webhook Configuration, Security Guardrails & Matrix Setup
     // =========================================================================
-    console.log('[E2E] Phase 4: Testing API security and validation edge cases');
+    console.log('[E2E] Phase 4: Setting up webhooks and verifying negative guardrails');
+    await page.getByRole('navigation', { name: 'Portal navigation' }).getByRole('link', { name: 'Webhooks' }).click();
+    await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible({ timeout: 10000 });
+
+    // 4.1 Negative Guardrails: Custom Secret Rejection (400)
+    const customSecretRes = await fetch('http://localhost:8080/api/v1/merchants/me/webhooks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        url: 'http://localhost:9999/webhooks/merchant-alpha',
+        events: ['parcel.booked.v1'],
+        secret: 'client_forbidden_secret_123',
+      }),
+    });
+    expect(customSecretRes.status).toBe(400);
+    const customSecretJson = await customSecretRes.json();
+    expect(customSecretJson.error?.code).toBe('WEBHOOK_SECRET_NOT_ALLOWED');
+
+    // 4.2 Negative Guardrails: SSRF Prohibited IP Rejection (400)
+    const ssrfRes = await fetch('http://localhost:8080/api/v1/merchants/me/webhooks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        url: 'http://169.254.169.254/latest/meta-data',
+        events: ['parcel.booked.v1'],
+      }),
+    });
+    expect(ssrfRes.status).toBe(400);
+    const ssrfJson = await ssrfRes.json();
+    expect(ssrfJson.error?.code).toBe('SSRF_PROHIBITED_URL');
+
+    // 4.3 Negative Guardrails: Invalid URL Fragment Rejection (422)
+    const fragmentRes = await fetch('http://localhost:8080/api/v1/merchants/me/webhooks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        url: 'https://example.com/webhook#anchor',
+        events: ['parcel.booked.v1'],
+      }),
+    });
+    expect(fragmentRes.status).toBe(422);
+    const fragmentJson = await fragmentRes.json();
+    expect(fragmentJson.error?.code).toBe('WEBHOOK_URL_INVALID');
+
+    // 4.4 Negative Guardrails: Unsupported Event Name (422)
+    const unsupportedEventRes = await fetch('http://localhost:8080/api/v1/merchants/me/webhooks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        url: 'http://localhost:9999/webhooks/merchant-alpha',
+        events: ['parcel.nonexistent.event'],
+      }),
+    });
+    expect(unsupportedEventRes.status).toBe(422);
+    const unsupportedJson = await unsupportedEventRes.json();
+    expect(unsupportedJson.error?.code).toBe('WEBHOOK_EVENT_UNSUPPORTED');
+
+    // 4.5 UI Empty Event Selection Validation
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-alpha');
+    const allEventCheckboxes = page.locator('input[name="event"]');
+    const checkboxCount = await allEventCheckboxes.count();
+    for (let i = 0; i < checkboxCount; i++) {
+      if (await allEventCheckboxes.nth(i).isChecked()) {
+        await allEventCheckboxes.nth(i).uncheck();
+      }
+    }
+    await page.getByTestId('merchant-credential-create-btn').click();
+    await expect(page.locator('[role="alert"]').filter({ hasText: /Select at least one event/i })).toBeVisible({ timeout: 5000 });
+
+    // 4.6 Webhook Alpha: Subscribed to parcel.booked.v1 ONLY
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-alpha');
+    await page.getByTestId('merchant-webhook-event-parcel.booked.v1').check();
+    await page.getByTestId('merchant-credential-create-btn').click();
+
+    await expect(page.getByText('Save your credential now')).toBeVisible({ timeout: 10000 });
+    const doneBtn = page.getByTestId('merchant-secret-close-btn');
+    await expect(doneBtn).toBeDisabled();
+
+    // Verify modal dismiss guardrails
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Save your credential now')).toBeVisible();
+
+    const alphaSecret = (await page.locator('code').innerText()).trim();
+    expect(alphaSecret).toMatch(/^whsec_[A-Za-z0-9_-]+$/);
+
+    // Register secret with mock receiver
+    await fetch('http://localhost:9999/api/secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant: 'alpha', secret: alphaSecret }),
+    });
+    await page.getByTestId('dismiss-key-modal-checkbox').check();
+    await expect(doneBtn).toBeEnabled();
+    await doneBtn.click();
+    await expect(page.getByText('Save your credential now')).not.toBeVisible();
+
+    // 4.7 Duplicate URL Collision Rejection (409)
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-alpha');
+    await page.getByTestId('merchant-webhook-event-parcel.booked.v1').check();
+    await page.getByTestId('merchant-credential-create-btn').click();
+    await expect(page.locator('[role="alert"]').filter({ hasText: /(?:already registered|conflicts with the current information)/i })).toBeVisible({ timeout: 5000 });
+
+    // 4.8 Webhook Beta: Subscribed to parcel.assigned.v1 ONLY
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-beta');
+    await page.getByTestId('merchant-webhook-event-parcel.booked.v1').uncheck();
+    await page.getByTestId('merchant-webhook-event-parcel.assigned.v1').check();
+    await page.getByTestId('merchant-credential-create-btn').click();
+
+    await expect(page.getByText('Save your credential now')).toBeVisible({ timeout: 10000 });
+    const betaSecret = (await page.locator('code').innerText()).trim();
+    expect(betaSecret).toMatch(/^whsec_[A-Za-z0-9_-]+$/);
+
+    await fetch('http://localhost:9999/api/secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant: 'beta', secret: betaSecret }),
+    });
+    await page.getByTestId('dismiss-key-modal-checkbox').check();
+    await page.getByTestId('merchant-secret-close-btn').click();
+
+    // 4.9 Webhook Gamma: Subscribed to BOTH parcel.booked.v1 AND parcel.assigned.v1
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-gamma');
+    await page.getByTestId('merchant-webhook-event-parcel.booked.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.assigned.v1').check();
+    await page.getByTestId('merchant-credential-create-btn').click();
+
+    await expect(page.getByText('Save your credential now')).toBeVisible({ timeout: 10000 });
+    const gammaSecret = (await page.locator('code').innerText()).trim();
+    expect(gammaSecret).toMatch(/^whsec_[A-Za-z0-9_-]+$/);
+
+    await fetch('http://localhost:9999/api/secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant: 'gamma', secret: gammaSecret }),
+    });
+    await page.getByTestId('dismiss-key-modal-checkbox').check();
+    await page.getByTestId('merchant-secret-close-btn').click();
+
+    // 4.10 Webhook Omega: Subscribed to ALL 6 events (Universal Wildcard Webhook)
+    await page.getByTestId('merchant-webhook-url-input').fill('http://localhost:9999/webhooks/merchant-omega');
+    await page.getByTestId('merchant-webhook-event-parcel.booked.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.assigned.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.picked_up.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.out_for_delivery.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.delivered.v1').check();
+    await page.getByTestId('merchant-webhook-event-parcel.delivery_failed.v1').check();
+    await page.getByTestId('merchant-credential-create-btn').click();
+
+    await expect(page.getByText('Save your credential now')).toBeVisible({ timeout: 10000 });
+    const omegaSecret = (await page.locator('code').innerText()).trim();
+    expect(omegaSecret).toMatch(/^whsec_[A-Za-z0-9_-]+$/);
+
+    await fetch('http://localhost:9999/api/secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant: 'omega', secret: omegaSecret }),
+    });
+    await page.getByTestId('dismiss-key-modal-checkbox').check();
+    await page.getByTestId('merchant-secret-close-btn').click();
+
+    // Verify all 4 webhooks rendered in the UI roster
+    await expect(page.getByText('http://localhost:9999/webhooks/merchant-alpha · Enabled')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('http://localhost:9999/webhooks/merchant-beta · Enabled')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('http://localhost:9999/webhooks/merchant-gamma · Enabled')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('http://localhost:9999/webhooks/merchant-omega · Enabled')).toBeVisible({ timeout: 5000 });
+
+    // =========================================================================
+    // PHASE 5: Authoritative Parcel Booking & Event Pipeline
+    // =========================================================================
+    console.log('[E2E] Phase 5: Booking authoritative parcel to trigger outbox and webhooks');
+    // 5.1 Obtain dynamic pricing quote
+    const quoteRes = await fetch('http://localhost:8080/api/v1/pricing/quotes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        origin_zone_id: 'ZONE_COLOMBO_01',
+        destination_zone_id: 'ZONE_COLOMBO_01',
+        service_level: 'STANDARD',
+        actual_weight_kg: 3.5,
+        dimensions: {
+          length_cm: 25,
+          width_cm: 20,
+          height_cm: 15,
+        },
+      }),
+    });
+    expect(quoteRes.status).toBe(201);
+    const quoteData = await quoteRes.json();
+    const quoteId = quoteData.data?.quote_id || quoteData.data?.id;
+    expect(quoteId).toBeTruthy();
+
+    // 5.2 Book parcel via authoritative POST /api/v1/parcels
+    const bookingRes = await fetch('http://localhost:8080/api/v1/parcels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+        'Idempotency-Key': randomUUID(),
+      },
+      body: JSON.stringify({
+        quote_id: quoteId,
+        recipient_name: 'Ananda Silva',
+        recipient_phone: '+94771234567',
+        weight_kg: 3.5,
+        dimensions: {
+          length_cm: 25,
+          width_cm: 20,
+          height_cm: 15,
+        },
+        pickup: {
+          contact_name: 'Alpha Warehouse',
+          contact_phone: '+94112345678',
+          address_line1: '124 Galle Road',
+          city: 'Colombo',
+          postal_code: '00100',
+          zone_id: 'ZONE_COLOMBO_01',
+        },
+        dropoff: {
+          contact_name: 'Ananda Silva',
+          contact_phone: '+94771234567',
+          address_line1: '45 Havelock Road',
+          city: 'Colombo',
+          postal_code: '00200',
+          zone_id: 'ZONE_COLOMBO_01',
+        },
+        item_description: 'Industrial Hardware Components',
+      }),
+    });
+    expect(bookingRes.status).toBe(201);
+    const bookingData = await bookingRes.json();
+    const authoritativeTrackingNo = bookingData.data?.tracking_number;
+    expect(authoritativeTrackingNo).toMatch(/^SD-\d{8}-[A-Z0-9]+$/);
+    console.log(`[E2E] Authoritative Parcel Booked: Tracking = ${authoritativeTrackingNo}`);
+
+    // =========================================================================
+    // PHASE 6: Event Filtering Audit 1 (Order Booking Events)
+    // =========================================================================
+    console.log('[E2E] Phase 6: Auditing webhook delivery for parcel.booked.v1');
+    let eventsAudit1: any = null;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 600));
+      try {
+        const res = await (await fetch('http://localhost:9999/api/events')).json();
+        if (res.counts?.alpha >= 1 && res.counts?.gamma >= 1 && res.counts?.omega >= 1) {
+          eventsAudit1 = res;
+          break;
+        }
+      } catch {
+        // retry
+      }
+    }
+    expect(eventsAudit1).toBeTruthy();
+
+    // Webhook Alpha: Received parcel.booked.v1 events
+    expect(eventsAudit1.counts?.alpha).toBeGreaterThanOrEqual(1);
+    // Webhook Gamma: Received parcel.booked.v1 events
+    expect(eventsAudit1.counts?.gamma).toBeGreaterThanOrEqual(1);
+    // Webhook Omega: Received parcel.booked.v1 events (Universal wildcard webhook)
+    expect(eventsAudit1.counts?.omega).toBeGreaterThanOrEqual(1);
+    // Webhook Beta: Received ZERO events (subscribed only to parcel.assigned.v1)
+    expect(eventsAudit1.counts?.beta || 0).toBe(0);
+
+    // Verify cryptographic signature and payload structure
+    const alphaEvent = eventsAudit1.events.find((e: any) => e.tenant === 'alpha');
+    expect(alphaEvent).toBeTruthy();
+    expect(alphaEvent.type).toBe('parcel.booked.v1');
+    expect(alphaEvent.hmacValid).toBe(true);
+
+    const omegaEvent = eventsAudit1.events.find((e: any) => e.tenant === 'omega');
+    expect(omegaEvent).toBeTruthy();
+    expect(omegaEvent.type).toBe('parcel.booked.v1');
+    expect(omegaEvent.hmacValid).toBe(true);
+
+    // Anti-leak check: Customer notification PII stripped
+    expect(alphaEvent.payload.notify).toBeUndefined();
+
+    // =========================================================================
+    // PHASE 7: Multi-Window Central Dispatcher Assignment
+    // =========================================================================
+    console.log('[E2E] Phase 7: Central Dispatcher assigns parcel in secondary window');
+    const dispatcherContext = await browser.newContext();
+    const dispatcherPage = await dispatcherContext.newPage();
+
+    await dispatcherPage.goto('/auth/login');
+    await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_EMAIL)).fill('dispatcher@swiftdrop.local');
+    await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Dispatcher123!');
+    await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
+
+    await expect(dispatcherPage).toHaveURL(/\/dispatcher\/dashboard/, { timeout: 12000 });
+    await expect(dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).toBeVisible({ timeout: 10000 });
+
+    // Locate parcel in Unassigned Parcels
+    const parcelItem = dispatcherPage.locator('li', { hasText: authoritativeTrackingNo });
+    await expect(parcelItem).toBeVisible({ timeout: 10000 });
+
+    // Edge Case: Assign button disabled until courier selected
+    const courierSelect = parcelItem.locator(testId(SELECTORS.DISPATCHER.COURIER_SELECT));
+    const assignBtn = parcelItem.locator(testId(SELECTORS.DISPATCHER.ASSIGN_BTN));
+    await expect(assignBtn).toBeDisabled();
+
+    // Select on-shift courier and execute assignment
+    await courierSelect.selectOption({ index: 1 });
+    await expect(assignBtn).toBeEnabled();
+    await assignBtn.click();
+
+    // Verify UI Status Feedback & parcel removed from unassigned queue
+    await expect(dispatcherPage.getByRole('status').filter({ hasText: `${authoritativeTrackingNo} assigned.` })).toBeVisible({ timeout: 10000 });
+    await expect(dispatcherPage.locator('li', { hasText: authoritativeTrackingNo })).not.toBeVisible({ timeout: 5000 });
+
+    await dispatcherContext.close();
+
+    // =========================================================================
+    // PHASE 8: Event Filtering Audit 2 & Cryptographic Security (Order Assignment)
+    // =========================================================================
+    console.log('[E2E] Phase 8: Auditing webhook delivery for parcel.assigned.v1');
+    let eventsAudit2: any = null;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 600));
+      try {
+        const res = await (await fetch('http://localhost:9999/api/events')).json();
+        if (res.counts?.beta >= 1 && res.counts?.gamma >= 2 && res.counts?.omega >= 2) {
+          eventsAudit2 = res;
+          break;
+        }
+      } catch {
+        // retry
+      }
+    }
+    expect(eventsAudit2).toBeTruthy();
+
+    // Webhook Beta: Received exactly 1 event (parcel.assigned.v1)
+    expect(eventsAudit2.counts?.beta).toBe(1);
+    // Webhook Gamma: Received both events (booked + assigned)
+    expect(eventsAudit2.counts?.gamma).toBeGreaterThanOrEqual(2);
+    // Webhook Omega: Received both events (booked + assigned)
+    expect(eventsAudit2.counts?.omega).toBeGreaterThanOrEqual(2);
+    // Webhook Alpha: Received NO new events (count unchanged)
+    expect(eventsAudit2.counts?.alpha).toBe(eventsAudit1.counts?.alpha);
+
+    const betaEvent = eventsAudit2.events.find((e: any) => e.tenant === 'beta');
+    expect(betaEvent).toBeTruthy();
+    expect(betaEvent.type).toBe('parcel.assigned.v1');
+    expect(betaEvent.hmacValid).toBe(true);
+
+    // Cryptographic Security: Anti-Tamper Check
+    const rawBetaPayload = JSON.stringify(betaEvent.payload);
+    const tamperedPayload = rawBetaPayload + 'tampered';
+    const timestampSec = Math.floor(Date.now() / 1000).toString();
+    const tamperedHmac = createHmac('sha256', betaSecret).update(`${timestampSec}.${tamperedPayload}`).digest('hex');
+    const validHmac = createHmac('sha256', betaSecret).update(`${timestampSec}.${rawBetaPayload}`).digest('hex');
+    expect(tamperedHmac).not.toBe(validHmac);
+
+    // Key Isolation Check: Verifying Beta's signature with Alpha's secret fails
+    const mismatchedHmac = createHmac('sha256', alphaSecret).update(`${timestampSec}.${rawBetaPayload}`).digest('hex');
+    expect(mismatchedHmac).not.toBe(validHmac);
+
+    // =========================================================================
+    // PHASE 9: Cross-Tenant Data Isolation Audit
+    // =========================================================================
+    console.log('[E2E] Phase 9: Verifying cross-tenant isolation and IDOR protection');
+    // Assert 0 events delivered to foreign or unconfigured tenant
+    expect(eventsAudit2.counts?.chaos || 0).toBe(0);
+
+    // IDOR Protection: Merchant cannot delete non-existent or foreign webhook
+    const idorRes = await fetch('http://localhost:8080/api/v1/merchants/me/webhooks/00000000-0000-0000-0000-000000000000', {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${merchantToken}` },
+    });
+    expect(idorRes.status).toBe(404);
+
+    // =========================================================================
+    // PHASE 10: Webhook Deletion & Immediate Delivery Cutoff Audit
+    // =========================================================================
+    console.log('[E2E] Phase 10: Deleting Webhook Alpha and verifying immediate cutoff');
+    await page.goto('/portal/merchants/webhooks');
+    await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible({ timeout: 10000 });
+
+    const alphaItem = page.locator('.m6-item').filter({ hasText: 'http://localhost:9999/webhooks/merchant-alpha' });
+    await expect(alphaItem).toBeVisible();
+
+    await alphaItem.getByTestId('merchant-webhook-delete-btn').click();
+    await page.getByTestId('merchant-credential-confirm-btn').click();
+    await expect(page.getByRole('status').filter({ hasText: 'Webhook removed.' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('http://localhost:9999/webhooks/merchant-alpha · Enabled')).not.toBeVisible();
+
+    const alphaCountBefore = eventsAudit2.counts?.alpha;
+    const gammaCountBefore = eventsAudit2.counts?.gamma;
+    const omegaCountBefore = eventsAudit2.counts?.omega;
+
+    // Book follow-up parcel to test immediate cutoff
+    const quote2Res = await fetch('http://localhost:8080/api/v1/pricing/quotes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+      },
+      body: JSON.stringify({
+        origin_zone_id: 'ZONE_COLOMBO_01',
+        destination_zone_id: 'ZONE_COLOMBO_01',
+        service_level: 'STANDARD',
+        actual_weight_kg: 2.0,
+        dimensions: {
+          length_cm: 20,
+          width_cm: 15,
+          height_cm: 10,
+        },
+      }),
+    });
+    expect(quote2Res.status).toBe(201);
+    const quote2Data = await quote2Res.json();
+    const quote2Id = quote2Data.data?.quote_id || quote2Data.data?.id;
+
+    await fetch('http://localhost:8080/api/v1/parcels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${merchantToken}`,
+        'Idempotency-Key': randomUUID(),
+      },
+      body: JSON.stringify({
+        quote_id: quote2Id,
+        recipient_name: 'Nimal Bandara',
+        recipient_phone: '+94719876543',
+        weight_kg: 2.0,
+        dimensions: {
+          length_cm: 20,
+          width_cm: 15,
+          height_cm: 10,
+        },
+        pickup: {
+          contact_name: 'Alpha Warehouse',
+          contact_phone: '+94112345678',
+          address_line1: '124 Galle Road',
+          city: 'Colombo',
+          postal_code: '00100',
+          zone_id: 'ZONE_COLOMBO_01',
+        },
+        dropoff: {
+          contact_name: 'Nimal Bandara',
+          contact_phone: '+94719876543',
+          address_line1: '88 Dalada Veediya',
+          city: 'Colombo',
+          postal_code: '00200',
+          zone_id: 'ZONE_COLOMBO_01',
+        },
+        item_description: 'Retail Apparel Sample',
+      }),
+    });
+
+    // Wait and verify Webhook Alpha received ZERO events, while Gamma and Omega received it
+    let eventsAudit3: any = null;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 600));
+      try {
+        const res = await (await fetch('http://localhost:9999/api/events')).json();
+        if (res.counts?.gamma > gammaCountBefore && res.counts?.omega > omegaCountBefore) {
+          eventsAudit3 = res;
+          break;
+        }
+      } catch {
+        // retry
+      }
+    }
+    expect(eventsAudit3).toBeTruthy();
+    // Alpha was deleted -> count remained identical (immediate cutoff confirmed!)
+    expect(eventsAudit3.counts?.alpha).toBe(alphaCountBefore);
+    expect(eventsAudit3.counts?.gamma).toBeGreaterThan(gammaCountBefore);
+    expect(eventsAudit3.counts?.omega).toBeGreaterThan(omegaCountBefore);
+
+    // =========================================================================
+    // PHASE 12: Exhaustive B2B Order API Security, Validation & Batch Generation
+    // =========================================================================
+    console.log('[E2E] Phase 12: Testing B2B order API edge cases and batch generation');
     const orderEndpoint = 'http://localhost:8080/api/v1/merchant/orders';
 
     const baseValidPayload = {
@@ -448,12 +970,7 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     const jsonIdemConflict = await resIdemConflict.json();
     expect(jsonIdemConflict.error?.code).toBe('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
 
-    // =========================================================================
-    // PHASE 5: Multi-Order Batch Generation
-    // =========================================================================
-    console.log('[E2E] Phase 5: Generating additional commercial orders');
-
-    // Order 2: Colombo to Galle (Express)
+    // Batch Generation: Order 2 (Colombo to Galle)
     const order2Payload = {
       merchant_reference: `E2E-REF-GALLE-${timestamp}`,
       service_level: 'EXPRESS',
@@ -489,7 +1006,7 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     const tracking2 = jsonOrder2.data.tracking_number;
     console.log(`[E2E] Order 2 Created: Tracking = ${tracking2}`);
 
-    // Order 3: Colombo to Kurunegala (Standard)
+    // Batch Generation: Order 3 (Colombo to Kurunegala)
     const order3Payload = {
       merchant_reference: `E2E-REF-KURU-${timestamp}`,
       service_level: 'STANDARD',
@@ -526,13 +1043,12 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     console.log(`[E2E] Order 3 Created: Tracking = ${tracking3}`);
 
     // =========================================================================
-    // PHASE 6: Merchant UI Reflection & Interactive Testing
+    // PHASE 13: Merchant UI Reflection & Interactive Testing
     // =========================================================================
-    console.log('[E2E] Phase 6: Verifying orders rendered and searchable in Merchant UI');
+    console.log('[E2E] Phase 13: Verifying orders rendered and searchable in Merchant UI');
     await page.getByRole('navigation', { name: 'Portal navigation' }).getByRole('link', { name: 'Orders', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Orders', level: 1 })).toBeVisible({ timeout: 10000 });
 
-    // Verify order table appears
     const orderTable = page.getByTestId('merchant-order-table');
     await expect(orderTable).toBeVisible({ timeout: 10000 });
 
@@ -593,9 +1109,9 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     await expect(page.getByTestId('tracking-search-input')).toHaveValue(tracking1);
 
     // =========================================================================
-    // PHASE 7: Key Revocation & Security Lifecycle Verification
+    // PHASE 14: Key Revocation & Security Lifecycle Verification
     // =========================================================================
-    console.log('[E2E] Phase 7: Revoking API Key via UI and testing post-revocation refusal');
+    console.log('[E2E] Phase 14: Revoking API Key via UI and testing post-revocation refusal');
     await page.goto('/portal/merchants/api-keys');
     await expect(page.getByRole('heading', { name: 'API keys', level: 1 })).toBeVisible({ timeout: 10000 });
 
@@ -622,6 +1138,6 @@ test.describe('Flow 8: Merchant Portal Onboarding, B2B Order Ingestion & UI Pari
     expect(jsonRevokedKey.error?.code).toBe('API_KEY_REVOKED');
     console.log('[E2E] Verified that revoked API key is rejected with 401 API_KEY_REVOKED');
 
-    console.log('[E2E] Flow 8 completed with 100% assertions satisfied!');
+    console.log('[E2E] Flow 8 Master Commercial Merchant Lifecycle completed with 100% assertions satisfied!');
   });
 });

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 export interface WebhookRecord {
   id: string;
-  tenant: 'alpha' | 'beta' | 'chaos';
+  tenant: 'alpha' | 'beta' | 'chaos' | 'gamma' | 'omega';
   type: string;
   payload: any;
   hmacValid: boolean;
@@ -55,7 +55,7 @@ app.use(cors());
 app.use(express.raw({ type: 'application/json' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
-function handleWebhook(tenant: 'alpha' | 'beta') {
+function handleWebhook(tenant: 'alpha' | 'beta' | 'gamma' | 'omega') {
   return (req: Request, res: Response) => {
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
     const sigHeader = (req.headers['x-swiftdrop-signature'] || req.headers['x-hub-signature-256']) as string | undefined;
@@ -92,6 +92,8 @@ function handleWebhook(tenant: 'alpha' | 'beta') {
 // 1. Registered Merchant Receivers
 app.post('/webhooks/merchant-alpha', handleWebhook('alpha'));
 app.post('/webhooks/merchant-beta', handleWebhook('beta'));
+app.post('/webhooks/merchant-gamma', handleWebhook('gamma'));
+app.post('/webhooks/merchant-omega', handleWebhook('omega'));
 
 // 2. Chaos Endpoint (Always returns 500 to trigger DLQ retry)
 app.post('/webhooks/merchant-chaos', (req: Request, res: Response) => {
@@ -116,6 +118,8 @@ app.get('/api/events', (req: Request, res: Response) => {
     counts: {
       alpha: eventStore.filter((e) => e.tenant === 'alpha').length,
       beta: eventStore.filter((e) => e.tenant === 'beta').length,
+      gamma: eventStore.filter((e) => e.tenant === 'gamma').length,
+      omega: eventStore.filter((e) => e.tenant === 'omega').length,
       chaos: chaosAttempts.length,
       total: eventStore.length,
     },

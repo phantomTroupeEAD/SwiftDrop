@@ -74,6 +74,10 @@ npx playwright install chromium
 | **`npm run test:live-guardrails`** | Real Stack | **Live Security Guardrails** (Real Courier IDOR 403, RBAC 403, Tenant Isolation 403/404, Tracking PII masking). |
 | **`npm run test:realtime`** | Live/Mocked | Master System 5-Window Real-Time Orchestration test across Customer, Applicant/Merchant, Admin, Dispatcher, and Courier simultaneously. |
 | **`npm run test:security`** | Live/Mocked | Strict authorization guardrails: Courier IDOR protection, Merchant tenant isolation, RBAC routing gates, SEC-009 public PII masking. |
+| **`npm run test:merchant-orders`** | Real Stack | **Master Unified Commercial Merchant E2E:** Mailpit OTP registration, REST approval, API keys, Webhooks matrix (Alpha/Beta/Gamma/Omega), 14 order API edge cases, multi-window dispatcher assignment, HMAC security & UI parity. |
+| **`npm run test:merchant-api-keys`** | Real Stack | **Exhaustive 29-Scenario API Key Testing Suite:** UI modal security, form validations, quota limits (max 5), duplicate labels, expiration bounds, and cryptographic auth. |
+| **`npm run test:combinatorial-webhooks`** | Real Stack | **Exhaustive 64-Combination Webhook Suite:** Full power set $\mathcal{P}(S)$ testing of all 6 subscribable events (0 to 6), 384 routing decisions, and Core API registration. |
+| **`npm run test:merchant-webhooks`** | Real Stack | Merchant webhooks, event filtering combinations (Alpha/Beta/Gamma), multi-window dispatcher assignment, HMAC-SHA256 & deletion cutoff. |
 | **`npm run test:dry-run`** | Offline | Runs the harness self-check verifying browser launch and multi-actor context isolation across all 5 profiles (**10/10 passing**). |
 | **`npm run test:webhook`** | Offline | Runs in-memory unit tests for the mock webhook service (HMAC-SHA256, isolation, chaos 500, native 404 in **7ms**). |
 | **`npm run test:ui`** | Interactive | Opens Playwright's visual desktop UI runner with DOM inspection, timeline scrub, and network logs. |
@@ -115,6 +119,7 @@ tests/e2e/
 │   ├── 06-customer-registration-mailpit.spec.ts # Flow 6: Customer registration & real email OTP verification via Mailpit
 │   ├── 07-multi-parcel-lifecycle-to-delivered.spec.ts # Flow 7: Multi-parcel real lifecycle (registration -> book 6 parcels -> full delivery loop to DELIVERED)
 │   ├── 08-merchant-portal-orders.spec.ts # Flow 8: Merchant portal onboarding, Mailpit OTP, REST approval, API order edge cases (14 scenarios) & UI parity
+│   ├── 09-merchant-webhook-dispatch-lifecycle.spec.ts # Flow 9: Merchant webhooks, event filtering combinations, multi-window dispatcher assignment & HMAC security
 │   ├── edge-01-booking-validation.spec.ts through edge-09-auth-security-and-edge-cases.spec.ts # Complete Edge Case Suite (9 Specs: Booking, Pricing, Fleet, Exceptions, CSV, Security, Tracking, AI, Auth)
 │   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
