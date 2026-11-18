@@ -76,5 +76,6 @@ type RegisterCourierCommand struct {
 type DispatchBoardDTO struct {
 	ZoneID            string                `json:"zone_id"`
 	UnassignedParcels []UnassignedParcelDTO `json:"unassigned_parcels"`
+	AssignedParcels   []AssignedParcelDTO   `json:"assigned_parcels"`
 	ActiveCouriers    []CourierLoadDTO      `json:"active_couriers"`
 }

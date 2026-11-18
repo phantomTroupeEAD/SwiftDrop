@@ -50,6 +50,7 @@ internal/dispatch/
 │   ├── cancel_assignment.go # CancelAssignmentUseCase (Terminates assignment, reverts to CREATED)
 │   ├── reschedule_parcel.go # RescheduleParcelUseCase (ADR-004 dispatcher-gated reattempt)
 │   ├── toggle_shift.go      # ToggleShiftUseCase & RegisterCourierUseCase
+│   ├── get_courier_candidates.go # GetCourierCandidatesQueryHandler (Unprovisioned courier accounts)
 │   ├── get_dispatch_board.go# GetDispatchBoardQueryHandler & ListCouriersQueryHandler
 │   └── application_test.go  # In-memory mock tests for assignment & capacity enforcement
 ├── infrastructure/          # Concrete Persistence Drivers & External Adapters
@@ -115,5 +116,9 @@ All dispatch components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for Courier capacity [1, 200] and zone trimming, assignment reassignment error paths, AssignmentStatus enum validation, transport negative tests for malformed JSON and payload bounds, and mapped ErrParcelNotEligibleForAssignment to 409 Conflict. | Member 3 (Antigravity) |
 | 2026-11-10 | Resequenced migrations to 20261110000003_create_couriers and 20261110000004_create_dispatch_and_delivery, removed stub parcels table to sequence cleanly after Member 2 parcels | Member 3 (Antigravity) |
 | 2026-11-10 | Enforced BR-FLT-001 role validation & uniqueness in RegisterCourierUseCase: rejects non-courier user accounts with 422 USER_NOT_A_COURIER, non-existent users with 404 USER_NOT_FOUND, and duplicate profiles with 409 COURIER_PROFILE_EXISTS. | Member 3 (Antigravity) |
+| 2026-11-17 | Standardized `GET /api/v1/dispatch/couriers` response contract (`CourierListItemResponse`) with joined workload metrics (`courier_name`, `active_count`) and integrated zone-based filtering with board synchronization in Dispatcher UI. | Member 3 (Antigravity) |
+| 2026-11-17 | Dual-compatible cancellation request contract (`reason` & `cancellation_reason`), integrated with Dispatcher UI unassign modal action, restoring driver capacity and reverting parcel status to `CREATED`. | Member 3 (Antigravity) |
+| 2026-11-17 | Integrated `POST /api/v1/dispatch/parcels/{id}/reschedule` with Dispatcher UI, featuring `ATTEMPT_FAILED` badge indicators, supervisor notes modal, and ADR-004 reattempt state machine transition. | Member 3 (Antigravity) |
+| 2026-11-17 | Connected administrative shift management in Dispatcher UI (`Courier roster`), allowing dispatchers to toggle driver statuses (`ON_SHIFT`, `OFF_SHIFT`, `ON_BREAK`) via `POST /api/v1/courier/shift`. | Member 3 (Antigravity) |
 
 The dispatch board reads actual weight, destination city, and lifecycle status from the canonical parcel schema. Assignment updates the parcel version and records the status history within the dispatch transaction. A history write failure aborts the transaction.

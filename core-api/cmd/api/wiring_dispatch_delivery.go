@@ -72,6 +72,7 @@ func registerDispatchAndDeliveryModules(
 	cancelAsgnUC := dispatchApp.NewCancelAssignmentUseCase(txMgr, asgnRepo, parcelUpdater, outboxWriter)
 	reschedUC := dispatchApp.NewRescheduleParcelUseCase(txMgr, courierRepo, asgnRepo, parcelUpdater, outboxWriter)
 	toggleShiftUC := dispatchApp.NewToggleShiftUseCase(courierRepo)
+	candidatesQ := dispatchApp.NewGetCourierCandidatesQueryHandler(pgCourierRepo)
 
 	// 2. Delivery Application Use Cases
 	deliveryTxMgr := &dispatchToDeliveryTxAdapter{txMgr: txMgr}
@@ -93,7 +94,7 @@ func registerDispatchAndDeliveryModules(
 		assignCourierUC,
 		cancelAsgnUC,
 		reschedUC,
-	)
+	).WithCandidatesQuery(candidatesQ)
 	courierShiftHandler := dispatchTransport.NewCourierShiftHandler(toggleShiftUC)
 
 	deliveryHandler := deliveryTransport.NewDeliveryHandler(
