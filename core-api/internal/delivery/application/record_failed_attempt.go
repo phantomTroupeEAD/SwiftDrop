@@ -133,6 +133,9 @@ func (uc *RecordFailedAttemptUseCase) Execute(ctx context.Context, cmd RecordFai
 				"final_reason_code": string(reasonCode),
 				"returned_at":       attempt.AttemptedAt.Format(time.RFC3339),
 			}
+			if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+				eventPayload["merchant_id"] = *mID
+			}
 			err = uc.outboxWriter.Write(
 				ctx,
 				tx,
@@ -186,6 +189,9 @@ func (uc *RecordFailedAttemptUseCase) Execute(ctx context.Context, cmd RecordFai
 				"reason_code":    string(reasonCode),
 				"next_action":    "AWAITING_DISPATCHER_REVIEW",
 				"attempted_at":   attempt.AttemptedAt.Format(time.RFC3339),
+			}
+			if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+				eventPayload["merchant_id"] = *mID
 			}
 			err = uc.outboxWriter.Write(
 				ctx,

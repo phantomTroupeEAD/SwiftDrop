@@ -159,6 +159,9 @@ export const RegisterPage: React.FC = () => {
       }
 
       if (!res.ok) {
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        }
         const message = 'Registration is unavailable right now. Please try again later.';
         throw new Error(friendlyApiError(res, data?.error?.code, message));
       }

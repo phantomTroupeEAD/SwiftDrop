@@ -567,6 +567,25 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 
 // ---------------- admin (stand-in for Member 7 routes) ----------------
 
+// AdminChangeStatusRequest represents the payload for administrative merchant status changes.
+type AdminChangeStatusRequest struct {
+	ExpectedVersion int    `json:"expected_version" example:"1"`
+	Reason          string `json:"reason" example:"Approved following verification"`
+}
+
+// adminList godoc
+// @Summary      List all merchant applications
+// @Description  Retrieves a paginated list of merchants with optional status filtering. Requires ADMIN role.
+// @Tags         admin
+// @Produce      json
+// @Security     BearerAuth
+// @Param        status query string false "Filter by merchant status (PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED)"
+// @Param        page query int false "Page number (default 1)"
+// @Param        per_page query int false "Items per page (default 20)"
+// @Success      200 {object} httpx.PaginatedEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin only"
+// @Router       /api/v1/admin/merchants [get]
 func (h *Handler) adminList(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -593,6 +612,18 @@ func (h *Handler) adminList(w http.ResponseWriter, r *http.Request) {
 		"page": page, "per_page": per, "total_items": total, "total_pages": (total + per - 1) / per}})
 }
 
+// adminGet godoc
+// @Summary      Get merchant details by ID
+// @Description  Retrieves full merchant application and profile details for administrative review. Requires ADMIN role.
+// @Tags         admin
+// @Produce      json
+// @Security     BearerAuth
+// @Param        merchant_id path string true "Merchant UUID"
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin only"
+// @Failure      404 {object} httpx.ErrorEnvelope "Merchant not found"
+// @Router       /api/v1/admin/merchants/{merchant_id} [get]
 func (h *Handler) adminGet(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {
@@ -616,6 +647,23 @@ var actions = map[string]domain.StatusAction{
 	"reinstate": domain.ActionReinstate, "disable": domain.ActionDisable,
 }
 
+// adminChangeStatus godoc
+// @Summary      Change merchant application status (approve, reject, suspend, etc.)
+// @Description  Executes a state transition on a merchant account (approve, reject, suspend, reinstate, disable). Approving grants the MERCHANT role to the owner user. Requires ADMIN role.
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        merchant_id path string true "Merchant UUID"
+// @Param        action path string true "Status action (approve, reject, suspend, reinstate, disable)"
+// @Param        body body AdminChangeStatusRequest true "Status transition payload"
+// @Success      200 {object} httpx.DataEnvelope
+// @Failure      400 {object} httpx.ErrorEnvelope "Malformed JSON, missing version, or invalid transition"
+// @Failure      401 {object} httpx.ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden - Admin only"
+// @Failure      404 {object} httpx.ErrorEnvelope "Merchant or action not found"
+// @Failure      409 {object} httpx.ErrorEnvelope "Version conflict"
+// @Router       /api/v1/admin/merchants/{merchant_id}/{action} [post]
 func (h *Handler) adminChangeStatus(w http.ResponseWriter, r *http.Request) {
 	a, ok := h.jwtActor(w, r)
 	if !ok {

@@ -37,9 +37,22 @@ func (h *GetDispatchBoardQueryHandler) Execute(ctx context.Context, zoneID strin
 		couriers = []CourierLoadDTO{}
 	}
 
+	var assigned []AssignedParcelDTO
+	if ar, ok := h.boardReader.(AssignedParcelsReader); ok {
+		assignedList, err := ar.GetAssignedParcels(ctx, trimmedZone)
+		if err != nil {
+			return nil, err
+		}
+		assigned = assignedList
+	}
+	if assigned == nil {
+		assigned = []AssignedParcelDTO{}
+	}
+
 	return &DispatchBoardDTO{
 		ZoneID:            trimmedZone,
 		UnassignedParcels: unassigned,
+		AssignedParcels:   assigned,
 		ActiveCouriers:    couriers,
 	}, nil
 }

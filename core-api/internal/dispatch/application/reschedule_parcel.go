@@ -129,6 +129,9 @@ func (uc *RescheduleParcelUseCase) Execute(ctx context.Context, cmd ReschedulePa
 			"assigned_at":   asgn.AssignedAt.Format(time.RFC3339),
 			"is_reattempt":  true,
 		}
+		if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+			eventPayload["merchant_id"] = *mID
+		}
 		err = uc.outboxWriter.Write(
 			ctx,
 			tx,

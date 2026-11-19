@@ -206,7 +206,12 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 			panic(err)
 		}
 
-		parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, merchantReader)
+		listParcelsUC, err := parcelsapp.NewListParcelsUseCase(parcelRepo, merchantReader)
+		if err != nil {
+			panic(err)
+		}
+
+		parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, listParcelsUC, merchantReader)
 		if err != nil {
 			panic(err)
 		}

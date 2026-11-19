@@ -23,8 +23,20 @@ func NewAdminHandler(userService *application.UserService) *AdminHandler {
 	}
 }
 
-// ListUsers handles GET /api/v1/admin/users
-// Supports query params: role (ADMIN, COURIER, etc.), limit (default 20), offset (default 0).
+// ListUsers godoc
+// @Summary      List users in the system
+// @Description  Retrieves a paginated list of users with optional role filtering. Requires ADMIN role.
+// @Tags         admin
+// @Produce      json
+// @Security     BearerAuth
+// @Param        role query string false "Filter by role (CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN)"
+// @Param        limit query int false "Maximum number of items to return (default 20)"
+// @Param        offset query int false "Number of items to skip (default 0)"
+// @Success      200 {object} UserListEnvelope
+// @Failure      400 {object} ErrorEnvelope "Invalid role filter"
+// @Failure      401 {object} ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} ErrorEnvelope "Forbidden - Admin only"
+// @Router       /api/v1/admin/users [get]
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	var roleFilter *domain.Role
 	roleQuery := strings.TrimSpace(r.URL.Query().Get("role"))
@@ -74,8 +86,21 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateRole handles PUT /api/v1/admin/users/{id}/role
-// Promotes or reassigns a user's role and optional merchant tenant context.
+// UpdateRole godoc
+// @Summary      Update user role and merchant tenant
+// @Description  Promotes or reassigns a user's role and optional merchant tenant context. Requires ADMIN role.
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "User ID"
+// @Param        body body UpdateUserRoleRequest true "Role update payload"
+// @Success      200 {object} UserProfileResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid role or missing tenant_id"
+// @Failure      401 {object} ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} ErrorEnvelope "Forbidden - Admin only"
+// @Failure      404 {object} ErrorEnvelope "User not found"
+// @Router       /api/v1/admin/users/{id}/role [put]
 func (h *AdminHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	targetUserID := strings.TrimSpace(r.PathValue("id"))
 	if targetUserID == "" {
@@ -132,8 +157,21 @@ func (h *AdminHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateStatus handles PUT /api/v1/admin/users/{id}/status
-// Suspends or reactivates a user's account.
+// UpdateStatus godoc
+// @Summary      Update user account status
+// @Description  Suspends or reactivates a user's account. Requires ADMIN role.
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "User ID"
+// @Param        body body UpdateUserStatusRequest true "Status update payload"
+// @Success      200 {object} UserProfileResponse
+// @Failure      400 {object} ErrorEnvelope "Invalid status"
+// @Failure      401 {object} ErrorEnvelope "Unauthorized"
+// @Failure      403 {object} ErrorEnvelope "Forbidden - Admin only"
+// @Failure      404 {object} ErrorEnvelope "User not found"
+// @Router       /api/v1/admin/users/{id}/status [put]
 func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	targetUserID := strings.TrimSpace(r.PathValue("id"))
 	if targetUserID == "" {

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 export interface WebhookRecord {
   id: string;
-  tenant: 'alpha' | 'beta' | 'chaos';
+  tenant: 'alpha' | 'beta' | 'chaos' | 'gamma' | 'omega';
   type: string;
   payload: any;
   hmacValid: boolean;
@@ -55,7 +55,7 @@ app.use(cors());
 app.use(express.raw({ type: 'application/json' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
-function handleWebhook(tenant: 'alpha' | 'beta') {
+function handleWebhook(tenant: 'alpha' | 'beta' | 'gamma' | 'omega') {
   return (req: Request, res: Response) => {
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
     const sigHeader = (req.headers['x-swiftdrop-signature'] || req.headers['x-hub-signature-256']) as string | undefined;
@@ -69,9 +69,9 @@ function handleWebhook(tenant: 'alpha' | 'beta') {
     }
 
     const record: WebhookRecord = {
-      id: parsedPayload.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: parsedPayload.event_id || parsedPayload.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       tenant,
-      type: parsedPayload.type || 'parcel.unknown',
+      type: parsedPayload.event_type || parsedPayload.type || 'parcel.unknown',
       payload: parsedPayload,
       hmacValid,
       receivedAt: new Date().toISOString(),
@@ -92,6 +92,8 @@ function handleWebhook(tenant: 'alpha' | 'beta') {
 // 1. Registered Merchant Receivers
 app.post('/webhooks/merchant-alpha', handleWebhook('alpha'));
 app.post('/webhooks/merchant-beta', handleWebhook('beta'));
+app.post('/webhooks/merchant-gamma', handleWebhook('gamma'));
+app.post('/webhooks/merchant-omega', handleWebhook('omega'));
 
 // 2. Chaos Endpoint (Always returns 500 to trigger DLQ retry)
 app.post('/webhooks/merchant-chaos', (req: Request, res: Response) => {
@@ -116,6 +118,8 @@ app.get('/api/events', (req: Request, res: Response) => {
     counts: {
       alpha: eventStore.filter((e) => e.tenant === 'alpha').length,
       beta: eventStore.filter((e) => e.tenant === 'beta').length,
+      gamma: eventStore.filter((e) => e.tenant === 'gamma').length,
+      omega: eventStore.filter((e) => e.tenant === 'omega').length,
       chaos: chaosAttempts.length,
       total: eventStore.length,
     },
@@ -126,6 +130,23 @@ app.post('/api/reset', (_req: Request, res: Response) => {
   eventStore.length = 0;
   chaosAttempts.length = 0;
   return res.json({ reset: true });
+});
+
+// Configure dynamic webhook secret from UI/test
+app.post('/api/secret', (req: Request, res: Response) => {
+  let body: any = {};
+  try {
+    body = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    body = req.body;
+  }
+  const tenant = body.tenant || 'alpha';
+  const secret = body.secret;
+  if (secret) {
+    SECRETS[tenant] = secret;
+    return res.json({ success: true, tenant, secretConfigured: true });
+  }
+  return res.status(400).json({ error: 'Secret required' });
 });
 
 // 5. 1-Click Test Trigger (For live examiner demo)
@@ -172,8 +193,8 @@ app.get('/dashboard', (_req: Request, res: Response) => {
 });
 
 export function start(port: number = Number(process.env.PORT) || 9999) {
-  return app.listen(port, '0.0.0.0', () => {
-    console.log(`[mock-webhook] Receiver & Visual Dashboard running on http://0.0.0.0:${port}`);
+  return app.listen(port, () => {
+    console.log(`[mock-webhook] Receiver & Visual Dashboard running on port ${port}`);
   });
 }
 

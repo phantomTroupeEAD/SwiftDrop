@@ -24,6 +24,10 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, sec *identitytransport.Secur
 		parcelRoles(http.HandlerFunc(h.BookParcel)),
 	))
 
+	mux.Handle("GET /api/v1/parcels", sec.Authenticate(
+		parcelRoles(http.HandlerFunc(h.ListParcels)),
+	))
+
 	mux.Handle("GET /api/v1/parcels/{id}", sec.Authenticate(
 		parcelRoles(http.HandlerFunc(h.GetParcel)),
 	))

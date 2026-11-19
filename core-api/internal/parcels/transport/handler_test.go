@@ -183,6 +183,37 @@ func (f *fakeParcelRepo) UpdateStatus(_ context.Context, _ db.Querier, parcel do
 	return nil
 }
 
+func (f *fakeParcelRepo) List(_ context.Context, _ db.Querier, filter application.ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var res []domain.Parcel
+	for _, p := range f.parcels {
+		if filter.SenderID != nil && (p.SenderID == nil || *p.SenderID != *filter.SenderID) {
+			continue
+		}
+		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
+			continue
+		}
+		res = append(res, p)
+	}
+	total := len(res)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []domain.Parcel{}, total, nil
+	}
+	end := offset + pageSize
+	if end > total {
+		end = total
+	}
+	return res[offset:end], total, nil
+}
+
 type fakeStatusHistoryRepo struct {
 	mu             sync.Mutex
 	entries        []domain.StatusHistoryEntry
@@ -377,6 +408,7 @@ type parcelTestHarness struct {
 	bookUC         *application.BookParcelUseCase
 	getParcelUC    *application.GetParcelUseCase
 	getHistoryUC   *application.GetParcelHistoryUseCase
+	listParcelsUC  *application.ListParcelsUseCase
 	quoteConsumer  *fakeQuoteConsumer
 	parcelRepo     *fakeParcelRepo
 	historyRepo    *fakeStatusHistoryRepo
@@ -528,8 +560,12 @@ func newParcelTestHarness(t *testing.T) *parcelTestHarness {
 	if err != nil {
 		t.Fatalf("NewGetParcelHistoryUseCase failed: %v", err)
 	}
+	listParcelsUC, err := application.NewListParcelsUseCase(parcelRepo, merchantReader)
+	if err != nil {
+		t.Fatalf("NewListParcelsUseCase failed: %v", err)
+	}
 
-	h, err := NewHandler(bookUC, getParcelUC, getHistoryUC, merchantReader)
+	h, err := NewHandler(bookUC, getParcelUC, getHistoryUC, listParcelsUC, merchantReader)
 	if err != nil {
 		t.Fatalf("NewHandler failed: %v", err)
 	}
@@ -547,6 +583,7 @@ func newParcelTestHarness(t *testing.T) *parcelTestHarness {
 		bookUC:         bookUC,
 		getParcelUC:    getParcelUC,
 		getHistoryUC:   getHistoryUC,
+		listParcelsUC:  listParcelsUC,
 		quoteConsumer:  quotes,
 		parcelRepo:     parcelRepo,
 		historyRepo:    historyRepo,
@@ -673,16 +710,19 @@ func assertParcelDataEnvelope(t *testing.T, rec *httptest.ResponseRecorder, expe
 func TestNewHandler_NilDependencies(t *testing.T) {
 	th := newParcelTestHarness(t)
 
-	if _, err := NewHandler(nil, th.getParcelUC, th.getHistoryUC, th.merchantReader); err == nil {
+	if _, err := NewHandler(nil, th.getParcelUC, th.getHistoryUC, th.listParcelsUC, th.merchantReader); err == nil {
 		t.Fatal("expected error for nil bookUseCase")
 	}
-	if _, err := NewHandler(th.bookUC, nil, th.getHistoryUC, th.merchantReader); err == nil {
+	if _, err := NewHandler(th.bookUC, nil, th.getHistoryUC, th.listParcelsUC, th.merchantReader); err == nil {
 		t.Fatal("expected error for nil getParcelUseCase")
 	}
-	if _, err := NewHandler(th.bookUC, th.getParcelUC, nil, th.merchantReader); err == nil {
+	if _, err := NewHandler(th.bookUC, th.getParcelUC, nil, th.listParcelsUC, th.merchantReader); err == nil {
 		t.Fatal("expected error for nil getHistoryUseCase")
 	}
-	if _, err := NewHandler(th.bookUC, th.getParcelUC, th.getHistoryUC, nil); err == nil {
+	if _, err := NewHandler(th.bookUC, th.getParcelUC, th.getHistoryUC, nil, th.merchantReader); err == nil {
+		t.Fatal("expected error for nil listParcelsUseCase")
+	}
+	if _, err := NewHandler(th.bookUC, th.getParcelUC, th.getHistoryUC, th.listParcelsUC, nil); err == nil {
 		t.Fatal("expected error for nil merchantReader")
 	}
 
@@ -699,6 +739,7 @@ func TestParcelEndpoints_UnauthenticatedRejected(t *testing.T) {
 		body   string
 	}{
 		{http.MethodPost, "/api/v1/parcels", validBookingJSON(testCustomerQuoteID)},
+		{http.MethodGet, "/api/v1/parcels", ""},
 		{http.MethodGet, "/api/v1/parcels/" + testMissingParcelID, ""},
 		{http.MethodGet, "/api/v1/parcels/" + testMissingParcelID + "/history", ""},
 	}
@@ -1292,4 +1333,66 @@ func TestParcelEndpoints_NonUUIDCallerAndMerchantLookupError(t *testing.T) {
 	merchTok := th.issueToken(t, identityapp.Principal{UserID: testMerchantOwnerID, Role: identitydomain.RoleMerchant, TenantID: strPtr(testMerchantID)})
 	recErr := th.doJSON(t, http.MethodPost, "/api/v1/parcels", merchTok, testIdemKey1, validBookingJSON(testMerchantQuoteID))
 	assertParcelErrorEnvelope(t, recErr, http.StatusInternalServerError, "INTERNAL_ERROR")
+}
+
+func TestParcelEndpoints_ListParcels(t *testing.T) {
+	th := newParcelTestHarness(t)
+
+	custToken := th.issueToken(t, identityapp.Principal{UserID: testCustomerUserID, Role: identitydomain.RoleCustomer})
+	otherCustToken := th.issueToken(t, identityapp.Principal{UserID: testOtherCustomerID, Role: identitydomain.RoleCustomer})
+
+	// Before booking: should return empty items array
+	recEmpty := th.doJSON(t, http.MethodGet, "/api/v1/parcels?page=1&page_size=20", custToken, "", "")
+	if recEmpty.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", recEmpty.Code, recEmpty.Body.String())
+	}
+	var rootEmpty map[string]any
+	if err := json.NewDecoder(recEmpty.Body).Decode(&rootEmpty); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+	emptyData, ok := rootEmpty["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data object, got %v", rootEmpty["data"])
+	}
+	items, ok := emptyData["items"].([]any)
+	if !ok {
+		t.Fatalf("expected data.items to be []any, got %T", emptyData["items"])
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(items))
+	}
+
+	// Book a parcel for customer 1
+	recBook := th.doJSON(t, http.MethodPost, "/api/v1/parcels", custToken, testIdemKey1, validBookingJSON(testCustomerQuoteID))
+	assertParcelDataEnvelope(t, recBook, http.StatusCreated)
+
+	// Customer 1 should see 1 parcel
+	recCust := th.doJSON(t, http.MethodGet, "/api/v1/parcels?page=1&page_size=20", custToken, "", "")
+	var rootCust map[string]any
+	if err := json.NewDecoder(recCust.Body).Decode(&rootCust); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+	custData, ok := rootCust["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data object, got %v", rootCust["data"])
+	}
+	custItems, ok := custData["items"].([]any)
+	if !ok || len(custItems) != 1 {
+		t.Fatalf("expected 1 item for customer 1, got %v", custData["items"])
+	}
+
+	// Customer 2 should see 0 parcels (tenant / sender isolation)
+	recOther := th.doJSON(t, http.MethodGet, "/api/v1/parcels?page=1&page_size=20", otherCustToken, "", "")
+	var rootOther map[string]any
+	if err := json.NewDecoder(recOther.Body).Decode(&rootOther); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+	otherData, ok := rootOther["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data object, got %v", rootOther["data"])
+	}
+	otherItems, ok := otherData["items"].([]any)
+	if !ok || len(otherItems) != 0 {
+		t.Fatalf("expected 0 items for customer 2, got %v", otherData["items"])
+	}
 }

@@ -9,7 +9,7 @@ Before requesting a booking quote, the web client resolves both five-digit posta
 | Public | Landing, sign-in, customer registration, public tracking | Verify OTP delivery and tracking updates against deployed services. |
 | Customer | Dashboard, booking, receipts, signed-in tracking, merchant application, AI chat | Verify quote, booking and receipt together with seeded pricing. Verify AI replies and booking prefill against the assistant service. |
 | Merchant | Dashboard, profile, orders and CSV import, API keys, webhooks | Verify tenant isolation and that CSV imports create parcels through the live booking adapter. |
-| Dispatcher | Dispatcher dashboard route | Connect the dispatch board and assignment operations to the dispatch API. |
+| Dispatcher | Dispatcher dashboard route | Live dispatch board (`GET /dispatch/board`), courier assignment (`POST /dispatch/assignments`), and courier fleet onboarding modal (`POST /dispatch/couriers`). |
 | Courier | Courier dashboard route | Replace local task fixtures and status changes with delivery and proof-of-delivery operations. |
 | Admin | Admin dashboard with user management requests | Connect delivery zones, settings, audit logs, delivery reports, and merchant approvals. |
 
@@ -375,6 +375,398 @@ data: {"tracking_number":"SD-20261026-00142","status":"OUT_FOR_DELIVERY","occurr
   }
 }
 ```
+
+---
+
+### 2.8 Dispatcher Operations (Owned by Member 3 & Member 7)
+
+#### `POST /api/v1/dispatch/couriers` — Register Courier Profile
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> `+ Add Courier` Modal)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+  - `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "user_id": "018f4a7c-1003-7000-8000-000000000003",
+  "employee_code": "CR-7001",
+  "vehicle_type": "MOTORCYCLE",
+  "max_capacity": 25,
+  "current_zone_id": "ZONE_COLOMBO_01"
+}
+```
+- **Success Response (`201 Created`):**
+```json
+{
+  "data": {
+    "user_id": "018f4a7c-1003-7000-8000-000000000003",
+    "employee_code": "CR-7001",
+    "vehicle_type": "MOTORCYCLE",
+    "max_capacity": 25,
+    "status": "OFF_SHIFT",
+    "current_zone_id": "ZONE_COLOMBO_01",
+    "is_active": true,
+    "created_at": "2026-11-17T20:00:00Z"
+  }
+}
+```
+- **Error Responses:**
+  - `400 Bad Request`: `VALIDATION_FAILED` (missing fields, invalid UUID, capacity out of range)
+  - `409 Conflict`: `COURIER_PROFILE_EXISTS` (courier profile already registered for this user)
+  - `422 Unprocessable Entity`: `USER_NOT_A_COURIER` (user exists but does not have the COURIER role)
+
+#### `GET /api/v1/dispatch/couriers/candidates` — List Eligible Courier Accounts
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> `+ Add Courier` Modal account selector)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": [
+    {
+      "user_id": "018f4a7c-1003-7000-8000-000000000003",
+      "display_name": "Kamal Perera",
+      "email": "courier@swiftdrop.local",
+      "phone": "+94770000003"
+    }
+  ]
+}
+```
+
+#### `GET /api/v1/dispatch/board` — Query Live Dispatch Board
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> Unassigned & Assigned Parcels)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Query Parameters:**
+  - `zone_id` (string, optional): Target delivery zone code (e.g. `ZONE_COLOMBO_01`).
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "zone_id": "ZONE_COLOMBO_01",
+    "unassigned_parcels": [
+      {
+        "id": "018f4a7c-8004-7000-8000-000000000004",
+        "tracking_number": "SD-20261117-CMB004",
+        "weight_kg": 5.5,
+        "recipient_city": "Colombo",
+        "status": "CREATED",
+        "created_at": "2026-11-17T15:59:33.35314Z"
+      }
+    ],
+    "assigned_parcels": [
+      {
+        "id": "018f4a7c-8002-7000-8000-000000000002",
+        "tracking_number": "SD-20261117-CMB002",
+        "weight_kg": 4.0,
+        "recipient_city": "Colombo",
+        "status": "ASSIGNED",
+        "courier_id": "018f4a7c-1003-7000-8000-000000000008"
+      }
+    ],
+    "courier_loads": [
+      {
+        "courier_id": "018f4a7c-1003-7000-8000-000000000003",
+        "name": "Kamal Perera (Courier)",
+        "employee_code": "CR-0012",
+        "current_zone_id": "ZONE_COLOMBO_01",
+        "active_assignments": 1,
+        "max_capacity": 25,
+        "status": "ON_SHIFT",
+        "vehicle_type": "MOTORCYCLE"
+      }
+    ]
+  }
+}
+```
+
+#### `GET /api/v1/dispatch/couriers` — List Couriers by Zone
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> Zone Filter & Courier Roster)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Query Parameters:**
+  - `zone_id` (string, optional): Target delivery zone code (e.g. `ZONE_COLOMBO_01`).
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": [
+    {
+      "user_id": "018f4a7c-1003-7000-8000-000000000003",
+      "courier_name": "Kamal Perera (Courier)",
+      "employee_code": "CR-0012",
+      "current_zone_id": "ZONE_COLOMBO_01",
+      "active_count": 0,
+      "max_capacity": 25,
+      "status": "ON_SHIFT",
+      "vehicle_type": "MOTORCYCLE"
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/dispatch/assignments/{id}/cancel` — Cancel Courier Assignment
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> Assigned Parcels card -> Unassign button & Cancel Modal)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Path Parameter:**
+  - `id` (string, UUID): The parcel UUID whose active assignment is being cancelled.
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+  - `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "reason": "Courier vehicle flat tire on Galle Road"
+}
+```
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "assignment_id": "018f4a7c-8003-7000-8000-000000000003",
+    "parcel_id": "018f4a7c-8003-7000-8000-000000000003",
+    "status": "CANCELLED",
+    "ended_at": "2026-11-17T16:21:26.9176536Z",
+    "reason": "Courier vehicle flat tire on Galle Road"
+  }
+}
+```
+- **Operational Effect:** Courier active workload decreases by 1; parcel reverts to `CREATED` and reappears in Unassigned Parcels.
+
+#### `POST /api/v1/dispatch/parcels/{id}/reschedule` — Reschedule Failed Delivery Reattempt
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> Unassigned Parcels queue -> `Attempt Failed` badge -> **Reschedule** button & Reschedule Modal)
+- **Role:** `DISPATCHER`, `ADMIN`
+- **Path Parameter:**
+  - `id` (string, UUID): The parcel UUID in `ATTEMPT_FAILED` status.
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+  - `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "courier_id": "018f4a7c-1003-7000-8000-000000000003",
+  "notes": "Customer confirmed home between 2 PM and 5 PM"
+}
+```
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "assignment_id": "df9c0fbd-e747-4f69-8d04-a2a63a853832",
+    "parcel_id": "018f4a7c-8003-7000-8000-000000000003",
+    "courier_id": "018f4a7c-1003-7000-8000-000000000003",
+    "assigned_by": "018f4a7c-1002-7000-8000-000000000002",
+    "status": "ACTIVE",
+    "assigned_at": "2026-11-17T16:35:30.7625662Z"
+  }
+}
+```
+- **Operational Effect:** Marks previous open assignment `REASSIGNED`, creates new `ACTIVE` assignment for target courier, transitions parcel status from `ATTEMPT_FAILED` to `ASSIGNED`, and decrements remaining driver capacity.
+
+---
+
+### 2.7 Courier Delivery Verification & Proof of Delivery (POD)
+
+#### `POST /api/v1/deliveries/{id}/proof-photo` — Stream Handover Proof Photo
+- **Role Required:** `COURIER`
+- **Content-Type:** `multipart/form-data`
+- **Part:** `file` (Binary image JPEG/PNG/WebP, $\le 5$ MB)
+- **Success Response (`201 Created`):**
+```json
+{
+  "data": {
+    "photo_url": "/api/v1/deliveries/proofs/proofs/018f4a7c-8004-7000-8000-000000000004_1794970609.jpg",
+    "storage_key": "proofs/018f4a7c-8004-7000-8000-000000000004_1794970609.jpg",
+    "content_type": "image/jpeg",
+    "uploaded_at": "2026-11-18T08:26:49.1029Z"
+  }
+}
+```
+
+#### `POST /api/v1/deliveries/{id}/complete` — Complete Delivery with Verified Proof
+- **Role Required:** `COURIER`
+- **Content-Type:** `application/json`
+- **Header:** `Idempotency-Key: <UUID>`
+
+**Option A: Photo Proof Payload:**
+```json
+{
+  "proof_type": "PHOTO",
+  "proof_url": "/api/v1/deliveries/proofs/proofs/018f4a7c-8004-7000-8000-000000000004_1794970609.jpg",
+  "received_by_name": "Kasun Perera"
+}
+```
+
+**Option B: Vector Signature Proof Payload:**
+```json
+{
+  "proof_type": "SIGNATURE",
+  "signature_data": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNjAiIGhlaWdodD0iMTYwIiB2aWV3Qm94PSIwIDAgMzYwIDE2MCI+PHBhdGggZD0iTSAxMCAxMCBMIDEwMCAxMDAiIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2Utd2lkdGg9IjIuNSIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==",
+  "received_by_name": "Kasun Perera"
+}
+```
+
+- **Invariants Enforced:**
+  - AT-006 IDOR protection: Authenticated courier must be assigned to parcel.
+  - Parcel must be in `OUT_FOR_DELIVERY` status.
+  - If `proof_type == "SIGNATURE"`, `signature_data` must contain $\ge 50$ characters of vector stroke data.
+  - Recipient name must be 2–150 characters.
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "attempt_id": "aab9c8ca-e948-4304-b675-806bdd80db7e",
+    "parcel_id": "018f4a7c-8004-7000-8000-000000000004",
+    "status": "DELIVERED",
+    "outcome": "SUCCESS",
+    "completed_at": "2026-11-18T08:26:49.116Z"
+  }
+}
+```
+- **Operational Effect:** Parcel moves to `DELIVERED`, courier assignment marked `COMPLETED`, courier load restored, and `parcel.delivered.v1` outbox event published.
+
+#### `POST /api/v1/deliveries/{id}/failed` — Record Failed Delivery Attempt
+- **Role Required:** `COURIER`
+- **Content-Type:** `application/json`
+- **Request Body:**
+```json
+{
+  "failure_reason_code": "RECIPIENT_UNAVAILABLE",
+  "notes": "Gate locked, called recipient twice with no answer"
+}
+```
+- **Approved ADR-004 Failure Reason Codes:**
+  - `RECIPIENT_UNAVAILABLE`
+  - `CUSTOMER_REQUESTED_RESCHEDULE`
+  - `ACCESS_RESTRICTED`
+  - `INVALID_ADDRESS`
+  - `REFUSED_BY_RECIPIENT` (Immediate terminal return)
+  - `DAMAGED_IN_TRANSIT`
+  - `OTHER` (Requires note $\ge 15$ characters)
+- **Invariants Enforced:**
+  - Caller must be the assigned courier (AT-006 IDOR protection).
+  - Parcel must be in `OUT_FOR_DELIVERY` status.
+  - Failure reason code must match an approved ADR-004 enum value.
+  - Reason `OTHER` mandates `notes` $\ge 15$ characters.
+  - 3-attempt ceiling: attempt 1 or 2 transitions parcel to `ATTEMPT_FAILED`. Attempt 3 or `REFUSED_BY_RECIPIENT` transitions parcel to `RETURNED`.
+- **Success Response (`200 OK` - Non-Terminal):**
+```json
+{
+  "data": {
+    "attempt_id": "9fa85f64-5717-4562-b3fc-2c963f66afa9",
+    "parcel_id": "7fa85f64-5717-4562-b3fc-2c963f66afa7",
+    "attempt_number": 1,
+    "max_attempts": 3,
+    "outcome": "FAILED",
+    "failure_reason_code": "RECIPIENT_UNAVAILABLE",
+    "parcel_status": "ATTEMPT_FAILED",
+    "is_terminal": false,
+    "attempted_at": "2026-11-18T21:55:00Z"
+  }
+}
+```
+- **Success Response (`200 OK` - Terminal):**
+```json
+{
+  "data": {
+    "attempt_id": "9fa85f64-5717-4562-b3fc-2c963f66afb0",
+    "parcel_id": "7fa85f64-5717-4562-b3fc-2c963f66afa7",
+    "attempt_number": 3,
+    "max_attempts": 3,
+    "outcome": "FAILED",
+    "failure_reason_code": "RECIPIENT_UNAVAILABLE",
+    "parcel_status": "RETURNED",
+    "is_terminal": true,
+    "attempted_at": "2026-11-18T22:00:00Z"
+  }
+}
+```
+
+#### `GET /api/v1/deliveries/parcels/{id}` — Get Parcel Delivery Attempt History
+- **Role Required:** `COURIER`, `DISPATCHER`, `ADMIN`
+- **Use Case:** Audit trail of all attempts made on a parcel, including failure reasons, notes, timestamps, recipient names, and proof attachments.
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "parcel_id": "018f4a7c-8004-7000-8000-000000000004",
+    "current_status": "DELIVERED",
+    "attempt_count": 1,
+    "attempts": [
+      {
+        "attempt_id": "aab9c8ca-e948-4304-b675-806bdd80db7e",
+        "attempt_number": 1,
+        "outcome": "SUCCESS",
+        "proof_type": "PHOTO",
+        "proof_attachment_url": "/api/v1/deliveries/proofs/proofs/018f4a7c-8004-7000-8000-000000000004_1794970609.jpg",
+        "received_by_name": "kavinda",
+        "notes": "",
+        "courier_id": "018f4a7c-1003-7000-8000-000000000003",
+        "attempted_at": "2026-11-18T02:56:49.11666Z"
+      }
+    ]
+  }
+}
+```
+- **Error Responses:**
+  - `404 Not Found`: `PARCEL_NOT_FOUND` (no attempts recorded yet for this parcel).
+
+#### `POST /api/v1/courier/shift` — Administrative Courier Shift Management
+- **Screen:** Dispatcher Dashboard (`/dispatcher/dashboard` -> Courier Roster card -> Start shift / Break / Resume shift / End shift buttons)
+- **Role:** `DISPATCHER`, `ADMIN` (also `COURIER` for self-service)
+- **Request Headers:**
+  - `Authorization: Bearer <accessToken>`
+  - `Content-Type: application/json`
+- **Request Body:**
+```json
+{
+  "courier_id": "018f4a7c-1003-7000-8000-000000000008",
+  "target_status": "ON_BREAK"
+}
+```
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "courier_id": "018f4a7c-1003-7000-8000-000000000008",
+    "new_status": "ON_BREAK",
+    "updated_at": "2026-11-17T16:50:11Z"
+  }
+}
+```
+- **Operational Effect:** Courier shift status updates in real time. Couriers in `ON_BREAK` or `OFF_SHIFT` are immediately excluded from the dispatcher's available assignment dropdown.
+
+#### `GET /api/v1/deliveries/parcels/{id}` — Get Parcel Delivery Attempt History
+- **Role Required:** `COURIER`, `DISPATCHER`, `ADMIN`
+- **Use Case:** Audit trail of all attempts made on a parcel, including failure reasons, notes, timestamps, recipient names, and proof attachments.
+- **Success Response (`200 OK`):**
+```json
+{
+  "data": {
+    "parcel_id": "018f4a7c-8004-7000-8000-000000000004",
+    "current_status": "DELIVERED",
+    "attempt_count": 1,
+    "attempts": [
+      {
+        "attempt_id": "aab9c8ca-e948-4304-b675-806bdd80db7e",
+        "attempt_number": 1,
+        "outcome": "SUCCESS",
+        "proof_type": "PHOTO",
+        "proof_attachment_url": "/api/v1/deliveries/proofs/proofs/018f4a7c-8004-7000-8000-000000000004_1794970609.jpg",
+        "received_by_name": "kavinda",
+        "notes": "",
+        "courier_id": "018f4a7c-1003-7000-8000-000000000003",
+        "attempted_at": "2026-11-18T02:56:49.11666Z"
+      }
+    ]
+  }
+}
+```
+- **Error Responses:**
+  - `404 Not Found`: `PARCEL_NOT_FOUND` (no attempts recorded yet for this parcel).
 
 ---
 

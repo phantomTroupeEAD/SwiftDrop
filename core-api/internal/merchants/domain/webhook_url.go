@@ -71,8 +71,12 @@ func ParseWebhookURL(raw string, allowHTTP bool) (WebhookURL, error) {
 	case port == "":
 	case scheme == "https" && port == "443", scheme == "http" && port == "80":
 		port = ""
-	default:
+	case scheme == "http" && port == "443":
 		return WebhookURL{}, ErrURLInvalid
+	default:
+		if !allowHTTP {
+			return WebhookURL{}, ErrURLInvalid
+		}
 	}
 	return WebhookURL{scheme: scheme, host: host, port: port, path: u.RequestURI()}, nil
 }
@@ -84,6 +88,9 @@ func (w WebhookURL) String() string {
 	h := w.host
 	if strings.Contains(h, ":") { // IPv6 literal
 		h = "[" + h + "]"
+	}
+	if w.port != "" {
+		h = h + ":" + w.port
 	}
 	return w.scheme + "://" + h + w.path
 }

@@ -52,6 +52,88 @@ type GetParcelHistoryResult struct {
 	Entries []domain.StatusHistoryEntry
 }
 
+// ListParcelsQuery encapsulates parameters for listing parcels visible to the authorized caller.
+type ListParcelsQuery struct {
+	Caller   CallerContext
+	Page     int
+	PageSize int
+}
+
+// ListParcelsResult contains paginated parcels and metadata.
+type ListParcelsResult struct {
+	Items    []domain.Parcel
+	Page     int
+	PageSize int
+	Total    int
+}
+
+// ListParcelsUseCase retrieves a paginated list of parcels scoped to the authenticated caller.
+type ListParcelsUseCase struct {
+	parcelRepo     ParcelRepository
+	merchantReader MerchantReader
+}
+
+// NewListParcelsUseCase constructs a ListParcelsUseCase.
+func NewListParcelsUseCase(parcelRepo ParcelRepository, merchantReader MerchantReader) (*ListParcelsUseCase, error) {
+	if parcelRepo == nil {
+		return nil, ErrNilParcelRepository
+	}
+	if merchantReader == nil {
+		return nil, ErrNilMerchantReader
+	}
+
+	return &ListParcelsUseCase{
+		parcelRepo:     parcelRepo,
+		merchantReader: merchantReader,
+	}, nil
+}
+
+// Execute validates caller authorization, applies ownership filters, and returns paginated parcels.
+func (uc *ListParcelsUseCase) Execute(ctx context.Context, query ListParcelsQuery) (ListParcelsResult, error) {
+	verified, err := authorizeAndResolveCaller(ctx, query.Caller, uc.merchantReader)
+	if err != nil {
+		return ListParcelsResult{}, err
+	}
+
+	page := query.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	var filter ParcelFilter
+	switch verified.role {
+	case RoleCustomer:
+		senderID := verified.userID
+		filter.SenderID = &senderID
+	case RoleMerchant:
+		filter.MerchantID = verified.merchantID
+	case RoleAdmin:
+		// Admin can view all parcels across tenants
+	default:
+		return ListParcelsResult{}, fmt.Errorf("%w: role %s not permitted to list parcels", ErrForbiddenParcelAccess, verified.role)
+	}
+
+	items, total, err := uc.parcelRepo.List(ctx, nil, filter, page, pageSize)
+	if err != nil {
+		return ListParcelsResult{}, fmt.Errorf("list parcels: %w", err)
+	}
+
+	if items == nil {
+		items = make([]domain.Parcel, 0)
+	}
+
+	return ListParcelsResult{
+		Items:    items,
+		Page:     page,
+		PageSize: pageSize,
+		Total:    total,
+	}, nil
+}
+
 // GetParcelUseCase retrieves parcel details after enforcing strict role, merchant-approval, and IDOR ownership checks.
 type GetParcelUseCase struct {
 	parcelRepo     ParcelRepository

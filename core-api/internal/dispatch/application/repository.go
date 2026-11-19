@@ -17,6 +17,19 @@ type CourierRepository interface {
 	List(ctx context.Context, zoneID string, status *domain.ShiftStatus, vehicleType *domain.VehicleType) ([]*domain.Courier, error)
 }
 
+// CourierCandidateReader queries unprovisioned courier candidate accounts.
+type CourierCandidateReader interface {
+	ListCandidates(ctx context.Context) ([]CourierCandidateDTO, error)
+}
+
+// CourierCandidateDTO represents an identity user holding the COURIER role eligible for fleet registration.
+type CourierCandidateDTO struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+}
+
 // AssignmentRepository governs persistence operations for CourierAssignment aggregates.
 type AssignmentRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, asgn *domain.CourierAssignment) error
@@ -52,4 +65,19 @@ type CourierLoadDTO struct {
 type DispatchBoardReader interface {
 	GetUnassignedParcels(ctx context.Context, zoneID string) ([]UnassignedParcelDTO, error)
 	GetCourierLoads(ctx context.Context, zoneID string) ([]CourierLoadDTO, error)
+}
+
+// AssignedParcelDTO represents an active courier assignment on the Dispatcher Board.
+type AssignedParcelDTO struct {
+	ID             string  `json:"id"`
+	TrackingNumber string  `json:"tracking_number"`
+	WeightKg       float64 `json:"weight_kg"`
+	RecipientCity  string  `json:"recipient_city"`
+	Status         string  `json:"status"`
+	CourierID      string  `json:"courier_id"`
+}
+
+// AssignedParcelsReader provides queries for currently assigned parcels on the Dispatcher Board.
+type AssignedParcelsReader interface {
+	GetAssignedParcels(ctx context.Context, zoneID string) ([]AssignedParcelDTO, error)
 }

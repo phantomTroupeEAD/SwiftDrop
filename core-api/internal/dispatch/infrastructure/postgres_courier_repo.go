@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/swiftdrop/core-api/internal/dispatch/application"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
 	"github.com/swiftdrop/core-api/internal/platform/db"
 )
@@ -222,4 +223,63 @@ func (r *PostgresCourierRepository) scanRows(rows *sql.Rows) (*domain.Courier, e
 	c.UpdatedAt = updatedAt
 
 	return &c, nil
+}
+
+// ListCandidates queries active users with role 'COURIER' who do not yet have an active fleet profile in couriers table.
+func (r *PostgresCourierRepository) ListCandidates(ctx context.Context) ([]application.CourierCandidateDTO, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to query courier candidates: %w", db.ErrNilDB)
+	}
+
+	query := `
+		SELECT 
+			u.id, 
+			COALESCE(u.display_name, '') AS display_name, 
+			u.email, 
+			COALESCE(u.phone, '') AS phone
+		FROM users u
+		WHERE u.role = 'COURIER'
+		  AND u.status = 'ACTIVE'
+		  AND u.id NOT IN (
+			SELECT c.user_id 
+			FROM couriers c 
+			WHERE c.is_active = TRUE
+		  )
+		ORDER BY u.display_name ASC;
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query courier candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var candidates []application.CourierCandidateDTO
+	for rows.Next() {
+		var (
+			uid         uuid.UUID
+			displayName string
+			email       string
+			phone       string
+		)
+		if err := rows.Scan(&uid, &displayName, &email, &phone); err != nil {
+			return nil, fmt.Errorf("failed to scan courier candidate: %w", err)
+		}
+		candidates = append(candidates, application.CourierCandidateDTO{
+			UserID:      uid.String(),
+			DisplayName: displayName,
+			Email:       email,
+			Phone:       phone,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error in courier candidates: %w", err)
+	}
+
+	if candidates == nil {
+		candidates = []application.CourierCandidateDTO{}
+	}
+
+	return candidates, nil
 }
