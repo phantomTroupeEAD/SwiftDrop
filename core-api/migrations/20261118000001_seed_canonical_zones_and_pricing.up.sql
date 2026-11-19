@@ -1,5 +1,5 @@
 -- Migration: 20261118000001_seed_canonical_zones_and_pricing.up.sql
--- Description: Seed canonical Sri Lankan delivery zones, postal code prefixes, and active pricing rules.
+-- Description: Seed canonical Sri Lankan delivery zones, postal code prefixes, active pricing rules, and secondary actors for E2E/live environments.
 
 -- 1. Seed canonical delivery zones
 INSERT INTO delivery_zones (id, code, name, description, enabled, version, created_at, updated_at) VALUES
@@ -68,3 +68,26 @@ ON CONFLICT (id, version) DO UPDATE SET
     effective_from = EXCLUDED.effective_from,
     is_active = TRUE,
     updated_at = NOW();
+
+-- 4. Seed secondary mock customer for IDOR & cross-user testing (password: CustomerPassword123!)
+INSERT INTO users (id, email, password_hash, display_name, phone, role, tenant_id, status) VALUES
+    ('018f4a7c-1006-7000-8000-000000000006', 'applicant@swiftdrop.local', '$sd$sha256$c271cc11a0beb226074d3a744477494d$dea45ec3435d22e4c1795402c22455766bddfba3ed1c73a786772ccbf9ff3c48', 'Applicant Customer', '+94770000006', 'CUSTOMER', NULL, 'ACTIVE')
+ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id) VALUES
+    ('018f4a7c-1006-7000-8000-000000000006', 'CUSTOMER')
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- 5. Seed secondary courier user & courier fleet profiles (password: CourierPassword123!)
+INSERT INTO users (id, email, password_hash, display_name, phone, role, tenant_id, status) VALUES
+    ('018f4a7c-1007-7000-8000-000000000007', 'courier2@swiftdrop.local', '$sd$sha256$6f19636f1cf0e6f3a9f047c0d003f736$98498e2cfe28af2307d3a02dc7e71a205e193f10c4a365a04277354baaf9f3f6', 'Sunil Silva (Courier 2)', '+94770000007', 'COURIER', NULL, 'ACTIVE')
+ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id) VALUES
+    ('018f4a7c-1007-7000-8000-000000000007', 'COURIER')
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+INSERT INTO couriers (user_id, employee_code, vehicle_type, max_capacity, status, current_zone_id, is_active, created_at, updated_at) VALUES
+    ('018f4a7c-1003-7000-8000-000000000003', 'CR-0001', 'MOTORCYCLE', 25, 'ON_SHIFT', 'ZONE_COLOMBO_01', TRUE, NOW(), NOW()),
+    ('018f4a7c-1007-7000-8000-000000000007', 'CR-0002', 'MOTORCYCLE', 25, 'ON_SHIFT', 'ZONE_COLOMBO_01', TRUE, NOW(), NOW())
+ON CONFLICT (user_id) DO NOTHING;

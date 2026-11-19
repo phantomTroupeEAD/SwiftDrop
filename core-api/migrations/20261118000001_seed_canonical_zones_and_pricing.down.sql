@@ -1,5 +1,9 @@
 -- Migration: 20261118000001_seed_canonical_zones_and_pricing.down.sql
--- Description: Rollback seeded canonical pricing rules, postal code prefixes, and delivery zones.
+-- Description: Rollback seeded canonical pricing rules, postal code prefixes, delivery zones, and secondary users.
+
+DELETE FROM couriers WHERE user_id IN ('018f4a7c-1003-7000-8000-000000000003', '018f4a7c-1007-7000-8000-000000000007');
+DELETE FROM user_roles WHERE user_id IN ('018f4a7c-1006-7000-8000-000000000006', '018f4a7c-1007-7000-8000-000000000007');
+DELETE FROM users WHERE id IN ('018f4a7c-1006-7000-8000-000000000006', '018f4a7c-1007-7000-8000-000000000007');
 
 DELETE FROM pricing_rules WHERE id LIKE 'rule_zone_%';
 
