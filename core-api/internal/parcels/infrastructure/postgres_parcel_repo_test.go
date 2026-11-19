@@ -369,3 +369,192 @@ func TestPostgresParcelRepository_UpdateStatus_DBError(t *testing.T) {
 		t.Fatalf("expected db error wrapped, got: %v", err)
 	}
 }
+
+func TestPostgresParcelRepository_ListByMerchantID(t *testing.T) {
+	now := time.Date(2026, 11, 15, 14, 0, 0, 0, time.UTC)
+	tn1, _ := domain.FormatTrackingNumber(now, "000001")
+	tn2, _ := domain.FormatTrackingNumber(now.Add(-1*time.Hour), "000002")
+
+	columns := []string{
+		"id", "tracking_number", "sender_id", "merchant_id", "recipient_name", "recipient_phone",
+		"quote_id", "pricing_rule_id", "pricing_rule_version", "delivery_fee_cents", "currency",
+		"origin_zone_id", "destination_zone_id", "service_level",
+		"actual_weight_kg", "volumetric_weight_kg", "chargeable_weight_kg",
+		"length_cm", "width_cm", "height_cm", "pickup_address", "dropoff_address",
+		"item_description", "special_instructions",
+		"status", "attempt_count", "version", "created_at", "updated_at",
+	}
+
+	pickupJSON := []byte(`{"contact_name":"Store Dispatcher","contact_phone":"+94771234567","address_line1":"100 Galle Rd","city":"Colombo","postal_code":"00300","zone_id":"ZONE_WESTERN_01"}`)
+	dropoffJSON := []byte(`{"contact_name":"Customer A","contact_phone":"+94719876543","address_line1":"200 Kandy Rd","city":"Kandy","postal_code":"20000","zone_id":"ZONE_CENTRAL_01"}`)
+
+	merchantAID := "0192e2b3-7c8a-7890-a123-000000000001"
+	merchantBID := "0192e2b3-7c8a-7890-a123-000000000002"
+
+	t.Run("returns parcels belonging to Merchant A ordered newest-first", func(t *testing.T) {
+		var executedQuery string
+		var capturedArgs []driver.NamedValue
+
+		database := registerMockDB("list_merchant_a_parcels", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			executedQuery = query
+			capturedArgs = args
+
+			data := [][]driver.Value{
+				{
+					"parcel-mrc-a-new", tn1.String(), nil, merchantAID, "Customer 1", "+94719876543",
+					"quote-001", "rule-001", int64(1), int64(55000), "LKR",
+					"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
+					2.5, 1.8, 2.5,
+					30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+					"Order Item 1", "Fragile",
+					"CREATED", int64(0), int64(1), now, now,
+				},
+				{
+					"parcel-mrc-a-old", tn2.String(), nil, merchantAID, "Customer 2", "+94719876544",
+					"quote-002", "rule-001", int64(1), int64(65000), "LKR",
+					"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
+					3.0, 1.8, 3.0,
+					30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+					"Order Item 2", "",
+					"CREATED", int64(0), int64(1), now.Add(-1 * time.Hour), now.Add(-1 * time.Hour),
+				},
+			}
+			return &testRows{columns: columns, data: data}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		parcels, err := repo.ListByMerchantID(context.Background(), nil, merchantAID)
+		if err != nil {
+			t.Fatalf("unexpected ListByMerchantID error: %v", err)
+		}
+
+		if !strings.Contains(executedQuery, "WHERE merchant_id = $1") {
+			t.Errorf("expected query to filter by WHERE merchant_id = $1, got: %s", executedQuery)
+		}
+		if !strings.Contains(executedQuery, "ORDER BY created_at DESC") {
+			t.Errorf("expected query to order by ORDER BY created_at DESC, got: %s", executedQuery)
+		}
+
+		if len(capturedArgs) != 1 {
+			t.Fatalf("expected 1 query argument, got %d", len(capturedArgs))
+		}
+		if capturedArgs[0].Value != merchantAID {
+			t.Errorf("expected arg 1 to be %s, got %v", merchantAID, capturedArgs[0].Value)
+		}
+
+		if len(parcels) != 2 {
+			t.Fatalf("expected 2 parcels, got %d", len(parcels))
+		}
+		if parcels[0].ID != "parcel-mrc-a-new" {
+			t.Errorf("expected newest parcel first, got %s", parcels[0].ID)
+		}
+		if parcels[1].ID != "parcel-mrc-a-old" {
+			t.Errorf("expected older parcel second, got %s", parcels[1].ID)
+		}
+		if parcels[0].MerchantID == nil || *parcels[0].MerchantID != merchantAID {
+			t.Errorf("expected MerchantID %s, got %v", merchantAID, parcels[0].MerchantID)
+		}
+		if parcels[1].MerchantID == nil || *parcels[1].MerchantID != merchantAID {
+			t.Errorf("expected MerchantID %s, got %v", merchantAID, parcels[1].MerchantID)
+		}
+	})
+
+	t.Run("does not return parcels belonging to Merchant B when querying Merchant A", func(t *testing.T) {
+		database := registerMockDB("list_merchant_isolation", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			if len(args) > 0 && args[0].Value == merchantAID {
+				data := [][]driver.Value{
+					{
+						"parcel-mrc-a-001", tn1.String(), nil, merchantAID, "Customer A", "+94719876543",
+						"quote-001", "rule-001", int64(1), int64(55000), "LKR",
+						"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
+						2.5, 1.8, 2.5,
+						30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
+						"", "",
+						"CREATED", int64(0), int64(1), now, now,
+					},
+				}
+				return &testRows{columns: columns, data: data}, nil, nil
+			}
+			return &testRows{columns: columns, data: [][]driver.Value{}}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		parcelsA, err := repo.ListByMerchantID(context.Background(), nil, merchantAID)
+		if err != nil {
+			t.Fatalf("unexpected ListByMerchantID error: %v", err)
+		}
+		for _, p := range parcelsA {
+			if p.MerchantID != nil && *p.MerchantID == merchantBID {
+				t.Fatalf("data leak: found Merchant B parcel in Merchant A result: %s", p.ID)
+			}
+		}
+
+		parcelsB, err := repo.ListByMerchantID(context.Background(), nil, merchantBID)
+		if err != nil {
+			t.Fatalf("unexpected ListByMerchantID error: %v", err)
+		}
+		if len(parcelsB) != 0 {
+			t.Fatalf("expected 0 parcels for Merchant B, got %d", len(parcelsB))
+		}
+	})
+
+	t.Run("returns empty collection when merchant has no parcels", func(t *testing.T) {
+		database := registerMockDB("list_merchant_empty", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			return &testRows{columns: columns, data: [][]driver.Value{}}, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		parcels, err := repo.ListByMerchantID(context.Background(), nil, "0192e2b3-7c8a-7890-a123-000000000999")
+		if err != nil {
+			t.Fatalf("unexpected error on empty collection: %v", err)
+		}
+		if parcels == nil {
+			t.Fatal("expected non-nil empty slice, got nil")
+		}
+		if len(parcels) != 0 {
+			t.Fatalf("expected 0 parcels, got %d", len(parcels))
+		}
+	})
+
+	t.Run("returns empty collection when merchantID is empty or whitespace", func(t *testing.T) {
+		database := registerMockDB("list_merchant_blank", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			t.Fatal("DB should not be queried when merchantID is empty")
+			return nil, nil, nil
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		parcels, err := repo.ListByMerchantID(context.Background(), nil, "   ")
+		if err != nil {
+			t.Fatalf("unexpected error on blank merchantID: %v", err)
+		}
+		if len(parcels) != 0 {
+			t.Fatalf("expected empty slice, got %d", len(parcels))
+		}
+	})
+
+	t.Run("returns error when db querier is nil", func(t *testing.T) {
+		repo := NewPostgresParcelRepository(nil)
+		_, err := repo.ListByMerchantID(context.Background(), nil, merchantAID)
+		if err == nil {
+			t.Fatal("expected error with nil querier, got nil")
+		}
+	})
+
+	t.Run("returns error when query execution fails", func(t *testing.T) {
+		queryErr := errors.New("query execution error")
+		database := registerMockDB("list_merchant_query_err", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			return nil, nil, queryErr
+		})
+		defer database.Close()
+
+		repo := NewPostgresParcelRepository(database)
+		_, err := repo.ListByMerchantID(context.Background(), nil, merchantAID)
+		if err == nil || !strings.Contains(err.Error(), "query execution error") {
+			t.Fatalf("expected query execution error wrapped, got: %v", err)
+		}
+	})
+}
