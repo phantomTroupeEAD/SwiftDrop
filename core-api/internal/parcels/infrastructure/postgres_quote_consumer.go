@@ -8,11 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/swiftdrop/core-api/internal/parcels/application"
 	"github.com/swiftdrop/core-api/internal/platform/db"
+	pricingdomain "github.com/swiftdrop/core-api/internal/pricing/domain"
 )
 
-var _ application.QuoteConsumer = (*PostgresQuoteConsumer)(nil)
+var (
+	_ application.QuoteConsumer        = (*PostgresQuoteConsumer)(nil)
+	_ application.InternalQuoteCreator = (*PostgresQuoteConsumer)(nil)
+)
 
 // PostgresQuoteConsumer implements application.QuoteConsumer using atomic PostgreSQL SQL statements.
 type PostgresQuoteConsumer struct {
@@ -169,4 +174,62 @@ func (c *PostgresQuoteConsumer) ConsumeQuote(
 	}
 
 	return application.AcceptedQuoteSnapshot{}, fmt.Errorf("quote cannot be consumed: underlying tariff rule not found")
+}
+
+// SaveConsumedQuote inserts an internal consumed quote directly into PostgreSQL within the given querier/transaction.
+func (c *PostgresQuoteConsumer) SaveConsumedQuote(ctx context.Context, q db.Querier, quote pricingdomain.Quote) error {
+	querier := q
+	if querier == nil {
+		querier = c.defaultQuerier
+	}
+	if querier == nil {
+		return errors.New("quote consumer: nil db querier")
+	}
+
+	if err := quote.Validate(); err != nil {
+		return fmt.Errorf("cannot save invalid quote: %w", err)
+	}
+
+	const query = `
+		INSERT INTO pricing_quotes (
+			id,
+			tariff_id,
+			tariff_version,
+			requester_id,
+			merchant_id,
+			chargeable_weight_kg,
+			service_level,
+			fee_cents,
+			currency,
+			created_at,
+			expires_at,
+			used_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+	`
+
+	_, err := querier.ExecContext(
+		ctx,
+		query,
+		quote.ID,
+		quote.TariffID,
+		quote.TariffVersion,
+		toNullString(quote.RequesterID),
+		toNullString(quote.MerchantID),
+		quote.ChargeableWeightKg,
+		string(quote.ServiceLevel),
+		quote.Fee.Amount,
+		quote.Fee.Currency,
+		quote.CreatedAt,
+		quote.ExpiresAt,
+		quote.UsedAt,
+	)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return fmt.Errorf("pricing: quote already exists: %w", err)
+		}
+		return fmt.Errorf("save internal consumed quote: %w", err)
+	}
+
+	return nil
 }
