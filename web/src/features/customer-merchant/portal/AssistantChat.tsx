@@ -1,6 +1,16 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  ExternalLink,
+  Package,
+  Search,
+  Send,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
@@ -81,10 +91,17 @@ function FormattedMessage({ text }: { text: string }) {
     <span className="whitespace-pre-wrap break-words">
       {parts.map((part, idx) => {
         if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-          return <strong key={idx} className="font-semibold">{part.slice(2, -2)}</strong>;
+          return <strong key={idx} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-          return <code key={idx} className="rounded bg-muted px-1 py-0.5 text-xs font-mono">{part.slice(1, -1)}</code>;
+          return (
+            <code
+              key={idx}
+              className="rounded-sm border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-xs tabular-nums text-foreground"
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
         }
         return part;
       })}
@@ -121,6 +138,18 @@ export function AssistantChat({
     if (open) composer.current?.focus();
   }, [open]);
 
+  const quickPrompts = role === 'MERCHANT'
+    ? [
+        'Estimate freight tariff for bulk orders',
+        'How do I configure order webhook notifications?',
+        'What are the express courier SLAs?',
+      ]
+    : [
+        'How much to ship 2.5kg from 00100 to 00400?',
+        'Where do I find my parcel tracking number?',
+        'What are the standard package dimensions?',
+      ];
+
   async function send(event: FormEvent) {
     event.preventDefault();
     const prompt = draft.trim();
@@ -140,7 +169,7 @@ export function AssistantChat({
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     try {
-      // 1. Attempt SSE Streaming endpoint first for lively UX
+      // 1. Attempt SSE Streaming endpoint first for lively Apple HIG UX
       let streamResponse: Response | undefined;
       try {
         streamResponse = await fetch(apiBase + '/ai/chat/stream', {
@@ -253,7 +282,7 @@ export function AssistantChat({
         return;
       }
 
-      // 2. Fallback to standard blocking /ai/chat (also preserves compatibility with existing test mocks)
+      // 2. Fallback to standard blocking /ai/chat (also preserves compatibility with test mocks)
       const response = await portalRequest<ChatResponse>('/ai/chat', {
         method: 'POST',
         token,
@@ -312,6 +341,15 @@ export function AssistantChat({
     setDraft('');
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (draft.trim() && !pending) {
+        void send(event as unknown as FormEvent);
+      }
+    }
+  }
+
   function close() {
     setOpen(false);
     launcher.current?.focus();
@@ -322,7 +360,8 @@ export function AssistantChat({
       <Button
         ref={launcher}
         type="button"
-        className="fixed bottom-5 right-4 z-40 min-h-12 rounded-full px-5 shadow-lg sm:right-6"
+        variant="default"
+        className="fixed bottom-5 right-4 z-40 min-h-11 rounded-full border border-border px-4 transition-all duration-150 active:scale-95 sm:right-6"
         aria-expanded={open}
         aria-controls={open ? 'assistant-chat' : undefined}
         data-testid="assistant-open-btn"
@@ -331,7 +370,8 @@ export function AssistantChat({
           else setOpen(true);
         }}
       >
-        <MessageCircle aria-hidden="true" /> Assistant
+        <Sparkles className="size-4" aria-hidden="true" />
+        <span>Assistant</span>
       </Button>
 
       {open && (
@@ -342,101 +382,183 @@ export function AssistantChat({
           onKeyDown={event => {
             if (event.key === 'Escape') close();
           }}
-          className="fixed inset-x-3 bottom-20 z-50 flex max-h-[min(36rem,calc(100dvh-6rem))] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl sm:left-auto sm:right-6 sm:w-96"
+          className="fixed inset-x-3 bottom-20 z-50 flex max-h-[min(38rem,calc(100dvh-6rem))] flex-col overflow-hidden rounded-lg border border-border bg-surface sm:left-auto sm:right-6 sm:w-[26rem]"
         >
-          <header className="flex shrink-0 items-center gap-3 border-b border-border bg-primary-tint px-4 py-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
-              <Sparkles className="size-5" aria-hidden="true" />
-            </span>
-            <h2 id="assistant-chat-title" className="flex-1 text-base font-semibold">
-              SwiftDrop Assistant
-            </h2>
-            <Button variant="ghost" size="icon" type="button" aria-label="Close assistant" onClick={close}>
-              <X aria-hidden="true" />
+          {/* Apple Cupertino Styled Topbar Header */}
+          <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-tint text-primary">
+                <Sparkles className="size-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 id="assistant-chat-title" className="text-sm font-semibold tracking-tight text-foreground leading-none">
+                  SwiftDrop Assistant
+                </h2>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="size-1.5 rounded-full bg-status-success-ink shrink-0" aria-hidden="true" />
+                  <span className="text-xs font-medium text-text-muted">Live Tariff & Tracking</span>
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              type="button"
+              className="size-8 rounded-sm text-text-muted hover:text-foreground"
+              aria-label="Close assistant"
+              onClick={close}
+            >
+              <X className="size-4" aria-hidden="true" />
             </Button>
           </header>
 
+          {/* Transcript Area */}
           <div
             ref={transcript}
             role="log"
             aria-label="Conversation"
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-canvas p-4"
+            className="min-h-0 flex-1 space-y-3.5 overflow-y-auto overscroll-contain bg-canvas p-4"
           >
             {!turns.length && !pending && (
-              <div className="space-y-3">
-                <p className="mr-8 rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm">
+              <div className="space-y-3 rounded-md border border-border bg-surface p-4">
+                <div className="flex items-center gap-2 text-foreground font-medium text-sm">
+                  <Package className="size-4 text-primary" aria-hidden="true" />
+                  <span>How can I assist you today?</span>
+                </div>
+                <p className="text-xs text-text-muted leading-relaxed">
                   {role === 'MERCHANT'
-                    ? 'Need help calculating freight tariffs or checking business shipments?'
-                    : 'Need help booking a parcel or estimating delivery cost?'}
+                    ? 'Get instant freight calculations, look up merchant order milestones, or ask about business dispatch policies.'
+                    : 'Calculate delivery fees, check parcel dimensions, lookup live tracking status, or review shipping rules.'}
                 </p>
-                <Button asChild variant="outline" data-testid="ai-initial-book-btn">
-                  <Link to={role === 'MERCHANT' ? '/portal/merchants/orders' : '/portal/book'}>
-                    {role === 'MERCHANT' ? 'Manage orders' : 'Estimate delivery cost'}
-                  </Link>
-                </Button>
+
+                {/* Quick Suggestion Chips */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Suggested Queries</span>
+                  <div className="flex flex-col gap-1.5">
+                    {quickPrompts.map((promptText, i) => (
+                      <Button
+                        key={i}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="justify-start text-left text-xs font-normal h-auto py-1.5 px-2.5 rounded-sm"
+                        onClick={() => {
+                          setDraft(promptText);
+                          composer.current?.focus();
+                        }}
+                      >
+                        <Search className="size-3 text-text-muted mr-1.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{promptText}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border-subtle">
+                  <Button asChild variant="outline" size="sm" className="w-full text-xs rounded-sm" data-testid="ai-initial-book-btn">
+                    <Link to={role === 'MERCHANT' ? '/portal/merchants/orders' : '/portal/book'}>
+                      {role === 'MERCHANT' ? 'Manage merchant orders' : 'Estimate delivery cost'}
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
 
             {turns.map((turn, index) => (
-              <div key={index} className="flex flex-col gap-3">
-                <p className="max-w-[88%] self-end whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm text-primary-foreground">
+              <div key={index} className="flex flex-col gap-2.5">
+                {/* User Message Bubble */}
+                <p className="max-w-[85%] self-end whitespace-pre-wrap break-words rounded-md rounded-br-sm bg-primary px-3.5 py-2.5 text-sm text-primary-foreground">
                   <span className="sr-only">You: </span>
                   {turn.prompt}
                 </p>
-                <div className="max-w-[88%] self-start space-y-2 rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm">
-                  <p>
+
+                {/* Assistant Message Bubble */}
+                <div className="max-w-[88%] self-start space-y-2.5 rounded-md rounded-bl-sm border border-border bg-surface px-3.5 py-2.5 text-sm">
+                  <p className="text-foreground leading-relaxed">
                     <span className="sr-only">Assistant: </span>
                     <FormattedMessage text={turn.reply} />
                   </p>
+
+                  {/* Grounded Action Cards */}
                   {turn.booking && (
-                    <Button asChild variant="outline" data-testid="ai-action-btn-book">
-                      <Link to={turn.booking}>Continue to booking</Link>
-                    </Button>
+                    <div className="mt-2 rounded-sm border border-border bg-surface-subtle p-2.5 flex items-center justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground truncate">Shipment Booking</p>
+                        <p className="text-xs text-text-muted truncate">Prefilled tariff parameters</p>
+                      </div>
+                      <Button asChild variant="default" size="sm" className="text-xs shrink-0 rounded-sm" data-testid="ai-action-btn-book">
+                        <Link to={turn.booking}>
+                          <span>Continue</span>
+                          <ArrowRight className="size-3 ml-1" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    </div>
                   )}
+
                   {turn.tracking && (
-                    <Button asChild variant="outline" data-testid="ai-action-btn-track">
-                      <Link to={turn.tracking.url}>{turn.tracking.label}</Link>
-                    </Button>
+                    <div className="mt-2 rounded-sm border border-border bg-surface-subtle p-2.5 flex items-center justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground truncate">Tracking Details</p>
+                        <p className="text-xs text-text-muted truncate">Live parcel milestones</p>
+                      </div>
+                      <Button asChild variant="outline" size="sm" className="text-xs shrink-0 rounded-sm" data-testid="ai-action-btn-track">
+                        <Link to={turn.tracking.url}>
+                          <span>{turn.tracking.label}</span>
+                          <ExternalLink className="size-3 ml-1" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
             ))}
 
             {pending && (
-              <div className="flex flex-col gap-3">
-                <p className="max-w-[88%] self-end whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm text-primary-foreground">
+              <div className="flex flex-col gap-2.5">
+                <p className="max-w-[85%] self-end whitespace-pre-wrap break-words rounded-md rounded-br-sm bg-primary px-3.5 py-2.5 text-sm text-primary-foreground">
                   <span className="sr-only">You: </span>
                   {draft.trim()}
                 </p>
 
                 {activeTool && (
-                  <div
-                    className="flex items-center gap-2 self-start rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-2 text-xs text-text-muted"
+                  <Badge
+                    variant="active"
+                    className="self-start text-xs py-1 px-2.5 rounded-sm border border-border"
                     data-testid="ai-active-tool-badge"
                   >
-                    <span className="size-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+                    <span className="size-1.5 rounded-full bg-primary animate-pulse shrink-0" aria-hidden="true" />
                     <span>{activeTool}</span>
-                  </div>
+                  </Badge>
                 )}
 
                 {streamingReply ? (
-                  <div className="max-w-[88%] self-start space-y-2 rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm">
-                    <p>
+                  <div className="max-w-[88%] self-start space-y-2 rounded-md rounded-bl-sm border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground">
+                    <p className="leading-relaxed">
                       <span className="sr-only">Assistant: </span>
                       <FormattedMessage text={streamingReply} />
+                      <span className="inline-block w-1.5 h-3.5 bg-primary ml-0.5 animate-pulse align-middle" aria-hidden="true" />
                     </p>
                   </div>
                 ) : (
-                  <p role="status" className="self-start rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-                    Assistant is typing…
-                  </p>
+                  <div className="self-start flex items-center gap-1.5 rounded-md rounded-bl-sm border border-border bg-surface px-3.5 py-2.5 text-xs text-text-muted">
+                    <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+                    <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+                    <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+                    <span className="ml-1 text-xs">Assistant is preparing response…</span>
+                  </div>
                 )}
               </div>
             )}
           </div>
 
+          {/* Composer Footer */}
           <form onSubmit={send} className="shrink-0 space-y-2 border-t border-border bg-surface p-3">
-            {error && <p role="alert" className="break-words text-sm text-status-error-ink">{error}</p>}
+            {error && (
+              <div role="alert" className="flex items-center gap-2 rounded-sm border border-status-error-border bg-status-error-bg px-2.5 py-1.5 text-xs text-status-error-ink">
+                <AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="break-words">{error}</span>
+              </div>
+            )}
             <Label htmlFor="assistant-prompt" className="sr-only">Message</Label>
             <div className="flex items-end gap-2">
               <Textarea
@@ -444,24 +566,28 @@ export function AssistantChat({
                 id="assistant-prompt"
                 data-testid="assistant-prompt-input"
                 value={draft}
-                rows={2}
+                rows={1}
                 maxLength={1000}
-                className="min-h-11 resize-none rounded-xl"
-                placeholder="Write a message…"
+                className="min-h-10 max-h-24 resize-none rounded-sm border-border text-sm placeholder:text-text-muted"
+                placeholder="Ask about tariffs, tracking, or booking…"
+                onKeyDown={handleKeyDown}
                 onChange={event => setDraft(event.target.value)}
                 readOnly={pending}
               />
               <Button
                 type="submit"
                 size="icon"
-                className="size-11 shrink-0 rounded-full"
+                className="size-10 shrink-0 rounded-sm"
                 aria-label="Send message"
                 data-testid="assistant-send-btn"
                 disabled={pending || !draft.trim()}
               >
-                <Send aria-hidden="true" />
+                <Send className="size-4" aria-hidden="true" />
               </Button>
             </div>
+            <p className="text-xs text-text-subtle text-center">
+              Grounded in official tariffs &amp; real-time tracking records
+            </p>
           </form>
         </section>
       )}
