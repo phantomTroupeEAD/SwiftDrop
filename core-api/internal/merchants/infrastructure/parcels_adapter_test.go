@@ -44,10 +44,14 @@ func (t *adapterTestTx) Rollback() error { return nil }
 
 type adapterTestStmt struct{}
 
-func (s *adapterTestStmt) Close() error                                    { return nil }
-func (s *adapterTestStmt) NumInput() int                                   { return -1 }
-func (s *adapterTestStmt) Exec(args []driver.Value) (driver.Result, error) { return adapterTestResult{}, nil }
-func (s *adapterTestStmt) Query(args []driver.Value) (driver.Rows, error)  { return &adapterTestRows{}, nil }
+func (s *adapterTestStmt) Close() error  { return nil }
+func (s *adapterTestStmt) NumInput() int { return -1 }
+func (s *adapterTestStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return adapterTestResult{}, nil
+}
+func (s *adapterTestStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return &adapterTestRows{}, nil
+}
 
 type adapterTestResult struct{}
 
@@ -344,22 +348,22 @@ func validTestOrderRequest() application.OrderRequest {
 		MerchantReference: "ORD-2026-9988",
 		ServiceLevel:      "STANDARD",
 		Pickup: map[string]any{
-			"contact_name":   "Warehouse Dispatch",
-			"contact_phone":  "+94771234567",
-			"street_line_1":  "10 Galle Road",
-			"city":           "Colombo",
-			"postal_code":    "00300",
-			"zone_id":        "ZONE_WESTERN_01",
-			"instructions":   "Loading Bay 2",
+			"contact_name":  "Warehouse Dispatch",
+			"contact_phone": "+94771234567",
+			"street_line_1": "10 Galle Road",
+			"city":          "Colombo",
+			"postal_code":   "00300",
+			"zone_id":       "ZONE_WESTERN_01",
+			"instructions":  "Loading Bay 2",
 		},
 		Dropoff: map[string]any{
-			"contact_name":   "Nimal Perera",
-			"contact_phone":  "+94779876543",
-			"street_line_1":  "12 Temple Road",
-			"city":           "Kandy",
-			"postal_code":    "20000",
-			"zone_id":        "ZONE_CENTRAL_01",
-			"instructions":   "Deliver to door",
+			"contact_name":  "Nimal Perera",
+			"contact_phone": "+94779876543",
+			"street_line_1": "12 Temple Road",
+			"city":          "Kandy",
+			"postal_code":   "20000",
+			"zone_id":       "ZONE_CENTRAL_01",
+			"instructions":  "Deliver to door",
 		},
 		Parcel: application.ParcelRequest{
 			WeightKG: 2.5,
