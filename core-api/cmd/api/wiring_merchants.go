@@ -12,13 +12,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/swiftdrop/core-api/internal/events"
 	identityapp "github.com/swiftdrop/core-api/internal/identity/application"
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/merchants/application"
 	"github.com/swiftdrop/core-api/internal/merchants/domain"
 	"github.com/swiftdrop/core-api/internal/merchants/infrastructure"
 	"github.com/swiftdrop/core-api/internal/merchants/transport"
+	parcelsapp "github.com/swiftdrop/core-api/internal/parcels/application"
+	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 	"github.com/swiftdrop/core-api/internal/platform/config"
+	pricinginfra "github.com/swiftdrop/core-api/internal/pricing/infrastructure"
 )
 
 // registerMerchantsModule wires Member 04 Merchant Integration operations into the router.
@@ -86,7 +90,49 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		}
 	}
 
-	// 4. Application Service construction
+	// 4. Construct Member 02 Authoritative Booking Engine & Repository Adapter
+	txManager := parcelsapp.NewDBTransactionManager(db)
+	tariffRepo := pricinginfra.NewPostgresTariffRepository(db)
+	quoteConsumer := parcelsinfra.NewPostgresQuoteConsumer(db)
+	parcelRepo := parcelsinfra.NewPostgresParcelRepository(db)
+	statusHistoryRepo := parcelsinfra.NewPostgresStatusHistoryRepository(db)
+	outboxWriter := events.NewPostgresOutboxWriter()
+	trackingGen := parcelsapp.NewCryptoTrackingNumberGenerator()
+	idGen := parcelsapp.NewUUIDv7Generator()
+	clock := parcelsapp.NewSystemClock()
+	idempotencyRepo := parcelsinfra.NewPostgresIdempotencyRepository(db)
+
+	bookUC, err := parcelsapp.NewBookParcelUseCase(
+		txManager,
+		quoteConsumer,
+		parcelRepo,
+		statusHistoryRepo,
+		outboxWriter,
+		trackingGen,
+		idGen,
+		clock,
+	)
+	if err != nil {
+		return fmt.Errorf("merchants: initialize book parcel use case: %w", err)
+	}
+	bookUC = bookUC.WithIdempotency(idempotencyRepo, parcelsapp.DefaultIdempotencyTTL)
+
+	merchantUC, err := parcelsapp.NewBookMerchantParcelUseCase(
+		txManager,
+		tariffRepo,
+		quoteConsumer,
+		bookUC,
+		idGen,
+		clock,
+	)
+	if err != nil {
+		return fmt.Errorf("merchants: initialize merchant booking use case: %w", err)
+	}
+	merchantUC = merchantUC.WithIdempotency(idempotencyRepo, parcelsapp.DefaultIdempotencyTTL)
+
+	bookingAdapter := infrastructure.NewParcelsBookingAdapter(merchantUC, parcelRepo)
+
+	// 5. Application Service construction
 	var roleAssigner application.RoleAssigner = infrastructure.RoleAssigner{}
 	if len(roleAssigners) > 0 && roleAssigners[0] != nil {
 		roleAssigner = &roleAssignerAdapter{assigner: roleAssigners[0]}
@@ -103,7 +149,7 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		Hasher:    infrastructure.Hasher{Peppers: map[int][]byte{1: pepper}, Current: 1},
 		Cipher:    infrastructure.Cipher{Key: encKey, Version: 1},
 		Resolver:  infrastructure.Resolver{},
-		Booking:   infrastructure.NewBookingStub(),
+		Booking:   bookingAdapter,
 		Observer:  noopObserver{},
 		Now:       time.Now,
 	}, application.Config{
