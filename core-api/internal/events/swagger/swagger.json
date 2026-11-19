@@ -1513,6 +1513,17 @@
                     "merchants"
                 ],
                 "summary": "Generate a new merchant API key",
+                "parameters": [
+                    {
+                        "description": "API key parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.CreateKeyRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -1625,6 +1636,17 @@
                     "merchants"
                 ],
                 "summary": "Register a new webhook subscription",
+                "parameters": [
+                    {
+                        "description": "Webhook subscription parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.RegisterWebhookRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -2647,6 +2669,56 @@
             "type": "object",
             "properties": {
                 "data": {}
+            }
+        },
+        "internal_merchants_transport.CreateKeyRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Production Warehouse Key"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcels:create\"",
+                        "\"parcels:read\"]"
+                    ]
+                }
+            }
+        },
+        "internal_merchants_transport.RegisterWebhookRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcel.delivered.v1\"",
+                        "\"parcel.delivery_failed.v1\"]"
+                    ]
+                },
+                "secret": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://httpbin.org/post"
+                }
             }
         },
         "internal_parcels_transport.AddressRequest": {

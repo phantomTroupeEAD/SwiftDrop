@@ -103,7 +103,7 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		Hasher:    infrastructure.Hasher{Peppers: map[int][]byte{1: pepper}, Current: 1},
 		Cipher:    infrastructure.Cipher{Key: encKey, Version: 1},
 		Resolver:  infrastructure.Resolver{},
-		Booking:   infrastructure.NewBookingStub(),
+		Booking:   infrastructure.NewPostgresParcelBooking(db),
 		Observer:  noopObserver{},
 		Now:       time.Now,
 	}, application.Config{
@@ -181,4 +181,17 @@ func (a *roleAssignerAdapter) GrantMerchantRole(ctx context.Context, _ applicati
 		return nil
 	}
 	return a.assigner.AssignRole(ctx, userID, identitydomain.RoleMerchant, &merchantID)
+}
+
+func (a *roleAssignerAdapter) RevokeMerchantRole(ctx context.Context, _ application.Querier, userID string) error {
+	if a.assigner == nil {
+		return nil
+	}
+	type revoker interface {
+		RevokeMerchantRole(ctx context.Context, userID string) error
+	}
+	if r, ok := any(a.assigner).(revoker); ok {
+		return r.RevokeMerchantRole(ctx, userID)
+	}
+	return a.assigner.AssignRole(ctx, userID, identitydomain.RoleCustomer, nil)
 }

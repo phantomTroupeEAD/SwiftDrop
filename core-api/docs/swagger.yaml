@@ -331,6 +331,40 @@ definitions:
     properties:
       data: {}
     type: object
+  internal_merchants_transport.CreateKeyRequest:
+    properties:
+      expires_at:
+        type: string
+      label:
+        example: Production Warehouse Key
+        type: string
+      scopes:
+        example:
+        - '["parcels:create"'
+        - '"parcels:read"]'
+        items:
+          type: string
+        type: array
+    type: object
+  internal_merchants_transport.RegisterWebhookRequest:
+    properties:
+      enabled:
+        type: boolean
+      events:
+        example:
+        - '["parcel.delivered.v1"'
+        - '"parcel.delivery_failed.v1"]'
+        items:
+          type: string
+        type: array
+      secret:
+        items:
+          type: integer
+        type: array
+      url:
+        example: https://httpbin.org/post
+        type: string
+    type: object
   internal_parcels_transport.AddressRequest:
     properties:
       address_line1:
@@ -1346,6 +1380,13 @@ paths:
       - application/json
       description: Generates an API credential with scoped permissions. Key secret
         is returned once only.
+      parameters:
+      - description: API key parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_merchants_transport.CreateKeyRequest'
       produces:
       - application/json
       responses:
@@ -1417,6 +1458,13 @@ paths:
       consumes:
       - application/json
       description: Configures a webhook endpoint to receive domain notification events.
+      parameters:
+      - description: Webhook subscription parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_merchants_transport.RegisterWebhookRequest'
       produces:
       - application/json
       responses:
