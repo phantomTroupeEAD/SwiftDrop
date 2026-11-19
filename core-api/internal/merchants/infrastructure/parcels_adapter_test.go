@@ -151,6 +151,37 @@ func (m *mockAdapterParcelRepo) ListByMerchantID(ctx context.Context, q db.Queri
 	return out, nil
 }
 
+func (m *mockAdapterParcelRepo) List(ctx context.Context, q db.Querier, filter parcelsapp.ParcelFilter, page, pageSize int) ([]parcelsdomain.Parcel, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var res []parcelsdomain.Parcel
+	for _, p := range m.parcels {
+		if filter.SenderID != nil && (p.SenderID == nil || *p.SenderID != *filter.SenderID) {
+			continue
+		}
+		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
+			continue
+		}
+		res = append(res, p)
+	}
+	total := len(res)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []parcelsdomain.Parcel{}, total, nil
+	}
+	end := offset + pageSize
+	if end > total {
+		end = total
+	}
+	return res[offset:end], total, nil
+}
+
 type mockAdapterStatusHistoryRepo struct{}
 
 func (m *mockAdapterStatusHistoryRepo) Save(ctx context.Context, q db.Querier, entry parcelsdomain.StatusHistoryEntry) error {
