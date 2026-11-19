@@ -6,11 +6,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
-<<<<<<< Updated upstream
-=======
 	"sort"
 	"strings"
->>>>>>> Stashed changes
 	"sync"
 	"testing"
 	"time"
