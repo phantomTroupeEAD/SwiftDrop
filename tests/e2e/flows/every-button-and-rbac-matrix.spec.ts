@@ -537,11 +537,11 @@ test.describe('Master CQA: Every Button, Every Action & Strict RBAC Privileges M
 
       // "No Less": Merchant can open API Keys
       await page.goto('/portal/merchants/api-keys');
-      await expect(page.getByRole('heading', { name: 'API keys' })).toBeVisible({ timeout: 6000 });
+      await expect(page.getByRole('heading', { name: 'API keys' }).first()).toBeVisible({ timeout: 6000 });
 
       // "No Less": Merchant can open Webhooks
       await page.goto('/portal/merchants/webhooks');
-      await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible({ timeout: 6000 });
+      await expect(page.getByRole('heading', { name: 'Webhooks' }).first()).toBeVisible({ timeout: 6000 });
 
       // "No More": Merchant cannot access Courier Dashboard (barred: redirects to /dashboard or /auth/login)
       await page.goto('/courier/dashboard');
