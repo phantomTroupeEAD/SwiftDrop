@@ -209,6 +209,21 @@ async def pricing_tool(
 
         response = await client.post(target_url, json=active_payload, headers=headers)
 
+        if response.status_code == 401:
+            # Core API requires an authenticated customer/merchant user ID to create a 15-minute price-frozen booking quote.
+            # For unauthenticated or guest inquiries, calculate mathematically grounded tariff pricing matching Member 2 Core Pricing formulas!
+            fallback = calculate_fallback_pricing(
+                billable_weight,
+                pickup_postal_code=input_data.pickup_postal_code,
+                delivery_postal_code=input_data.delivery_postal_code,
+                service_type=input_data.service_type.value,
+                role=role,
+            )
+            fallback["origin_zone_id"] = origin_zone
+            fallback["destination_zone_id"] = dest_zone
+            fallback["quote_id"] = None
+            return fallback
+
         if response.status_code >= 400:
             error_msg = f"Received HTTP {response.status_code} while calculating quote"
             try:
