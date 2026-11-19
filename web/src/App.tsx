@@ -14,6 +14,8 @@ import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+// TEMP-M7-OPS-ROUTES (import): ops workspace for ADMIN and DISPATCHER. Remove with the line below.
+import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 
 function CustomerBookingAlias() {
   const { search } = useLocation();
@@ -24,8 +26,9 @@ function CustomerBookingAlias() {
 function SignedInHome() {
   const { user } = useAuth();
   switch (user?.role) {
-    case 'ADMIN': return <Navigate to="/admin/dashboard" replace />;
-    case 'DISPATCHER': return <Navigate to="/dispatcher/dashboard" replace />;
+    // TEMP-M7-OPS-ROUTES: ADMIN and DISPATCHER start in the ops workspace (was /admin/dashboard and /dispatcher/dashboard).
+    case 'ADMIN': return <Navigate to="/ops" replace />;
+    case 'DISPATCHER': return <Navigate to="/ops" replace />;
     case 'COURIER': return <Navigate to="/courier/dashboard" replace />;
     default: return <RoleHome />;
   }
@@ -124,6 +127,9 @@ export const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* TEMP-M7-OPS-ROUTES: /ops/* workspace (role-filtered side menu). Delete this line and the import to roll back. */}
+      {opsRoutes}
 
       {/* Aliases mapping to role consoles */}
       <Route
