@@ -44,6 +44,42 @@
                         "description": "Items per page, 1-100",
                         "name": "per_page",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact action, for example ZONE_CREATED",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact target type, for example ZONE",
+                        "name": "target_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact target id, for example ZONE_COLOMBO_01",
+                        "name": "target_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER or SYSTEM",
+                        "name": "actor_role",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "First Sri Lanka day to include, YYYY-MM-DD",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last Sri Lanka day to include, YYYY-MM-DD",
+                        "name": "to",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -81,7 +117,7 @@
                         }
                     },
                     "422": {
-                        "description": "VALIDATION_FAILED: bad page or per_page",
+                        "description": "VALIDATION_FAILED: bad page, per_page or filter",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
                         }
@@ -2277,6 +2313,17 @@
                     "merchants"
                 ],
                 "summary": "Generate a new merchant API key",
+                "parameters": [
+                    {
+                        "description": "API key parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.CreateKeyRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -2389,6 +2436,17 @@
                     "merchants"
                 ],
                 "summary": "Register a new webhook subscription",
+                "parameters": [
+                    {
+                        "description": "Webhook subscription parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.RegisterWebhookRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -3861,6 +3919,56 @@
                 "reason": {
                     "type": "string",
                     "example": "Approved following verification"
+                }
+            }
+        },
+        "internal_merchants_transport.CreateKeyRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Production Warehouse Key"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcels:create\"",
+                        "\"parcels:read\"]"
+                    ]
+                }
+            }
+        },
+        "internal_merchants_transport.RegisterWebhookRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcel.delivered.v1\"",
+                        "\"parcel.delivery_failed.v1\"]"
+                    ]
+                },
+                "secret": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://httpbin.org/post"
                 }
             }
         },
