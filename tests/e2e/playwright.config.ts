@@ -32,7 +32,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://localhost:80',
     trace: 'on',
     video: 'on',
     screenshot: 'on',
