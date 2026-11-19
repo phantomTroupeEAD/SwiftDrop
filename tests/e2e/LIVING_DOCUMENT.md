@@ -277,3 +277,34 @@ Flow 7 proves the authoritative, multi-actor parcel delivery journey across the 
 7. **Customer Home Page Visual Verification:** Customer navigates to `/dashboard` and confirms all 6 parcels render in the "Recent parcels" table with tracking number links, booking timestamps, and `DELIVERED` status badges, alongside summary metrics cards (`Parcels on latest page: 6`, `Delivered: 6`).
 - **Endpoint Implementation:** Implemented `GET /api/v1/parcels` in `core-api/internal/parcels` (`ListParcelsUseCase`, `PostgresParcelRepository.List`, `Handler.ListParcels`) with role-based scoping (`CUSTOMER` filtered by `sender_id`, `MERCHANT` filtered by `merchant_id`, `ADMIN` global view).
 - **Test Result:** 1 passed (3.7s) — 100% Pass Rate across all 6 parcels with complete UI table rendering verified.
+
+---
+
+## 12. Exhaustive Dispatcher Portal Suite (`12-dispatcher-portal-exhaustive.spec.ts`)
+
+### 12.1 Suite Overview & UI/Domain Contract Verification
+Flow 12 covers 100% of the single-page operational capabilities, modal flows, validation rules, and error recovery on the Dispatcher Portal (`/dispatcher/dashboard`):
+- **12.1 Empty Board State & Role Scoping:** Validates `[data-role="DISPATCHER"]` DOM scoping, zero waiting counters, and empty queue representations (`No parcels are waiting`, `No active assignments`, `No couriers listed`).
+- **12.2 Operating Zone Filtering:** Validates `GET /zones` integration, dynamic query scoping (`?zone_id=ZONE_KANDY_01`), active zone badge rendering, empty zone rosters, and query clearance on "All Operational Zones".
+- **12.3 Courier Eligibility Matrix:** Restricts assignment dropdown to couriers with `ON_SHIFT` status and active workload strictly below `max_capacity`. Excludes `OFF_SHIFT`, `ON_BREAK`, and saturated couriers.
+- **12.4 Cancel / Unassign Assignment Modal:** Verifies modal open on assigned parcel, operational reason textarea validation (blocks empty/whitespace submissions via `disabled` state), cancellation payload dispatch (`POST /dispatch/assignments/:id/cancel`), banner notice feedback, and parcel return to the unassigned queue.
+- **12.5 Reschedule Failed Parcel Modal:** Identifies `ATTEMPT_FAILED` parcels, verifies amber warning badge, opens supervisor reschedule dialog, validates courier selection, captures optional supervisor notes, and dispatches `POST /dispatch/parcels/:id/reschedule`.
+- **12.6 Administrative Shift Toggling:** Allows dispatchers to control courier shifts directly from roster cards (`POST /courier/shift`). Validates status transitions (`OFF_SHIFT` -> `ON_SHIFT` -> `ON_BREAK` -> `ON_SHIFT`) and dynamic reflect in assignment dropdowns.
+- **12.7 Courier Fleet Onboarding Modal:** Tests `+ Add Courier` dialog, Candidate Accounts fetch (`GET /dispatch/couriers/candidates`), manual UUID entry toggle, vehicle type dynamic capacity defaults (`MOTORCYCLE` = 25, `VAN` = 60, `TRUCK` = 150), and `POST /dispatch/couriers` registration.
+- **12.8 Error Boundary & Recovery:** Validates HTTP 500 error alert rendering, retry button execution (`data-testid="dispatcher-retry-btn"`), and seamless board recovery.
+- **Test Result:** 8 passed (18.0s) — 100% Pass Rate across all 8 suites.
+
+---
+
+## 13. Dispatcher Cross-Portal Live Synchronization Suite (`13-dispatcher-cross-portal-sync.spec.ts`)
+
+### 13.1 Multi-Actor Real-Time Zero-Mock Synchronized Architecture
+Flow 13 verifies true multi-actor value-chain synchronization across concurrent, isolated browser contexts (Desktop Dispatcher + Mobile Courier PWA + Customer Booking API):
+1. **Administrative Shift Sync:** Dispatcher puts courier `CR-0012` on break and resumes shift; Courier mobile PWA and Dispatcher board reflect state without reload.
+2. **Real Customer Ingestion:** Customer authenticates, requests a tariff quote (`POST /api/v1/pricing/quotes`), and commits a real parcel booking (`POST /api/v1/parcels`) with atomic PostgreSQL persistence and outbox event creation.
+3. **Dispatcher Queue Ingestion:** Newly booked parcel appears live in Dispatcher's Unassigned Queue on board refresh.
+4. **Dispatcher Assignment:** Dispatcher assigns parcel to courier `CR-0012` (`POST /dispatch/assignments`); parcel moves to Assigned table on Dispatcher board.
+5. **Courier Mobile Sync:** Courier mobile PWA (`/courier/dashboard`) receives task in real time upon task list refresh.
+6. **Dispatcher Emergency Unassign & Eviction:** Dispatcher unassigns parcel with operational reason; parcel immediately returns to Dispatcher unassigned queue and is evicted from Courier mobile device.
+7. **Reassignment & In-Transit Progress:** Dispatcher reassigns parcel to courier; courier clicks `Start delivery` (`data-testid="courier-start-run"`) transitioning parcel to `OUT_FOR_DELIVERY`; Dispatcher Board Assigned table reactively reflects `out for delivery` status badge.
+- **Test Result:** 1 passed (6.0s) — 100% Pass Rate with zero mocks against live PostgreSQL, Redis, RabbitMQ, and Core API.

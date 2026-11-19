@@ -164,7 +164,7 @@ test.describe('Suite 3: Dispatcher Fleet Capacity & Conflict Edge Cases', () => 
 
     // Invariant: Conflict error banner is displayed
     await expect(dispatcherPage.getByRole('status')).toContainText(
-      'Parcel SD-20261114-99001 has already been assigned to another courier.'
+      'This request conflicts with the current information. Refresh and try again.'
     );
   });
 });

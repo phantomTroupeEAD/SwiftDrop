@@ -82,6 +82,13 @@ export const SELECTORS = {
     BADGE_ASSIGNMENT_STATUS: 'badge-assignment-status',
     FILTER_ZONE_DROPDOWN: 'filter-zone-dropdown',
     COURIER_CAPACITY_METER: 'courier-capacity-meter',
+    ASSIGNED_PARCELS_LIST: 'dispatcher-assigned-parcels',
+    RESCHEDULE_BTN: 'reschedule-btn',
+    UNASSIGN_BTN: 'unassign-btn',
+    ONBOARD_COURIER_BTN: 'onboard-courier-btn',
+    REGISTER_COURIER_SUBMIT_BTN: 'register-courier-submit-btn',
+    CONFIRM_CANCEL_ASSIGNMENT_BTN: 'confirm-cancel-assignment-btn',
+    CONFIRM_RESCHEDULE_BTN: 'confirm-reschedule-btn',
   },
 
   // ---------------------------------------------------------------------------
