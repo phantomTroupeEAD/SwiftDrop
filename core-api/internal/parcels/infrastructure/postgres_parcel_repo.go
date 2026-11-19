@@ -228,6 +228,151 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 		LIMIT 1;
 	`
 
+<<<<<<< Updated upstream
+=======
+	row := querier.QueryRowContext(ctx, query, cleanID)
+	parcel, err := scanParcelRow(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Parcel{}, domain.ErrInvalidParcelID
+		}
+		return domain.Parcel{}, fmt.Errorf("find parcel from postgres: %w", err)
+	}
+
+	return parcel, nil
+}
+
+// FindByTrackingNumber retrieves a parcel by its unique Crockford Base32 tracking number.
+func (r *PostgresParcelRepository) FindByTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (domain.Parcel, error) {
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return domain.Parcel{}, err
+	}
+
+	if err := tn.Validate(); err != nil {
+		return domain.Parcel{}, err
+	}
+
+	const query = `
+		SELECT
+			id,
+			tracking_number,
+			sender_id,
+			merchant_id,
+			recipient_name,
+			recipient_phone,
+			quote_id,
+			pricing_rule_id,
+			pricing_rule_version,
+			delivery_fee_cents,
+			currency,
+			origin_zone_id,
+			destination_zone_id,
+			service_level,
+			actual_weight_kg,
+			volumetric_weight_kg,
+			chargeable_weight_kg,
+			length_cm,
+			width_cm,
+			height_cm,
+			pickup_address,
+			dropoff_address,
+			item_description,
+			special_instructions,
+			status,
+			attempt_count,
+			version,
+			created_at,
+			updated_at
+		FROM parcels
+		WHERE tracking_number = $1
+		LIMIT 1;
+	`
+
+	row := querier.QueryRowContext(ctx, query, tn.String())
+	parcel, err := scanParcelRow(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Parcel{}, domain.ErrInvalidTrackingNumber
+		}
+		return domain.Parcel{}, fmt.Errorf("find parcel by tracking number from postgres: %w", err)
+	}
+
+	return parcel, nil
+}
+
+// ListByMerchantID retrieves all parcels owned by the specified merchant, ordered by created_at DESC.
+// Returns an empty slice (not an error) when no parcels match the merchant ID or if merchantID is empty.
+func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return nil, err
+	}
+
+	cleanMerchantID := strings.TrimSpace(merchantID)
+	if cleanMerchantID == "" {
+		return []domain.Parcel{}, nil
+	}
+
+	const query = `
+		SELECT
+			id,
+			tracking_number,
+			sender_id,
+			merchant_id,
+			recipient_name,
+			recipient_phone,
+			quote_id,
+			pricing_rule_id,
+			pricing_rule_version,
+			delivery_fee_cents,
+			currency,
+			origin_zone_id,
+			destination_zone_id,
+			service_level,
+			actual_weight_kg,
+			volumetric_weight_kg,
+			chargeable_weight_kg,
+			length_cm,
+			width_cm,
+			height_cm,
+			pickup_address,
+			dropoff_address,
+			item_description,
+			special_instructions,
+			status,
+			attempt_count,
+			version,
+			created_at,
+			updated_at
+		FROM parcels
+		WHERE merchant_id = $1
+		ORDER BY created_at DESC;
+	`
+
+	rows, err := querier.QueryContext(ctx, query, cleanMerchantID)
+	if err != nil {
+		return nil, fmt.Errorf("list parcels by merchant from postgres: %w", err)
+	}
+	defer rows.Close()
+
+	parcels := make([]domain.Parcel, 0)
+	for rows.Next() {
+		parcel, err := scanParcelRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan parcel row: %w", err)
+		}
+		parcels = append(parcels, parcel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate parcel rows: %w", err)
+	}
+
+	return parcels, nil
+}
+
+func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, error) {
+>>>>>>> Stashed changes
 	var (
 		parcelID, tnStr           string
 		senderID, merchantID      sql.NullString
