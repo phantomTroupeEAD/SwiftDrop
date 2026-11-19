@@ -228,8 +228,6 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 		LIMIT 1;
 	`
 
-<<<<<<< Updated upstream
-=======
 	row := querier.QueryRowContext(ctx, query, cleanID)
 	parcel, err := scanParcelRow(row)
 	if err != nil {
@@ -277,8 +275,6 @@ func (r *PostgresParcelRepository) FindByTrackingNumber(ctx context.Context, q d
 			height_cm,
 			pickup_address,
 			dropoff_address,
-			item_description,
-			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -338,8 +334,6 @@ func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Qu
 			height_cm,
 			pickup_address,
 			dropoff_address,
-			item_description,
-			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -372,7 +366,6 @@ func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Qu
 }
 
 func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, error) {
->>>>>>> Stashed changes
 	var (
 		parcelID, tnStr           string
 		senderID, merchantID      sql.NullString
@@ -391,8 +384,7 @@ func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, err
 		createdAt, updatedAt      time.Time
 	)
 
-	row := querier.QueryRowContext(ctx, query, cleanID)
-	err = row.Scan(
+	err := row.Scan(
 		&parcelID,
 		&tnStr,
 		&senderID,
@@ -422,10 +414,7 @@ func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, err
 		&updatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.Parcel{}, domain.ErrInvalidParcelID
-		}
-		return domain.Parcel{}, fmt.Errorf("find parcel from postgres: %w", err)
+		return domain.Parcel{}, err
 	}
 
 	tn, err := domain.NewTrackingNumber(tnStr)
