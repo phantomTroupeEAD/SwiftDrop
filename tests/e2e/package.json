@@ -16,6 +16,7 @@
     "test:combinatorial-webhooks": "playwright test flows/combinatorial-webhooks.spec.ts --project=merchant-portal",
     "test:traffic": "playwright test flows/realtime-user-traffic-load.spec.ts --project=admin-portal",
     "test:vulnerabilities": "playwright test flows/flaw-and-vulnerability-matrix.spec.ts --project=admin-portal",
+    "test:rbac-matrix": "playwright test flows/every-button-and-rbac-matrix.spec.ts --project=admin-portal",
     "test:dispatcher": "playwright test flows/12-dispatcher-portal-exhaustive.spec.ts --project=dispatcher-board",
     "test:dispatcher-sync": "playwright test flows/13-dispatcher-cross-portal-sync.spec.ts --project=dispatcher-board",
     "test:ui": "playwright test --ui",

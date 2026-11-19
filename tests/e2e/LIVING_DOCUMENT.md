@@ -348,6 +348,7 @@ Flow 13 verifies true multi-actor value-chain synchronization across concurrent,
 
 ### 9.3 Verification Summary
 All core and edge suites verified passing:
+- `npm run test:rbac-matrix`: PASS (8/8 passed in 33.2s) — Master Every-Button & Strict 6-Role RBAC Matrix
 - `npm run test:traffic`: PASS (10.4s)
 - `npm run test:vulnerabilities`: PASS (2.3s)
 - `npm run test:live`: PASS (13.8s)
@@ -373,4 +374,32 @@ All core and edge suites verified passing:
 - `edge-07-tracking-degradation.spec.ts`: PASS (1/1 passed)
 - `edge-08-assistant-adversarial.spec.ts`: PASS (1/1 passed)
 - `edge-09-auth-security-and-edge-cases.spec.ts`: PASS (18/18 passed)
+
+### 9.4 Master Every-Button & Strict 6-Role RBAC Matrix Suite (`npm run test:rbac-matrix`)
+- **File:** `tests/e2e/flows/every-button-and-rbac-matrix.spec.ts` (756 lines)
+- **Execution Script:** `npm run test:rbac-matrix` -> `playwright test flows/every-button-and-rbac-matrix.spec.ts --project=admin-portal`
+- **Results:** 8/8 tests PASSED (100% pass rate) in 33.2 seconds.
+- **Coverage Areas:**
+  1. **Courier Mobile PWA Every-Button & Actions:**
+     - Shift management toggles ("Start shift" / "End shift") verified with live DB status transitions (`ON_SHIFT` / `OFF_SHIFT`).
+     - External communication triggers: recipient phone dialer link (`tel:`) and Google Maps directions link (`maps.google.com`).
+     - Operational task list refresh button.
+     - Single delivery progression (`ASSIGNED` $\rightarrow$ `OUT_FOR_DELIVERY`).
+     - Digital Signature Pad POD: HTML5 canvas pointer strokes, clear button, SVG path serialization, validation, and submission ($\rightarrow$ `DELIVERED`).
+     - Delivery failure reporting: Reason dropdown (`RECIPIENT_UNAVAILABLE`, `OTHER`), validation requirement for $\ge 15$ character notes, and state transition to `ATTEMPT_FAILED`.
+     - Delivery attempt history modal drawer (`[data-testid="view-attempt-history-btn"]`) verifying recorded attempts and reasons.
+  2. **Admin Console & Ops Workspace Every-Button Actions:**
+     - Live metric cards (Total Parcels, Delivered, Active Couriers, Delivery Rate).
+     - Delivery zones management: "New Zone" dialog, input validation, zone creation, and active/inactive status toggle with mandatory reason dialog.
+     - Users & Access panel: User search by email, role filter dropdown, user table rendering, and change role dialog trigger.
+     - System Settings: Configuration parameters table, edit setting modal, and mandatory audit reason validation.
+     - Append-only Audit Log: Filter inputs (Search, Action dropdown, Date range), and Before/After JSON state inspection modal.
+     - Operational navigation tabs: Seamless routing across `/ops/dispatch`, `/ops/couriers`, `/ops/failed-deliveries`, and `/ops/reports`.
+  3. **Strict 6-Role Privilege Matrix ("No Less, No More"):**
+     - **PUBLIC:** Public tracking lookup, authentication pages. 401 Unauthorized on protected Core APIs; redirection to `/auth/login` on protected portal routes.
+     - **CUSTOMER:** Parcel booking wizard, dynamic quotes, customer dashboard, AI assistant, personal shipment tracking. Strictly barred from courier runs, dispatcher board, and admin console (403 Forbidden / automated redirection).
+     - **MERCHANT:** Merchant portal, order history, bulk CSV import, API keys management, webhook subscriptions. Strictly barred from courier PWA, dispatcher board, and admin console.
+     - **COURIER:** Mobile delivery runs, shift toggling, task list, POD submission, failure reporting. Strictly barred from customer booking, merchant tools, ops dispatch, and admin console.
+     - **DISPATCHER:** Operational dispatch board, fleet view, failed deliveries review, operational reports. Strictly barred from admin zones, user management, system settings, and audit logs (`[data-testid="ops-forbidden"]` rendered; underlying APIs return 403 Forbidden).
+     - **ADMIN:** Unrestricted administrative and operational access across all console sections, user administration, system settings, and operations workspaces.
 

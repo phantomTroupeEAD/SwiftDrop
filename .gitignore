@@ -11,6 +11,8 @@ dist/
 *.test
 *.out
 coverage.txt
+test-results/
+playwright-report/
 
 # Go
 vendor/
