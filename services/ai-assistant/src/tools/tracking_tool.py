@@ -6,6 +6,7 @@ import urllib.parse
 import httpx
 
 from src.core.config import get_settings
+from src.domain.chat import ActionType, GenerativeAction
 from src.domain.errors import UpstreamServiceException
 from src.domain.tools import TrackParcelInput
 from src.tools.registry import register_tool
@@ -13,6 +14,9 @@ from src.tools.registry import register_tool
 
 def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[str, Any]:
     """Apply SEC-009 privacy masking, extracting only non-sensitive milestone and city information."""
+    if isinstance(raw_data, dict) and isinstance(raw_data.get("data"), dict):
+        raw_data = raw_data["data"]
+
     destination_city = "Unknown"
     dest_obj = raw_data.get("destination")
     if isinstance(dest_obj, dict) and dest_obj.get("city"):
@@ -34,6 +38,16 @@ def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[s
                 }
             )
 
+    action = GenerativeAction(
+        action_type=ActionType.VIEW_TRACKING,
+        label=f"Track Parcel {tracking_number}",
+        target_url=f"/track/{tracking_number}",
+        prefill_data={
+            "tracking_number": tracking_number,
+            "status": raw_data.get("status", "UNKNOWN"),
+        },
+    )
+
     return {
         "found": True,
         "tracking_number": tracking_number,
@@ -42,6 +56,7 @@ def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[s
         "destination_city": destination_city,
         "estimated_delivery": raw_data.get("estimated_delivery") or raw_data.get("estimated_delivery_date"),
         "milestones": sanitized_milestones,
+        "action": action.model_dump(),
         "grounded": True,
     }
 
