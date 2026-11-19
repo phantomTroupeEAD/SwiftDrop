@@ -40,6 +40,7 @@ type ParcelRepository interface {
 	ExistsTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (bool, error)
 	FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error)
 	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
+	ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error)
 }
 
 // StatusHistoryRepository defines the append-only persistence and chronological query port for status audit entries.
