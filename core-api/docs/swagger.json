@@ -3285,6 +3285,29 @@
                 }
             }
         },
+        "github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "number"
+                },
+                "height_cm": {
+                    "type": "number"
+                },
+                "length": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "width": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
+                }
+            }
+        },
         "github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest": {
             "type": "object",
             "properties": {
@@ -3295,20 +3318,51 @@
                 "merchant_reference": {
                     "type": "string"
                 },
+                "package": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest"
+                },
                 "parcel": {
-                    "type": "object",
-                    "properties": {
-                        "weight_kg": {
-                            "type": "number"
-                        }
-                    }
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest"
                 },
                 "pickup": {
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "recipient": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "service_level": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "dimensions": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest"
+                },
+                "dimensions_cm": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest"
+                },
+                "height_cm": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "weight_grams": {
+                    "type": "number"
+                },
+                "weight_kg": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
                 }
             }
         },

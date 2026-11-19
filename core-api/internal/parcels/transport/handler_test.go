@@ -214,6 +214,25 @@ func (f *fakeParcelRepo) List(_ context.Context, _ db.Querier, filter applicatio
 	return res[offset:end], total, nil
 }
 
+func (f *fakeParcelRepo) ListByMerchantID(_ context.Context, _ db.Querier, merchantID string) ([]domain.Parcel, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cleanID := strings.TrimSpace(merchantID)
+	if cleanID == "" {
+		return []domain.Parcel{}, nil
+	}
+	var out []domain.Parcel
+	for _, p := range f.parcels {
+		if p.MerchantID != nil && *p.MerchantID == cleanID {
+			out = append(out, p)
+		}
+	}
+	if out == nil {
+		out = make([]domain.Parcel, 0)
+	}
+	return out, nil
+}
+
 type fakeStatusHistoryRepo struct {
 	mu             sync.Mutex
 	entries        []domain.StatusHistoryEntry

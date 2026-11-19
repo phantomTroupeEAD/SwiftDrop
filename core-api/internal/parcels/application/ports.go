@@ -7,7 +7,23 @@ import (
 
 	"github.com/swiftdrop/core-api/internal/parcels/domain"
 	"github.com/swiftdrop/core-api/internal/platform/db"
+	pricingdomain "github.com/swiftdrop/core-api/internal/pricing/domain"
 )
+
+// TariffRepository defines the port for finding applicable pricing tariffs.
+type TariffRepository interface {
+	FindApplicable(
+		ctx context.Context,
+		originZoneID string,
+		destinationZoneID string,
+		at time.Time,
+	) (pricingdomain.Tariff, error)
+}
+
+// InternalQuoteCreator defines the transactional port for persisting internal consumed pricing quotes.
+type InternalQuoteCreator interface {
+	SaveConsumedQuote(ctx context.Context, q db.Querier, quote pricingdomain.Quote) error
+}
 
 // AcceptedQuoteSnapshot represents the authoritative frozen quote and base tariff data
 // returned upon successful atomic consumption of an issued pricing quote.
@@ -48,6 +64,7 @@ type ParcelRepository interface {
 	FindByTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (domain.Parcel, error)
 	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
 	List(ctx context.Context, q db.Querier, filter ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error)
+	ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error)
 }
 
 // StatusHistoryRepository defines the append-only persistence and chronological query port for status audit entries.

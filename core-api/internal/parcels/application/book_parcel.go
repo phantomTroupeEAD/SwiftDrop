@@ -203,36 +203,6 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 				ErrQuoteWeightMismatch, weight.ChargeableKg, quote.ChargeableWeightKg)
 		}
 
-		// d. Generate unique tracking number with bounded retries
-		const maxRetries = 3
-		var trackingNumber domain.TrackingNumber
-		for i := 0; i < maxRetries; i++ {
-			candidate, err := uc.trackingGen.Generate(ctx, now)
-			if err != nil {
-				return fmt.Errorf("failed to generate tracking number: %w", err)
-			}
-
-			exists, err := uc.parcelRepo.ExistsTrackingNumber(ctx, tx, candidate)
-			if err != nil {
-				return fmt.Errorf("failed to check tracking number uniqueness: %w", err)
-			}
-
-			if !exists {
-				trackingNumber = candidate
-				break
-			}
-		}
-
-		if trackingNumber == "" {
-			return ErrTrackingNumberCollision
-		}
-
-		// e. Generate Parcel UUID
-		parcelID, err := uc.idGen.GenerateID()
-		if err != nil {
-			return fmt.Errorf("failed to generate parcel id: %w", err)
-		}
-
 		// f. Construct immutable delivery fee and SLA tier from quote snapshot
 		fee, err := domain.NewMoney(quote.FeeCents, quote.Currency)
 		if err != nil {
@@ -240,12 +210,13 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		}
 		serviceLevel := domain.ServiceLevel(quote.ServiceLevel)
 
-		// g. Create Parcel aggregate root
-		parcel, err := domain.NewParcel(domain.CreateParcelParams{
-			ID:                  parcelID,
-			TrackingNumber:      trackingNumber,
+		res, err := uc.persistParcelBookingTx(ctx, tx, persistParcelBookingParams{
+			Now:                 now,
 			SenderID:            senderID,
 			MerchantID:          merchantID,
+			ActorID:             actorID,
+			ActorType:           actorType,
+			ActorRole:           actorRole,
 			RecipientName:       cmd.RecipientName,
 			RecipientPhone:      cmd.RecipientPhone,
 			QuoteID:             quote.QuoteID,
@@ -261,107 +232,206 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 			DropoffAddress:      dropoffAddr,
 			ItemDescription:     cmd.ItemDescription,
 			SpecialInstructions: cmd.SpecialInstructions,
-			CreatedAt:           now,
+			CorrelationID:       cmd.CorrelationID,
+			IdemInput:           idemInput,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to construct parcel aggregate: %w", err)
+			return err
 		}
 
-		// h. Persist parcel
-		if err := uc.parcelRepo.Save(ctx, tx, parcel); err != nil {
-			return fmt.Errorf("failed to persist parcel: %w", err)
-		}
-
-		// i. Create and persist initial CREATED status-history entry
-		historyID, err := uc.idGen.GenerateID()
-		if err != nil {
-			return fmt.Errorf("failed to generate status history id: %w", err)
-		}
-
-		historyEntry, err := domain.NewStatusHistoryEntry(
-			historyID,
-			parcel.ID,
-			nil, // fromStatus is nil for initial booking creation
-			domain.StatusCreated,
-			actorID,
-			actorType,
-			actorRole,
-			"Initial parcel booking",
-			now,
-			0,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to construct status history entry: %w", err)
-		}
-
-		if err := uc.statusHistoryRepo.Save(ctx, tx, historyEntry); err != nil {
-			return fmt.Errorf("failed to persist status history entry: %w", err)
-		}
-
-		// j. Publish parcel.booked.v1 event to transactional outbox
-		payload := ParcelBookedPayload{
-			ParcelID:            parcel.ID,
-			TrackingNumber:      parcel.TrackingNumber.String(),
-			SenderID:            parcel.SenderID,
-			MerchantID:          parcel.MerchantID,
-			RecipientName:       parcel.RecipientName,
-			RecipientPhone:      parcel.RecipientPhone,
-			QuoteID:             parcel.QuoteID,
-			PricingRuleID:       parcel.PricingRuleID,
-			PricingRuleVersion:  parcel.PricingRuleVersion,
-			DeliveryFeeCents:    parcel.DeliveryFee.Amount,
-			Currency:            parcel.DeliveryFee.Currency,
-			OriginZoneID:        parcel.OriginZoneID,
-			DestinationZoneID:   parcel.DestinationZoneID,
-			ServiceLevel:        string(parcel.ServiceLevel),
-			ActualWeightKg:      parcel.Weight.ActualKg,
-			ChargeableWeightKg:  parcel.Weight.ChargeableKg,
-			ItemDescription:     parcel.ItemDescription,
-			SpecialInstructions: parcel.SpecialInstructions,
-			Status:              string(parcel.Status),
-			CreatedAt:           parcel.CreatedAt,
-		}
-
-		corrID := strings.TrimSpace(cmd.CorrelationID)
-		if corrID == "" {
-			corrID = parcel.ID
-		}
-
-		envelope, err := events.NewEnvelope(
-			events.ParcelBookedV1,
-			"parcel",
-			parcel.ID,
-			parcel.Version,
-			corrID,
-			"core-api.parcels",
-			payload,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to build outbox envelope: %w", err)
-		}
-
-		if err := uc.outboxWriter.Write(ctx, tx, envelope); err != nil {
-			return fmt.Errorf("failed to write outbox event: %w", err)
-		}
-
-		result = BookParcelResult{
-			Parcel:        parcel,
-			StatusHistory: historyEntry,
-		}
-
-		if idemInput != nil {
-			rec, err := uc.persistIdempotencyRecord(ctx, tx, *idemInput, result, now)
-			if err != nil {
-				return err
-			}
-			result.Idempotency = &rec
-		}
-
+		result = res
 		return nil
 	})
 
 	if err != nil {
 		return BookParcelResult{}, err
+	}
+
+	return result, nil
+}
+
+// persistParcelBookingParams encapsulates all validated inputs required to build and persist
+// a parcel, its initial status history entry, its outbox event, and its idempotency record
+// within an active database transaction.
+type persistParcelBookingParams struct {
+	Now                 time.Time
+	SenderID            *string
+	MerchantID          *string
+	ActorID             *string
+	ActorType           domain.ActorType
+	ActorRole           string
+	RecipientName       string
+	RecipientPhone      string
+	QuoteID             string
+	PricingRuleID       string
+	PricingRuleVersion  int
+	DeliveryFee         domain.Money
+	OriginZoneID        string
+	DestinationZoneID   string
+	ServiceLevel        domain.ServiceLevel
+	Weight              domain.Weight
+	Dimensions          domain.Dimensions
+	PickupAddress       domain.Address
+	DropoffAddress      domain.Address
+	ItemDescription     string
+	SpecialInstructions string
+	CorrelationID       string
+	IdemInput           *IdempotencyInput
+}
+
+// persistParcelBookingTx executes the common transactional parcel persistence pipeline:
+// tracking number allocation, aggregate creation, parcel persistence, status history audit logging,
+// transactional outbox event publication, and idempotency snapshot recording.
+func (uc *BookParcelUseCase) persistParcelBookingTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	params persistParcelBookingParams,
+) (BookParcelResult, error) {
+	// d. Generate unique tracking number with bounded retries
+	const maxRetries = 3
+	var trackingNumber domain.TrackingNumber
+	for i := 0; i < maxRetries; i++ {
+		candidate, err := uc.trackingGen.Generate(ctx, params.Now)
+		if err != nil {
+			return BookParcelResult{}, fmt.Errorf("failed to generate tracking number: %w", err)
+		}
+
+		exists, err := uc.parcelRepo.ExistsTrackingNumber(ctx, tx, candidate)
+		if err != nil {
+			return BookParcelResult{}, fmt.Errorf("failed to check tracking number uniqueness: %w", err)
+		}
+
+		if !exists {
+			trackingNumber = candidate
+			break
+		}
+	}
+
+	if trackingNumber == "" {
+		return BookParcelResult{}, ErrTrackingNumberCollision
+	}
+
+	// e. Generate Parcel UUID
+	parcelID, err := uc.idGen.GenerateID()
+	if err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to generate parcel id: %w", err)
+	}
+
+	// g. Create Parcel aggregate root
+	parcel, err := domain.NewParcel(domain.CreateParcelParams{
+		ID:                  parcelID,
+		TrackingNumber:      trackingNumber,
+		SenderID:            params.SenderID,
+		MerchantID:          params.MerchantID,
+		RecipientName:       params.RecipientName,
+		RecipientPhone:      params.RecipientPhone,
+		QuoteID:             params.QuoteID,
+		PricingRuleID:       params.PricingRuleID,
+		PricingRuleVersion:  params.PricingRuleVersion,
+		DeliveryFee:         params.DeliveryFee,
+		OriginZoneID:        params.OriginZoneID,
+		DestinationZoneID:   params.DestinationZoneID,
+		ServiceLevel:        params.ServiceLevel,
+		Weight:              params.Weight,
+		Dimensions:          params.Dimensions,
+		PickupAddress:       params.PickupAddress,
+		DropoffAddress:      params.DropoffAddress,
+		ItemDescription:     params.ItemDescription,
+		SpecialInstructions: params.SpecialInstructions,
+		CreatedAt:           params.Now,
+	})
+	if err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to construct parcel aggregate: %w", err)
+	}
+
+	// h. Persist parcel
+	if err := uc.parcelRepo.Save(ctx, tx, parcel); err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to persist parcel: %w", err)
+	}
+
+	// i. Create and persist initial CREATED status-history entry
+	historyID, err := uc.idGen.GenerateID()
+	if err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to generate status history id: %w", err)
+	}
+
+	historyEntry, err := domain.NewStatusHistoryEntry(
+		historyID,
+		parcel.ID,
+		nil, // fromStatus is nil for initial booking creation
+		domain.StatusCreated,
+		params.ActorID,
+		params.ActorType,
+		params.ActorRole,
+		"Initial parcel booking",
+		params.Now,
+		0,
+	)
+	if err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to construct status history entry: %w", err)
+	}
+
+	if err := uc.statusHistoryRepo.Save(ctx, tx, historyEntry); err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to persist status history entry: %w", err)
+	}
+
+	// j. Publish parcel.booked.v1 event to transactional outbox
+	payload := ParcelBookedPayload{
+		ParcelID:            parcel.ID,
+		TrackingNumber:      parcel.TrackingNumber.String(),
+		SenderID:            parcel.SenderID,
+		MerchantID:          parcel.MerchantID,
+		RecipientName:       parcel.RecipientName,
+		RecipientPhone:      parcel.RecipientPhone,
+		QuoteID:             parcel.QuoteID,
+		PricingRuleID:       parcel.PricingRuleID,
+		PricingRuleVersion:  parcel.PricingRuleVersion,
+		DeliveryFeeCents:    parcel.DeliveryFee.Amount,
+		Currency:            parcel.DeliveryFee.Currency,
+		OriginZoneID:        parcel.OriginZoneID,
+		DestinationZoneID:   parcel.DestinationZoneID,
+		ServiceLevel:        string(parcel.ServiceLevel),
+		ActualWeightKg:      parcel.Weight.ActualKg,
+		ChargeableWeightKg:  parcel.Weight.ChargeableKg,
+		ItemDescription:     parcel.ItemDescription,
+		SpecialInstructions: parcel.SpecialInstructions,
+		Status:              string(parcel.Status),
+		CreatedAt:           parcel.CreatedAt,
+	}
+
+	corrID := strings.TrimSpace(params.CorrelationID)
+	if corrID == "" {
+		corrID = parcel.ID
+	}
+
+	envelope, err := events.NewEnvelope(
+		events.ParcelBookedV1,
+		"parcel",
+		parcel.ID,
+		parcel.Version,
+		corrID,
+		"core-api.parcels",
+		payload,
+	)
+	if err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to build outbox envelope: %w", err)
+	}
+
+	if err := uc.outboxWriter.Write(ctx, tx, envelope); err != nil {
+		return BookParcelResult{}, fmt.Errorf("failed to write outbox event: %w", err)
+	}
+
+	result := BookParcelResult{
+		Parcel:        parcel,
+		StatusHistory: historyEntry,
+	}
+
+	if params.IdemInput != nil {
+		rec, err := uc.persistIdempotencyRecord(ctx, tx, *params.IdemInput, result, params.Now)
+		if err != nil {
+			return BookParcelResult{}, err
+		}
+		result.Idempotency = &rec
 	}
 
 	return result, nil

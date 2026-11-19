@@ -19,9 +19,7 @@ func TestPostgresParcelBooking_Validation(t *testing.T) {
 		req := application.OrderRequest{
 			Pickup:  map[string]any{"city": "Colombo"},
 			Dropoff: map[string]any{"city": "Kandy"},
-			Parcel: struct {
-				WeightKG float64 `json:"weight_kg"`
-			}{WeightKG: 2.5},
+			Parcel:  application.ParcelRequest{WeightKG: 2.5},
 		}
 		_, _, err := b.CreateForMerchant(ctx, "018f4a7c-4001-7000-8000-000000000041", "", "", req)
 		if err == nil {
@@ -36,9 +34,7 @@ func TestPostgresParcelBooking_Validation(t *testing.T) {
 		req := application.OrderRequest{
 			Pickup:  nil,
 			Dropoff: map[string]any{"city": "Kandy"},
-			Parcel: struct {
-				WeightKG float64 `json:"weight_kg"`
-			}{WeightKG: 2.5},
+			Parcel:  application.ParcelRequest{WeightKG: 2.5},
 		}
 		_, _, err := booking.CreateForMerchant(ctx, "018f4a7c-4001-7000-8000-000000000041", "", "", req)
 		if err == nil {
@@ -54,9 +50,7 @@ func TestPostgresParcelBooking_Validation(t *testing.T) {
 		req := application.OrderRequest{
 			Pickup:  map[string]any{"city": "Colombo"},
 			Dropoff: nil,
-			Parcel: struct {
-				WeightKG float64 `json:"weight_kg"`
-			}{WeightKG: 2.5},
+			Parcel:  application.ParcelRequest{WeightKG: 2.5},
 		}
 		_, _, err := booking.CreateForMerchant(ctx, "018f4a7c-4001-7000-8000-000000000041", "", "", req)
 		if err == nil {
@@ -68,9 +62,7 @@ func TestPostgresParcelBooking_Validation(t *testing.T) {
 		req := application.OrderRequest{
 			Pickup:  map[string]any{"city": "Colombo"},
 			Dropoff: map[string]any{"city": "Kandy"},
-			Parcel: struct {
-				WeightKG float64 `json:"weight_kg"`
-			}{WeightKG: 0.0},
+			Parcel:  application.ParcelRequest{WeightKG: 0.0},
 		}
 		_, _, err := booking.CreateForMerchant(ctx, "018f4a7c-4001-7000-8000-000000000041", "", "", req)
 		if err == nil {
@@ -82,9 +74,7 @@ func TestPostgresParcelBooking_Validation(t *testing.T) {
 		req := application.OrderRequest{
 			Pickup:  map[string]any{"city": "Colombo"},
 			Dropoff: map[string]any{"city": "Kandy"},
-			Parcel: struct {
-				WeightKG float64 `json:"weight_kg"`
-			}{WeightKG: 31.5},
+			Parcel:  application.ParcelRequest{WeightKG: 31.5},
 		}
 		_, _, err := booking.CreateForMerchant(ctx, "018f4a7c-4001-7000-8000-000000000041", "", "", req)
 		if err == nil {

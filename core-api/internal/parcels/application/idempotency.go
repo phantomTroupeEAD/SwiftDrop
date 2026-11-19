@@ -17,6 +17,9 @@ const (
 	// DefaultBookingOperation identifies parcel booking idempotency records.
 	DefaultBookingOperation = "POST /api/v1/parcels"
 
+	// DefaultMerchantBookingOperation identifies B2B merchant booking idempotency records.
+	DefaultMerchantBookingOperation = "POST /api/v1/merchant/orders"
+
 	// defaultBookingResponseStatus stores the canonical HTTP status code for a created parcel.
 	defaultBookingResponseStatus = 201
 )

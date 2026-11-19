@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -253,6 +254,29 @@ func (m *mockParcelRepo) List(ctx context.Context, q db.Querier, filter ParcelFi
 		end = total
 	}
 	return res[offset:end], total, nil
+}
+
+func (m *mockParcelRepo) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	cleanID := strings.TrimSpace(merchantID)
+	if cleanID == "" {
+		return []domain.Parcel{}, nil
+	}
+	var results []domain.Parcel
+	for _, p := range m.parcels {
+		if p.MerchantID != nil && *p.MerchantID == cleanID {
+			results = append(results, p)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].CreatedAt.After(results[j].CreatedAt)
+	})
+	if results == nil {
+		results = make([]domain.Parcel, 0)
+	}
+	return results, nil
 }
 
 // Mock Status History Repository.
