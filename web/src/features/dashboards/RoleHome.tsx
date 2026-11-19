@@ -123,7 +123,7 @@ export function RoleHome() {
         </aside>}
         </div>
       </main>
-      {!merchant && accessToken && <AssistantChat key={user.id} token={accessToken} />}
+      {accessToken && <AssistantChat key={`${user.id}:${user.role}`} token={accessToken} role={user.role} />}
     </div>
   );
 }

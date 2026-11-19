@@ -34,6 +34,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261102-00001`).
 - **Target Upstream Endpoint:** `GET http://tracking-api:8081/api/v1/tracking/public/{tracking_number}`
 - **Security & Privacy:** Strictly enforces SEC-009 privacy masking (omits phone numbers, street addresses, driver notes).
+- **Generative UI Action:** Returns `VIEW_TRACKING` / `NAVIGATE_TRACKING` action card targeting `/track/{tracking_number}`.
 - **Permissions:** Public / Anonymous.
 
 ### 2.2 `estimate_delivery_fee`
@@ -53,9 +54,9 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - Maximum volumetric weight: strictly enforces `(Length * Width * Height) / 5000 <= 50.0 kg`.
   - Billable weight calculation: dynamically evaluates `billable_weight = max(weight_kg, volumetric_kg)`.
   - Upstream 422 error sanitization: upstream schema validation errors are sanitized into human-readable messages without leaking internal trace dictionaries.
-- **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes`
-- **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
-- **Permissions:** Public / Anonymous.
+- **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes` (authenticated with Bearer JWT / Service Role Token)
+- **Generative UI Action:** Returns role-aware `NAVIGATE_BOOKING` action card: `/portal/book` for Customers; `/portal/merchants/orders` for Merchants.
+- **Permissions:** Public / Anonymous (forwards caller Bearer token or service-role token for Core API authorization).
 
 ### 2.3 `get_my_active_parcels`
 - **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.

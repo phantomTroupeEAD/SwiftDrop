@@ -28,7 +28,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 - **Natural Language Tracking:** Public tracking queries returning sanitized milestone timelines without disclosing personal customer information (`SEC-009`).
 - **Instant Shipping Fee Estimation:** Instantaneous price estimations calculated via Core API's pricing engine.
 - **Sri Lanka Postal Directory & Town Resolution:** Built-in directory of all 25 districts and sub-district towns (e.g. Walasmulla `82450`, Kadugannawa `20430`, Mawanella `71500`, Mirissa `81740`, Nivitigala `70450`), enabling instant postal code lookups and automated quote routing with length-bounded fuzzy substring matching.
-- **Generative UI Action Cards:** Generates pre-filled `NAVIGATE_BOOKING` cards directly in the React web portal for seamless 1-click booking confirmation.
+- **Generative UI Action Cards:** Generates pre-filled `NAVIGATE_BOOKING` (role-aware: `/portal/book` or `/portal/merchants/orders`) and `NAVIGATE_TRACKING` / `VIEW_TRACKING` cards directly in the React web portal for seamless 1-click continuation.
 - **FastMCP Protocol Server:** Exposes tools via STDIO and Server-Sent Events (SSE) for external AI agent integration (**+5 Assignment Bonus Marks**).
 - **Dual LLM Engine:** Universal `AsyncOpenAI` client (OpenRouter, Groq, NVIDIA NIM, OpenAI, Ollama) paired with an offline deterministic mock adapter for zero-cost automated CI testing.
 - **Role-Aware Tiered Rate Limiting:** Configurable SlowAPI engine enforcing 20 RPM for anonymous visitors, 60 RPM for authenticated customers, and 100 RPM for merchants/staff with RFC-7807 429 envelopes.

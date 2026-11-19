@@ -130,6 +130,11 @@ export const SELECTORS = {
   // 8. AI Assistant Drawer & FastMCP Chat
   // ---------------------------------------------------------------------------
   AI_ASSISTANT: {
+    PANEL: 'assistant-panel',
+    OPEN_BTN: 'assistant-open-btn',
+    PROMPT_INPUT: 'assistant-prompt-input',
+    SEND_BTN: 'assistant-send-btn',
+    ACTIVE_TOOL_BADGE: 'ai-active-tool-badge',
     CHAT_TOGGLE_BUTTON: 'ai-chat-toggle-btn',
     CHAT_DRAWER: 'ai-chat-drawer',
     INPUT_AI_QUERY: 'input-ai-query',

@@ -16,15 +16,19 @@ def calculate_fallback_pricing(
     pickup_postal_code: str = "00100",
     delivery_postal_code: str = "20000",
     service_type: str = "STANDARD",
+    role: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Calculate deterministic offline fallback tariff for CI and local dev."""
     fee_cents = int(35000 + (weight_kg * 7500))
     total_fee_lkr = int(round(fee_cents / 100.0))
     currency = "LKR"
+    role_upper = (role or "").upper()
+    target_url = "/portal/merchants/orders" if role_upper == "MERCHANT" else "/portal/book"
+    label = "Create Merchant Order" if role_upper == "MERCHANT" else "Book Delivery Now"
     action = GenerativeAction(
         action_type=ActionType.NAVIGATE_BOOKING,
-        label="Book Delivery Now",
-        target_url="/portal/book",
+        label=label,
+        target_url=target_url,
         prefill_data={
             "pickup_postal_code": pickup_postal_code,
             "delivery_postal_code": delivery_postal_code,
@@ -113,8 +117,22 @@ async def pricing_tool(
         client = httpx.AsyncClient(timeout=timeouts)
         close_client = True
 
+    context = context or {}
+    role = str(context.get("role") or "").upper()
+    headers: Dict[str, str] = {"Accept": "application/json"}
+    if context.get("authorization"):
+        headers["Authorization"] = str(context["authorization"])
+    elif context.get("auth_token"):
+        headers["Authorization"] = f"Bearer {context['auth_token']}"
+    elif context.get("x-api-key"):
+        headers["X-API-Key"] = str(context["x-api-key"])
+    elif context.get("X-API-Key"):
+        headers["X-API-Key"] = str(context["X-API-Key"])
+    elif settings.effective_service_role_token:
+        headers["Authorization"] = f"Bearer {settings.effective_service_role_token}"
+
     try:
-        response = await client.post(target_url, json=request_payload)
+        response = await client.post(target_url, json=request_payload, headers=headers)
 
         if response.status_code >= 400:
             error_msg = f"Received HTTP {response.status_code} while calculating quote"
@@ -151,10 +169,12 @@ async def pricing_tool(
         display_amount = f"{currency} {total_fee_lkr:,}"
 
         # Construct validated GenerativeAction card for the web portal
+        target_url = "/portal/merchants/orders" if role == "MERCHANT" else "/portal/book"
+        label = "Create Merchant Order" if role == "MERCHANT" else "Book Delivery Now"
         action = GenerativeAction(
             action_type=ActionType.NAVIGATE_BOOKING,
-            label="Book Delivery Now",
-            target_url="/portal/book",
+            label=label,
+            target_url=target_url,
             prefill_data={
                 "pickup_postal_code": input_data.pickup_postal_code,
                 "delivery_postal_code": input_data.delivery_postal_code,
@@ -191,6 +211,7 @@ async def pricing_tool(
                 pickup_postal_code=input_data.pickup_postal_code,
                 delivery_postal_code=input_data.delivery_postal_code,
                 service_type=input_data.service_type.value,
+                role=role,
             )
         raise UpstreamServiceException(
             "Core API Pricing",
