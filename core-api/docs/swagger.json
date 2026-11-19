@@ -1520,7 +1520,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_transport.CreateKeyRequest"
+                            "$ref": "#/definitions/internal_merchants_transport.CreateKeyRequest"
                         }
                     }
                 ],
@@ -1643,7 +1643,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_transport.RegisterWebhookRequest"
+                            "$ref": "#/definitions/internal_merchants_transport.RegisterWebhookRequest"
                         }
                     }
                 ],
@@ -2163,54 +2163,6 @@
         }
     },
     "definitions": {
-        "github_com_swiftdrop_core-api_internal_merchants_transport.CreateKeyRequest": {
-            "type": "object",
-            "required": [
-                "label"
-            ],
-            "properties": {
-                "expires_at": {
-                    "type": "string"
-                },
-                "label": {
-                    "type": "string",
-                    "example": "Production Warehouse Key"
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "parcels:create",
-                        "parcels:read"
-                    ]
-                }
-            }
-        },
-        "github_com_swiftdrop_core-api_internal_merchants_transport.RegisterWebhookRequest": {
-            "type": "object",
-            "required": [
-                "url",
-                "events"
-            ],
-            "properties": {
-                "events": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "parcel.delivered.v1",
-                        "parcel.delivery_failed.v1"
-                    ]
-                },
-                "url": {
-                    "type": "string",
-                    "example": "https://httpbin.org/post"
-                }
-            }
-        },
         "github_com_swiftdrop_core-api_internal_admin_application.AuditRow": {
             "type": "object",
             "properties": {
@@ -2717,6 +2669,56 @@
             "type": "object",
             "properties": {
                 "data": {}
+            }
+        },
+        "internal_merchants_transport.CreateKeyRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Production Warehouse Key"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcels:create\"",
+                        "\"parcels:read\"]"
+                    ]
+                }
+            }
+        },
+        "internal_merchants_transport.RegisterWebhookRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcel.delivered.v1\"",
+                        "\"parcel.delivery_failed.v1\"]"
+                    ]
+                },
+                "secret": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://httpbin.org/post"
+                }
             }
         },
         "internal_parcels_transport.AddressRequest": {
