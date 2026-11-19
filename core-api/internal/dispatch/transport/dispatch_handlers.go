@@ -13,13 +13,13 @@ import (
 
 // DispatchHandler handles HTTP requests for fleet management and parcel dispatch operations.
 type DispatchHandler struct {
-	registerCourierUC   *application.RegisterCourierUseCase
-	listCouriersQ       *application.ListCouriersQueryHandler
-	dispatchBoardQ      *application.GetDispatchBoardQueryHandler
-	assignCourierUC     *application.AssignCourierUseCase
-	cancelAssignmentUC  *application.CancelAssignmentUseCase
-	rescheduleParcelUC  *application.RescheduleParcelUseCase
-	courierCandidatesQ  *application.GetCourierCandidatesQueryHandler
+	registerCourierUC  *application.RegisterCourierUseCase
+	listCouriersQ      *application.ListCouriersQueryHandler
+	dispatchBoardQ     *application.GetDispatchBoardQueryHandler
+	assignCourierUC    *application.AssignCourierUseCase
+	cancelAssignmentUC *application.CancelAssignmentUseCase
+	rescheduleParcelUC *application.RescheduleParcelUseCase
+	courierCandidatesQ *application.GetCourierCandidatesQueryHandler
 }
 
 // NewDispatchHandler constructs a DispatchHandler instance with all required use cases.

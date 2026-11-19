@@ -50,6 +50,10 @@ func (s *lifecycleMockStorage) GetStatusWithLock(ctx context.Context, tx *sql.Tx
 	return "OUT_FOR_DELIVERY", 1, nil
 }
 
+func (s *lifecycleMockStorage) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 func (s *lifecycleMockStorage) GetActiveAssignment(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*deliveryApp.ActiveAssignmentDTO, error) {
 	for _, a := range s.assignments {
 		if a.ParcelID == parcelID && a.Status == dispatchDomain.AssignmentStatusActive {
