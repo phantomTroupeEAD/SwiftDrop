@@ -116,28 +116,28 @@ jobs:
 
       - name: Run Master Flaw & Vulnerability Audit Matrix
         env:
-          BASE_URL: http://localhost:80
+          BASE_URL: http://localhost:3000
         run: |
           cd tests/e2e
           npm run test:vulnerabilities
 
       - name: Run Master Every-Button & Strict 6-Role RBAC Privilege Matrix
         env:
-          BASE_URL: http://localhost:80
+          BASE_URL: http://localhost:3000
         run: |
           cd tests/e2e
           npm run test:rbac-matrix
 
       - name: Run Concurrent 6-Role User Traffic Load Simulation
         env:
-          BASE_URL: http://localhost:80
+          BASE_URL: http://localhost:3000
         run: |
           cd tests/e2e
           npm run test:traffic
 
       - name: Run Live System Security & IDOR Guardrails
         env:
-          BASE_URL: http://localhost:80
+          BASE_URL: http://localhost:3000
         run: |
           cd tests/e2e
           npm run test:live-guardrails
