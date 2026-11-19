@@ -103,7 +103,7 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		Hasher:    infrastructure.Hasher{Peppers: map[int][]byte{1: pepper}, Current: 1},
 		Cipher:    infrastructure.Cipher{Key: encKey, Version: 1},
 		Resolver:  infrastructure.Resolver{},
-		Booking:   infrastructure.NewBookingStub(),
+		Booking:   infrastructure.NewPostgresParcelBooking(db),
 		Observer:  noopObserver{},
 		Now:       time.Now,
 	}, application.Config{
