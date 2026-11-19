@@ -14,6 +14,8 @@
     "test:merchant-api-keys": "playwright test flows/10-merchant-api-keys-exhaustive.spec.ts --project=merchant-portal",
     "test:merchant-webhooks": "playwright test flows/09-merchant-webhook-dispatch-lifecycle.spec.ts --project=merchant-portal",
     "test:combinatorial-webhooks": "playwright test flows/combinatorial-webhooks.spec.ts --project=merchant-portal",
+    "test:traffic": "playwright test flows/realtime-user-traffic-load.spec.ts --project=admin-portal",
+    "test:vulnerabilities": "playwright test flows/flaw-and-vulnerability-matrix.spec.ts --project=admin-portal",
     "test:dispatcher": "playwright test flows/12-dispatcher-portal-exhaustive.spec.ts --project=dispatcher-board",
     "test:dispatcher-sync": "playwright test flows/13-dispatcher-cross-portal-sync.spec.ts --project=dispatcher-board",
     "test:ui": "playwright test --ui",

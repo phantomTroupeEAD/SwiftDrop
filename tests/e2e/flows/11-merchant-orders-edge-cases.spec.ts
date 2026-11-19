@@ -440,15 +440,28 @@ test.describe('Flow 11: Merchant Orders Page & Bulk CSV Ingestion Edge Cases Sui
     request,
   }) => {
     // Invariant: This test directly audits the cross-module value chain across DB, Dispatcher, Tracking and Webhooks.
-    // It documents and tracks open GitHub Issues #92 (@NagithaDS) & #93 (@HansiAshara).
-    test.fail(
-      true,
-      'Blocked by GitHub #92 (@NagithaDS) & #93 (@HansiAshara): Merchant CSV orders use in-memory BookingStub instead of writing to PostgreSQL parcels table and outbox_events'
-    );
+    // It verifies that Issue #92 (@NagithaDS) & #93 (@HansiAshara) are fully resolved.
     const timestamp = Date.now();
     const chainRef = `REF-CHAIN-${timestamp}`;
 
     // 1. Log in as canonical merchant
+    const merchantLoginRes = await request.post('http://localhost:8080/api/v1/auth/login', {
+      data: { email: 'merchant@vendor.com', password: 'Merchant123!' },
+    });
+    expect(merchantLoginRes.ok()).toBeTruthy();
+    const merchantToken = (await merchantLoginRes.json()).data.access_token;
+
+    await request.post('http://localhost:8080/api/v1/merchants/me/webhooks', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${merchantToken}`,
+      },
+      data: {
+        url: `http://localhost:9999/webhooks/chain-${timestamp}`,
+        events: ['parcel.booked.v1'],
+      },
+    });
+
     await page.goto('/auth/login');
     await page.locator(testId(SELECTORS.AUTH.INPUT_EMAIL)).fill('merchant@vendor.com');
     await page.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Merchant123!');
@@ -507,7 +520,7 @@ test.describe('Flow 11: Merchant Orders Page & Bulk CSV Ingestion Edge Cases Sui
     // Queries: SELECT * FROM parcels WHERE tracking_number = $1
     // =========================================================================
     console.log('[VALUE-CHAIN-AUDIT] Station 2: Checking Public Tracking API');
-    const trackingRes = await request.get(`http://localhost:8080/api/v1/tracking/public/${trackingNumber}`);
+    const trackingRes = await request.get(`http://localhost:8081/api/v1/tracking/public/${trackingNumber}`);
     expect(
       trackingRes.status(),
       `[BLOCKED BY #92 & #93] Public Tracking returned 404 for CSV parcel ${trackingNumber}!`
@@ -518,12 +531,22 @@ test.describe('Flow 11: Merchant Orders Page & Bulk CSV Ingestion Edge Cases Sui
     // Verifies parcel.booked.v1 was published and received by third-party receiver
     // =========================================================================
     console.log('[VALUE-CHAIN-AUDIT] Station 3: Checking Webhook Delivery');
-    const webhookRes = await request.get('http://localhost:9999/api/events');
-    const events = (await webhookRes.json()).events as Array<{ data?: { tracking_number?: string } }>;
-    const webhookReceived = events.some(e => e.data?.tracking_number === trackingNumber);
+    let webhookReceived = false;
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(500);
+      const webhookRes = await request.get('http://localhost:9999/api/events');
+      const events = (await webhookRes.json()).events as Array<any>;
+      webhookReceived = events.some(e => 
+        e.data?.tracking_number === trackingNumber || 
+        e.payload?.tracking_number === trackingNumber || 
+        e.payload?.data?.tracking_number === trackingNumber ||
+        JSON.stringify(e).includes(trackingNumber)
+      );
+      if (webhookReceived) break;
+    }
     expect(
       webhookReceived,
-      `[BLOCKED BY #92 & #93] Event Worker never received outbox event for CSV parcel ${trackingNumber}!`
+      `Event Worker never received outbox event for CSV parcel ${trackingNumber}!`
     ).toBe(true);
   });
 });

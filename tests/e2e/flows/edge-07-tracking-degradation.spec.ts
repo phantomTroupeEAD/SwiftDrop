@@ -21,8 +21,8 @@ test.describe('Suite 7: Public Tracking Network Degradation & Masking', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           error: {
-            code: 'PARCEL_NOT_FOUND',
-            message: 'No parcel found matching tracking number SD-99999999-00000',
+            code: 'TRACKING_NOT_FOUND',
+            message: 'No parcel was found. Check the tracking number and try again.',
           },
         }),
       });
@@ -35,7 +35,7 @@ test.describe('Suite 7: Public Tracking Network Degradation & Masking', () => {
     await customerPage.locator(testId(SELECTORS.TRACKING.SEARCH_BTN)).click();
 
     // Invariant: Clean error banner is displayed without crashing the UI
-    await expect(customerPage.getByText('No parcel found matching tracking number SD-99999999-00000')).toBeVisible();
+    await expect(customerPage.getByText('No parcel was found. Check the tracking number and try again.')).toBeVisible();
     await expect(customerPage.locator(testId(SELECTORS.TRACKING.STATUS_BADGE))).not.toBeVisible();
   });
 });

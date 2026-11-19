@@ -31,7 +31,7 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
 
     // 2. Ensure merchant account exists and truncate any webhook endpoints and delivery tables
     try {
-      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "TRUNCATE webhook_delivery_attempts, webhook_deliveries, webhook_endpoints CASCADE; UPDATE users SET role = \'MERCHANT\', tenant_id = \'91d10f4e-6a14-4598-a5a8-ea472a3ffcba\' WHERE email = \'applicant@swiftdrop.local\';"');
+      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "TRUNCATE webhook_delivery_attempts, webhook_deliveries, webhook_endpoints CASCADE; UPDATE users SET role = \'MERCHANT\', tenant_id = m.id FROM merchants m WHERE m.owner_user_id = users.id AND users.email = \'applicant@swiftdrop.local\';"');
     } catch {
       // ignore
     }
@@ -94,7 +94,7 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
     // -------------------------------------------------------------------------
     // 3. Window 1: Merchant Books B2B Parcel via Live Booking Wizard
     // -------------------------------------------------------------------------
-    await merchantPage.getByRole('link', { name: 'Book a parcel' }).click();
+    await merchantPage.goto('/portal/book');
     await expect(merchantPage.getByRole('heading', { name: 'Book a parcel', level: 1 })).toBeVisible({ timeout: 10000 });
 
     // Step 1: Addresses
@@ -139,7 +139,7 @@ test.describe('Merchant Webhook & Delivery Failure/Retry Lifecycle (Zero Mocks)'
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_EMAIL)).fill('dispatcher@swiftdrop.local');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Dispatcher123!');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
-
+    await dispatcherPage.goto('/dispatcher/dashboard');
     await expect(dispatcherPage).toHaveURL(/\/dispatcher\/dashboard/, { timeout: 10000 });
     await expect(dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).toBeVisible({ timeout: 10000 });
 

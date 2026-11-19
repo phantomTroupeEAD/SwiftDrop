@@ -62,7 +62,7 @@ test.describe('Flow 13: Dispatcher & Cross-Portal Live Synchronization (Zero Moc
       await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill(TEST_USERS.DISPATCHER.password);
       await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
-      await expect(dispatcherPage).toHaveURL(/.*(dispatcher|dashboard).*/, { timeout: 15000 });
+      await expect(dispatcherPage).toHaveURL(/.*(dispatcher|dashboard|ops).*/, { timeout: 15000 });
       await dispatcherPage.goto('/dispatcher/dashboard');
 
       const board = dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD));

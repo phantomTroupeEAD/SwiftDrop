@@ -70,6 +70,8 @@ npx playwright install chromium
 
 | Command | Environment | Description |
 | :--- | :---: | :--- |
+| **`npm run test:traffic`** | Real Stack | **Concurrent 6-Role System Load Simulation:** Multi-browser concurrent load across PUBLIC (SSE stream), CUSTOMER (parallel bookings), MERCHANT (CSV ingestion), DISPATCHER (zone assignment), COURIER (mobile POD), and ADMIN. |
+| **`npm run test:vulnerabilities`** | Real Stack | **Exhaustive Flaw & Vulnerability Audit Matrix:** 15 security scenarios auditing state machine bypass, cross-tenant IDOR, privilege escalation, JWT tampering, and boundary fuzzing. |
 | **`npm run test:live`** | Real Stack | **Master 5-Window Live System E2E** running against real Core API, live PostgreSQL DB, and physical daemons with zero route mocks. |
 | **`npm run test:live-guardrails`** | Real Stack | **Live Security Guardrails** (Real Courier IDOR 403, RBAC 403, Tenant Isolation 403/404, Tracking PII masking). |
 | **`npm run test:realtime`** | Live/Mocked | Master System 5-Window Real-Time Orchestration test across Customer, Applicant/Merchant, Admin, Dispatcher, and Courier simultaneously. |
@@ -120,6 +122,8 @@ tests/e2e/
 │   ├── 04-tracking-and-ai.spec.ts # Flow 4: Public tracking PII masking & grounded AI assistant
 │   ├── 05-merchant-delivery-webhook-loop.spec.ts # Flow 5: Full-circle merchant webhook, courier delivery retry & messaging audit
 │   ├── 06-customer-registration-mailpit.spec.ts # Flow 6: Customer registration & real email OTP verification via Mailpit
+│   ├── realtime-user-traffic-load.spec.ts # Master Multi-Role Concurrent Load Simulation (6 concurrent browser sessions)
+│   ├── flaw-and-vulnerability-matrix.spec.ts # Exhaustive System Vulnerability & Flaw Audit Matrix (15 security & invariant scenarios)
 │   ├── 07-multi-parcel-lifecycle-to-delivered.spec.ts # Flow 7: Multi-parcel real lifecycle (registration -> book 6 parcels -> full delivery loop to DELIVERED)
 │   ├── 08-merchant-portal-orders.spec.ts # Flow 8: Merchant portal onboarding, Mailpit OTP, REST approval, API order edge cases (14 scenarios) & UI parity
 │   ├── 09-merchant-webhook-dispatch-lifecycle.spec.ts # Flow 9: Merchant webhooks, event filtering combinations, multi-window dispatcher assignment & HMAC security

@@ -85,7 +85,7 @@ test.describe('Merchant Webhooks, Multi-Window Dispatcher & Event Filtering Life
 
     // 2. Clean database tables and ensure canonical approved merchant exists
     try {
-      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "TRUNCATE webhook_delivery_attempts, webhook_deliveries, webhook_endpoints CASCADE; UPDATE users SET role = \'MERCHANT\', tenant_id = \'91d10f4e-6a14-4598-a5a8-ea472a3ffcba\' WHERE email = \'applicant@swiftdrop.local\';"');
+      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "TRUNCATE webhook_delivery_attempts, webhook_deliveries, webhook_endpoints CASCADE; UPDATE users SET role = \'MERCHANT\', tenant_id = m.id FROM merchants m WHERE m.owner_user_id = users.id AND users.email = \'applicant@swiftdrop.local\';"');
     } catch {
       // ignore
     }
@@ -411,7 +411,7 @@ test.describe('Merchant Webhooks, Multi-Window Dispatcher & Event Filtering Life
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_EMAIL)).fill('dispatcher@swiftdrop.local');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Dispatcher123!');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
-
+    await dispatcherPage.goto('/dispatcher/dashboard');
     await expect(dispatcherPage).toHaveURL(/\/dispatcher\/dashboard/, { timeout: 12000 });
     await expect(dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).toBeVisible({ timeout: 10000 });
 
@@ -494,9 +494,9 @@ test.describe('Merchant Webhooks, Multi-Window Dispatcher & Event Filtering Life
     await alphaItem.getByTestId('merchant-webhook-delete-btn').click();
 
     // Test cancellation prompt (H1)
-    await expect(merchantPage.getByRole('heading', { name: 'Remove webhook', level: 3 })).toBeVisible();
+    await expect(merchantPage.getByRole('heading', { name: 'Remove webhook' })).toBeVisible();
     await merchantPage.getByRole('button', { name: 'Cancel' }).click();
-    await expect(merchantPage.getByRole('heading', { name: 'Remove webhook', level: 3 })).not.toBeVisible();
+    await expect(merchantPage.getByRole('heading', { name: 'Remove webhook' })).not.toBeVisible();
     await expect(alphaItem).toBeVisible();
 
     // Confirm deletion (H2)

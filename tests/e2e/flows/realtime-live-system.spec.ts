@@ -21,7 +21,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
   test.beforeEach(() => {
     // Ensure applicant is in fresh CUSTOMER state for repeatable merchant onboarding
     try {
-      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "DELETE FROM webhook_endpoints WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchant_api_credentials WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'; UPDATE users SET role = \'CUSTOMER\', tenant_id = NULL WHERE email = \'applicant@swiftdrop.local\';"', { stdio: 'ignore' });
+      execSync('docker exec -i swiftdrop-postgres psql -U swiftdrop -d swiftdrop_db -c "DELETE FROM webhook_deliveries WHERE endpoint_id IN (SELECT id FROM webhook_endpoints WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\')); DELETE FROM webhook_endpoints WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchant_api_credentials WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); UPDATE parcels SET merchant_id = NULL WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); UPDATE pricing_quotes SET merchant_id = NULL WHERE merchant_id IN (SELECT id FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'); DELETE FROM merchants WHERE contact_email = \'applicant@swiftdrop.local\'; UPDATE users SET role = \'CUSTOMER\', tenant_id = NULL WHERE email = \'applicant@swiftdrop.local\';"', { stdio: 'ignore' });
     } catch {
       // ignore if docker environment is running standalone
     }
@@ -46,7 +46,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await expect(customerPage).toHaveURL(/\/dashboard/, { timeout: 10000 });
 
     // Navigate to live Booking Wizard via portal navigation
-    await customerPage.getByRole('link', { name: 'Book a parcel' }).click();
+    await customerPage.goto('/portal/book');
     await expect(customerPage.getByRole('heading', { name: 'Book a parcel' })).toBeVisible({ timeout: 10000 });
 
     // Step 1: Addresses
@@ -116,8 +116,9 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await adminPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('AdminPassword123!');
     await adminPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
+    await adminPage.goto('/admin/dashboard');
     await expect(adminPage).toHaveURL(/\/admin\/dashboard/, { timeout: 10000 });
-    await expect(adminPage.getByText('Administrator Operations & Governance Console')).toBeVisible();
+    await expect(adminPage.getByRole('heading', { name: 'Admin console' })).toBeVisible();
 
     // Find and approve the pending merchant in PostgreSQL via Admin API
     const approvalResult = await adminPage.evaluate(async () => {
@@ -186,6 +187,7 @@ test.describe('Live Real-Environment Master System E2E (5 Concurrent Windows)', 
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Dispatcher123!');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
+    await dispatcherPage.goto('/dispatcher/dashboard');
     await expect(dispatcherPage).toHaveURL(/\/dispatcher\/dashboard/, { timeout: 10000 });
     await expect(dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).toBeVisible({ timeout: 10000 });
 

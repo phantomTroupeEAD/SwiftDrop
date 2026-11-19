@@ -308,3 +308,69 @@ Flow 13 verifies true multi-actor value-chain synchronization across concurrent,
 6. **Dispatcher Emergency Unassign & Eviction:** Dispatcher unassigns parcel with operational reason; parcel immediately returns to Dispatcher unassigned queue and is evicted from Courier mobile device.
 7. **Reassignment & In-Transit Progress:** Dispatcher reassigns parcel to courier; courier clicks `Start delivery` (`data-testid="courier-start-run"`) transitioning parcel to `OUT_FOR_DELIVERY`; Dispatcher Board Assigned table reactively reflects `out for delivery` status badge.
 - **Test Result:** 1 passed (6.0s) — 100% Pass Rate with zero mocks against live PostgreSQL, Redis, RabbitMQ, and Core API.
+
+---
+
+## 9. CQA Master Evaluation & Verification Journal (Branch: `feat/cqa-cross-module-e2e-testing`)
+
+**Date:** 2026-11-19  
+**Role:** Chief QA (CQA) Engineer & System Lead  
+**Scope:** Cross-Module Integration, Multi-Role Concurrent Load Simulation, Value-Chain Synchronization, and Exhaustive Vulnerability Auditing.
+
+### 9.1 Root Cause Identifications & Infrastructure Fixes
+1. **Dispatch Board Query Truncation Bug (`core-api/internal/dispatch/infrastructure/postgres_dispatch_board_reader.go`):**
+   - *Problem:* `GetUnassignedParcels` performed `ORDER BY p.created_at ASC LIMIT 100` without evaluating `zoneID`. In a database with 114+ legacy unassigned parcels, newly booked parcels were truncated and invisible to dispatchers.
+   - *Resolution:* Updated query to `WHERE ($1 = '' OR p.origin_zone_id = $1 OR p.destination_zone_id = $1) ORDER BY p.created_at DESC LIMIT 100`, ensuring newest bookings are immediately visible and actionable.
+2. **Mock Webhook Secret Ingestion Crash (`tests/e2e/mock-webhook/src/server.ts`):**
+   - *Problem:* Calling `crypto.createHmac('sha256', secret)` where `secret` is undefined for dynamic tenant endpoints threw an unhandled `TypeError [ERR_INVALID_ARG_TYPE]`, causing 500 errors to Event Worker.
+   - *Resolution:* Added guard `if (!signatureHeader || !secret) return false;` and wildcard route `/webhooks/:tenant`.
+3. **Tracking API Port Routing Isolation:**
+   - Public tracking endpoints (`/api/v1/tracking/public/*`) are isolated on port 8081 (read-optimized SSE projection service) rather than monolithic port 8080.
+4. **Tenant ID Foreign Key Alignment in Tests:**
+   - Dynamically mapped `users.tenant_id = m.id FROM merchants m WHERE m.owner_user_id = users.id` to prevent `404 MERCHANT_NOT_FOUND` during webhook registration.
+
+### 9.2 Newly Implemented Master Suites
+1. **`tests/e2e/flows/realtime-user-traffic-load.spec.ts` (`npm run test:traffic`):**
+   - Simultaneously spins up 6 completely isolated browser contexts (PUBLIC, CUSTOMER 1, CUSTOMER 2, MERCHANT, DISPATCHER, COURIER, ADMIN).
+   - Simulates real concurrent user traffic: parallel quote estimation, customer bookings, unauthenticated public SSE stream tracking with zero PII exposure, dispatcher queue assignment, courier delivery run with digital SVG signature proof, and atomic outbox commit verification.
+   - **Verification:** 1/1 passed in 10.4s.
+2. **`tests/e2e/flows/flaw-and-vulnerability-matrix.spec.ts` (`npm run test:vulnerabilities`):**
+   - Exhaustive 15-test security audit covering:
+     - State machine jump attacks (delivering CREATED parcels directly -> 422 rejected).
+     - Unassigned delivery start -> 400/403/404/409 rejected.
+     - Cross-tenant receipt IDOR -> 403/404 blocked.
+     - Foreign webhook deletion -> 404 blocked.
+     - Vertical RBAC escalation (Customer -> Dispatch Board 403, Courier -> Admin Zones 403, Customer -> Courier Shift 403).
+     - Cryptographic JWT tampering (signature mutation 401, missing auth 401, malformed scheme 401).
+     - Public PII disclosure (SEC-009 zero street/phone leakage).
+     - Boundary fuzzing (negative weights, >30kg ceiling, zero dimensions, invalid zone IDs).
+   - **Verification:** 15/15 passed in 2.3s.
+
+### 9.3 Verification Summary
+All core and edge suites verified passing:
+- `npm run test:traffic`: PASS (10.4s)
+- `npm run test:vulnerabilities`: PASS (2.3s)
+- `npm run test:live`: PASS (13.8s)
+- `npm run test:live-guardrails`: PASS (4/4 passed)
+- `npm run test:merchant-orders`: PASS (15.1s)
+- `npm run test:merchant-orders-edge-cases`: PASS (21.5s)
+- `npm run test:merchant-webhooks`: PASS (14.3s)
+- `npm run test:merchant-api-keys`: PASS (7.5s)
+- `npm run test:combinatorial-webhooks`: PASS (2.6s)
+- `npm run test:dispatcher`: PASS (25.3s)
+- `npm run test:dispatcher-sync`: PASS (6.1s)
+- `01-customer-booking.spec.ts`: PASS (3.8s)
+- `02-dispatcher-assignment.spec.ts`: PASS (3.1s)
+- `05-merchant-delivery-webhook-loop.spec.ts`: PASS (13.9s)
+- `06-customer-registration-mailpit.spec.ts`: PASS (3.7s)
+- `07-multi-parcel-lifecycle-to-delivered.spec.ts`: PASS (5.4s)
+- `ai-assistant.spec.ts`: PASS (6/6 passed)
+- `edge-01-booking-validation.spec.ts`: PASS (2/2 passed)
+- `edge-02-quote-lifecycle.spec.ts`: PASS (2/2 passed)
+- `edge-03-dispatcher-capacity.spec.ts`: PASS (2/2 passed)
+- `edge-05-merchant-csv-import.spec.ts`: PASS (2/2 passed)
+- `edge-06-merchant-security.spec.ts`: PASS (1/1 passed)
+- `edge-07-tracking-degradation.spec.ts`: PASS (1/1 passed)
+- `edge-08-assistant-adversarial.spec.ts`: PASS (1/1 passed)
+- `edge-09-auth-security-and-edge-cases.spec.ts`: PASS (18/18 passed)
+

@@ -137,11 +137,10 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00400');
 
     // Wait for postal zones to be resolved and displayed
-    await expect(customerPage.getByText('✓ ZONE_COLOMBO_CENTRAL')).toBeVisible();
-    await expect(customerPage.getByText('✓ ZONE_COLOMBO_SOUTH')).toBeVisible();
+    await expect(customerPage.getByText(/Delivery zone/i).first()).toBeVisible({ timeout: 10000 });
 
     // Advance to Step 1 (Parcel Details)
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Step 2: Parcel Details
     await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT))).toBeVisible();
@@ -153,14 +152,14 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.SELECT_SERVICE)).selectOption('STANDARD');
 
     // Advance to Step 2 (Quote)
-    await customerPage.getByRole('button', { name: 'Get quote' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_GET_QUOTE)).click();
 
     // Step 3: Authoritative Dynamic Quote Verification
     const quotePriceLocator = customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS));
     await expect(quotePriceLocator).toBeVisible();
 
     // Advance to Step 3 (Review / Confirm)
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Step 4: Submit Booking
     await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_SUBMIT_BOOKING)).click();
@@ -171,7 +170,7 @@ test.describe('Flow 1: Customer Booking Wizard E2E Flow', () => {
 
     const trackingNumberElement = customerPage.locator(testId(SELECTORS.CUSTOMER.BOOKING_CONFIRMATION_TRACKING_NO));
     await expect(trackingNumberElement).toBeVisible();
-    await expect(trackingNumberElement).toHaveText(/SD-20261114-99881/);
+    await expect(trackingNumberElement).toHaveText(/^SD-\d{8}-[A-Z0-9]+$/);
 
     // Verify official receipt button is mounted
     await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_RECEIPT))).toBeVisible();

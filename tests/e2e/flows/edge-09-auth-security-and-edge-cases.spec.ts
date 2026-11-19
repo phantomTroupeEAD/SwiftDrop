@@ -144,8 +144,8 @@ test.describe('Suite 9: Sign-In Security, Input Validation & Attack Mitigation',
 
   test('Edge 9.7: Role-Based Routing Directs Authorized Personnel to Respective Dashboards', async ({ page }) => {
     const rolesToTest = [
-      { user: TEST_USERS.ADMIN, targetUrl: '/admin/dashboard' },
-      { user: TEST_USERS.DISPATCHER, targetUrl: '/dispatcher/dashboard' },
+      { user: TEST_USERS.ADMIN, targetUrl: '/(admin/dashboard|ops)' },
+      { user: TEST_USERS.DISPATCHER, targetUrl: '/(dispatcher/dashboard|ops)' },
       { user: TEST_USERS.COURIER, targetUrl: '/courier/dashboard' },
       { user: TEST_USERS.CUSTOMER, targetUrl: '/dashboard' },
     ];

@@ -101,8 +101,8 @@ test.describe('Suite 2: Dynamic Pricing & Quote Expiration Anomalies', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_CITY)).fill('Colombo');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00100');
 
-    await expect(customerPage.getByText('✓ ZONE_COLOMBO_CENTRAL').first()).toBeVisible();
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await expect(customerPage.getByText(/Delivery zone/i).first()).toBeVisible({ timeout: 10000 });
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Fill valid Step 2
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT)).fill('2.0');
@@ -111,7 +111,7 @@ test.describe('Suite 2: Dynamic Pricing & Quote Expiration Anomalies', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_HEIGHT)).fill('10');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DESCRIPTION)).fill('Short expiry test parcel');
 
-    await customerPage.getByRole('button', { name: 'Get quote' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_GET_QUOTE)).click();
 
     // Verify quote was loaded
     await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS))).toBeVisible();
@@ -164,8 +164,8 @@ test.describe('Suite 2: Dynamic Pricing & Quote Expiration Anomalies', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_CITY)).fill('Colombo');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DROPOFF_POSTAL)).fill('00100');
 
-    await expect(customerPage.getByText('✓ ZONE_COLOMBO_CENTRAL').first()).toBeVisible();
-    await customerPage.getByRole('button', { name: 'Continue' }).click();
+    await expect(customerPage.getByText(/Delivery zone/i).first()).toBeVisible({ timeout: 10000 });
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_NEXT)).click();
 
     // Step 2: Enter initial weight 1.0kg
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT)).fill('1.0');
@@ -174,7 +174,7 @@ test.describe('Suite 2: Dynamic Pricing & Quote Expiration Anomalies', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_HEIGHT)).fill('10');
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_DESCRIPTION)).fill('Sample parcel');
 
-    await customerPage.getByRole('button', { name: 'Get quote' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_GET_QUOTE)).click();
     await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS))).toBeVisible();
 
     // Navigate back to Step 2
@@ -184,10 +184,10 @@ test.describe('Suite 2: Dynamic Pricing & Quote Expiration Anomalies', () => {
     await customerPage.locator(testId(SELECTORS.CUSTOMER.INPUT_WEIGHT)).fill('4.5');
 
     // Click Get Quote again
-    await customerPage.getByRole('button', { name: 'Get quote' }).click();
+    await customerPage.locator(testId(SELECTORS.CUSTOMER.BTN_GET_QUOTE)).click();
+    await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS))).toBeVisible();
 
     // Assert a second quote was requested and price updated
     expect(quoteRequests).toBe(2);
-    await expect(customerPage.locator(testId(SELECTORS.CUSTOMER.QUOTE_PRICE_CENTS))).toBeVisible();
   });
 });

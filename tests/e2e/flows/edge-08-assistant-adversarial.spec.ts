@@ -61,6 +61,11 @@ test.describe('Suite 8: AI Assistant Boundaries Edge Cases', () => {
 
     await customerPage.goto('/portal/dashboard');
 
+    const openBtn = customerPage.locator(testId(SELECTORS.AI_ASSISTANT.OPEN_BTN));
+    if (await openBtn.isVisible()) {
+      await openBtn.click();
+    }
+
     const assistantPanel = customerPage.locator(testId(SELECTORS.AI_ASSISTANT.PANEL));
     await expect(assistantPanel).toBeVisible();
 

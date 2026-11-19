@@ -21,8 +21,8 @@ const SECRETS: Record<string, string> = {
 export const eventStore: WebhookRecord[] = [];
 export const chaosAttempts: { receivedAt: string; path: string }[] = [];
 
-export function verifyHmac(rawBody: Buffer, signatureHeader: string | undefined, secret: string): boolean {
-  if (!signatureHeader) return false;
+export function verifyHmac(rawBody: Buffer, signatureHeader: string | undefined, secret?: string): boolean {
+  if (!signatureHeader || !secret) return false;
 
   let signatureHex = signatureHeader;
   let payloadToSign: Buffer | string = rawBody;
@@ -94,6 +94,18 @@ app.post('/webhooks/merchant-alpha', handleWebhook('alpha'));
 app.post('/webhooks/merchant-beta', handleWebhook('beta'));
 app.post('/webhooks/merchant-gamma', handleWebhook('gamma'));
 app.post('/webhooks/merchant-omega', handleWebhook('omega'));
+app.post('/webhooks/:tenant', (req: Request, res: Response, next) => {
+  const tenantParam = req.params.tenant;
+  if (tenantParam === 'merchant-chaos') {
+    chaosAttempts.unshift({ receivedAt: new Date().toISOString(), path: req.path });
+    return res.status(500).json({ error: 'CHAOS_INJECTED_500_DEAD_LETTER_TRIGGER' });
+  }
+  if (tenantParam === 'merchant-slow') {
+    return next();
+  }
+  const tenantKey = tenantParam.replace(/^merchant-/, '');
+  return handleWebhook(tenantKey as any)(req, res);
+});
 
 // 2. Chaos Endpoint (Always returns 500 to trigger DLQ retry)
 app.post('/webhooks/merchant-chaos', (req: Request, res: Response) => {

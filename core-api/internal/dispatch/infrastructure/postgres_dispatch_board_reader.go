@@ -22,7 +22,7 @@ func NewPostgresDispatchBoardReader(db *sql.DB) *PostgresDispatchBoardReader {
 }
 
 // GetUnassignedParcels queries eligible unassigned parcels for a target delivery zone.
-func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, _ string) ([]application.UnassignedParcelDTO, error) {
+func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zoneID string) ([]application.UnassignedParcelDTO, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("failed to get unassigned parcels: %w", db.ErrNilDB)
 	}
@@ -37,11 +37,12 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 			p.created_at
 		FROM parcels p
 		WHERE p.status IN ('CREATED', 'ATTEMPT_FAILED')
-		ORDER BY p.created_at ASC
+		  AND ($1 = '' OR p.origin_zone_id = $1 OR p.destination_zone_id = $1)
+		ORDER BY p.created_at DESC
 		LIMIT 100;
 	`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, zoneID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query unassigned parcels: %w", err)
 	}
@@ -56,6 +57,10 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 		}
 		item.CreatedAt = createdAt
 		list = append(list, item)
+	}
+
+	if list == nil {
+		list = []application.UnassignedParcelDTO{}
 	}
 
 	return list, rows.Err()

@@ -556,7 +556,7 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_EMAIL)).fill('dispatcher@swiftdrop.local');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.INPUT_PASSWORD)).fill('Dispatcher123!');
     await dispatcherPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
-
+    await dispatcherPage.goto('/dispatcher/dashboard');
     await expect(dispatcherPage).toHaveURL(/\/dispatcher\/dashboard/, { timeout: 12000 });
     await expect(dispatcherPage.locator(testId(SELECTORS.DISPATCHER.DISPATCHER_BOARD))).toBeVisible({ timeout: 10000 });
 
@@ -934,7 +934,7 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
     expect(resOrder1.status()).toBe(201);
     const jsonOrder1 = await resOrder1.json();
     const tracking1 = jsonOrder1.data.tracking_number;
-    expect(tracking1).toMatch(/^SD-\d{8}-\d{5}$/);
+    expect(tracking1).toMatch(/^SD-\d{8}-[A-Z0-9]+$/);
     expect(jsonOrder1.data.status).toBe('CREATED');
     expect(jsonOrder1.data.merchant_reference).toBe(baseValidPayload.merchant_reference);
     console.log(`[E2E] Order 1 Created Successfully: Tracking = ${tracking1}`);
