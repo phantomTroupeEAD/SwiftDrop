@@ -33,7 +33,8 @@ REQUIRED=(
 # Optional: GHCR_USER + GHCR_PULL_TOKEN (private images), ORIGIN_CERT_PEM + ORIGIN_KEY_PEM (Cloudflare TLS),
 # AI_SERVICE_ROLE_TOKEN, LLM_API_KEY, SWIFTDROP_API_KEY (ai-assistant),
 # mail: SMTP_HOST, SMTP_PORT, SMTP_SECURITY, SMTP_FROM_EMAIL, SMTP_FROM_NAME, SMTP_USERNAME, SMTP_PASSWORD,
-# proof-photo storage: OBJECT_STORAGE_DRIVER, _ACCOUNT_ID, _BUCKET, _REGION, _ACCESS_KEY, _SECRET_KEY, _PUBLIC_URL.
+# proof-photo storage: OBJECT_STORAGE_DRIVER, _ACCOUNT_ID, _BUCKET, _REGION, _ACCESS_KEY, _SECRET_KEY, _PUBLIC_URL,
+# Google sign-in: GOOGLE_CLIENT_ID.
 
 missing=()
 for v in "${REQUIRED[@]}"; do [[ -n "${!v:-}" ]] || missing+=("$v"); done
@@ -123,6 +124,8 @@ if [[ -n "${OBJECT_STORAGE_DRIVER:-}" ]]; then
     add_kv "$k" "${!k:-}"
   done
 fi
+# Google sign-in: core-api checks that ID tokens were issued for this client (audience).
+add_kv GOOGLE_CLIENT_ID "${GOOGLE_CLIENT_ID:-}"
 if [[ -s "$TMP/core-api-integrations.env" ]]; then
   apply_secret core-api-integrations "$TMP/core-api-integrations.env"
 else

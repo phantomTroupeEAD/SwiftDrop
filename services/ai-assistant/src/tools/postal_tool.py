@@ -11,6 +11,7 @@ from src.tools.registry import register_tool
     description="Lookup Sri Lankan 5-digit postal code by city, town, suburb, or postal division (e.g. 'Walasmulla', 'Kadugannawa', 'Colombo 03', 'Anuradhapura', 'Kegalle').",
     input_schema=LookupPostalCodeInput,
     is_read_only=True,
+    aliases=["postal_code_lookup", "get_postal_code", "search_postal_code"],
 )
 async def postal_tool(
     input_data: LookupPostalCodeInput,

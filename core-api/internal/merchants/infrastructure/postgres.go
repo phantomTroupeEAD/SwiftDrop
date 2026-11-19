@@ -487,3 +487,7 @@ func (RoleAssigner) GrantMerchantRole(_ context.Context, _ application.Querier, 
 	// TODO(Member 1): wire to user_roles table once migration is committed.
 	return nil
 }
+
+func (RoleAssigner) RevokeMerchantRole(_ context.Context, _ application.Querier, _ string) error {
+	return nil
+}

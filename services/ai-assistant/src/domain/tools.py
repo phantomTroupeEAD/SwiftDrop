@@ -86,19 +86,19 @@ class EstimateFeeInput(BaseModel):
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package length in centimeters",
+        description="Package length in centimeters. Required by Core API pricing engine (never guess or default).",
     )
     width_cm: Optional[float] = Field(
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package width in centimeters",
+        description="Package width in centimeters. Required by Core API pricing engine (never guess or default).",
     )
     height_cm: Optional[float] = Field(
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package height in centimeters",
+        description="Package height in centimeters. Required by Core API pricing engine (never guess or default).",
     )
 
     @model_validator(mode="after")

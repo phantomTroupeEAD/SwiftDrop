@@ -333,7 +333,7 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 		Hasher:    hasher,
 		Cipher:    cipher,
 		Resolver:  merchantsinfra.Resolver{},
-		Booking:   merchantsinfra.NewBookingStub(),
+		Booking:   merchantsinfra.NewPostgresParcelBooking(db),
 		Observer:  testNoopObserver{},
 		Now:       time.Now,
 	}, merchantsapp.Config{
@@ -578,6 +578,61 @@ func TestMerchantsLifecycle_E2E(t *testing.T) {
 		}
 		if recReplay.Header().Get("Idempotent-Replay") != "true" {
 			t.Errorf("expected Idempotent-Replay: true header, got %s", recReplay.Header().Get("Idempotent-Replay"))
+		}
+	})
+
+	// 7. Merchant Lists Persisted Orders (GET /api/v1/merchant/orders) & PostgreSQL Verification
+	t.Run("E2E-7: Persisted order retrieval and database verification", func(t *testing.T) {
+		testCtx := context.Background()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders", nil)
+		req.Header.Set("X-API-Key", createdPlaintextKey)
+		rec := httptest.NewRecorder()
+
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 OK from GET /merchant/orders, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp struct {
+			Data []struct {
+				ParcelID          string `json:"parcel_id"`
+				TrackingNumber    string `json:"tracking_number"`
+				MerchantReference string `json:"merchant_reference"`
+				Status            string `json:"status"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode orders list: %v", err)
+		}
+		if len(resp.Data) == 0 {
+			t.Fatalf("expected at least 1 persisted order, got 0")
+		}
+		if resp.Data[0].MerchantReference != "E2E-TEST-ORDER-001" {
+			t.Errorf("expected merchant reference E2E-TEST-ORDER-001, got %q", resp.Data[0].MerchantReference)
+		}
+
+		// Verify parcel directly in PostgreSQL parcels table
+		var dbStatus, dbMerchantID string
+		err := db.QueryRowContext(testCtx, "SELECT status, merchant_id::text FROM parcels WHERE id = $1", resp.Data[0].ParcelID).Scan(&dbStatus, &dbMerchantID)
+		if err != nil {
+			t.Fatalf("failed to query parcels table: %v", err)
+		}
+		if dbStatus != "CREATED" {
+			t.Errorf("expected parcel status CREATED, got %s", dbStatus)
+		}
+		if dbMerchantID != createdMerchantID {
+			t.Errorf("expected merchant_id %s, got %s", createdMerchantID, dbMerchantID)
+		}
+
+		// Verify outbox event in outbox_events table
+		var eventType string
+		err = db.QueryRowContext(testCtx, "SELECT event_type FROM outbox_events WHERE aggregate_id = $1", resp.Data[0].ParcelID).Scan(&eventType)
+		if err != nil {
+			t.Fatalf("failed to query outbox_events table: %v", err)
+		}
+		if eventType != "parcel.booked.v1" {
+			t.Errorf("expected outbox event parcel.booked.v1, got %s", eventType)
 		}
 	})
 }

@@ -103,6 +103,7 @@ jobs:
           OBJECT_STORAGE_ACCOUNT_ID: ${{ secrets.OBJECT_STORAGE_ACCOUNT_ID || vars.OBJECT_STORAGE_ACCOUNT_ID }}
           OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
           OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || secrets.GOOGLE_CLIENT_ID }}
         run: bash deploy/scripts/sync-secrets.sh
 
       - name: Deploy, smoke test, roll back on failure
