@@ -426,4 +426,10 @@ All core and edge suites verified passing:
   - Runs `govulncheck` across all Go codebases, `npm audit` for frontend and test dependencies, and `Trivy` filesystem CVE scanning.
 - **Local Verification Parity (`scripts/verify.ps1` / `scripts/verify.sh`):**
   - Executes all 7 local quality gates in under 60 seconds with zero manual configuration. Fully verified passing.
+- **CI Stabilization & Cross-Module Parity (PR #98):**
+  - Upgraded `govulncheck-scan` toolchain in `.github/workflows/security.yml` to Go 1.23 for compatibility with `golang.org/x/vuln@latest`.
+  - Mounted administrative governance routes (`RegisterAdminRoutes`) in `core-api/tests/openapi_contract_test.go` router to ensure 100% OpenAPI spec route matching.
+  - Aligned canonical merchant UUID in `core-api/tests/events_integration_test.go` to eliminate unique key constraint conflicts with canonical seeder migrations.
+  - Implemented `/health` readiness probe endpoint in `mock-webhook/src/server.ts` and hardened daemon readiness polling in `.github/workflows/e2e.yml`.
+  - Added PostgreSQL driver registration in `core-api/tests/migrations/member_03_migration_test.go`.
 

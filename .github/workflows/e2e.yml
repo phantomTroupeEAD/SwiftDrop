@@ -106,8 +106,13 @@ jobs:
         run: |
           cd tests/e2e
           npm --prefix mock-webhook start &
-          sleep 2
-          curl -sf http://localhost:9999/health || (echo "Mock webhook server failed to start" && exit 1)
+          timeout 30s bash -c '
+            until curl -sf http://localhost:9999/health; do
+              echo "Waiting for Mock Webhook receiver..."
+              sleep 1
+            done
+          '
+          echo "Mock webhook server is ready!"
 
       - name: Run Master Flaw & Vulnerability Audit Matrix
         run: |

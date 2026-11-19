@@ -112,16 +112,23 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 	hasher := identityinfra.NewStandardPasswordHasher()
 	var userRepo identityapp.UserRepository
 	var tokenRepo identityapp.TokenRepository
+	var auditWriter identityapp.AuditWriter
 	if db != nil {
 		userRepo = identityinfra.NewPostgresUserRepository(db)
 		tokenRepo = identityinfra.NewPostgresTokenRepository(db)
+		auditWriter = identityinfra.NewPostgresAuditWriter(db)
 	} else {
 		userRepo = identityinfra.NewMockUserRepository(hasher)
 		tokenRepo = identityinfra.NewMockTokenRepository()
+		auditWriter = identityinfra.NewMockAuditWriter()
 	}
 	authSvc := identityapp.NewAuthService(userRepo, tokenRepo, hasher, tokenProv)
 	authHandler := identitytransport.NewAuthHandler(authSvc)
 	identitytransport.RegisterRoutes(mux, authHandler, security)
+
+	userService := identityapp.NewUserService(userRepo, auditWriter)
+	adminHandler := identitytransport.NewAdminHandler(userService)
+	identitytransport.RegisterAdminRoutes(mux, adminHandler, security)
 
 	// 2. Events Routes
 	eventsHandler := eventstransport.NewHandler(nil)

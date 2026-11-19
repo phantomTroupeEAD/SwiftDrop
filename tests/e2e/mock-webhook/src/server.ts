@@ -55,6 +55,11 @@ app.use(cors());
 app.use(express.raw({ type: 'application/json' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Health check endpoint for CI/CD readiness probes
+app.get('/health', (_req: Request, res: Response) => {
+  return res.status(200).json({ status: 'ok', service: 'mock-webhook' });
+});
+
 function handleWebhook(tenant: 'alpha' | 'beta' | 'gamma' | 'omega') {
   return (req: Request, res: Response) => {
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
