@@ -533,7 +533,7 @@ test.describe('Master CQA: Every Button, Every Action & Strict RBAC Privileges M
 
       // "No Less": Merchant can open Orders
       await page.goto('/portal/merchants/orders');
-      await expect(page.locator('table')).toBeVisible({ timeout: 8000 });
+      await expect(page.getByTestId('merchant-order-table').or(page.getByTestId('merchant-order-empty'))).toBeVisible({ timeout: 8000 });
 
       // "No Less": Merchant can open API Keys
       await page.goto('/portal/merchants/api-keys');
