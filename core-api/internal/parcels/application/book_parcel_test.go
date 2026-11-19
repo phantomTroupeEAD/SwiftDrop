@@ -6,6 +6,11 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+<<<<<<< Updated upstream
+=======
+	"sort"
+	"strings"
+>>>>>>> Stashed changes
 	"sync"
 	"testing"
 	"time"
@@ -208,6 +213,29 @@ func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel 
 	}
 	m.parcels[parcel.ID] = parcel
 	return nil
+}
+
+func (m *mockParcelRepo) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	cleanID := strings.TrimSpace(merchantID)
+	if cleanID == "" {
+		return []domain.Parcel{}, nil
+	}
+	var results []domain.Parcel
+	for _, p := range m.parcels {
+		if p.MerchantID != nil && *p.MerchantID == cleanID {
+			results = append(results, p)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].CreatedAt.After(results[j].CreatedAt)
+	})
+	if results == nil {
+		results = make([]domain.Parcel, 0)
+	}
+	return results, nil
 }
 
 // Mock Status History Repository.
