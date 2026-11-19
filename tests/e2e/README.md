@@ -75,6 +75,7 @@ npx playwright install chromium
 | **`npm run test:realtime`** | Live/Mocked | Master System 5-Window Real-Time Orchestration test across Customer, Applicant/Merchant, Admin, Dispatcher, and Courier simultaneously. |
 | **`npm run test:security`** | Live/Mocked | Strict authorization guardrails: Courier IDOR protection, Merchant tenant isolation, RBAC routing gates, SEC-009 public PII masking. |
 | **`npm run test:merchant-orders`** | Real Stack | **Master Unified Commercial Merchant E2E:** Mailpit OTP registration, REST approval, API keys, Webhooks matrix (Alpha/Beta/Gamma/Omega), 14 order API edge cases, multi-window dispatcher assignment, HMAC security & UI parity. |
+| **`npm run test:merchant-orders-edge-cases`** | Real Stack | **Senior QA Orders Page Suite:** CSV Excel BOM parsing, embedded quotes/commas, partial failure retries, pagination boundaries (>20 orders), and cross-tenant IDOR isolation. |
 | **`npm run test:merchant-api-keys`** | Real Stack | **Exhaustive 29-Scenario API Key Testing Suite:** UI modal security, form validations, quota limits (max 5), duplicate labels, expiration bounds, and cryptographic auth. |
 | **`npm run test:combinatorial-webhooks`** | Real Stack | **Exhaustive 64-Combination Webhook Suite:** Full power set $\mathcal{P}(S)$ testing of all 6 subscribable events (0 to 6), 384 routing decisions, and Core API registration. |
 | **`npm run test:merchant-webhooks`** | Real Stack | Merchant webhooks, event filtering combinations (Alpha/Beta/Gamma), multi-window dispatcher assignment, HMAC-SHA256 & deletion cutoff. |
