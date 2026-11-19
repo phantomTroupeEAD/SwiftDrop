@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/swiftdrop/tracking/internal/dto"
 )
@@ -20,16 +21,43 @@ const (
 )
 
 type clientSub struct {
-	ch     chan dto.PublicStatusUpdateEvent
-	once   sync.Once
-	closed bool
+	mu        sync.RWMutex
+	ch        chan dto.PublicStatusUpdateEvent
+	closed    bool
+	uncounted atomic.Bool
 }
 
 func (s *clientSub) Close() {
-	s.once.Do(func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
 		s.closed = true
 		close(s.ch)
-	})
+	}
+}
+
+func (s *clientSub) IsClosed() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.closed
+}
+
+// TrySend safely attempts to send an event on the subscriber channel.
+// Guarantees that sends never race with Close() or Unsubscribe(), avoiding panics on closed channels.
+func (s *clientSub) TrySend(event dto.PublicStatusUpdateEvent) (delivered bool, closed bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.closed {
+		return false, true
+	}
+
+	select {
+	case s.ch <- event:
+		return true, false
+	default:
+		return false, false // buffer full
+	}
 }
 
 // HubOption configures an EventHub instance.
@@ -114,6 +142,9 @@ func (h *EventHub) Subscribe(ctx context.Context, trackingNumber string) (<-chan
 		return nil, nil, ErrEventSourceUnavailable
 	}
 
+	// Prune any closed subscribers for this tracking number before evaluating capacity limits
+	h.pruneClosedKeyLocked(trackingNumber)
+
 	if h.totalSubs >= h.maxTotalSubs {
 		return nil, nil, ErrSubscriptionLimitExceeded
 	}
@@ -136,7 +167,9 @@ func (h *EventHub) Subscribe(ctx context.Context, trackingNumber string) (<-chan
 			if c == sub {
 				// Remove channel preserving order
 				h.subscribers[trackingNumber] = append(channels[:i], channels[i+1:]...)
-				h.totalSubs--
+				if !c.uncounted.Swap(true) {
+					h.totalSubs--
+				}
 				c.Close()
 				break
 			}
@@ -154,39 +187,83 @@ func (h *EventHub) Subscribe(ctx context.Context, trackingNumber string) (<-chan
 // If a subscriber channel buffer overflows (slow client), the stalled connection is terminated
 // to trigger the browser EventSource auto-reconnect and database milestone resynchronization,
 // rather than silently dropping updates and leaving the client in an inconsistent state.
+// Closed subscribers are pruned safely to prevent sends on closed channels and resource leaks.
 // Returns the count of successfully queued deliveries.
 func (h *EventHub) Broadcast(event dto.PublicStatusUpdateEvent) int {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	if h.closed || !h.available {
+		h.mu.RUnlock()
 		return 0
 	}
 
 	channels, found := h.subscribers[event.TrackingNumber]
 	if !found || len(channels) == 0 {
+		h.mu.RUnlock()
 		return 0
 	}
 
+	subs := make([]*clientSub, len(channels))
+	copy(subs, channels)
+	h.mu.RUnlock()
+
 	delivered := 0
-	for _, sub := range channels {
-		select {
-		case sub.ch <- event:
+	hasClosed := false
+
+	for _, sub := range subs {
+		ok, isClosed := sub.TrySend(event)
+		if ok {
 			delivered++
-		default:
-			// Buffer full for this subscriber: slow client is lagging behind.
-			// Terminate the stalled channel to force client reconnect and milestone replay.
-			if h.logger != nil {
-				h.logger.Warn("Slow client buffer overflowed; terminating subscription for resynchronization",
-					"tracking_number", event.TrackingNumber,
-					"status", event.Status,
-				)
-			}
-			sub.Close()
+			continue
 		}
+		if isClosed {
+			hasClosed = true
+			continue
+		}
+
+		// Buffer full for this subscriber: slow client is lagging behind.
+		if h.logger != nil {
+			h.logger.Warn("Slow client buffer overflowed; terminating subscription for resynchronization",
+				"tracking_number", event.TrackingNumber,
+				"status", event.Status,
+			)
+		}
+		sub.Close()
+		hasClosed = true
+	}
+
+	if hasClosed {
+		h.pruneClosedKey(event.TrackingNumber)
 	}
 
 	return delivered
+}
+
+func (h *EventHub) pruneClosedKey(trackingNumber string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pruneClosedKeyLocked(trackingNumber)
+}
+
+func (h *EventHub) pruneClosedKeyLocked(trackingNumber string) {
+	subs, found := h.subscribers[trackingNumber]
+	if !found {
+		return
+	}
+	active := make([]*clientSub, 0, len(subs))
+	for _, sub := range subs {
+		if sub.IsClosed() {
+			if !sub.uncounted.Swap(true) {
+				h.totalSubs--
+			}
+		} else {
+			active = append(active, sub)
+		}
+	}
+	if len(active) == 0 {
+		delete(h.subscribers, trackingNumber)
+	} else {
+		h.subscribers[trackingNumber] = active
+	}
 }
 
 // IsAvailable reports whether the event source is active.
@@ -205,8 +282,9 @@ func (h *EventHub) SetAvailable(available bool) {
 
 // SubscriberCount returns the current number of active subscribers for a tracking number.
 func (h *EventHub) SubscriberCount(trackingNumber string) int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pruneClosedKeyLocked(trackingNumber)
 	return len(h.subscribers[trackingNumber])
 }
 
@@ -232,6 +310,7 @@ func (h *EventHub) Close() error {
 	for _, channels := range h.subscribers {
 		for _, sub := range channels {
 			sub.Close()
+			sub.uncounted.Store(true)
 		}
 	}
 

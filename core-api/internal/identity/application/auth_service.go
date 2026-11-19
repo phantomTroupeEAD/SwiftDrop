@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
 
@@ -103,7 +105,9 @@ func (s *AuthService) SendRegistrationOTP(ctx context.Context, cmd SendRegistrat
 	// 6. Dispatch email (dev mode: printed to stdout)
 	if s.emailSender != nil {
 		if err := s.emailSender.SendOTPEmail(ctx, emailVO.String(), code); err != nil {
-			_ = err
+			log.Printf("[ERROR] Failed to send registration OTP email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Registration OTP [%s] successfully dispatched to %s\n", code, emailVO.String())
 		}
 	}
 
@@ -164,7 +168,7 @@ func (s *AuthService) Register(ctx context.Context, cmd RegisterCustomerCommand)
 	}
 
 	// 9. Build user aggregate
-	userID := "usr_" + generateRandomHex(16)
+	userID := newEntityID()
 	displayName := firstName + " " + lastName
 	newUser := domain.NewUser(
 		userID,
@@ -267,7 +271,7 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := newEntityID()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -278,7 +282,8 @@ func (s *AuthService) Login(ctx context.Context, cmd LoginCommand) (*LoginResult
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			// Login still succeeds, but without a stored session the refresh token cannot be used.
+			log.Printf("[WARN] failed to persist refresh-token session for user %s: %v", user.ID, err)
 		}
 	}
 
@@ -345,7 +350,7 @@ func (s *AuthService) RefreshSession(ctx context.Context, cmd RefreshSessionComm
 		return nil, fmt.Errorf("failed to generate rotated refresh token: %w", err)
 	}
 
-	newSessionID := "ses_" + generateRandomHex(16)
+	newSessionID := newEntityID()
 	newSession := domain.NewRefreshTokenSession(
 		newSessionID,
 		user.ID,
@@ -445,7 +450,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 			// Account exists -> link Google identity
 			user = existingUser
 			link := domain.NewOAuthIdentity(
-				"oai_"+generateRandomHex(16),
+				newEntityID(),
 				user.ID,
 				domain.ProviderGoogle,
 				claims.Subject,
@@ -481,7 +486,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 				return nil, fmt.Errorf("failed to hash password: %w", err)
 			}
 
-			userID := "usr_" + generateRandomHex(16)
+			userID := newEntityID()
 			displayName := strings.TrimSpace(firstName + " " + lastName)
 			if displayName == "" {
 				displayName = firstName
@@ -508,7 +513,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 			}
 
 			link := domain.NewOAuthIdentity(
-				"oai_"+generateRandomHex(16),
+				newEntityID(),
 				newUser.ID,
 				domain.ProviderGoogle,
 				claims.Subject,
@@ -546,7 +551,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 	}
 
 	familyID := "fam_" + generateRandomHex(12)
-	sessionID := "ses_" + generateRandomHex(16)
+	sessionID := newEntityID()
 	session := domain.NewRefreshTokenSession(
 		sessionID,
 		user.ID,
@@ -557,7 +562,8 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 
 	if s.tokenRepo != nil {
 		if err := s.tokenRepo.SaveToken(ctx, session); err != nil {
-			_ = err
+			// Login still succeeds, but without a stored session the refresh token cannot be used.
+			log.Printf("[WARN] failed to persist refresh-token session for user %s: %v", user.ID, err)
 		}
 	}
 
@@ -570,6 +576,102 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, cmd GoogleLoginComman
 		IsNewUser:     isNewUser,
 		RequiresPhone: user.RequiresPhone(),
 	}, nil
+}
+
+const passwordResetOTPKeyPrefix = "reset:"
+
+// ─────────────────────────────────────────────
+// Password Reset Use Cases
+// ─────────────────────────────────────────────
+
+// SendPasswordResetOTP issues a 6-digit password reset code if an active account
+// exists for the email. Returns a uniform response even when the email is not
+// registered to prevent user enumeration.
+func (s *AuthService) SendPasswordResetOTP(ctx context.Context, cmd SendPasswordResetOTPCommand) (*SendPasswordResetOTPResult, error) {
+	emailVO, err := domain.NewEmail(cmd.Email)
+	if err != nil {
+		return nil, domain.ErrInvalidEmail
+	}
+
+	result := &SendPasswordResetOTPResult{
+		Email:           emailVO.String(),
+		ExpiresIn:       600,
+		CooldownSeconds: 60,
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, emailVO.String())
+	if err != nil || !user.IsActive() {
+		return result, nil
+	}
+
+	resetKey := passwordResetOTPKeyPrefix + emailVO.String()
+	if s.otpRepo != nil {
+		if err := s.otpRepo.CheckCooldown(ctx, resetKey); err != nil {
+			return nil, err
+		}
+	}
+
+	code, err := generateSixDigitOTP()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate otp: %w", err)
+	}
+
+	if s.otpRepo != nil {
+		if err := s.otpRepo.SaveOTP(ctx, resetKey, code); err != nil {
+			return nil, fmt.Errorf("failed to save otp: %w", err)
+		}
+	}
+
+	if s.emailSender != nil {
+		if err := s.emailSender.SendPasswordResetEmail(ctx, emailVO.String(), code); err != nil {
+			log.Printf("[ERROR] Failed to send password reset email to %s: %v\n", emailVO.String(), err)
+		} else {
+			log.Printf("[INFO] Password reset OTP [%s] successfully dispatched to %s (valid for 10m)\n", code, emailVO.String())
+		}
+	}
+
+	return result, nil
+}
+
+// ResetPassword verifies the password reset OTP, enforces password complexity,
+// and updates the user's password hash.
+func (s *AuthService) ResetPassword(ctx context.Context, cmd ResetPasswordCommand) error {
+	emailVO, err := domain.NewEmail(cmd.Email)
+	if err != nil {
+		return domain.ErrInvalidEmail
+	}
+
+	if err := domain.ValidatePlaintextPassword(cmd.NewPassword); err != nil {
+		return err
+	}
+
+	resetKey := passwordResetOTPKeyPrefix + emailVO.String()
+	if s.otpRepo != nil {
+		if err := s.otpRepo.VerifyAndConsumeOTP(ctx, resetKey, strings.TrimSpace(cmd.OTP)); err != nil {
+			return err
+		}
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, emailVO.String())
+	if err != nil {
+		return domain.ErrOTPInvalid
+	}
+
+	if !user.IsActive() {
+		return domain.ErrAccountSuspended
+	}
+
+	passwordHash, err := s.hasher.HashPassword(cmd.NewPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user.ChangePassword(passwordHash)
+	if err := s.userRepo.Save(ctx, user); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return nil
 }
 
 // ─────────────────────────────────────────────
@@ -599,6 +701,13 @@ func generateOpaqueToken() (raw string, hash string, err error) {
 	sum := sha256.Sum256([]byte(raw))
 	hash = hex.EncodeToString(sum[:])
 	return raw, hash, nil
+}
+
+// newEntityID returns a random UUID (v4) for users, refresh-token sessions and OAuth links.
+// Their primary keys are UUID columns in PostgreSQL (users.id, refresh_tokens.id,
+// oauth_identities.id); prefixed IDs such as "usr_<hex>" are rejected by the database.
+func newEntityID() string {
+	return uuid.NewString()
 }
 
 func generateRandomHex(byteCount int) string {

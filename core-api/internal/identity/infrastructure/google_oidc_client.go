@@ -14,9 +14,7 @@ import (
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
 
-// GoogleOIDCClient validates Google OAuth ID tokens.
-// In dev/test mode (or when given tokens prefixed with "mock_" or "dev_"),
-// it produces deterministic mock claims without external network requests.
+// GoogleOIDCClient validates Google OAuth ID tokens against Google's OIDC tokeninfo endpoint.
 type GoogleOIDCClient struct {
 	clientID   string
 	httpClient *http.Client
@@ -50,13 +48,11 @@ func (c *GoogleOIDCClient) VerifyIDToken(ctx context.Context, idToken string) (*
 	if trimmed == "" {
 		return nil, domain.ErrInvalidToken
 	}
-
-	// 1. Check for Mock/Offline Dev Tokens
-	if strings.HasPrefix(trimmed, "mock_") || strings.HasPrefix(trimmed, "dev_") || c.clientID == "" {
-		return c.resolveMockToken(trimmed)
+	if strings.TrimSpace(c.clientID) == "" {
+		return nil, fmt.Errorf("%w: GOOGLE_CLIENT_ID is not configured", domain.ErrInvalidToken)
 	}
 
-	// 2. Online verification via Google's tokeninfo endpoint
+	// Online verification via Google's tokeninfo endpoint
 	endpoint := fmt.Sprintf("https://oauth2.googleapis.com/tokeninfo?id_token=%s", url.QueryEscape(trimmed))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -88,64 +84,18 @@ func (c *GoogleOIDCClient) VerifyIDToken(ctx context.Context, idToken string) (*
 		return nil, fmt.Errorf("%w: token audience mismatch", domain.ErrInvalidToken)
 	}
 
+	emailVerified := info.EmailVerified == "true" || info.EmailVerified == "1"
+	if !emailVerified {
+		return nil, fmt.Errorf("%w: google account email is not verified", domain.ErrInvalidToken)
+	}
+
 	return &application.OIDCClaims{
 		Subject:       info.Sub,
 		Email:         strings.ToLower(info.Email),
-		EmailVerified: info.EmailVerified == "true" || info.EmailVerified == "1",
+		EmailVerified: true,
 		Name:          info.Name,
 		GivenName:     info.GivenName,
 		FamilyName:    info.FamilyName,
 		Picture:       info.Picture,
 	}, nil
-}
-
-// resolveMockToken provides simulated claims for automated tests and offline development.
-func (c *GoogleOIDCClient) resolveMockToken(token string) (*application.OIDCClaims, error) {
-	if token == "mock_invalid_token" {
-		return nil, domain.ErrInvalidToken
-	}
-
-	// Default fallback values
-	email := "google.user@example.com"
-	sub := "google_sub_1001"
-	name := "Google TestUser"
-	givenName := "Google"
-	familyName := "TestUser"
-
-	// Parse identifiers if provided, e.g. "mock_google_id_token_alice" or "mock_alice@gmail.com"
-	clean := strings.TrimPrefix(token, "mock_")
-	clean = strings.TrimPrefix(clean, "dev_")
-	clean = strings.TrimPrefix(clean, "google_id_token_")
-
-	if strings.Contains(clean, "@") {
-		email = clean
-		parts := strings.Split(clean, "@")
-		sub = "google_sub_" + parts[0]
-		name = capitalize(parts[0]) + " OAuth"
-		givenName = capitalize(parts[0])
-		familyName = "OAuth"
-	} else if clean != "" {
-		email = clean + "@gmail.com"
-		sub = "google_sub_" + clean
-		name = capitalize(clean) + " User"
-		givenName = capitalize(clean)
-		familyName = "User"
-	}
-
-	return &application.OIDCClaims{
-		Subject:       sub,
-		Email:         strings.ToLower(email),
-		EmailVerified: true,
-		Name:          name,
-		GivenName:     givenName,
-		FamilyName:    familyName,
-		Picture:       "https://lh3.googleusercontent.com/a/mock-avatar",
-	}, nil
-}
-
-func capitalize(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }

@@ -133,10 +133,7 @@ func GetTenantID(ctx context.Context) *string {
 
 func writeJSONError(w http.ResponseWriter, statusCode int, code, message string) {
 	envelope := NewErrorEnvelope(code, message)
-	// The platform RequestID middleware puts the request's correlation ID in the X-Request-ID
-	// response header before any handler runs (api-conventions: every error carries correlation_id).
 	envelope.Error.CorrelationID = w.Header().Get("X-Request-ID")
-
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(envelope)

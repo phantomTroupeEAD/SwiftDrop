@@ -55,6 +55,7 @@ type ParcelRepository interface {
 	Save(ctx context.Context, q db.Querier, parcel domain.Parcel) error
 	ExistsTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (bool, error)
 	FindByID(ctx context.Context, q db.Querier, id string) (domain.Parcel, error)
+	FindByTrackingNumber(ctx context.Context, q db.Querier, tn domain.TrackingNumber) (domain.Parcel, error)
 	UpdateStatus(ctx context.Context, q db.Querier, parcel domain.Parcel, expectedVersion int) error
 	ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error)
 }

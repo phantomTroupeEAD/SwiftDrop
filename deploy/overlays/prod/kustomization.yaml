@@ -68,6 +68,17 @@ patches:
       - op: replace
         path: /spec/routes/9/match
         value: Host(`swiftdrop.work`)
+  # Content-Security-Policy for the web app (Member 7's spa-csp), extended for production only:
+  #   - Google Identity Services ("Sign in with Google"): script, button iframe, styles, token calls
+  #   - Cloudflare Web Analytics, which Cloudflare injects into pages it proxies
+  # Everything else is unchanged from the base policy.
+  - target:
+      kind: Middleware
+      name: spa-csp
+    patch: |-
+      - op: replace
+        path: /spec/headers/contentSecurityPolicy
+        value: "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https://*.googleusercontent.com; connect-src 'self' https://accounts.google.com/gsi/ https://cloudflareinsights.com; frame-src https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
   # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
   - target:
@@ -97,6 +108,14 @@ patches:
         value:
           name: APP_ENV
           value: production
+  # Production LLM chosen by Member 10 (free OpenRouter model; the base ConfigMap keeps its default).
+  - target:
+      kind: ConfigMap
+      name: ai-assistant-config
+    patch: |-
+      - op: replace
+        path: /data/LLM_MODEL
+        value: nvidia/nemotron-3.5-super-vl:free
   - target:
       kind: Deployment
       name: ai-assistant

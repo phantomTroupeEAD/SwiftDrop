@@ -211,27 +211,29 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 		serviceLevel := domain.ServiceLevel(quote.ServiceLevel)
 
 		res, err := uc.persistParcelBookingTx(ctx, tx, persistParcelBookingParams{
-			Now:                now,
-			SenderID:           senderID,
-			MerchantID:         merchantID,
-			ActorID:            actorID,
-			ActorType:          actorType,
-			ActorRole:          actorRole,
-			RecipientName:      cmd.RecipientName,
-			RecipientPhone:     cmd.RecipientPhone,
-			QuoteID:            quote.QuoteID,
-			PricingRuleID:      quote.TariffID,
-			PricingRuleVersion: quote.TariffVersion,
-			DeliveryFee:        fee,
-			OriginZoneID:       quote.OriginZoneID,
-			DestinationZoneID:  quote.DestinationZoneID,
-			ServiceLevel:       serviceLevel,
-			Weight:             weight,
-			Dimensions:         dim,
-			PickupAddress:      pickupAddr,
-			DropoffAddress:     dropoffAddr,
-			CorrelationID:      cmd.CorrelationID,
-			IdemInput:          idemInput,
+			Now:                 now,
+			SenderID:            senderID,
+			MerchantID:          merchantID,
+			ActorID:             actorID,
+			ActorType:           actorType,
+			ActorRole:           actorRole,
+			RecipientName:       cmd.RecipientName,
+			RecipientPhone:      cmd.RecipientPhone,
+			QuoteID:             quote.QuoteID,
+			PricingRuleID:       quote.TariffID,
+			PricingRuleVersion:  quote.TariffVersion,
+			DeliveryFee:         fee,
+			OriginZoneID:        quote.OriginZoneID,
+			DestinationZoneID:   quote.DestinationZoneID,
+			ServiceLevel:        serviceLevel,
+			Weight:              weight,
+			Dimensions:          dim,
+			PickupAddress:       pickupAddr,
+			DropoffAddress:      dropoffAddr,
+			ItemDescription:     cmd.ItemDescription,
+			SpecialInstructions: cmd.SpecialInstructions,
+			CorrelationID:       cmd.CorrelationID,
+			IdemInput:           idemInput,
 		})
 		if err != nil {
 			return err
@@ -252,27 +254,29 @@ func (uc *BookParcelUseCase) Execute(ctx context.Context, cmd BookParcelCommand)
 // a parcel, its initial status history entry, its outbox event, and its idempotency record
 // within an active database transaction.
 type persistParcelBookingParams struct {
-	Now                time.Time
-	SenderID           *string
-	MerchantID         *string
-	ActorID            *string
-	ActorType          domain.ActorType
-	ActorRole          string
-	RecipientName      string
-	RecipientPhone     string
-	QuoteID            string
-	PricingRuleID      string
-	PricingRuleVersion int
-	DeliveryFee        domain.Money
-	OriginZoneID       string
-	DestinationZoneID  string
-	ServiceLevel       domain.ServiceLevel
-	Weight             domain.Weight
-	Dimensions         domain.Dimensions
-	PickupAddress      domain.Address
-	DropoffAddress     domain.Address
-	CorrelationID      string
-	IdemInput          *IdempotencyInput
+	Now                 time.Time
+	SenderID            *string
+	MerchantID          *string
+	ActorID             *string
+	ActorType           domain.ActorType
+	ActorRole           string
+	RecipientName       string
+	RecipientPhone      string
+	QuoteID             string
+	PricingRuleID       string
+	PricingRuleVersion  int
+	DeliveryFee         domain.Money
+	OriginZoneID        string
+	DestinationZoneID   string
+	ServiceLevel        domain.ServiceLevel
+	Weight              domain.Weight
+	Dimensions          domain.Dimensions
+	PickupAddress       domain.Address
+	DropoffAddress      domain.Address
+	ItemDescription     string
+	SpecialInstructions string
+	CorrelationID       string
+	IdemInput           *IdempotencyInput
 }
 
 // persistParcelBookingTx executes the common transactional parcel persistence pipeline:
@@ -315,24 +319,26 @@ func (uc *BookParcelUseCase) persistParcelBookingTx(
 
 	// g. Create Parcel aggregate root
 	parcel, err := domain.NewParcel(domain.CreateParcelParams{
-		ID:                 parcelID,
-		TrackingNumber:     trackingNumber,
-		SenderID:           params.SenderID,
-		MerchantID:         params.MerchantID,
-		RecipientName:      params.RecipientName,
-		RecipientPhone:     params.RecipientPhone,
-		QuoteID:            params.QuoteID,
-		PricingRuleID:      params.PricingRuleID,
-		PricingRuleVersion: params.PricingRuleVersion,
-		DeliveryFee:        params.DeliveryFee,
-		OriginZoneID:       params.OriginZoneID,
-		DestinationZoneID:  params.DestinationZoneID,
-		ServiceLevel:       params.ServiceLevel,
-		Weight:             params.Weight,
-		Dimensions:         params.Dimensions,
-		PickupAddress:      params.PickupAddress,
-		DropoffAddress:     params.DropoffAddress,
-		CreatedAt:          params.Now,
+		ID:                  parcelID,
+		TrackingNumber:      trackingNumber,
+		SenderID:            params.SenderID,
+		MerchantID:          params.MerchantID,
+		RecipientName:       params.RecipientName,
+		RecipientPhone:      params.RecipientPhone,
+		QuoteID:             params.QuoteID,
+		PricingRuleID:       params.PricingRuleID,
+		PricingRuleVersion:  params.PricingRuleVersion,
+		DeliveryFee:         params.DeliveryFee,
+		OriginZoneID:        params.OriginZoneID,
+		DestinationZoneID:   params.DestinationZoneID,
+		ServiceLevel:        params.ServiceLevel,
+		Weight:              params.Weight,
+		Dimensions:          params.Dimensions,
+		PickupAddress:       params.PickupAddress,
+		DropoffAddress:      params.DropoffAddress,
+		ItemDescription:     params.ItemDescription,
+		SpecialInstructions: params.SpecialInstructions,
+		CreatedAt:           params.Now,
 	})
 	if err != nil {
 		return BookParcelResult{}, fmt.Errorf("failed to construct parcel aggregate: %w", err)
@@ -371,24 +377,26 @@ func (uc *BookParcelUseCase) persistParcelBookingTx(
 
 	// j. Publish parcel.booked.v1 event to transactional outbox
 	payload := ParcelBookedPayload{
-		ParcelID:           parcel.ID,
-		TrackingNumber:     parcel.TrackingNumber.String(),
-		SenderID:           parcel.SenderID,
-		MerchantID:         parcel.MerchantID,
-		RecipientName:      parcel.RecipientName,
-		RecipientPhone:     parcel.RecipientPhone,
-		QuoteID:            parcel.QuoteID,
-		PricingRuleID:      parcel.PricingRuleID,
-		PricingRuleVersion: parcel.PricingRuleVersion,
-		DeliveryFeeCents:   parcel.DeliveryFee.Amount,
-		Currency:           parcel.DeliveryFee.Currency,
-		OriginZoneID:       parcel.OriginZoneID,
-		DestinationZoneID:  parcel.DestinationZoneID,
-		ServiceLevel:       string(parcel.ServiceLevel),
-		ActualWeightKg:     parcel.Weight.ActualKg,
-		ChargeableWeightKg: parcel.Weight.ChargeableKg,
-		Status:             string(parcel.Status),
-		CreatedAt:          parcel.CreatedAt,
+		ParcelID:            parcel.ID,
+		TrackingNumber:      parcel.TrackingNumber.String(),
+		SenderID:            parcel.SenderID,
+		MerchantID:          parcel.MerchantID,
+		RecipientName:       parcel.RecipientName,
+		RecipientPhone:      parcel.RecipientPhone,
+		QuoteID:             parcel.QuoteID,
+		PricingRuleID:       parcel.PricingRuleID,
+		PricingRuleVersion:  parcel.PricingRuleVersion,
+		DeliveryFeeCents:    parcel.DeliveryFee.Amount,
+		Currency:            parcel.DeliveryFee.Currency,
+		OriginZoneID:        parcel.OriginZoneID,
+		DestinationZoneID:   parcel.DestinationZoneID,
+		ServiceLevel:        string(parcel.ServiceLevel),
+		ActualWeightKg:      parcel.Weight.ActualKg,
+		ChargeableWeightKg:  parcel.Weight.ChargeableKg,
+		ItemDescription:     parcel.ItemDescription,
+		SpecialInstructions: parcel.SpecialInstructions,
+		Status:              string(parcel.Status),
+		CreatedAt:           parcel.CreatedAt,
 	}
 
 	corrID := strings.TrimSpace(params.CorrelationID)

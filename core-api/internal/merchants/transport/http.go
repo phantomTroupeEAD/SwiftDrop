@@ -318,6 +318,21 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteData(w, http.StatusOK, out)
 }
 
+// CreateKeyRequest defines the payload for generating a merchant API key.
+type CreateKeyRequest struct {
+	Label     string     `json:"label" example:"Production Warehouse Key"`
+	Scopes    []string   `json:"scopes" example:"[\"parcels:create\",\"parcels:read\"]"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+// RegisterWebhookRequest defines the payload for registering a webhook subscription.
+type RegisterWebhookRequest struct {
+	URL     string           `json:"url" example:"https://httpbin.org/post"`
+	Events  []string         `json:"events" example:"[\"parcel.delivered.v1\",\"parcel.delivery_failed.v1\"]"`
+	Enabled *bool            `json:"enabled,omitempty"`
+	Secret  *json.RawMessage `json:"secret,omitempty"`
+}
+
 // createKey godoc
 // @Summary      Generate a new merchant API key
 // @Description  Generates an API credential with scoped permissions. Key secret is returned once only.
@@ -325,6 +340,7 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
+// @Param        request body CreateKeyRequest true "API key parameters"
 // @Success      201 {object} httpx.DataEnvelope
 // @Failure      400 {object} httpx.ErrorResponse "Malformed JSON"
 // @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
@@ -334,11 +350,7 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Label     string     `json:"label"`
-		Scopes    []string   `json:"scopes"`
-		ExpiresAt *time.Time `json:"expires_at"`
-	}
+	var in CreateKeyRequest
 	if decode(r, &in) != nil {
 		badJSON(w, r)
 		return
@@ -416,6 +428,7 @@ func (h *Handler) listWebhooks(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
+// @Param        request body RegisterWebhookRequest true "Webhook subscription parameters"
 // @Success      201 {object} httpx.DataEnvelope
 // @Failure      400 {object} httpx.ErrorResponse "Malformed JSON or user-supplied secret forbidden"
 // @Failure      401 {object} httpx.ErrorResponse "Unauthorized"
@@ -425,12 +438,7 @@ func (h *Handler) registerWebhook(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		URL     string           `json:"url"`
-		Events  []string         `json:"events"`
-		Enabled *bool            `json:"enabled"`
-		Secret  *json.RawMessage `json:"secret"`
-	}
+	var in RegisterWebhookRequest
 	if decode(r, &in) != nil {
 		badJSON(w, r)
 		return

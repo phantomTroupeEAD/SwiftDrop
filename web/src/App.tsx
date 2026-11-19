@@ -1,8 +1,9 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
 import { LandingPage } from '@/features/landing/LandingPage';
 import { AdminDashboard } from '@/features/dashboards/AdminDashboard';
 import { DispatcherDashboard } from '@/features/dashboards/DispatcherDashboard';
@@ -13,6 +14,8 @@ import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+// TEMP-M7-OPS-ROUTES (import): ops workspace for ADMIN and DISPATCHER. Remove with the line below.
+import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 
 function CustomerBookingAlias() {
   const { search } = useLocation();
@@ -23,8 +26,9 @@ function CustomerBookingAlias() {
 function SignedInHome() {
   const { user } = useAuth();
   switch (user?.role) {
-    case 'ADMIN': return <Navigate to="/admin/dashboard" replace />;
-    case 'DISPATCHER': return <Navigate to="/dispatcher/dashboard" replace />;
+    // TEMP-M7-OPS-ROUTES: ADMIN and DISPATCHER start in the ops workspace (was /admin/dashboard and /dispatcher/dashboard).
+    case 'ADMIN': return <Navigate to="/ops" replace />;
+    case 'DISPATCHER': return <Navigate to="/ops" replace />;
     case 'COURIER': return <Navigate to="/courier/dashboard" replace />;
     default: return <RoleHome />;
   }
@@ -43,6 +47,7 @@ function MerchantSessionGate({ children }: { children: React.ReactNode }) {
 
   if (user?.role === 'MERCHANT') return <>{children}</>;
   if (user?.role === 'CUSTOMER' && !attempted) return <p role="status">Checking merchant access…</p>;
+  if (user?.role === 'CUSTOMER') return <p className="p-5">If your application was approved, <Link to="/auth/login" className="underline">sign in again to open your merchant dashboard</Link>.</p>;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -63,6 +68,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/register" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/forgot-password" element={<Navigate to="/auth/forgot-password" replace />} />
       <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
@@ -120,6 +127,9 @@ export const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* TEMP-M7-OPS-ROUTES: /ops/* workspace (role-filtered side menu). Delete this line and the import to roll back. */}
+      {opsRoutes}
 
       {/* Aliases mapping to role consoles */}
       <Route

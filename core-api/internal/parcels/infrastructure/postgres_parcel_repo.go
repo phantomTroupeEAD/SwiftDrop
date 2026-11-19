@@ -91,6 +91,9 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 		return fmt.Errorf("marshal dropoff address: %w", err)
 	}
 
+	itemDescNull := toNullString(&parcel.ItemDescription)
+	specialInstructionsNull := toNullString(&parcel.SpecialInstructions)
+
 	const query = `
 		INSERT INTO parcels (
 			id,
@@ -115,6 +118,8 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 			height_cm,
 			pickup_address,
 			dropoff_address,
+			item_description,
+			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -123,7 +128,7 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-			$21, $22, $23, $24, $25, $26, $27
+			$21, $22, $23, $24, $25, $26, $27, $28, $29
 		);
 	`
 
@@ -152,6 +157,8 @@ func (r *PostgresParcelRepository) Save(ctx context.Context, q db.Querier, parce
 		parcel.Dimensions.HeightCm,
 		pickupJSON,
 		dropoffJSON,
+		itemDescNull,
+		specialInstructionsNull,
 		string(parcel.Status),
 		parcel.AttemptCount,
 		parcel.Version,
@@ -218,6 +225,8 @@ func (r *PostgresParcelRepository) FindByID(ctx context.Context, q db.Querier, i
 			height_cm,
 			pickup_address,
 			dropoff_address,
+			item_description,
+			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -275,6 +284,8 @@ func (r *PostgresParcelRepository) FindByTrackingNumber(ctx context.Context, q d
 			height_cm,
 			pickup_address,
 			dropoff_address,
+			item_description,
+			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -334,6 +345,8 @@ func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Qu
 			height_cm,
 			pickup_address,
 			dropoff_address,
+			item_description,
+			special_instructions,
 			status,
 			attempt_count,
 			version,
@@ -364,7 +377,6 @@ func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Qu
 
 	return parcels, nil
 }
-
 func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, error) {
 	var (
 		parcelID, tnStr           string
@@ -379,6 +391,7 @@ func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, err
 		actualKg, volKg, charKg   float64
 		lengthCm, widthCm, htCm   float64
 		pickupBytes, dropoffBytes []byte
+		itemDescNull, instrNull   sql.NullString
 		statusStr                 string
 		attempts, version         int
 		createdAt, updatedAt      time.Time
@@ -407,6 +420,8 @@ func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, err
 		&htCm,
 		&pickupBytes,
 		&dropoffBytes,
+		&itemDescNull,
+		&instrNull,
 		&statusStr,
 		&attempts,
 		&version,
@@ -446,28 +461,30 @@ func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, err
 	}
 
 	return domain.ReconstituteParcel(domain.ReconstituteParcelParams{
-		ID:                 parcelID,
-		TrackingNumber:     tn,
-		SenderID:           fromNullString(senderID),
-		MerchantID:         fromNullString(merchantID),
-		RecipientName:      recipName,
-		RecipientPhone:     recipPhone,
-		QuoteID:            quoteID,
-		PricingRuleID:      ruleID,
-		PricingRuleVersion: ruleVersion,
-		DeliveryFee:        fee,
-		OriginZoneID:       origZone,
-		DestinationZoneID:  destZone,
-		ServiceLevel:       domain.ServiceLevel(svcLevel),
-		Weight:             weight,
-		Dimensions:         dims,
-		PickupAddress:      pickupAddr,
-		DropoffAddress:     dropoffAddr,
-		Status:             domain.ParcelStatus(statusStr),
-		AttemptCount:       attempts,
-		Version:            version,
-		CreatedAt:          createdAt,
-		UpdatedAt:          updatedAt,
+		ID:                  parcelID,
+		TrackingNumber:      tn,
+		SenderID:            fromNullString(senderID),
+		MerchantID:          fromNullString(merchantID),
+		RecipientName:       recipName,
+		RecipientPhone:      recipPhone,
+		QuoteID:             quoteID,
+		PricingRuleID:       ruleID,
+		PricingRuleVersion:  ruleVersion,
+		DeliveryFee:         fee,
+		OriginZoneID:        origZone,
+		DestinationZoneID:   destZone,
+		ServiceLevel:        domain.ServiceLevel(svcLevel),
+		Weight:              weight,
+		Dimensions:          dims,
+		PickupAddress:       pickupAddr,
+		DropoffAddress:      dropoffAddr,
+		ItemDescription:     itemDescNull.String,
+		SpecialInstructions: instrNull.String,
+		Status:              domain.ParcelStatus(statusStr),
+		AttemptCount:        attempts,
+		Version:             version,
+		CreatedAt:           createdAt,
+		UpdatedAt:           updatedAt,
 	})
 }
 

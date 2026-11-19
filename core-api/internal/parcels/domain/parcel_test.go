@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,24 +40,26 @@ func validTestParcelParams() CreateParcelParams {
 	merchantID := "merchant-999"
 
 	return CreateParcelParams{
-		ID:                 "parcel-uuid-001",
-		TrackingNumber:     tn,
-		SenderID:           &senderID,
-		MerchantID:         &merchantID,
-		RecipientName:      "Nimali Silva",
-		RecipientPhone:     "+94719876543",
-		QuoteID:            "quote-uuid-001",
-		PricingRuleID:      "rule-uuid-001",
-		PricingRuleVersion: 2,
-		DeliveryFee:        fee,
-		OriginZoneID:       "ZONE_WESTERN_01",
-		DestinationZoneID:  "ZONE_CENTRAL_01",
-		ServiceLevel:       ServiceLevelStandard,
-		Weight:             weight,
-		Dimensions:         dims,
-		PickupAddress:      pickupAddr,
-		DropoffAddress:     dropoffAddr,
-		CreatedAt:          now,
+		ID:                  "parcel-uuid-001",
+		TrackingNumber:      tn,
+		SenderID:            &senderID,
+		MerchantID:          &merchantID,
+		RecipientName:       "Nimali Silva",
+		RecipientPhone:      "+94719876543",
+		QuoteID:             "quote-uuid-001",
+		PricingRuleID:       "rule-uuid-001",
+		PricingRuleVersion:  2,
+		DeliveryFee:         fee,
+		OriginZoneID:        "ZONE_WESTERN_01",
+		DestinationZoneID:   "ZONE_CENTRAL_01",
+		ServiceLevel:        ServiceLevelStandard,
+		Weight:              weight,
+		Dimensions:          dims,
+		PickupAddress:       pickupAddr,
+		DropoffAddress:      dropoffAddr,
+		ItemDescription:     "  Textbooks and Documents  ",
+		SpecialInstructions: "  Please handle with care  ",
+		CreatedAt:           now,
 	}
 }
 
@@ -65,6 +68,13 @@ func TestNewParcel_Success(t *testing.T) {
 	parcel, err := NewParcel(params)
 	if err != nil {
 		t.Fatalf("expected NewParcel to succeed, got: %v", err)
+	}
+
+	if parcel.ItemDescription != "Textbooks and Documents" {
+		t.Errorf("expected trimmed ItemDescription %q, got %q", "Textbooks and Documents", parcel.ItemDescription)
+	}
+	if parcel.SpecialInstructions != "Please handle with care" {
+		t.Errorf("expected trimmed SpecialInstructions %q, got %q", "Please handle with care", parcel.SpecialInstructions)
 	}
 
 	if parcel.ID != "parcel-uuid-001" {
@@ -674,4 +684,111 @@ func TestParcel_TransitionTo_ActorValidationDoesNotMutateState(t *testing.T) {
 		t.Errorf("failed actor validation must not mutate parcel state: status=%s ver=%d updated=%v",
 			parcel.Status, parcel.Version, parcel.UpdatedAt)
 	}
+}
+
+func TestNewParcel_ItemDescriptionValidation(t *testing.T) {
+	t.Run("rejects item description exceeding 500 characters", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.ItemDescription = strings.Repeat("A", 501)
+
+		_, err := NewParcel(params)
+		if err == nil {
+			t.Fatalf("expected error for oversized item description, got nil")
+		}
+		if !errors.Is(err, ErrInvalidParcel) {
+			t.Errorf("expected error to wrap ErrInvalidParcel, got: %v", err)
+		}
+		if !errors.Is(err, ErrItemDescriptionTooLong) {
+			t.Errorf("expected error to wrap ErrItemDescriptionTooLong, got: %v", err)
+		}
+	})
+
+	t.Run("accepts item description exactly 500 characters", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.ItemDescription = strings.Repeat("A", 500)
+
+		parcel, err := NewParcel(params)
+		if err != nil {
+			t.Fatalf("expected 500-char description to succeed, got: %v", err)
+		}
+		if len(parcel.ItemDescription) != 500 {
+			t.Errorf("expected description length 500, got %d", len(parcel.ItemDescription))
+		}
+	})
+
+	t.Run("trims item description and special instructions", func(t *testing.T) {
+		params := validTestParcelParams()
+		params.ItemDescription = "   Spare electronics parts   \n"
+		params.SpecialInstructions = "   Keep away from water   \t"
+
+		parcel, err := NewParcel(params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if parcel.ItemDescription != "Spare electronics parts" {
+			t.Errorf("expected trimmed description, got %q", parcel.ItemDescription)
+		}
+		if parcel.SpecialInstructions != "Keep away from water" {
+			t.Errorf("expected trimmed special instructions, got %q", parcel.SpecialInstructions)
+		}
+	})
+}
+
+func TestReconstituteParcel_ItemDescriptionValidation(t *testing.T) {
+	params := validTestParcelParams()
+	now := params.CreatedAt
+	updatedAt := now.Add(time.Hour)
+
+	reconParams := ReconstituteParcelParams{
+		ID:                  params.ID,
+		TrackingNumber:      params.TrackingNumber,
+		SenderID:            params.SenderID,
+		MerchantID:          params.MerchantID,
+		RecipientName:       params.RecipientName,
+		RecipientPhone:      params.RecipientPhone,
+		QuoteID:             params.QuoteID,
+		PricingRuleID:       params.PricingRuleID,
+		PricingRuleVersion:  params.PricingRuleVersion,
+		DeliveryFee:         params.DeliveryFee,
+		OriginZoneID:        params.OriginZoneID,
+		DestinationZoneID:   params.DestinationZoneID,
+		ServiceLevel:        params.ServiceLevel,
+		Weight:              params.Weight,
+		Dimensions:          params.Dimensions,
+		PickupAddress:       params.PickupAddress,
+		DropoffAddress:      params.DropoffAddress,
+		ItemDescription:     "Reconstituted items",
+		SpecialInstructions: "Do not stack",
+		Status:              StatusInTransit,
+		AttemptCount:        1,
+		Version:             2,
+		CreatedAt:           now,
+		UpdatedAt:           updatedAt,
+	}
+
+	t.Run("reconstitutes with item description and special instructions", func(t *testing.T) {
+		parcel, err := ReconstituteParcel(reconParams)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if parcel.ItemDescription != "Reconstituted items" {
+			t.Errorf("expected %q, got %q", "Reconstituted items", parcel.ItemDescription)
+		}
+		if parcel.SpecialInstructions != "Do not stack" {
+			t.Errorf("expected %q, got %q", "Do not stack", parcel.SpecialInstructions)
+		}
+	})
+
+	t.Run("rejects reconstitution with oversized item description", func(t *testing.T) {
+		badParams := reconParams
+		badParams.ItemDescription = strings.Repeat("B", 501)
+
+		_, err := ReconstituteParcel(badParams)
+		if err == nil {
+			t.Fatalf("expected error for oversized item description, got nil")
+		}
+		if !errors.Is(err, ErrItemDescriptionTooLong) {
+			t.Errorf("expected ErrItemDescriptionTooLong, got: %v", err)
+		}
+	})
 }

@@ -421,6 +421,100 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─────────────────────────────────────────────────────
+// Password Recovery Handlers
+// ─────────────────────────────────────────────────────
+
+// ForgotPasswordSendOTP handles POST /api/v1/auth/forgot-password/send-otp
+func (h *AuthHandler) ForgotPasswordSendOTP(w http.ResponseWriter, r *http.Request) {
+	var req ForgotPasswordSendOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_REQUEST_PAYLOAD", "Malformed JSON body")
+		return
+	}
+
+	if strings.TrimSpace(req.Email) == "" {
+		writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", "email is required")
+		return
+	}
+
+	result, err := h.authService.SendPasswordResetOTP(r.Context(), application.SendPasswordResetOTPCommand{
+		Email: req.Email,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidEmail):
+			writeJSONError(w, http.StatusBadRequest, "INVALID_EMAIL", "Email format is invalid")
+		case errors.Is(err, domain.ErrOTPCooldownActive):
+			writeJSONError(w, http.StatusTooManyRequests, "OTP_COOLDOWN_ACTIVE", "Please wait 60 seconds before requesting another code")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to process password reset request")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SingleDataEnvelope{
+		Data: OTPDataDTO{
+			Message:         "If an account with that email exists, a password reset code has been sent",
+			Email:           result.Email,
+			ExpiresIn:       result.ExpiresIn,
+			CooldownSeconds: result.CooldownSeconds,
+		},
+	})
+}
+
+// ResetPassword handles POST /api/v1/auth/forgot-password/reset
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_REQUEST_PAYLOAD", "Malformed JSON body")
+		return
+	}
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.OTP) == "" || strings.TrimSpace(req.NewPassword) == "" {
+		writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", "email, otp, and new_password are all required")
+		return
+	}
+
+	err := h.authService.ResetPassword(r.Context(), application.ResetPasswordCommand{
+		Email:       req.Email,
+		OTP:         req.OTP,
+		NewPassword: req.NewPassword,
+		ClientIP:    r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidEmail):
+			writeJSONError(w, http.StatusBadRequest, "INVALID_EMAIL", "Email format is invalid")
+		case errors.Is(err, domain.ErrWeakPassword):
+			writeJSONError(w, http.StatusBadRequest, "WEAK_PASSWORD",
+				"Password must be at least 8 characters with uppercase, lowercase, digit, and symbol")
+		case errors.Is(err, domain.ErrOTPInvalid):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_INVALID", "Verification code is incorrect")
+		case errors.Is(err, domain.ErrOTPExpired):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_EXPIRED", "Verification code has expired, please request a new one")
+		case errors.Is(err, domain.ErrOTPMaxAttempts):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_MAX_ATTEMPTS", "Too many invalid attempts, please request a new code")
+		case errors.Is(err, domain.ErrAccountSuspended):
+			writeJSONError(w, http.StatusForbidden, "ACCOUNT_SUSPENDED", "This account is suspended and cannot reset its password")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to reset password")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SingleDataEnvelope{
+		Data: MessageDataDTO{
+			Message: "Password has been reset successfully. You can now sign in with your new password.",
+		},
+	})
+}
+
+// ─────────────────────────────────────────────────────
 // Cookie Helpers
 // ─────────────────────────────────────────────────────
 

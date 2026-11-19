@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -50,6 +51,7 @@ func BuildAppContainer() *AppContainer {
 	var tokenRepo application.TokenRepository
 	var auditWriter application.AuditWriter
 	var oauthRepo application.OAuthRepository
+	var otpRepo application.OTPRepository
 	var dbConn *sql.DB
 	storageType := "In-Memory (Mock Role Accounts)"
 
@@ -76,6 +78,7 @@ func BuildAppContainer() *AppContainer {
 			tokenRepo = infrastructure.NewPostgresTokenRepository(db)
 			auditWriter = infrastructure.NewPostgresAuditWriter(db)
 			oauthRepo = infrastructure.NewPostgresOAuthRepository(db)
+			otpRepo = infrastructure.NewPostgresOTPRepository(db)
 			dbConn = db
 			storageType = "PostgreSQL Database (Authoritative)"
 
@@ -103,33 +106,75 @@ func BuildAppContainer() *AppContainer {
 
 	// 3. Fallback to Pre-Seeded Mock Repository if PostgreSQL is offline
 	if userRepo == nil {
-		userRepo = infrastructure.NewMockUserRepository(hasher)
+		mockRepo := infrastructure.NewMockUserRepository(hasher)
+		// Pre-seed user's email so password recovery OTP can be dispatched immediately
+		devEmails := []string{"kgumigiranga@gmail.com"}
+		for i, devEmail := range devEmails {
+			if emailVO, err := domain.NewEmail(devEmail); err == nil {
+				pwdHash, _ := hasher.HashPassword("CustomerPassword123!")
+				now := time.Now().UTC()
+				devUser := domain.NewUser(
+					fmt.Sprintf("usr_01HKGUMIGIRANGA%014d", i+1),
+					emailVO,
+					pwdHash,
+					"Umesh Mihiranga",
+					"+94770000006",
+					domain.RoleCustomer,
+					nil,
+					domain.StatusActive,
+					now,
+					now,
+				)
+				_ = mockRepo.Save(context.Background(), devUser)
+			}
+		}
+		userRepo = mockRepo
 		tokenRepo = infrastructure.NewMockTokenRepository()
 		auditWriter = infrastructure.NewMockAuditWriter()
 		oauthRepo = infrastructure.NewMockOAuthRepository()
 	}
 
 	// 4. Application Services
-	otpRepo := infrastructure.NewMemoryOTPRepository()
+	if otpRepo == nil {
+		otpRepo = infrastructure.NewMemoryOTPRepository()
+	}
 
 	// Email Sender Adapter:
 	// - If SMTP_HOST is configured in environment variables, sends real emails via SMTPEmailSender.
 	// - Otherwise, falls back to DevEmailSender (prints 6-digit OTP to server console for local testing).
 	var emailSender application.EmailSender
-	smtpHost := os.Getenv("SMTP_HOST")
+	smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST"))
 	if smtpHost != "" {
-		smtpPort := os.Getenv("SMTP_PORT")
+		smtpPort := strings.TrimSpace(os.Getenv("SMTP_PORT"))
 		if smtpPort == "" {
 			smtpPort = "587"
 		}
-		smtpUser := os.Getenv("SMTP_USER")
-		smtpPass := os.Getenv("SMTP_PASS")
-		smtpFrom := os.Getenv("SMTP_FROM")
-		if smtpFrom == "" {
-			smtpFrom = "no-reply@swiftdrop.com"
+		smtpUser := strings.TrimSpace(os.Getenv("SMTP_USER"))
+		if smtpUser == "" {
+			smtpUser = strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
 		}
-		emailSender = infrastructure.NewSMTPEmailSender(smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom)
-		log.Printf("[INFO] Using production SMTP Email Sender (%s:%s)\n", smtpHost, smtpPort)
+		smtpPass := strings.TrimSpace(os.Getenv("SMTP_PASS"))
+		if smtpPass == "" {
+			smtpPass = strings.TrimSpace(os.Getenv("SMTP_PASSWORD"))
+		}
+		smtpFromEmail := strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL"))
+		if smtpFromEmail == "" {
+			smtpFromEmail = strings.TrimSpace(os.Getenv("SMTP_FROM"))
+		}
+		if smtpFromEmail == "" || (strings.Contains(smtpHost, "gmail") && smtpUser != "" && strings.Contains(smtpUser, "@")) {
+			if strings.Contains(smtpHost, "gmail") && smtpUser != "" {
+				smtpFromEmail = smtpUser
+			} else if smtpFromEmail == "" {
+				smtpFromEmail = "no-reply@swiftdrop.com"
+			}
+		}
+		smtpFromName := strings.TrimSpace(os.Getenv("SMTP_FROM_NAME"))
+		if smtpFromName == "" {
+			smtpFromName = "SwiftDrop Deliveries"
+		}
+
+		emailSender = infrastructure.NewSMTPEmailSender(smtpHost, smtpPort, smtpUser, smtpPass, smtpFromEmail, smtpFromName)
+		log.Printf("[INFO] Using SMTP Email Sender (%s:%s, from: %s <%s>, user: %s)\n", smtpHost, smtpPort, smtpFromName, smtpFromEmail, smtpUser)
 	} else {
 		emailSender = infrastructure.NewDevEmailSender()
 		log.Println("[INFO] Using Dev Email Sender (OTP printed to console). Set SMTP_HOST in .env to send real emails.")

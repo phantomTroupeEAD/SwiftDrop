@@ -55,13 +55,15 @@ Implemented an authoritative, image-heavy public landing page (`src/features/lan
 - **Strict Compliance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="PUBLIC"` scoping, zero raw elements, and zero arbitrary brackets. Tested cleanly with `npm run lint:ui` and `npm run build`.
 
 ### Authentication Screens Refinement (November 2026)
-Both the primary sign-in screen (`src/features/auth/LoginPage.tsx`) and the registration screen (`src/features/auth/RegisterPage.tsx`) conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
+All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/features/auth/RegisterPage.tsx`, and `src/features/auth/ForgotPasswordPage.tsx`) strictly conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
 - Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
 - Floating solid white/neutral modal cards (`bg-surface rounded-2xl border border-border`) over the cinematic twilight logistics background (`public/login-bg.jpg`) with an ambient blur and contrast veil (`bg-canvas/75 backdrop-blur-sm`).
 - Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
 - Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
+- Google OAuth button integrated directly into the login card using semantic button primitives and standard SVG glyphs.
 - Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).
-- Cleanly verified via `npm run lint:ui` and `npm run build`.
+- Cleanly verified via `npm run lint:ui` with zero design governance violations.
 
 ## Implementation checkpoint — 5 November 2026
 
@@ -132,7 +134,9 @@ web/
             ├── dispatch-board/          # Live courier assignment & unassigned parcel board
             ├── fleet/                   # Courier status, vehicle capacity & shift management
             ├── courier-mobile/          # Mobile-first courier task list & POD capture
-            ├── zones/                   # Admin delivery zone configuration & polygon maps
+            ├── ops/                     # Ops workspace shell for ADMIN and DISPATCHER (/ops/*): role-filtered side menu, routes and placeholders
+            ├── admin-console/           # Admin console after sign-in (/admin/dashboard): tabs for zones, users, settings and the audit log; built on shared primitives with data-role="ADMIN" (design.md)
+            ├── zones/                   # Admin delivery zones: ZonesPanel (list, create, edit, enable/disable) shown as a console tab; no separate /ops/zones route yet (shell owner)
             └── reports/                 # Operational metrics, SLA charts & audit logs
 ```
 
@@ -154,12 +158,14 @@ The router guards ensure strict authorization before any protected view is mount
 | `/portal/merchants/orders` | `MERCHANT` | Member 6 | Merchant B2B batch order ingestion, CSV upload, and label generation. |
 | `/portal/merchants/api-keys`| `MERCHANT` | Member 6 | Machine-to-machine API key management & one-time copy modal. |
 | `/portal/merchants/webhooks`| `MERCHANT` | Member 6 | Webhook endpoint registration & one-time signing secret modal. |
-| `/ops/dispatch` | `DISPATCHER`, `ADMIN` | Member 7 | Interactive dispatch board: parcel queues, courier workload, assignment. |
-| `/ops/couriers` | `DISPATCHER`, `ADMIN` | Member 7 | Active courier fleet management, load monitoring, availability toggle. |
+| `/ops/dispatch` | `DISPATCHER`, `ADMIN` | Member 7 | Dispatch board: waiting parcels and couriers for a zone (`GET /api/v1/dispatch/board`, reloads every 30 s), assign (`POST /dispatch/assignments`) or reassign a failed parcel (`POST /dispatch/parcels/{id}/reschedule`). |
+| `/ops/couriers` | `ADMIN`, `DISPATCHER` | Member 7 | Fleet: couriers with shift, zone, vehicle and workload (`GET /api/v1/dispatch/couriers`), and adding a courier (`POST /api/v1/dispatch/couriers`). Shift is shown, not edited. |
 | `/ops/zones` | `ADMIN` | Member 7 | Delivery zone geometry, base tariffs, and operational boundary setup. |
-| `/ops/reports` | `ADMIN` | Member 7 | SLA reports, courier performance metrics, and audit log explorer. |
+| `/ops/reports` | `ADMIN`, `DISPATCHER` | Member 7 | Deliveries per day for a Sri Lanka date range (`GET /api/v1/admin/reports/deliveries`). Read only. |
 | `/courier/tasks` | `COURIER` | Member 7 | Mobile-responsive courier route, pickup/delivery tasks, barcode scanner. |
 | `/courier/tasks/:id/pod` | `COURIER` | Member 7 | Proof-of-delivery capture (camera photo upload, recipient signature). |
+
+**Ops workspace status (Member 7):** `/ops/*` is served by `src/features/dispatcher-admin/ops/` for `ADMIN` and `DISPATCHER`. The side menu lists only the pages the signed-in role can open, and a page above the role shows an access message. Built now: `/ops/users`, `/ops/zones`, `/ops/settings`, `/ops/failed-deliveries` (ADMIN and DISPATCHER: no endpoint lists failed attempts across parcels, so the list is the `ATTEMPT_FAILED` parcels from `GET /dispatch/board`, with each parcel's reasons from `GET /deliveries/parcels/{id}` (up to 50 per refresh, five at a time). Filter by last failure reason, view every attempt, and schedule a retry through `POST /dispatch/parcels/{id}/reschedule` in the same courier window as the dispatch board; the API has no retry date, only a courier and notes. Known backend problems, reported to Member 3: the board endpoint answers 500 (see dispatch), the history endpoint also answered 500 for an unknown parcel id, and history attempts use `attempt_id` and `reason_code` instead of the documented `id` and `failure_reason_code`; the screen accepts both), `/ops/dispatch` (ADMIN and DISPATCHER: zone picker, waiting parcels oldest first, couriers with shift and load, an assign window that greys out couriers who are off shift or full, and a 30 second reload that pauses while the window is open or the tab is hidden. Reassign covers parcels whose attempt failed; cancelling an existing assignment is not offered because the board lists no assigned parcels or assignment ids. Known backend problems, reported to Member 3: `GET /dispatch/board` answers 500 because its SQL reads `parcels.current_status` but the column is `status`, it does not filter parcels by zone, and it names courier fields `courier_id`, `name`, `active_assignments` unlike `API.md`; the screen accepts both names and shows the API error with its reference id until the endpoint is fixed), `/ops/couriers` (ADMIN and DISPATCHER: fleet list with shift, zone, vehicle and parcels against capacity; add a courier from an account that has the Courier role. Admins pick the account from a list, dispatchers enter its id because they cannot read the user list. Shift is display only: `POST /courier/shift` changes the caller's own shift. The running list endpoint returns the domain struct, not the shape in the dispatch `API.md`, so the screen accepts both and shows a dash for a workload the API does not send; reported to Member 3), `/ops/reports` (ADMIN and DISPATCHER: delivered, failed, success rate and a per-day table for a date range; the server labels its numbers a stand-in until the parcel and delivery modules connect, and the screen shows that label), `/ops/audit` (ADMIN, read only: server-side filters for change, target type, target id, done by and a Sri Lanka date range, with `page`/`per_page` paging). Every other `/ops` page (merchants, pricing) shows a "not built yet" page with no data. `/admin/dashboard` still serves the admin console. The routes are mounted with one line in `App.tsx` (`{opsRoutes}`, marker `TEMP-M7-OPS-ROUTES`).
 
 ---
 
