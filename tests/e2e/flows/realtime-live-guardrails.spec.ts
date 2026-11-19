@@ -134,16 +134,88 @@ test.describe('Live Real-Environment Authorization Guardrails (Zero Mocks)', () 
   });
 
   test('LIVE-SEC-04: Real Public Tracking PII Masking - Customer phone and address are masked', async ({ page }) => {
-    // Navigate to live public tracking page backed by live Tracking API on port 8081
-    await page.goto('/track/SD-20261114-KK61K5');
+    await page.goto('/');
 
-    // Wait for real tracking number and status badge
-    await expect(page.getByText('SD-20261114-KK61K5')).toBeVisible({ timeout: 10000 });
+    // 1. Provision a real parcel dynamically with sensitive PII (recipient phone & address)
+    const setupResult = await page.evaluate(async () => {
+      const loginRes = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'customer@swiftdrop.local',
+          password: 'CustomerPassword123!',
+        }),
+      });
+      const loginData = await loginRes.json();
+      const token = loginData.data?.access_token;
+
+      const quoteRes = await fetch('/api/v1/pricing/quotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          origin_zone_id: 'ZONE_COLOMBO_01',
+          destination_zone_id: 'ZONE_COLOMBO_01',
+          service_level: 'STANDARD',
+          actual_weight_kg: 1.0,
+          dimensions: { length_cm: 10, width_cm: 10, height_cm: 10 },
+        }),
+      });
+      const quoteData = await quoteRes.json();
+      const quoteId = quoteData.data?.quote_id;
+
+      const bookRes = await fetch('/api/v1/parcels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          quote_id: quoteId,
+          recipient_name: 'Audit Recipient',
+          recipient_phone: '+94771234567',
+          weight_kg: 1.0,
+          dimensions: { length_cm: 10, width_cm: 10, height_cm: 10 },
+          pickup: {
+            contact_name: 'Audit Sender',
+            contact_phone: '+94772223333',
+            address_line1: '100 Core St',
+            city: 'Colombo',
+            postal_code: '00100',
+            zone_id: 'ZONE_COLOMBO_01',
+          },
+          dropoff: {
+            contact_name: 'Audit Recipient',
+            contact_phone: '+94771234567',
+            address_line1: '42 Galle Road',
+            city: 'Colombo',
+            postal_code: '00400',
+            zone_id: 'ZONE_COLOMBO_01',
+          },
+          item_description: 'PII masking verification parcel',
+        }),
+      });
+      const bookData = await bookRes.json();
+      return {
+        trackingNumber: bookData.data?.tracking_number,
+      };
+    });
+
+    const trackingNumber = setupResult.trackingNumber;
+    expect(trackingNumber).toBeTruthy();
+
+    // 2. Navigate to live public tracking page backed by live Tracking API on port 8081
+    await page.goto(`/track/${trackingNumber}`);
+
+    // 3. Wait for real tracking number and status badge
+    await expect(page.getByText(trackingNumber)).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('tracking-status-badge')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('tracking-status-badge')).toHaveText(/delivered/i);
     await expect(page.getByText('Colombo')).toBeVisible({ timeout: 10000 });
 
-    // Verify sensitive PII is absent from page content
+    // 4. Verify sensitive PII is absent from page content (SEC-009 Compliance)
     const bodyContent = await page.locator('body').innerText();
     expect(bodyContent).not.toContain('+94771234567');
     expect(bodyContent).not.toContain('42 Galle Road');
