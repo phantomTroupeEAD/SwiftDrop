@@ -381,7 +381,6 @@ func TestPostgresParcelRepository_ListByMerchantID(t *testing.T) {
 		"origin_zone_id", "destination_zone_id", "service_level",
 		"actual_weight_kg", "volumetric_weight_kg", "chargeable_weight_kg",
 		"length_cm", "width_cm", "height_cm", "pickup_address", "dropoff_address",
-		"item_description", "special_instructions",
 		"status", "attempt_count", "version", "created_at", "updated_at",
 	}
 
@@ -406,7 +405,6 @@ func TestPostgresParcelRepository_ListByMerchantID(t *testing.T) {
 					"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
 					2.5, 1.8, 2.5,
 					30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
-					"Order Item 1", "Fragile",
 					"CREATED", int64(0), int64(1), now, now,
 				},
 				{
@@ -415,7 +413,6 @@ func TestPostgresParcelRepository_ListByMerchantID(t *testing.T) {
 					"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
 					3.0, 1.8, 3.0,
 					30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
-					"Order Item 2", "",
 					"CREATED", int64(0), int64(1), now.Add(-1 * time.Hour), now.Add(-1 * time.Hour),
 				},
 			}
@@ -470,7 +467,6 @@ func TestPostgresParcelRepository_ListByMerchantID(t *testing.T) {
 						"ZONE_WESTERN_01", "ZONE_CENTRAL_01", "STANDARD",
 						2.5, 1.8, 2.5,
 						30.0, 20.0, 15.0, pickupJSON, dropoffJSON,
-						"", "",
 						"CREATED", int64(0), int64(1), now, now,
 					},
 				}
