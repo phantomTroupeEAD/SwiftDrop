@@ -190,6 +190,21 @@ definitions:
       businessName:
         type: string
     type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest:
+    properties:
+      height:
+        type: number
+      height_cm:
+        type: number
+      length:
+        type: number
+      length_cm:
+        type: number
+      width:
+        type: number
+      width_cm:
+        type: number
+    type: object
   github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest:
     properties:
       dropoff:
@@ -197,16 +212,37 @@ definitions:
         type: object
       merchant_reference:
         type: string
+      package:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest'
       parcel:
-        properties:
-          weight_kg:
-            type: number
-        type: object
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest'
       pickup:
+        additionalProperties: {}
+        type: object
+      recipient:
         additionalProperties: {}
         type: object
       service_level:
         type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest:
+    properties:
+      description:
+        type: string
+      dimensions:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest'
+      dimensions_cm:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest'
+      height_cm:
+        type: number
+      length_cm:
+        type: number
+      weight_grams:
+        type: number
+      weight_kg:
+        type: number
+      width_cm:
+        type: number
     type: object
   github_com_swiftdrop_core-api_internal_merchants_domain.Address:
     properties:
