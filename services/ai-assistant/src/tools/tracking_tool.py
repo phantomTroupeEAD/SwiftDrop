@@ -14,6 +14,9 @@ from src.tools.registry import register_tool
 
 def mask_tracking_data(raw_data: Dict[str, Any], tracking_number: str) -> Dict[str, Any]:
     """Apply SEC-009 privacy masking, extracting only non-sensitive milestone and city information."""
+    if isinstance(raw_data, dict) and isinstance(raw_data.get("data"), dict):
+        raw_data = raw_data["data"]
+
     destination_city = "Unknown"
     dest_obj = raw_data.get("destination")
     if isinstance(dest_obj, dict) and dest_obj.get("city"):

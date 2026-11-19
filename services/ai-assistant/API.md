@@ -55,6 +55,8 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - Billable weight calculation: dynamically evaluates `billable_weight = max(weight_kg, volumetric_kg)`.
   - Upstream 422 error sanitization: upstream schema validation errors are sanitized into human-readable messages without leaking internal trace dictionaries.
 - **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes` (authenticated with Bearer JWT / Service Role Token)
+- **Core API Schema Conformance:** Dispatches `origin_zone_id`, `destination_zone_id`, `actual_weight_kg`, `dimensions` (`length_cm`, `width_cm`, `height_cm`), and `service_level`, dynamically resolving zones via `GET /api/v1/zones?postal_code=...` or canonical prefix mapping.
+- **Envelope Unwrapping:** Robustly unwraps Core API standard single data envelope `{"data": {"quote_id": "...", "fee_cents": ...}}`.
 - **Generative UI Action:** Returns role-aware `NAVIGATE_BOOKING` action card: `/portal/book` for Customers; `/portal/merchants/orders` for Merchants.
 - **Permissions:** Public / Anonymous (forwards caller Bearer token or service-role token for Core API authorization).
 
