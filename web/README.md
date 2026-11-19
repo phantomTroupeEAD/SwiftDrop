@@ -157,10 +157,12 @@ The router guards ensure strict authorization before any protected view is mount
 | `/portal/merchants/api-keys`| `MERCHANT` | Member 6 | Machine-to-machine API key management & one-time copy modal. |
 | `/portal/merchants/webhooks`| `MERCHANT` | Member 6 | Webhook endpoint registration & one-time signing secret modal. |
 | `/ops/dispatch` | `DISPATCHER`, `ADMIN` | Member 7 | Interactive dispatch board: parcel queues, courier workload, assignment. |
+| `/dispatcher/dashboard` | `DISPATCHER` | Member 7 | Live dispatch board: unassigned parcel queue, courier workloads, parcel assignment, and courier fleet onboarding modal (`POST /api/v1/dispatch/couriers`). |
 | `/ops/couriers` | `DISPATCHER`, `ADMIN` | Member 7 | Active courier fleet management, load monitoring, availability toggle. |
 | `/ops/zones` | `ADMIN` | Member 7 | Delivery zone geometry, base tariffs, and operational boundary setup. |
 | `/ops/reports` | `ADMIN` | Member 7 | SLA reports, courier performance metrics, and audit log explorer. |
 | `/courier/tasks` | `COURIER` | Member 7 | Mobile-responsive courier route, pickup/delivery tasks, barcode scanner. |
+| `/courier/dashboard` | `COURIER` | Member 7 | Mobile-first courier workspace: shift toggle, assigned manifest (`GET /api/v1/courier/parcels`), single & batch run initiation (`POST /courier/runs/start-batch`), live camera viewfinder with snapshot capture, interactive signature canvas pad with SVG export, rich delivery completion alerts (`POST /deliveries/{id}/complete`), and delivery attempt history modal audit trail (`GET /api/v1/deliveries/parcels/{id}`). |
 | `/courier/tasks/:id/pod` | `COURIER` | Member 7 | Proof-of-delivery capture (camera photo upload, recipient signature). |
 
 ---
@@ -237,6 +239,19 @@ The [M6 UI review guide](M6-UI-REVIEW.md) explains how to open the customer and 
    - **Recommended Micro-Animations:** Apple-standard cubic bezier easing (`cubic-bezier(0.16, 1, 0.3, 1)`), 150ms–220ms durations, zero sluggish ease-in animations.
    - **Embedded Lucide SVG Icons:** High-precision SVG iconography across navigation, actions, form inputs, status chips, and a dedicated 20-icon logistics catalog.
    - **Taste-Skill Anti-Slop Compliant:** Strictly enforces `color-on-data <= 3%`, zero resting card shadows, zero purple/violet gradients, and verified via `taste-skill/scripts/lint.mjs --app` (`0 FAIL, 0 WARN`).
+
+### Dispatcher Dashboard & Zone-Based Fleet Filtering (November 2026)
+The Dispatcher workspace (`src/features/dashboards/DispatcherDashboard.tsx`) features live operational fleet management:
+- **Operating Zone Filter Toolbar**: An interactive `<NativeSelect>` toolbar above the board allowing dispatchers to switch between *All Operational Zones* and specific regions (e.g. *Colombo Central*, *Kandy*).
+- **Synchronized Data Fetching**: Changing the zone synchronizes both `GET /api/v1/dispatch/board?zone_id=...` (filtering unassigned and assigned parcel queues) and `GET /api/v1/dispatch/couriers?zone_id=...` (filtering active couriers in the zone).
+- **Courier Roster Card**: Displays active couriers for the selected zone with their real-time parcel assignment counts (`active_assignments of max_capacity`), vehicle classification badges, and shift status indicators.
+- **Scoped Parcel Assignment**: Unassigned parcels can be immediately assigned to on-shift couriers having available capacity within the active zone.
+- **Courier Assignment Cancellation ("Unassign")**: Dispatchers can cancel an active courier assignment directly from the Assigned Parcels card via an accessible `<Dialog>` modal requiring an audit reason. Cancelling terminates the assignment (`POST /api/v1/dispatch/assignments/:id/cancel`), decrements driver workload, and returns the parcel to the unassigned queue as `CREATED`.
+- **Supervised Failed Parcel Rescheduling**: Parcels that failed a delivery attempt (`ATTEMPT_FAILED`) are clearly flagged in the unassigned queue with an `Attempt Failed` badge. Dispatchers can click **Reschedule** (`data-testid="reschedule-btn"`) to open an accessible modal capturing supervisor reattempt instructions and customer delivery window constraints (`notes`), re-dispatching the shipment (`POST /api/v1/dispatch/parcels/:id/reschedule`) per ADR-004.
+- **Administrative Courier Shift Management**: Dispatchers can manage driver shifts directly within the Courier Roster card via one-click shift actions (**Start shift**, **Break**, **Resume shift**, **End shift**), invoking `POST /api/v1/courier/shift` with administrative override. Couriers transitioned off-shift or onto break are automatically removed from assignment dropdowns.
+- **Transparent Session Recovery**: The shared API client (`portalRequest`) transparently detects HTTP 401 token expirations, executes silent session recovery against `/api/v1/auth/refresh` using the secure HttpOnly cookie, broadcasts a synchronization event to `AuthContext`, and retries the failed operation seamlessly without blocking the user.
+- **Courier Onboarding Modal**: Onboards eligible users holding the `COURIER` role via `GET /api/v1/dispatch/couriers/candidates` and `POST /api/v1/dispatch/couriers`.
+- **Strict UI Governance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="DISPATCHER"`, zero raw elements, and zero arbitrary Tailwind brackets.
 
 ---
 
