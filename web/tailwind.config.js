@@ -17,8 +17,21 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: 'var(--font-sans)',
+        display: 'var(--font-display)',
+        mono: 'var(--font-mono)',
+      },
       colors: {
         canvas: 'var(--canvas)',
+        chrome: {
+          DEFAULT: 'var(--chrome)',
+          foreground: 'var(--chrome-foreground)',
+          muted: 'var(--chrome-muted)',
+          line: 'var(--chrome-line)',
+          hover: 'var(--chrome-hover)',
+          accent: 'var(--chrome-accent)',
+        },
         surface: {
           DEFAULT: 'var(--surface)',
           subtle: 'var(--surface-subtle)',
@@ -27,6 +40,7 @@ export default {
         border: {
           DEFAULT: 'var(--border)',
           subtle: 'var(--border-subtle)',
+          strong: 'var(--border-strong)',
         },
         text: {
           DEFAULT: 'var(--text)',
@@ -48,6 +62,11 @@ export default {
             ink: 'var(--status-error-ink)',
             bg: 'var(--status-error-bg)',
             border: 'var(--status-error-border)',
+          },
+          info: {
+            ink: 'var(--status-info-ink)',
+            bg: 'var(--status-info-bg)',
+            border: 'var(--status-info-border)',
           },
         },
         // Standard shadcn variables bound to CSS custom properties

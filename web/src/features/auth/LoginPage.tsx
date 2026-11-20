@@ -16,14 +16,6 @@ import { Label } from '@/shared/components/ui/label';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Separator } from '@/shared/components/ui/separator';
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '@/shared/components/ui/card';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -58,6 +50,15 @@ declare global {
     };
   }
 }
+
+// Where each role lands after sign-in (shown on the right-hand panel).
+const LOGIN_ROLES = [
+  { name: 'CUSTOMER', does: 'Book pickups, track parcels, print receipts' },
+  { name: 'MERCHANT', does: 'Orders, CSV uploads, API keys and webhooks' },
+  { name: 'DISPATCHER', does: 'Assign waiting parcels to couriers' },
+  { name: 'COURIER', does: 'Today’s run, proof of delivery, failed attempts' },
+  { name: 'ADMIN', does: 'Zones, pricing, users and merchant approvals' },
+];
 
 export const LoginPage: React.FC = () => {
   const { login, loginWithGoogle, updateProfile } = useAuth();
@@ -207,66 +208,33 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary overflow-hidden">
-      {/* Strategic Background: Cinematic Logistics Artwork with Ambient Blur & Contrast Scrim */}
-      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
-        <img
-          src="/login-bg.jpg"
-          alt=""
-          className="h-full w-full object-cover object-center filter blur-sm scale-105"
-        />
-
-        {/* Soft atmospheric glow orbs */}
-        <div className="absolute -top-32 -left-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-50" />
-        <div className="absolute -bottom-32 -right-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-40" />
-
-        {/* Backdrop Scrim & Blur Veil for Contrast and Legibility across Light/Dark modes */}
-        <div className="absolute inset-0 bg-canvas/75 backdrop-blur-sm" />
-      </div>
-
-      {/* Top Header */}
-      <header className="relative z-10 px-4 sm:px-8 py-5">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
+    <main data-role="PUBLIC" className="grid min-h-screen bg-canvas text-text lg:grid-cols-2">
+      <div className="flex flex-col px-4 py-6 sm:px-8">
+        <header className="flex items-center justify-between gap-4">
           <Link
             to="/"
-            className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-text hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-text"
             aria-label="SwiftDrop Home"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-tint text-primary border border-border">
-              <Package className="size-4" aria-hidden="true" />
-            </div>
-            <span className="text-lg font-bold">
-              Swift<span className="text-primary">Drop</span>
+            <span className="grid size-8 place-items-center rounded-sm bg-chrome text-primary">
+              <Package size={17} strokeWidth={2} aria-hidden="true" />
             </span>
+            SwiftDrop
           </Link>
-
-          <Button asChild variant="ghost" size="sm" className="text-xs text-text-muted hover:text-text">
+          <Button asChild variant="ghost" size="sm" className="text-text-muted hover:text-text">
             <Link to="/track">
               Track a parcel
               <ArrowRight className="ml-1.5 size-3.5" aria-hidden="true" />
             </Link>
           </Button>
-        </div>
-      </header>
+        </header>
 
-      {/* Centralized Clean Solid Login Window */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[420px] flex-col gap-4 px-4 my-auto">
-        <Card className="border border-border bg-surface rounded-2xl">
-          <CardHeader className="text-center space-y-2 pb-5 pt-7">
-            <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary-tint text-primary border border-border mb-1">
-              <Package className="size-5" aria-hidden="true" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle className="text-xl font-bold tracking-tight text-text">
-                Welcome back
-              </CardTitle>
-              <CardDescription className="text-xs text-text-muted">
-                Sign in to your SwiftDrop account to continue
-              </CardDescription>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4 px-6">
+        <div className="mx-auto my-auto flex w-full max-w-[400px] flex-col gap-6 py-12">
+          <div className="space-y-2">
+            <h1 className="font-display text-4xl font-bold tracking-tight">Sign in</h1>
+            <p className="text-text-muted">Use the account you book with or work with.</p>
+          </div>
+          <div className="space-y-4">
             {error && (
               <div
                 role="alert"
@@ -355,7 +323,7 @@ export const LoginPage: React.FC = () => {
             <div className="space-y-3 pt-1">
               <div className="relative flex items-center justify-center">
                 <Separator className="w-full" />
-                <span className="absolute bg-surface px-2 text-xs uppercase tracking-wider text-text-muted">
+                <span className="absolute bg-canvas px-2 text-xs uppercase tracking-wider text-text-muted">
                   or continue with
                 </span>
               </div>
@@ -410,7 +378,7 @@ export const LoginPage: React.FC = () => {
               <div className="space-y-3 pt-1">
                 <div className="relative flex items-center justify-center">
                   <Separator className="w-full" />
-                  <span className="absolute bg-surface px-2 text-xs uppercase tracking-wider text-text-muted">
+                  <span className="absolute bg-canvas px-2 text-xs uppercase tracking-wider text-text-muted">
                     developer testing
                   </span>
                 </div>
@@ -445,23 +413,34 @@ export const LoginPage: React.FC = () => {
                 </Button>
               </div>
             )}
-          </CardContent>
+          </div>
 
-          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-2xl">
-            <p className="text-xs text-text-muted">
-              Don’t have an account?{' '}
-              <Button asChild variant="link" className="text-xs font-semibold text-primary">
-                <Link to="/auth/register">Create one</Link>
-              </Button>
-            </p>
-          </CardFooter>
-        </Card>
+          <p className="text-center text-sm text-text-muted">
+            Don’t have an account?{' '}
+            <Button asChild variant="link" className="text-sm font-semibold text-primary-hover">
+              <Link to="/auth/register">Create one</Link>
+            </Button>
+          </p>
+        </div>
+
+        <footer className="text-center text-xs text-text-subtle">
+          <p>© 2026 SwiftDrop</p>
+        </footer>
       </div>
 
-      {/* Bottom Footer Note */}
-      <footer className="relative z-10 px-4 py-4 text-center text-xs text-text-subtle">
-        <p>© 2026 SwiftDrop Logistics Platform. Enterprise Edition v2.4</p>
-      </footer>
+      <aside className="hidden flex-col justify-center gap-8 bg-chrome p-14 text-chrome-foreground lg:flex" aria-labelledby="login-roles-title">
+        <h2 id="login-roles-title" className="max-w-md font-display text-4xl font-bold leading-tight tracking-tight">
+          One sign-in. You land on the workspace for your role.
+        </h2>
+        <dl className="max-w-lg border-b border-chrome-line">
+          {LOGIN_ROLES.map((role) => (
+            <div key={role.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-4 border-t border-chrome-line py-4">
+              <dt className="font-mono text-sm font-medium text-chrome-accent">{role.name}</dt>
+              <dd className="text-chrome-muted">{role.does}</dd>
+            </div>
+          ))}
+        </dl>
+      </aside>
 
       {/* Google Dev Testing Dialog */}
       <Dialog open={googleModalOpen} onOpenChange={setGoogleModalOpen}>
