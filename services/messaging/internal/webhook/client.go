@@ -132,9 +132,17 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 				}
 			}
 
-			// Dial first safe IP directly
-			safeTarget := net.JoinHostPort(ips[0].IP.String(), port)
-			return dialer.DialContext(ctx, network, safeTarget)
+			// Try dialing safe IPs in order (handles dual-stack IPv4/IPv6 fallback)
+			var lastErr error
+			for _, ipAddr := range ips {
+				safeTarget := net.JoinHostPort(ipAddr.IP.String(), port)
+				conn, err := dialer.DialContext(ctx, network, safeTarget)
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			return nil, lastErr
 		},
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,

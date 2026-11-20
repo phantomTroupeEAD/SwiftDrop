@@ -22,6 +22,7 @@ class ActionType(str, Enum):
 
     NAVIGATE_BOOKING = "NAVIGATE_BOOKING"
     VIEW_TRACKING = "VIEW_TRACKING"
+    NAVIGATE_TRACKING = "NAVIGATE_TRACKING"
     CONTACT_SUPPORT = "CONTACT_SUPPORT"
 
 
@@ -59,11 +60,15 @@ class GenerativeAction(BaseModel):
         """Enforce strict relative URL whitelisting to eliminate Open Redirect and XSS."""
         v_clean = v.strip()
         # Must start with forward slash and match approved portal routes
-        approved_pattern = r"^/(portal/book|customer/book|tracking|support)(\?.*)?$"
+        approved_pattern = (
+            r"^/(portal/book|customer/book|portal/merchants/orders|"
+            r"track(/[A-Za-z0-9\-]+)?|portal/tracking(/[A-Za-z0-9\-]+)?|"
+            r"tracking|support)(\?.*)?$"
+        )
         if not re.match(approved_pattern, v_clean):
             raise ValueError(
                 f"Invalid or prohibited target_url '{v_clean}'. "
-                "Must be a relative path to /portal/book, /tracking, or /support"
+                "Must be a relative path to /portal/book, /portal/merchants/orders, /track, /portal/tracking, /tracking, or /support"
             )
         # Explicitly ban javascript:, data:, or protocol relative //
         if v_clean.lower().startswith(("//", "javascript:", "data:", "vbscript:")):

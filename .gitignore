@@ -11,6 +11,8 @@ dist/
 *.test
 *.out
 coverage.txt
+test-results/
+playwright-report/
 
 # Go
 vendor/
@@ -56,3 +58,8 @@ graphify-out/
 
 # Kubernetes real secrets (never commit — only secrets.example.yaml is tracked)
 deploy/kubernetes/secrets.yaml
+
+# Local Proof of Delivery (POD) attachments and uploaded data
+data/proofs/
+**/data/proofs/
+core-api/**/data/

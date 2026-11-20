@@ -30,19 +30,18 @@ func (r *PostgresManifestReader) GetActiveManifest(ctx context.Context, courierI
 		SELECT 
 			ca.parcel_id::text,
 			p.tracking_number,
-			p.current_status,
-			COALESCE(pa.zone_id, '') AS destination_zone,
-			COALESCE(pa.contact_name, '') AS recipient_name,
-			COALESCE(pa.contact_phone, '') AS recipient_phone,
-			COALESCE(pa.address_line1, '') AS delivery_street,
-			COALESCE(pa.city, '') AS delivery_city,
-			COALESCE(p.weight_kg, 1.0) AS weight_kg,
-			COALESCE(p.handling_instructions, '') AS handling_instructions,
+			p.status,
+			COALESCE(p.destination_zone_id, '') AS destination_zone,
+			COALESCE(p.recipient_name, '') AS recipient_name,
+			COALESCE(p.recipient_phone, '') AS recipient_phone,
+			COALESCE(p.dropoff_address->>'address_line1', '') AS delivery_street,
+			COALESCE(p.dropoff_address->>'city', '') AS delivery_city,
+			COALESCE(p.actual_weight_kg, 1.0) AS weight_kg,
+			'' AS handling_instructions,
 			p.attempt_count,
 			ca.assigned_at
 		FROM courier_assignments ca
 		JOIN parcels p ON p.id = ca.parcel_id
-		LEFT JOIN parcel_addresses pa ON pa.parcel_id = p.id AND pa.address_type = 'DROPOFF'
 		WHERE ca.courier_id = $1 AND ca.status = 'ACTIVE'
 		ORDER BY ca.assigned_at ASC;
 	`

@@ -280,11 +280,93 @@ Wrapped in `httpx.WriteData` (`{"data": ...}`):
 
 The name comes from the booking's pickup contact. The amount and pricing rule come from the accepted booking. The parcel module does not track payment settlement.
 
-## 6. Deferred Endpoints (Planned — Not Yet Implemented in HTTP Transport)
+## 6. Paginated Parcel List (`GET /api/v1/parcels`)
+
+- **Method / Path:** `GET /api/v1/parcels`
+- **Authorized Roles:** `CUSTOMER`, `MERCHANT`, `ADMIN`
+- **Required Headers:** `Authorization: Bearer <jwt_token>`
+- **Query Parameters:**
+  - `page` (optional integer, default `1`): 1-based page index.
+  - `page_size` / `per_page` (optional integer, default `20`, maximum `100`): Maximum items returned per page.
+- **Authorization & Scoping Rules:**
+  - `CUSTOMER`: Results are strictly scoped to `sender_id = caller.UserID`.
+  - `MERCHANT`: Results are strictly scoped to `merchant_id = caller.TenantID` (requires approved status).
+  - `ADMIN`: Global view across all tenants and users.
+  - `COURIER` / `DISPATCHER`: `403 Forbidden` (`PARCEL_FORBIDDEN`).
+
+### 6.1 Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": "01a1e8d2-383a-7bfa-922c-49e459d5a57c",
+        "tracking_number": "SD-20261117-NHMWP4",
+        "sender_id": "018f4a7c-1005-7000-8000-000000000005",
+        "merchant_id": null,
+        "recipient_name": "Recipient 1 Perera",
+        "recipient_phone": "+94719876501",
+        "quote_id": "01a1e8d2-3801-729f-863a-23945a60e0a1",
+        "pricing_rule_id": "rule_colombo_standard",
+        "pricing_rule_version": 1,
+        "delivery_fee_cents": 42500,
+        "currency": "LKR",
+        "origin_zone_id": "ZONE_COLOMBO_01",
+        "destination_zone_id": "ZONE_COLOMBO_01",
+        "service_level": "STANDARD",
+        "weight": {
+          "actual_kg": 1.7,
+          "volumetric_kg": 0.6,
+          "chargeable_kg": 1.7
+        },
+        "dimensions": {
+          "length_cm": 21.0,
+          "width_cm": 15.0,
+          "height_cm": 10.0
+        },
+        "pickup": {
+          "contact_name": "Nisal Perera",
+          "contact_phone": "+94771234567",
+          "address_line1": "45 Galle Road, Suite 3B",
+          "city": "Colombo",
+          "postal_code": "00100",
+          "zone_id": "ZONE_COLOMBO_01"
+        },
+        "dropoff": {
+          "contact_name": "Recipient 1 Perera",
+          "contact_phone": "+94719876501",
+          "address_line1": "12 Duplication Road",
+          "city": "Colombo",
+          "postal_code": "00400",
+          "zone_id": "ZONE_COLOMBO_01"
+        },
+        "item_description": "Urgent Delivery Package #1",
+        "special_instructions": "Handle with care",
+        "status": "DELIVERED",
+        "attempt_count": 0,
+        "max_attempts": 3,
+        "version": 4,
+        "created_at": "2026-11-17T09:24:12Z",
+        "updated_at": "2026-11-17T09:24:14Z"
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 6
+  },
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total_items": 6,
+    "total_pages": 1
+  }
+}
+```
+
+## 7. Deferred Endpoints (Planned — Not Yet Implemented in HTTP Transport)
 
 > [!NOTE]
 > **Implementation Status Notice:**
-> The routes below are deferred from the current HTTP transport milestone and are **not** registered in `internal/parcels/transport/routes.go`.
+> The route below is deferred from the current HTTP transport milestone and is **not** registered in `internal/parcels/transport/routes.go`.
 
-- `GET /api/v1/parcels`: Paginated list of parcels visible to caller (`CUSTOMER`, `MERCHANT`, `ADMIN`).
 - `POST /api/v1/parcels/{id}/cancel`: Cancel parcel prior to pickup (`CREATED -> CANCELLED`; application lifecycle support already exists in `TransitionParcelStatusUseCase`).

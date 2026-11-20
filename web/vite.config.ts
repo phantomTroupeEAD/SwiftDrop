@@ -7,7 +7,7 @@ const MOCK_USERS: Record<string, { role: string; name: string; tenant_id: string
   'admin@swiftdrop.local': { role: 'ADMIN', name: 'System Administrator', tenant_id: null },
   'dispatcher@swiftdrop.local': { role: 'DISPATCHER', name: 'Central Dispatcher', tenant_id: null },
   'courier@swiftdrop.local': { role: 'COURIER', name: 'Kamal Perera (Courier)', tenant_id: null },
-  'merchant@vendor.com': { role: 'MERCHANT', name: 'Colombo Tech Stores', tenant_id: 'mrc_01HMERCHANTTENANT00001' },
+  'merchant@vendor.com': { role: 'MERCHANT', name: 'Colombo Tech Stores', tenant_id: '018f4a7c-1004-7000-9000-000000000004' },
   'customer@swiftdrop.local': { role: 'CUSTOMER', name: 'Nimal Fernando', tenant_id: null },
 };
 

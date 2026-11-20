@@ -308,6 +308,75 @@ func (r *PostgresParcelRepository) FindByTrackingNumber(ctx context.Context, q d
 	return parcel, nil
 }
 
+// ListByMerchantID retrieves all parcels owned by the specified merchant, ordered by created_at DESC.
+// Returns an empty slice (not an error) when no parcels match the merchant ID or if merchantID is empty.
+func (r *PostgresParcelRepository) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return nil, err
+	}
+
+	cleanMerchantID := strings.TrimSpace(merchantID)
+	if cleanMerchantID == "" {
+		return []domain.Parcel{}, nil
+	}
+
+	const query = `
+		SELECT
+			id,
+			tracking_number,
+			sender_id,
+			merchant_id,
+			recipient_name,
+			recipient_phone,
+			quote_id,
+			pricing_rule_id,
+			pricing_rule_version,
+			delivery_fee_cents,
+			currency,
+			origin_zone_id,
+			destination_zone_id,
+			service_level,
+			actual_weight_kg,
+			volumetric_weight_kg,
+			chargeable_weight_kg,
+			length_cm,
+			width_cm,
+			height_cm,
+			pickup_address,
+			dropoff_address,
+			item_description,
+			special_instructions,
+			status,
+			attempt_count,
+			version,
+			created_at,
+			updated_at
+		FROM parcels
+		WHERE merchant_id = $1
+		ORDER BY created_at DESC;
+	`
+
+	rows, err := querier.QueryContext(ctx, query, cleanMerchantID)
+	if err != nil {
+		return nil, fmt.Errorf("list parcels by merchant from postgres: %w", err)
+	}
+	defer rows.Close()
+
+	parcels := make([]domain.Parcel, 0)
+	for rows.Next() {
+		parcel, err := scanParcelRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan parcel row: %w", err)
+		}
+		parcels = append(parcels, parcel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate parcel rows: %w", err)
+	}
+
+	return parcels, nil
+}
 func scanParcelRow(row interface{ Scan(dest ...any) error }) (domain.Parcel, error) {
 	var (
 		parcelID, tnStr           string
@@ -460,4 +529,112 @@ func (r *PostgresParcelRepository) UpdateStatus(ctx context.Context, q db.Querie
 	}
 
 	return nil
+}
+
+// List retrieves paginated parcels matching the provided filter criteria.
+func (r *PostgresParcelRepository) List(ctx context.Context, q db.Querier, filter application.ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error) {
+	querier, err := resolveQuerier(q, r.defaultQuerier, "parcel repo: nil db querier")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var conditions []string
+	var args []any
+	argIdx := 1
+
+	if filter.SenderID != nil {
+		conditions = append(conditions, fmt.Sprintf("sender_id = $%d", argIdx))
+		args = append(args, *filter.SenderID)
+		argIdx++
+	}
+	if filter.MerchantID != nil {
+		conditions = append(conditions, fmt.Sprintf("merchant_id = $%d", argIdx))
+		args = append(args, *filter.MerchantID)
+		argIdx++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM parcels %s;", whereClause)
+	var total int
+	if err := querier.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count parcels from postgres: %w", err)
+	}
+
+	if total == 0 {
+		return []domain.Parcel{}, 0, nil
+	}
+
+	listQuery := fmt.Sprintf(`
+		SELECT
+			id,
+			tracking_number,
+			sender_id,
+			merchant_id,
+			recipient_name,
+			recipient_phone,
+			quote_id,
+			pricing_rule_id,
+			pricing_rule_version,
+			delivery_fee_cents,
+			currency,
+			origin_zone_id,
+			destination_zone_id,
+			service_level,
+			actual_weight_kg,
+			volumetric_weight_kg,
+			chargeable_weight_kg,
+			length_cm,
+			width_cm,
+			height_cm,
+			pickup_address,
+			dropoff_address,
+			item_description,
+			special_instructions,
+			status,
+			attempt_count,
+			version,
+			created_at,
+			updated_at
+		FROM parcels
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d;
+	`, whereClause, argIdx, argIdx+1)
+
+	queryArgs := append(args, pageSize, offset)
+	rows, err := querier.QueryContext(ctx, listQuery, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query parcels list from postgres: %w", err)
+	}
+	defer rows.Close()
+
+	var parcels []domain.Parcel
+	for rows.Next() {
+		parcel, err := scanParcelRow(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scan parcel list row: %w", err)
+		}
+		parcels = append(parcels, parcel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate parcel list rows: %w", err)
+	}
+
+	if parcels == nil {
+		parcels = make([]domain.Parcel, 0)
+	}
+
+	return parcels, total, nil
 }

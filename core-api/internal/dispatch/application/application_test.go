@@ -48,6 +48,10 @@ func (m *MockCourierRepository) List(ctx context.Context, zoneID string, status 
 	return list, nil
 }
 
+func (m *MockCourierRepository) ListCandidates(ctx context.Context) ([]application.CourierCandidateDTO, error) {
+	return []application.CourierCandidateDTO{}, nil
+}
+
 // MockAssignmentRepository provides in-memory assignment storage for tests.
 type MockAssignmentRepository struct {
 	assignments map[uuid.UUID]*domain.CourierAssignment
@@ -116,6 +120,10 @@ func (m *MockParcelLifecycleUpdater) GetStatusWithLock(ctx context.Context, tx *
 		return "CREATED", 0, nil
 	}
 	return st, m.attempts[parcelID], nil
+}
+
+func (m *MockParcelLifecycleUpdater) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
 }
 
 // MockOutboxWriter captures emitted events.

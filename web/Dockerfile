@@ -14,6 +14,11 @@ COPY . .
 # Set canonical base API URL (Agreement A3 & C15: /api/v1 for unified edge proxying)
 ENV VITE_API_BASE_URL=/api/v1
 
+# Public Google OAuth client ID for the "Sign in with Google" button. Passed as a build argument by
+# .github/workflows/release-images.yml (repository variable GOOGLE_CLIENT_ID); empty = button disabled.
+ARG VITE_GOOGLE_CLIENT_ID=""
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
 # Compile TypeScript and build production bundle via Vite
 RUN npm run build
 

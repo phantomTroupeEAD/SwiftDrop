@@ -436,6 +436,198 @@
                 }
             }
         },
+        "/api/v1/admin/merchants": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a paginated list of merchants with optional status filtering. Requires ADMIN role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List all merchant applications",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by merchant status (PENDING, APPROVED, REJECTED, SUSPENDED, DISABLED)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 20)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/merchants/{merchant_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves full merchant application and profile details for administrative review. Requires ADMIN role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get merchant details by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Merchant UUID",
+                        "name": "merchant_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Merchant not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/merchants/{merchant_id}/{action}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Executes a state transition on a merchant account (approve, reject, suspend, reinstate, disable). Approving grants the MERCHANT role to the owner user. Requires ADMIN role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Change merchant application status (approve, reject, suspend, etc.)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Merchant UUID",
+                        "name": "merchant_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status action (approve, reject, suspend, reinstate, disable)",
+                        "name": "action",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status transition payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.AdminChangeStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed JSON, missing version, or invalid transition",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Merchant or action not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Version conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/reports/deliveries": {
             "get": {
                 "security": [
@@ -639,6 +831,209 @@
                         "description": "SETTING_UNKNOWN, REASON_REQUIRED or VALIDATION_FAILED",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a paginated list of users with optional role filtering. Requires ADMIN role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List users in the system",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by role (CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN)",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of items to return (default 20)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of items to skip (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UserListEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid role filter",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/users/{id}/role": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Promotes or reassigns a user's role and optional merchant tenant context. Requires ADMIN role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update user role and merchant tenant",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role update payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UpdateUserRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UserProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid role or missing tenant_id",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/users/{id}/status": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Suspends or reactivates a user's account. Requires ADMIN role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update user account status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status update payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UpdateUserStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UserProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid status",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
                         }
                     }
                 }
@@ -1042,6 +1437,150 @@
                 }
             }
         },
+        "/api/v1/auth/forgot-password/reset": {
+            "post": {
+                "description": "Verifies the password recovery OTP and updates the user account password.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Reset password using verified OTP code",
+                "parameters": [
+                    {
+                        "description": "Password reset completion payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ResetPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid OTP, weak password, or validation error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/forgot-password/send-otp": {
+            "post": {
+                "description": "Dispatches a 6-digit OTP code to the verified user email for password recovery.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Request password reset verification code",
+                "parameters": [
+                    {
+                        "description": "Password reset request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ForgotPasswordSendOTPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.OTPResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "429": {
+                        "description": "OTP cooldown active",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/google": {
+            "post": {
+                "description": "Verifies a Google OAuth ID token and issues session tokens.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Sign in or register with Google OAuth ID token",
+                "parameters": [
+                    {
+                        "description": "Google ID token payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.GoogleLoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.GoogleLoginResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.GoogleLoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid token or email",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid Google credentials",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Account suspended",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "description": "Validates credentials and returns access token and HttpOnly refresh token cookie.",
@@ -1100,6 +1639,39 @@
                 }
             }
         },
+        "/api/v1/auth/logout": {
+            "post": {
+                "description": "Invalidates the session refresh token and clears the authentication cookie.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Revoke active refresh token and sign out",
+                "parameters": [
+                    {
+                        "description": "Refresh token payload (optional if cookie present)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.RefreshTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.MessageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/me": {
             "get": {
                 "security": [
@@ -1124,6 +1696,198 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates profile details (e.g. phone number and terms acceptance).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Update current user profile",
+                "parameters": [
+                    {
+                        "description": "Profile update payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UpdateProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.UserProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "description": "Single-use refresh token rotation issuing a new access JWT and new refresh token cookie.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Rotate session tokens using refresh token",
+                "parameters": [
+                    {
+                        "description": "Refresh token payload (optional if cookie present)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.RefreshTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.LoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid, expired, revoked, or reused refresh token",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Account suspended",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "description": "Verifies the 6-digit email OTP and registers a new customer profile.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Verify registration OTP and create customer account",
+                "parameters": [
+                    {
+                        "description": "Registration payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.RegisterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid OTP, weak password, or missing fields",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Email already registered",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register/send-otp": {
+            "post": {
+                "description": "Sends a cryptographically secure 6-digit OTP code to the provided email address via SMTP.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Request email verification code for registration",
+                "parameters": [
+                    {
+                        "description": "Registration email payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.SendOTPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.OTPResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid email or validation error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Email already registered",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "429": {
+                        "description": "OTP cooldown active",
                         "schema": {
                             "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
                         }
@@ -1549,6 +2313,17 @@
                     "merchants"
                 ],
                 "summary": "Generate a new merchant API key",
+                "parameters": [
+                    {
+                        "description": "API key parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.CreateKeyRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -1661,6 +2436,17 @@
                     "merchants"
                 ],
                 "summary": "Register a new webhook subscription",
+                "parameters": [
+                    {
+                        "description": "Webhook subscription parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_merchants_transport.RegisterWebhookRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -1752,6 +2538,67 @@
             }
         },
         "/api/v1/parcels": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin (all parcels).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "parcels"
+                ],
+                "summary": "List parcels visible to caller",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 20, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Alternative query parameter for page_size",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated parcels list wrapped in standard data envelope",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid Bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden role",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal list lookup failure",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -2415,6 +3262,34 @@
                 }
             }
         },
+        "github_com_swiftdrop_core-api_internal_identity_domain.Role": {
+            "type": "string",
+            "enum": [
+                "ADMIN",
+                "DISPATCHER",
+                "COURIER",
+                "MERCHANT",
+                "CUSTOMER"
+            ],
+            "x-enum-varnames": [
+                "RoleAdmin",
+                "RoleDispatcher",
+                "RoleCourier",
+                "RoleMerchant",
+                "RoleCustomer"
+            ]
+        },
+        "github_com_swiftdrop_core-api_internal_identity_domain.UserStatus": {
+            "type": "string",
+            "enum": [
+                "ACTIVE",
+                "SUSPENDED"
+            ],
+            "x-enum-varnames": [
+                "StatusActive",
+                "StatusSuspended"
+            ]
+        },
         "github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail": {
             "type": "object",
             "properties": {
@@ -2465,12 +3340,29 @@
                 },
                 "businessName": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "number"
                 },
-                "contactEmail": {
-                    "type": "string"
+                "height_cm": {
+                    "type": "number"
                 },
-                "contactPhone": {
-                    "type": "string"
+                "length": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "width": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
                 }
             }
         },
@@ -2484,20 +3376,51 @@
                 "merchant_reference": {
                     "type": "string"
                 },
+                "package": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest"
+                },
                 "parcel": {
-                    "type": "object",
-                    "properties": {
-                        "weight_kg": {
-                            "type": "number"
-                        }
-                    }
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest"
                 },
                 "pickup": {
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "recipient": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "service_level": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "dimensions": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest"
+                },
+                "dimensions_cm": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest"
+                },
+                "height_cm": {
+                    "type": "number"
+                },
+                "length_cm": {
+                    "type": "number"
+                },
+                "weight_grams": {
+                    "type": "number"
+                },
+                "weight_kg": {
+                    "type": "number"
+                },
+                "width_cm": {
+                    "type": "number"
                 }
             }
         },
@@ -2674,6 +3597,70 @@
                 }
             }
         },
+        "internal_identity_transport.ForgotPasswordSendOTPRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.GoogleLoginDataDTO": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "is_new_user": {
+                    "type": "boolean"
+                },
+                "requires_phone": {
+                    "type": "boolean"
+                },
+                "token_type": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/internal_identity_transport.UserDTO"
+                }
+            }
+        },
+        "internal_identity_transport.GoogleLoginRequest": {
+            "type": "object",
+            "properties": {
+                "id_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.GoogleLoginResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.GoogleLoginDataDTO"
+                }
+            }
+        },
+        "internal_identity_transport.LoginDataDTO": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "token_type": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/internal_identity_transport.UserDTO"
+                }
+            }
+        },
         "internal_identity_transport.LoginRequest": {
             "type": "object",
             "properties": {
@@ -2685,10 +3672,304 @@
                 }
             }
         },
+        "internal_identity_transport.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.LoginDataDTO"
+                }
+            }
+        },
+        "internal_identity_transport.MessageDataDTO": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.MessageDataDTO"
+                }
+            }
+        },
+        "internal_identity_transport.OTPDataDTO": {
+            "type": "object",
+            "properties": {
+                "cooldown_seconds": {
+                    "type": "integer"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.OTPResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.OTPDataDTO"
+                }
+            }
+        },
+        "internal_identity_transport.RefreshTokenRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.RegisterDataDTO": {
+            "type": "object",
+            "properties": {
+                "is_new_user": {
+                    "type": "boolean"
+                },
+                "user": {
+                    "$ref": "#/definitions/internal_identity_transport.UserDTO"
+                }
+            }
+        },
+        "internal_identity_transport.RegisterRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "first_name": {
+                    "type": "string"
+                },
+                "last_name": {
+                    "type": "string"
+                },
+                "otp": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_identity_transport.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.RegisterDataDTO"
+                }
+            }
+        },
+        "internal_identity_transport.ResetPasswordRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string"
+                },
+                "otp": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.SendOTPRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_identity_transport.SingleDataEnvelope": {
             "type": "object",
             "properties": {
                 "data": {}
+            }
+        },
+        "internal_identity_transport.UpdateProfileRequest": {
+            "type": "object",
+            "properties": {
+                "phone": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_identity_transport.UpdateUserRoleRequest": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.Role"
+                },
+                "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.UpdateUserStatusRequest": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.UserStatus"
+                }
+            }
+        },
+        "internal_identity_transport.UserDTO": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "email_verified": {
+                    "type": "boolean"
+                },
+                "first_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "requires_phone": {
+                    "type": "boolean"
+                },
+                "role": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.Role"
+                },
+                "status": {
+                    "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.UserStatus"
+                },
+                "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.UserListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.UserListResponse"
+                }
+            }
+        },
+        "internal_identity_transport.UserListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_identity_transport.UserDTO"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_identity_transport.UserProfileResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.UserDTO"
+                }
+            }
+        },
+        "internal_merchants_transport.AdminChangeStatusRequest": {
+            "type": "object",
+            "properties": {
+                "expected_version": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "reason": {
+                    "type": "string",
+                    "example": "Approved following verification"
+                }
+            }
+        },
+        "internal_merchants_transport.CreateKeyRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Production Warehouse Key"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcels:create\"",
+                        "\"parcels:read\"]"
+                    ]
+                }
+            }
+        },
+        "internal_merchants_transport.RegisterWebhookRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"parcel.delivered.v1\"",
+                        "\"parcel.delivery_failed.v1\"]"
+                    ]
+                },
+                "secret": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://httpbin.org/post"
+                }
             }
         },
         "internal_parcels_transport.AddressRequest": {

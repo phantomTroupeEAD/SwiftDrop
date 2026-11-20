@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -221,6 +222,61 @@ func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel 
 	}
 	m.parcels[parcel.ID] = parcel
 	return nil
+}
+
+func (m *mockParcelRepo) List(ctx context.Context, q db.Querier, filter ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error) {
+	if m.findErr != nil {
+		return nil, 0, m.findErr
+	}
+	var res []domain.Parcel
+	for _, p := range m.parcels {
+		if filter.SenderID != nil && (p.SenderID == nil || *p.SenderID != *filter.SenderID) {
+			continue
+		}
+		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
+			continue
+		}
+		res = append(res, p)
+	}
+	total := len(res)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []domain.Parcel{}, total, nil
+	}
+	end := offset + pageSize
+	if end > total {
+		end = total
+	}
+	return res[offset:end], total, nil
+}
+
+func (m *mockParcelRepo) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	cleanID := strings.TrimSpace(merchantID)
+	if cleanID == "" {
+		return []domain.Parcel{}, nil
+	}
+	var results []domain.Parcel
+	for _, p := range m.parcels {
+		if p.MerchantID != nil && *p.MerchantID == cleanID {
+			results = append(results, p)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].CreatedAt.After(results[j].CreatedAt)
+	})
+	if results == nil {
+		results = make([]domain.Parcel, 0)
+	}
+	return results, nil
 }
 
 // Mock Status History Repository.

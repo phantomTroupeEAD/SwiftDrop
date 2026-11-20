@@ -34,6 +34,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261102-00001`).
 - **Target Upstream Endpoint:** `GET http://tracking-api:8081/api/v1/tracking/public/{tracking_number}`
 - **Security & Privacy:** Strictly enforces SEC-009 privacy masking (omits phone numbers, street addresses, driver notes).
+- **Generative UI Action:** Returns `VIEW_TRACKING` / `NAVIGATE_TRACKING` action card targeting `/track/{tracking_number}`.
 - **Permissions:** Public / Anonymous.
 
 ### 2.2 `estimate_delivery_fee`
@@ -47,15 +48,18 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
   - `width_cm` (float, optional): Package width in cm (`0.0 < width_cm <= 300.0`).
   - `height_cm` (float, optional): Package height in cm (`0.0 < height_cm <= 300.0`).
 - **Validation Invariants (VULN-006, SEC-CLD-002, SEC-CLD-004):**
+  - Core API Mandatory Dimensions & Zero Guessing: Core API mandates all three dimensions (`length_cm`, `width_cm`, `height_cm`) to evaluate volumetric weight ($L \times W \times H / 5000$) against gross weight. The assistant NEVER guesses or defaults dimensions (no 20x15x10 cm). If dimensions are omitted by the user, the assistant prompts the user for package dimensions before calling `estimate_delivery_fee`.
   - Strict 3D dimension cross-validation: if any dimension is provided, all three (`length_cm`, `width_cm`, `height_cm`) must be supplied together. Partial dimensions trigger a `422 Unprocessable Entity` validation error.
   - Minimum gross weight: strictly enforces `weight_kg >= 0.01 kg`.
   - Maximum package girth: strictly enforces `Length + 2 * (Width + Height) <= 300.0 cm`.
   - Maximum volumetric weight: strictly enforces `(Length * Width * Height) / 5000 <= 50.0 kg`.
   - Billable weight calculation: dynamically evaluates `billable_weight = max(weight_kg, volumetric_kg)`.
   - Upstream 422 error sanitization: upstream schema validation errors are sanitized into human-readable messages without leaking internal trace dictionaries.
-- **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes`
-- **Generative UI Action:** Returns `NAVIGATE_BOOKING` card targeting `/portal/book`.
-- **Permissions:** Public / Anonymous.
+- **Target Upstream Endpoint:** `POST http://core-api:8080/api/v1/pricing/quotes` (strictly executed with zero mock fallback; for guest inquiries, signs an internal customer Bearer token so Core API authenticates and persists an authoritative 15-minute price-frozen quote with `quote_id`).
+- **Core API Schema Conformance:** Dispatches `origin_zone_id`, `destination_zone_id`, `actual_weight_kg`, `dimensions` (`length_cm`, `width_cm`, `height_cm`), and `service_level`, dynamically resolving zones via `GET /api/v1/zones?postal_code=...` or canonical prefix mapping.
+- **Envelope Unwrapping:** Robustly unwraps Core API standard single data envelope `{"data": {"quote_id": "...", "fee_cents": ...}}`.
+- **Generative UI Action:** Returns role-aware `NAVIGATE_BOOKING` action card: `/portal/book` for Customers; `/portal/merchants/orders` for Merchants.
+- **Permissions:** Public / Anonymous (forwards caller Bearer token or service-role token for Core API authorization).
 
 ### 2.3 `get_my_active_parcels`
 - **Description:** Retrieve active shipments (picked-up, in-transit, out-for-delivery) belonging to the authenticated customer or merchant.

@@ -22,7 +22,7 @@ func NewPostgresDispatchBoardReader(db *sql.DB) *PostgresDispatchBoardReader {
 }
 
 // GetUnassignedParcels queries eligible unassigned parcels for a target delivery zone.
-func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, _ string) ([]application.UnassignedParcelDTO, error) {
+func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zoneID string) ([]application.UnassignedParcelDTO, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("failed to get unassigned parcels: %w", db.ErrNilDB)
 	}
@@ -37,11 +37,12 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 			p.created_at
 		FROM parcels p
 		WHERE p.status IN ('CREATED', 'ATTEMPT_FAILED')
-		ORDER BY p.created_at ASC
+		  AND ($1 = '' OR p.origin_zone_id = $1 OR p.destination_zone_id = $1)
+		ORDER BY p.created_at DESC
 		LIMIT 100;
 	`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, zoneID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query unassigned parcels: %w", err)
 	}
@@ -56,6 +57,10 @@ func (r *PostgresDispatchBoardReader) GetUnassignedParcels(ctx context.Context, 
 		}
 		item.CreatedAt = createdAt
 		list = append(list, item)
+	}
+
+	if list == nil {
+		list = []application.UnassignedParcelDTO{}
 	}
 
 	return list, rows.Err()
@@ -114,6 +119,48 @@ func (r *PostgresDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneI
 		item.Status = domain.ShiftStatus(statusStr)
 		item.VehicleType = domain.VehicleType(vehicleStr)
 		list = append(list, item)
+	}
+
+	return list, rows.Err()
+}
+
+// GetAssignedParcels queries parcels with active courier assignments for the Dispatcher Board.
+func (r *PostgresDispatchBoardReader) GetAssignedParcels(ctx context.Context, zoneID string) ([]application.AssignedParcelDTO, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("failed to get assigned parcels: %w", db.ErrNilDB)
+	}
+	query := `
+		SELECT 
+			p.id,
+			p.tracking_number,
+			p.actual_weight_kg AS weight_kg,
+			COALESCE(p.dropoff_address->>'city', '') AS recipient_city,
+			p.status,
+			ca.courier_id
+		FROM parcels p
+		JOIN courier_assignments ca ON ca.parcel_id = p.id AND ca.status = 'ACTIVE'
+		WHERE ($1 = '' OR p.destination_zone_id = $1)
+		ORDER BY ca.assigned_at DESC
+		LIMIT 100;
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, zoneID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query assigned parcels: %w", err)
+	}
+	defer rows.Close()
+
+	var list []application.AssignedParcelDTO
+	for rows.Next() {
+		var item application.AssignedParcelDTO
+		if err := rows.Scan(&item.ID, &item.TrackingNumber, &item.WeightKg, &item.RecipientCity, &item.Status, &item.CourierID); err != nil {
+			return nil, fmt.Errorf("failed to scan assigned parcel: %w", err)
+		}
+		list = append(list, item)
+	}
+
+	if list == nil {
+		list = []application.AssignedParcelDTO{}
 	}
 
 	return list, rows.Err()

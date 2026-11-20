@@ -207,6 +207,10 @@ func (mockRoleAssigner) GrantMerchantRole(ctx context.Context, q Querier, userID
 	return nil
 }
 
+func (mockRoleAssigner) RevokeMerchantRole(ctx context.Context, q Querier, userID string) error {
+	return nil
+}
+
 type mockKeyGen struct{}
 
 func (mockKeyGen) NewAPIKey(env string) (domain.PlainAPIKey, error) {

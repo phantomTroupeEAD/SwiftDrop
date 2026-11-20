@@ -58,6 +58,41 @@ func (u *PostgresParcelLifecycleUpdater) GetStatusWithLock(
 	return currentStatus, attemptCount, nil
 }
 
+// GetMerchantID retrieves the merchant ID for a parcel if it is a merchant shipment.
+func (u *PostgresParcelLifecycleUpdater) GetMerchantID(
+	ctx context.Context,
+	tx *sql.Tx,
+	parcelID uuid.UUID,
+) (*string, error) {
+	if tx == nil && u.db == nil {
+		return nil, fmt.Errorf("parcel updater: %w", db.ErrNilDB)
+	}
+	query := `
+		SELECT merchant_id::text
+		FROM parcels
+		WHERE id = $1;
+	`
+	var row *sql.Row
+	if tx != nil {
+		row = tx.QueryRowContext(ctx, query, parcelID)
+	} else {
+		row = u.db.QueryRowContext(ctx, query, parcelID)
+	}
+
+	var mID sql.NullString
+	if err := row.Scan(&mID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load parcel merchant_id: %w", err)
+	}
+	if !mID.Valid || mID.String == "" {
+		return nil, nil
+	}
+	val := mID.String
+	return &val, nil
+}
+
 // TransitionStatus atomically updates parcel status and appends a row to parcel_status_history.
 func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 	// Check db handle

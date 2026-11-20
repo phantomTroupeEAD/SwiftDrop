@@ -16,6 +16,7 @@ type RequestOptions = {
   signal?: AbortSignal;
   allowUnwrapped?: boolean;
   acceptPdf?: boolean;
+  _retryCount?: number;
 };
 
 export async function portalRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -37,6 +38,30 @@ export async function portalRequest<T>(path: string, options: RequestOptions = {
   if (response.headers.get('Content-Type')?.includes('text/html')) {
     throw new PortalError('SwiftDrop is temporarily unavailable. Please try again later.', 502);
   }
+
+  // Transparent session recovery on 401: attempt silent refresh once if refresh cookie exists
+  if (response.status === 401 && !options._retryCount && !path.startsWith('/auth/')) {
+    try {
+      const refreshRes = await fetch(apiBase + '/auth/refresh', {
+        method: 'POST',
+        credentials: 'same-origin',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        const newToken = refreshData?.data?.access_token;
+        if (newToken) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('swiftdrop:token-refreshed', { detail: refreshData.data }));
+          }
+          return await portalRequest<T>(path, { ...options, token: newToken, _retryCount: 1 });
+        }
+      }
+    } catch {
+      // Refresh attempt failed, continue to throw PortalError below
+    }
+  }
+
   const envelope = await response.json().catch(() => null);
   if (!response.ok) {
 

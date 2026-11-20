@@ -69,5 +69,9 @@ jobs:
           file: ${{ matrix.service.file }}
           push: true
           tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ steps.tag.outputs.sha }}
+          # The web bundle is built with the public Google OAuth client ID (repository variable
+          # GOOGLE_CLIENT_ID; a client ID is not secret). Other images ignore this build argument.
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}

@@ -92,6 +92,11 @@ class MockLLMAdapter(BaseLLMClient):
 
             if record.status == "SUCCESS" and record.result.get("found"):
                 res = record.result
+                if "action" in res and isinstance(res["action"], dict):
+                    try:
+                        actions.append(GenerativeAction(**res["action"]))
+                    except Exception:
+                        pass
                 dest_city = res.get("destination_city", "Destination Hub")
                 status_val = res.get("status", "UNKNOWN")
                 status_desc = res.get("status_description", "")

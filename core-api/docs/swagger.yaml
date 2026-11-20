@@ -156,6 +156,28 @@ definitions:
       version:
         type: integer
     type: object
+  github_com_swiftdrop_core-api_internal_identity_domain.Role:
+    enum:
+    - ADMIN
+    - DISPATCHER
+    - COURIER
+    - MERCHANT
+    - CUSTOMER
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleDispatcher
+    - RoleCourier
+    - RoleMerchant
+    - RoleCustomer
+  github_com_swiftdrop_core-api_internal_identity_domain.UserStatus:
+    enum:
+    - ACTIVE
+    - SUSPENDED
+    type: string
+    x-enum-varnames:
+    - StatusActive
+    - StatusSuspended
   github_com_swiftdrop_core-api_internal_identity_transport.ErrorDetail:
     properties:
       field:
@@ -189,10 +211,21 @@ definitions:
         $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_domain.Address'
       businessName:
         type: string
-      contactEmail:
-        type: string
-      contactPhone:
-        type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest:
+    properties:
+      height:
+        type: number
+      height_cm:
+        type: number
+      length:
+        type: number
+      length_cm:
+        type: number
+      width:
+        type: number
+      width_cm:
+        type: number
     type: object
   github_com_swiftdrop_core-api_internal_merchants_application.OrderRequest:
     properties:
@@ -201,16 +234,37 @@ definitions:
         type: object
       merchant_reference:
         type: string
+      package:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest'
       parcel:
-        properties:
-          weight_kg:
-            type: number
-        type: object
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest'
       pickup:
+        additionalProperties: {}
+        type: object
+      recipient:
         additionalProperties: {}
         type: object
       service_level:
         type: string
+    type: object
+  github_com_swiftdrop_core-api_internal_merchants_application.ParcelRequest:
+    properties:
+      description:
+        type: string
+      dimensions:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest'
+      dimensions_cm:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_merchants_application.DimensionsRequest'
+      height_cm:
+        type: number
+      length_cm:
+        type: number
+      weight_grams:
+        type: number
+      weight_kg:
+        type: number
+      width_cm:
+        type: number
     type: object
   github_com_swiftdrop_core-api_internal_merchants_domain.Address:
     properties:
@@ -324,6 +378,47 @@ definitions:
       timestamp:
         type: string
     type: object
+  internal_identity_transport.ForgotPasswordSendOTPRequest:
+    properties:
+      email:
+        type: string
+    type: object
+  internal_identity_transport.GoogleLoginDataDTO:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      is_new_user:
+        type: boolean
+      requires_phone:
+        type: boolean
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/internal_identity_transport.UserDTO'
+    type: object
+  internal_identity_transport.GoogleLoginRequest:
+    properties:
+      id_token:
+        type: string
+    type: object
+  internal_identity_transport.GoogleLoginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.GoogleLoginDataDTO'
+    type: object
+  internal_identity_transport.LoginDataDTO:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/internal_identity_transport.UserDTO'
+    type: object
   internal_identity_transport.LoginRequest:
     properties:
       email:
@@ -331,9 +426,200 @@ definitions:
       password:
         type: string
     type: object
+  internal_identity_transport.LoginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.LoginDataDTO'
+    type: object
+  internal_identity_transport.MessageDataDTO:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_identity_transport.MessageResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.MessageDataDTO'
+    type: object
+  internal_identity_transport.OTPDataDTO:
+    properties:
+      cooldown_seconds:
+        type: integer
+      email:
+        type: string
+      expires_in:
+        type: integer
+      message:
+        type: string
+    type: object
+  internal_identity_transport.OTPResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.OTPDataDTO'
+    type: object
+  internal_identity_transport.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
+  internal_identity_transport.RegisterDataDTO:
+    properties:
+      is_new_user:
+        type: boolean
+      user:
+        $ref: '#/definitions/internal_identity_transport.UserDTO'
+    type: object
+  internal_identity_transport.RegisterRequest:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      otp:
+        type: string
+      password:
+        type: string
+      phone:
+        type: string
+      terms_accepted:
+        type: boolean
+    type: object
+  internal_identity_transport.RegisterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.RegisterDataDTO'
+    type: object
+  internal_identity_transport.ResetPasswordRequest:
+    properties:
+      email:
+        type: string
+      new_password:
+        type: string
+      otp:
+        type: string
+    type: object
+  internal_identity_transport.SendOTPRequest:
+    properties:
+      email:
+        type: string
+    type: object
   internal_identity_transport.SingleDataEnvelope:
     properties:
       data: {}
+    type: object
+  internal_identity_transport.UpdateProfileRequest:
+    properties:
+      phone:
+        type: string
+      terms_accepted:
+        type: boolean
+    type: object
+  internal_identity_transport.UpdateUserRoleRequest:
+    properties:
+      role:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.Role'
+      tenant_id:
+        type: string
+    type: object
+  internal_identity_transport.UpdateUserStatusRequest:
+    properties:
+      status:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.UserStatus'
+    type: object
+  internal_identity_transport.UserDTO:
+    properties:
+      created_at:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      first_name:
+        type: string
+      id:
+        type: string
+      last_name:
+        type: string
+      phone:
+        type: string
+      requires_phone:
+        type: boolean
+      role:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.Role'
+      status:
+        $ref: '#/definitions/github_com_swiftdrop_core-api_internal_identity_domain.UserStatus'
+      tenant_id:
+        type: string
+    type: object
+  internal_identity_transport.UserListEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.UserListResponse'
+    type: object
+  internal_identity_transport.UserListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_identity_transport.UserDTO'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_identity_transport.UserProfileResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.UserDTO'
+    type: object
+  internal_merchants_transport.AdminChangeStatusRequest:
+    properties:
+      expected_version:
+        example: 1
+        type: integer
+      reason:
+        example: Approved following verification
+        type: string
+    type: object
+  internal_merchants_transport.CreateKeyRequest:
+    properties:
+      expires_at:
+        type: string
+      label:
+        example: Production Warehouse Key
+        type: string
+      scopes:
+        example:
+        - '["parcels:create"'
+        - '"parcels:read"]'
+        items:
+          type: string
+        type: array
+    type: object
+  internal_merchants_transport.RegisterWebhookRequest:
+    properties:
+      enabled:
+        type: boolean
+      events:
+        example:
+        - '["parcel.delivered.v1"'
+        - '"parcel.delivery_failed.v1"]'
+        items:
+          type: string
+        type: array
+      secret:
+        items:
+          type: integer
+        type: array
+      url:
+        example: https://httpbin.org/post
+        type: string
     type: object
   internal_parcels_transport.AddressRequest:
     properties:
@@ -686,6 +972,134 @@ paths:
       summary: Retry failed webhook delivery
       tags:
       - events
+  /api/v1/admin/merchants:
+    get:
+      description: Retrieves a paginated list of merchants with optional status filtering.
+        Requires ADMIN role.
+      parameters:
+      - description: Filter by merchant status (PENDING, APPROVED, REJECTED, SUSPENDED,
+          DISABLED)
+        in: query
+        name: status
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List all merchant applications
+      tags:
+      - admin
+  /api/v1/admin/merchants/{merchant_id}:
+    get:
+      description: Retrieves full merchant application and profile details for administrative
+        review. Requires ADMIN role.
+      parameters:
+      - description: Merchant UUID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Merchant not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get merchant details by ID
+      tags:
+      - admin
+  /api/v1/admin/merchants/{merchant_id}/{action}:
+    post:
+      consumes:
+      - application/json
+      description: Executes a state transition on a merchant account (approve, reject,
+        suspend, reinstate, disable). Approving grants the MERCHANT role to the owner
+        user. Requires ADMIN role.
+      parameters:
+      - description: Merchant UUID
+        in: path
+        name: merchant_id
+        required: true
+        type: string
+      - description: Status action (approve, reject, suspend, reinstate, disable)
+        in: path
+        name: action
+        required: true
+        type: string
+      - description: Status transition payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_merchants_transport.AdminChangeStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "400":
+          description: Malformed JSON, missing version, or invalid transition
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Merchant or action not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "409":
+          description: Version conflict
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Change merchant application status (approve, reject, suspend, etc.)
+      tags:
+      - admin
   /api/v1/admin/reports/deliveries:
     get:
       parameters:
@@ -811,6 +1225,138 @@ paths:
       summary: Change one system setting (admin)
       tags:
       - admin-settings
+  /api/v1/admin/users:
+    get:
+      description: Retrieves a paginated list of users with optional role filtering.
+        Requires ADMIN role.
+      parameters:
+      - description: Filter by role (CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN)
+        in: query
+        name: role
+        type: string
+      - description: Maximum number of items to return (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Number of items to skip (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.UserListEnvelope'
+        "400":
+          description: Invalid role filter
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List users in the system
+      tags:
+      - admin
+  /api/v1/admin/users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      description: Promotes or reassigns a user's role and optional merchant tenant
+        context. Requires ADMIN role.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role update payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.UpdateUserRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.UserProfileResponse'
+        "400":
+          description: Invalid role or missing tenant_id
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update user role and merchant tenant
+      tags:
+      - admin
+  /api/v1/admin/users/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Suspends or reactivates a user's account. Requires ADMIN role.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.UpdateUserStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.UserProfileResponse'
+        "400":
+          description: Invalid status
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Forbidden - Admin only
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update user account status
+      tags:
+      - admin
   /api/v1/admin/zones:
     get:
       parameters:
@@ -1052,6 +1598,102 @@ paths:
       summary: Enable or disable a delivery zone (admin)
       tags:
       - admin-zones
+  /api/v1/auth/forgot-password/reset:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the password recovery OTP and updates the user account
+        password.
+      parameters:
+      - description: Password reset completion payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.MessageResponse'
+        "400":
+          description: Invalid OTP, weak password, or validation error
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Reset password using verified OTP code
+      tags:
+      - identity
+  /api/v1/auth/forgot-password/send-otp:
+    post:
+      consumes:
+      - application/json
+      description: Dispatches a 6-digit OTP code to the verified user email for password
+        recovery.
+      parameters:
+      - description: Password reset request payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.ForgotPasswordSendOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.OTPResponse'
+        "400":
+          description: Validation failed
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "429":
+          description: OTP cooldown active
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Request password reset verification code
+      tags:
+      - identity
+  /api/v1/auth/google:
+    post:
+      consumes:
+      - application/json
+      description: Verifies a Google OAuth ID token and issues session tokens.
+      parameters:
+      - description: Google ID token payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.GoogleLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.GoogleLoginResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_identity_transport.GoogleLoginResponse'
+        "400":
+          description: Invalid token or email
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Invalid Google credentials
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Account suspended
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Sign in or register with Google OAuth ID token
+      tags:
+      - identity
   /api/v1/auth/login:
     post:
       consumes:
@@ -1091,6 +1733,28 @@ paths:
       summary: Authenticate user and issue JWT
       tags:
       - identity
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Invalidates the session refresh token and clears the authentication
+        cookie.
+      parameters:
+      - description: Refresh token payload (optional if cookie present)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/internal_identity_transport.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.MessageResponse'
+      summary: Revoke active refresh token and sign out
+      tags:
+      - identity
   /api/v1/auth/me:
     get:
       description: Returns user profile and tenant details for the authenticated bearer
@@ -1109,6 +1773,132 @@ paths:
       security:
       - BearerAuth: []
       summary: Get authenticated user profile
+      tags:
+      - identity
+    put:
+      consumes:
+      - application/json
+      description: Updates profile details (e.g. phone number and terms acceptance).
+      parameters:
+      - description: Profile update payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.UserProfileResponse'
+        "400":
+          description: Validation failed
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update current user profile
+      tags:
+      - identity
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Single-use refresh token rotation issuing a new access JWT and
+        new refresh token cookie.
+      parameters:
+      - description: Refresh token payload (optional if cookie present)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/internal_identity_transport.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.LoginResponse'
+        "401":
+          description: Invalid, expired, revoked, or reused refresh token
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "403":
+          description: Account suspended
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Rotate session tokens using refresh token
+      tags:
+      - identity
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the 6-digit email OTP and registers a new customer profile.
+      parameters:
+      - description: Registration payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_identity_transport.RegisterResponse'
+        "400":
+          description: Invalid OTP, weak password, or missing fields
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "409":
+          description: Email already registered
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Verify registration OTP and create customer account
+      tags:
+      - identity
+  /api/v1/auth/register/send-otp:
+    post:
+      consumes:
+      - application/json
+      description: Sends a cryptographically secure 6-digit OTP code to the provided
+        email address via SMTP.
+      parameters:
+      - description: Registration email payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.SendOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.OTPResponse'
+        "400":
+          description: Invalid email or validation error
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "409":
+          description: Email already registered
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "429":
+          description: OTP cooldown active
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Request email verification code for registration
       tags:
       - identity
   /api/v1/courier/dashboard:
@@ -1374,6 +2164,13 @@ paths:
       - application/json
       description: Generates an API credential with scoped permissions. Key secret
         is returned once only.
+      parameters:
+      - description: API key parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_merchants_transport.CreateKeyRequest'
       produces:
       - application/json
       responses:
@@ -1445,6 +2242,13 @@ paths:
       consumes:
       - application/json
       description: Configures a webhook endpoint to receive domain notification events.
+      parameters:
+      - description: Webhook subscription parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_merchants_transport.RegisterWebhookRequest'
       produces:
       - application/json
       responses:
@@ -1508,6 +2312,47 @@ paths:
       tags:
       - merchants
   /api/v1/parcels:
+    get:
+      description: Returns a paginated list of parcels for the authenticated customer
+        (scoped by sender_id), approved merchant (scoped by merchant_id), or admin
+        (all parcels).
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20, max 100)
+        in: query
+        name: page_size
+        type: integer
+      - description: Alternative query parameter for page_size
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated parcels list wrapped in standard data envelope
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope'
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden role
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal list lookup failure
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List parcels visible to caller
+      tags:
+      - parcels
     post:
       consumes:
       - application/json

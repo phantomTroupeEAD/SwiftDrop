@@ -8,7 +8,6 @@ kind: Kustomization
 
 resources:
   - ../../kubernetes
-  - block-google-login.yaml
 
 images:
   - name: ghcr.io/phantomtroupeead/swiftdrop/core-api
@@ -69,18 +68,17 @@ patches:
       - op: replace
         path: /spec/routes/9/match
         value: Host(`swiftdrop.work`)
-      # Temporary: refuse Google login until mock tokens are rejected in production (see block-google-login.yaml).
-      - op: add
-        path: /spec/routes/-
-        value:
-          kind: Rule
-          match: Host(`swiftdrop.work`) && Path(`/api/v1/auth/google`)
-          priority: 200
-          middlewares:
-            - name: deny-all
-          services:
-            - name: core-api
-              port: 8080
+  # Content-Security-Policy for the web app (Member 7's spa-csp), extended for production only:
+  #   - Google Identity Services ("Sign in with Google"): script, button iframe, styles, token calls
+  #   - Cloudflare Web Analytics, which Cloudflare injects into pages it proxies
+  # Everything else is unchanged from the base policy.
+  - target:
+      kind: Middleware
+      name: spa-csp
+    patch: |-
+      - op: replace
+        path: /spec/headers/contentSecurityPolicy
+        value: "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https://*.googleusercontent.com; connect-src 'self' https://accounts.google.com/gsi/ https://cloudflareinsights.com; frame-src https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   # ghcr packages are private by default: pull with a token (kubectl create secret docker-registry ghcr-pull ...).
   # Deployments, StatefulSets and Jobs (the core-api migrate Job) share the pod template path.
   - target:

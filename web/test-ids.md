@@ -260,6 +260,7 @@ Routes `/ops/*` for ADMIN and DISPATCHER, built in `src/features/dispatcher-admi
 | `ops-role-badge`, `ops-signout-btn` | Role badge and sign out in the header |
 | `ops-notice` | Success message on an ops page |
 | `ops-not-built`, `ops-forbidden`, `ops-not-found` | Placeholder for an unbuilt page, access message for a role without access, unknown address |
+
 | Dispatcher selector | Purpose |
 | --- | --- |
 | `dispatcher-board` | Loaded assignment queue and courier roster |

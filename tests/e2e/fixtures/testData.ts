@@ -8,7 +8,7 @@
 export const TEST_USERS = {
   CUSTOMER: {
     email: 'customer@swiftdrop.local',
-    password: 'Customer123!',
+    password: 'CustomerPassword123!',
     role: 'CUSTOMER',
     name: 'Dilshan Silva',
     phone: '+94771234567',
@@ -33,13 +33,13 @@ export const TEST_USERS = {
   },
   DISPATCHER: {
     email: 'dispatcher@swiftdrop.local',
-    password: 'Dispatch123!',
+    password: 'Dispatcher123!',
     role: 'DISPATCHER',
     name: 'Kamal Perera',
   },
   COURIER: {
     email: 'courier@swiftdrop.local',
-    password: 'Courier123!',
+    password: 'CourierPassword123!',
     role: 'COURIER',
     name: 'Sunil Fernando',
     vehicle: 'Motorcycle (WP BCD-1234)',
@@ -47,7 +47,7 @@ export const TEST_USERS = {
   },
   ADMIN: {
     email: 'admin@swiftdrop.local',
-    password: 'Admin123!',
+    password: 'AdminPassword123!',
     role: 'ADMIN',
     name: 'System Administrator',
   },
