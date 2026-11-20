@@ -18,7 +18,7 @@ Public tracking and registration use the centered blue profile. Customer booking
 
 - **Customer:** Four-step quote and booking flow, server-issued tracking number, and merchant application/status.
 - **Merchant:** Orders with search and status filters, CSV import with per-record results and retries, API key management, webhook registration and removal, and in-portal B2B integration documentation (`/portal/merchants/docs`) with interactive code samples (cURL, Node.js, Python), 16-column bulk CSV order ingestion reference with real Sri Lankan e-commerce examples, schema accordions, and HMAC verification guides.
-- **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects.
+- **Public tracking:** Redacted snapshot, event-driven refresh, and polling while the event stream reconnects. Accessible at `/track` and `/track/:trackingNumber` (with route aliases at `/tracking` and `/tracking/:trackingNumber` automatically redirecting to canonical `/track` paths).
 - **Signed-in tracking:** Customers and merchants can open `/portal/tracking` to look up parcels they can access. Merchant tracking numbers link directly to this view.
 
 Portal requests use `VITE_API_BASE_URL` (default `/api/v1`). Vite's local fallback only signs in a demo account. The workflows require the corresponding backend services to return data. See [API.md](API.md) for integration status, [test-ids.md](test-ids.md) for active selectors, and [M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md](M6_FRONTEND_AUDIT_REDESIGN_AND_ACTION_PLAN.md) for the complete audit, redesign and migration guide.
