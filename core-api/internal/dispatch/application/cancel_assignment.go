@@ -45,7 +45,17 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 	}
 
 	return uc.txManager.WithTransaction(ctx, func(tx *sql.Tx) error {
-		// 1. Fetch active assignment for this parcel with lock
+		// 1. Lock and verify parcel status (SELECT ... FOR UPDATE) to ensure mutual exclusion
+		// against concurrent courier run start (ASSIGNED -> OUT_FOR_DELIVERY) or delivery completion.
+		status, _, err := uc.parcelUpdater.GetStatusWithLock(ctx, tx, parcelUUID)
+		if err != nil {
+			return fmt.Errorf("failed to load parcel status: %w", err)
+		}
+		if status != "ASSIGNED" {
+			return fmt.Errorf("%w: cannot cancel assignment when parcel is in status %s", ErrInvalidParcelStatusForAssignment, status)
+		}
+
+		// 2. Fetch active assignment for this parcel with lock
 		asgn, err := uc.assignmentRepo.GetActiveByParcelID(ctx, tx, parcelUUID)
 		if err != nil {
 			return fmt.Errorf("failed to fetch active assignment: %w", err)
@@ -54,17 +64,17 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 			return ErrAssignmentNotFound
 		}
 
-		// 2. Transition assignment aggregate to CANCELLED
+		// 3. Transition assignment aggregate to CANCELLED
 		if err := asgn.Cancel(cmd.Reason); err != nil {
 			return err
 		}
 
-		// 3. Persist updated assignment record
+		// 4. Persist updated assignment record
 		if err := uc.assignmentRepo.Update(ctx, tx, asgn); err != nil {
 			return fmt.Errorf("failed to update assignment: %w", err)
 		}
 
-		// 4. Revert parcel status from ASSIGNED back to CREATED
+		// 5. Revert parcel status from ASSIGNED back to CREATED
 		err = uc.parcelUpdater.TransitionStatus(
 			ctx,
 			tx,
@@ -79,7 +89,7 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 			return fmt.Errorf("failed to revert parcel status: %w", err)
 		}
 
-		// 5. Emit courier.unassigned.v1 outbox event
+		// 6. Emit courier.unassigned.v1 outbox event
 		eventPayload := map[string]any{
 			"assignment_id": asgn.ID.String(),
 			"parcel_id":     asgn.ParcelID.String(),

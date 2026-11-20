@@ -144,6 +144,7 @@ func TestAssignCourierUseCase_Success(t *testing.T) {
 	courierRepo := NewMockCourierRepository()
 	asgnRepo := NewMockAssignmentRepository()
 	parcelUpdater := NewMockParcelLifecycleUpdater()
+	parcelUpdater.lastStatus = "ASSIGNED"
 	outboxWriter := &MockOutboxWriter{}
 
 	courierID := uuid.New()
@@ -184,6 +185,7 @@ func TestAssignCourierUseCase_Overload(t *testing.T) {
 	courierRepo := NewMockCourierRepository()
 	asgnRepo := NewMockAssignmentRepository()
 	parcelUpdater := NewMockParcelLifecycleUpdater()
+	parcelUpdater.lastStatus = "ASSIGNED"
 	outboxWriter := &MockOutboxWriter{}
 
 	courierID := uuid.New()
@@ -213,9 +215,11 @@ func TestCancelAssignmentUseCase_Success(t *testing.T) {
 	txMgr := &MockTransactionManager{}
 	asgnRepo := NewMockAssignmentRepository()
 	parcelUpdater := NewMockParcelLifecycleUpdater()
+	parcelUpdater.lastStatus = "ASSIGNED"
 	outboxWriter := &MockOutboxWriter{}
 
 	parcelID := uuid.New()
+	parcelUpdater.statusMap[parcelID] = "ASSIGNED"
 	asgn := domain.NewCourierAssignment(parcelID, uuid.New(), uuid.New(), "")
 	_ = asgnRepo.Create(ctx, nil, asgn)
 
@@ -238,6 +242,31 @@ func TestCancelAssignmentUseCase_Success(t *testing.T) {
 	}
 	if len(outboxWriter.events) != 1 || outboxWriter.events[0] != "courier.unassigned.v1" {
 		t.Errorf("expected courier.unassigned.v1 outbox event, got %v", outboxWriter.events)
+	}
+}
+
+func TestCancelAssignmentUseCase_ParcelNotAssigned(t *testing.T) {
+	ctx := context.Background()
+	txMgr := &MockTransactionManager{}
+	asgnRepo := NewMockAssignmentRepository()
+	parcelUpdater := NewMockParcelLifecycleUpdater()
+	outboxWriter := &MockOutboxWriter{}
+
+	parcelID := uuid.New()
+	parcelUpdater.statusMap[parcelID] = "OUT_FOR_DELIVERY"
+	asgn := domain.NewCourierAssignment(parcelID, uuid.New(), uuid.New(), "")
+	_ = asgnRepo.Create(ctx, nil, asgn)
+
+	uc := application.NewCancelAssignmentUseCase(txMgr, asgnRepo, parcelUpdater, outboxWriter)
+
+	err := uc.Execute(ctx, application.CancelAssignmentCommand{
+		ParcelID:    parcelID.String(),
+		CancelledBy: uuid.New().String(),
+		Reason:      "Courier already departed with package",
+	})
+
+	if !errors.Is(err, application.ErrInvalidParcelStatusForAssignment) {
+		t.Fatalf("expected ErrInvalidParcelStatusForAssignment, got: %v", err)
 	}
 }
 
