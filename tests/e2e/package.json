@@ -28,7 +28,7 @@
     "test:dispatcher-sync": "playwright test flows/13-dispatcher-cross-portal-sync.spec.ts --project=dispatcher-board",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "test:dry-run": "playwright test flows/dry-run.spec.ts",
+    "test:dry-run": "playwright test flows/dry-run.spec.ts --project=customer-portal --project=merchant-portal --project=dispatcher-board --project=courier-pwa --project=admin-portal",
     "test:webhook": "npm --prefix mock-webhook test",
     "start": "npm --prefix mock-webhook start",
     "start:webhook": "npm --prefix mock-webhook start",
