@@ -390,6 +390,9 @@ func (s *Store) ListAudit(ctx context.Context, f application.AuditFilter, offset
 		}
 		a.ActorID, a.Reason, a.RequestID = strPtr(actorID), strPtr(reason), strPtr(requestID)
 		a.Before, a.After = legacySnapshots(before, after, metadata)
+		if a.Reason == nil {
+			a.Reason = reasonFromSnapshot(a.After)
+		}
 		out = append(out, a)
 	}
 	return out, total, mapPG(rows.Err())
@@ -414,6 +417,19 @@ func legacySnapshots(before, after, metadata []byte) (json.RawMessage, json.RawM
 			prev[strings.TrimPrefix(k, "previous_")] = v
 		case strings.HasPrefix(k, "new_"):
 			next[strings.TrimPrefix(k, "new_")] = v
+		case k == "previous":
+			// The merchants module keeps its snapshots as nested objects under "previous" and "new".
+			if m, ok := v.(map[string]any); ok {
+				for kk, vv := range m {
+					prev[kk] = vv
+				}
+			}
+		case k == "new":
+			if m, ok := v.(map[string]any); ok {
+				for kk, vv := range m {
+					next[kk] = vv
+				}
+			}
 		}
 	}
 	var b, a json.RawMessage
@@ -424,6 +440,22 @@ func legacySnapshots(before, after, metadata []byte) (json.RawMessage, json.RawM
 		a, _ = json.Marshal(next)
 	}
 	return b, a
+}
+
+// reasonFromSnapshot returns the "reason" held in an after snapshot, for rows whose module stored
+// the reason there instead of in the reason column. It returns nil when there is none.
+func reasonFromSnapshot(after json.RawMessage) *string {
+	if len(after) == 0 {
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal(after, &m) != nil {
+		return nil
+	}
+	if r, ok := m["reason"].(string); ok && strings.TrimSpace(r) != "" {
+		return &r
+	}
+	return nil
 }
 
 func strPtr(n sql.NullString) *string {

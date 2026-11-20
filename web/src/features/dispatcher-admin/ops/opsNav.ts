@@ -75,11 +75,11 @@ export const OPS_NAV: OpsNavItem[] = [
     path: '/ops/merchants',
     label: 'Merchants',
     title: 'Merchants',
-    description: 'Merchant applications: approve, reject, suspend, reinstate or disable.',
+    description: 'Every merchant account and its status. Open one to approve, reject, suspend, reinstate or disable it.',
     icon: Store,
     group: 'Operations',
     roles: ADMIN_ONLY,
-    built: false,
+    built: true,
   },
   {
     id: 'reports',
@@ -123,7 +123,7 @@ export const OPS_NAV: OpsNavItem[] = [
     icon: Receipt,
     group: 'Administration',
     roles: ADMIN_ONLY,
-    built: false,
+    built: true,
   },
   {
     id: 'settings',

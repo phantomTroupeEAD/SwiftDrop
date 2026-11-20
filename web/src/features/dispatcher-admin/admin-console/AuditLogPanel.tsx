@@ -23,8 +23,8 @@ const ANY = 'ANY';
 
 // The actions and target types the platform writes today. The server accepts any valid name,
 // so a new action can still be filtered once this list learns about it.
-const ACTIONS = ['ZONE_CREATED', 'ZONE_UPDATED', 'ZONE_ENABLED', 'ZONE_DISABLED', 'SETTING_CHANGED', 'USER_ROLE_UPDATED', 'USER_STATUS_UPDATED'];
-const TARGET_TYPES = ['ZONE', 'SETTING', 'USER'];
+const ACTIONS = ['ZONE_CREATED', 'ZONE_UPDATED', 'ZONE_ENABLED', 'ZONE_DISABLED', 'SETTING_CHANGED', 'USER_ROLE_UPDATED', 'USER_STATUS_UPDATED', 'MERCHANT_APPROVED', 'MERCHANT_REJECTED', 'MERCHANT_SUSPENDED', 'MERCHANT_REINSTATED', 'MERCHANT_DISABLED'];
+const TARGET_TYPES = ['ZONE', 'SETTING', 'USER', 'MERCHANT'];
 const ACTOR_ROLES = ['ADMIN', 'DISPATCHER', 'COURIER', 'MERCHANT', 'CUSTOMER', 'SYSTEM'];
 const TARGET_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 
