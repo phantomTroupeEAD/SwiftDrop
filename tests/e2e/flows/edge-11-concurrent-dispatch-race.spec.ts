@@ -30,25 +30,23 @@ test.describe.serial('Edge Suite 11: Concurrent Dispatch Assignment Race & Row-L
   const CORE_API = 'http://localhost:8080/api/v1';
 
   const ACTORS = {
-    DISPATCHER_1: { email: 'dispatcher@swiftdrop.local', password: 'Dispatcher123!' },
-    DISPATCHER_2: { email: 'dispatcher2@swiftdrop.local', password: 'Dispatcher123!' },
+    DISPATCHER: { email: 'dispatcher@swiftdrop.local', password: 'Dispatcher123!' },
+    ADMIN: { email: 'admin@swiftdrop.local', password: 'AdminPassword123!' },
     COURIER_1: {
       id: '018f4a7c-1003-7000-8000-000000000003',
-      code: 'CR-0012',
+      code: 'CR-0001',
       email: 'courier@swiftdrop.local',
       password: 'CourierPassword123!',
     },
     COURIER_2: {
-      id: '018f4a7c-1003-7000-8000-000000000099',
-      code: 'CR-0099',
-      email: 'courier2@swiftdrop.local',
-      password: 'CourierPassword123!',
+      id: '018f4a7c-1007-7000-8000-000000000007',
+      code: 'CR-0002',
     },
     CUSTOMER: { email: 'customer@swiftdrop.local', password: 'CustomerPassword123!' },
   };
 
-  let disp1Token = '';
-  let disp2Token = '';
+  let dispToken = '';
+  let adminToken = '';
   let customerToken = '';
   let courier1Token = '';
 
@@ -124,8 +122,8 @@ test.describe.serial('Edge Suite 11: Concurrent Dispatch Assignment Race & Row-L
   }
 
   test.beforeAll(async () => {
-    disp1Token = await apiLogin(ACTORS.DISPATCHER_1.email, ACTORS.DISPATCHER_1.password);
-    disp2Token = await apiLogin(ACTORS.DISPATCHER_2.email, ACTORS.DISPATCHER_2.password);
+    dispToken = await apiLogin(ACTORS.DISPATCHER.email, ACTORS.DISPATCHER.password);
+    adminToken = await apiLogin(ACTORS.ADMIN.email, ACTORS.ADMIN.password);
     customerToken = await apiLogin(ACTORS.CUSTOMER.email, ACTORS.CUSTOMER.password);
     courier1Token = await apiLogin(ACTORS.COURIER_1.email, ACTORS.COURIER_1.password);
   });
@@ -140,33 +138,33 @@ test.describe.serial('Edge Suite 11: Concurrent Dispatch Assignment Race & Row-L
     expect(statusBefore).toBe('CREATED');
 
     console.log('[EDGE-11] ⚡ Firing simultaneous assignment requests for Courier 1 and Courier 2...');
-    // Dispatcher 1 attempts to assign to Courier 1
+    // Dispatcher attempts to assign to Courier 1
     const assignRequest1 = fetch(`${CORE_API}/dispatch/assignments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${disp1Token}`,
+        Authorization: `Bearer ${dispToken}`,
         'Idempotency-Key': randomUUID(),
       },
       body: JSON.stringify({
         parcel_id: parcel.id,
         courier_id: ACTORS.COURIER_1.id,
-        notes: 'Assigned by Dispatcher 1 in race test',
+        notes: 'Assigned by Dispatcher in race test',
       }),
     });
 
-    // Dispatcher 2 attempts to assign to Courier 2
+    // Admin attempts to assign to Courier 2
     const assignRequest2 = fetch(`${CORE_API}/dispatch/assignments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${disp2Token}`,
+        Authorization: `Bearer ${adminToken}`,
         'Idempotency-Key': randomUUID(),
       },
       body: JSON.stringify({
         parcel_id: parcel.id,
         courier_id: ACTORS.COURIER_2.id,
-        notes: 'Assigned by Dispatcher 2 in race test',
+        notes: 'Assigned by Admin in race test',
       }),
     });
 
@@ -218,7 +216,7 @@ test.describe.serial('Edge Suite 11: Concurrent Dispatch Assignment Race & Row-L
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${disp1Token}`,
+        Authorization: `Bearer ${dispToken}`,
         'Idempotency-Key': randomUUID(),
       },
       body: JSON.stringify({
@@ -235,7 +233,7 @@ test.describe.serial('Edge Suite 11: Concurrent Dispatch Assignment Race & Row-L
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${disp1Token}`,
+        Authorization: `Bearer ${dispToken}`,
       },
       body: JSON.stringify({ reason: 'Customer requested address correction' }),
     });
