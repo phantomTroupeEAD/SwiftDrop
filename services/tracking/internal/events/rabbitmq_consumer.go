@@ -593,6 +593,61 @@ func (c *RabbitMQConsumer) ProcessDelivery(ctx context.Context, d AMQPDelivery) 
 		statusHistoryID = strings.TrimSpace(statusPayload.StatusHistoryID)
 		occurredAt = statusPayload.OccurredAt
 
+		// Fallback resolution if tracking_number is missing (e.g. Member 3 dispatch/delivery payload format)
+		if trackingNumber == "" {
+			if parcelID == "" {
+				var raw map[string]any
+				if err := json.Unmarshal(env.Payload, &raw); err == nil {
+					if p, ok := raw["parcel_id"].(string); ok {
+						parcelID = p
+					}
+				}
+			}
+			if parcelID != "" {
+				if resolver, ok := c.repo.(interface {
+					ResolveParcelStatusEvent(context.Context, string) (string, string, string, time.Time, error)
+				}); ok {
+					if tn, st, histID, occ, err := resolver.ResolveParcelStatusEvent(ctx, parcelID); err == nil {
+						if trackingNumber == "" {
+							trackingNumber = tn
+						}
+						if status == "" {
+							status = st
+						}
+						if (statusHistoryID == "" || !uuidRegex.MatchString(statusHistoryID)) && histID != "" && uuidRegex.MatchString(histID) {
+							statusHistoryID = histID
+						}
+						if occurredAt.IsZero() {
+							occurredAt = occ
+						}
+					}
+				}
+			}
+
+			// Status fallback from event type if status remains empty
+			if status == "" {
+				switch env.EventType {
+				case "parcel.assigned.v1":
+					status = "ASSIGNED"
+				case "parcel.picked_up.v1":
+					status = "PICKED_UP"
+				case "parcel.in_transit.v1":
+					status = "IN_TRANSIT"
+				case "parcel.out_for_delivery.v1":
+					status = "OUT_FOR_DELIVERY"
+				case "parcel.delivered.v1":
+					status = "DELIVERED"
+				case "parcel.failed.v1", "parcel.delivery_failed.v1":
+					status = "ATTEMPT_FAILED"
+				}
+			}
+
+			// Fallback status_history_id to valid envelope event_id if still unpopulated for Member 3 events
+			if (statusHistoryID == "" || !uuidRegex.MatchString(statusHistoryID)) && uuidRegex.MatchString(env.EventID) {
+				statusHistoryID = env.EventID
+			}
+		}
+
 		// Authoritative contract: status_history_id must be a valid UUID for lifecycle transitions
 		if statusHistoryID == "" || !uuidRegex.MatchString(statusHistoryID) {
 			c.logger.Warn("rejecting status change event missing valid status_history_id to DLQ",

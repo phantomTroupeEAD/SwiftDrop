@@ -86,6 +86,14 @@ test.describe('Flow 4: Public Tracking & AI Assistant Grounding E2E Flow', () =>
       });
     });
 
+    await customerPage.route('**/api/v1/parcels', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [] }),
+      });
+    });
+
     await customerPage.route('**/api/v1/ai/chat', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({
@@ -145,6 +153,11 @@ test.describe('Flow 4: Public Tracking & AI Assistant Grounding E2E Flow', () =>
 
     await customerPage.goto('/portal/dashboard');
 
+    // Open AI Assistant drawer/panel
+    const assistantOpenBtn = customerPage.locator(testId(SELECTORS.AI_ASSISTANT.OPEN_BTN));
+    await expect(assistantOpenBtn).toBeVisible();
+    await assistantOpenBtn.click();
+
     const assistantPanel = customerPage.locator(testId(SELECTORS.AI_ASSISTANT.PANEL));
     await expect(assistantPanel).toBeVisible();
 
@@ -158,7 +171,7 @@ test.describe('Flow 4: Public Tracking & AI Assistant Grounding E2E Flow', () =>
     await expect(customerPage.getByText('estimated Standard delivery fee is 500 LKR')).toBeVisible();
 
     // Verify Deep-link to Booking
-    const bookingLink = customerPage.getByRole('link', { name: 'Continue to booking' });
-    await expect(bookingLink).toBeVisible();
+    const bookingBtn = customerPage.locator(testId('ai-action-btn-book'));
+    await expect(bookingBtn).toBeVisible();
   });
 });

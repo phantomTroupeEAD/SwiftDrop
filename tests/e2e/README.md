@@ -70,7 +70,9 @@ npx playwright install chromium
 
 | Command | Environment | Description |
 | :--- | :---: | :--- |
+| **`npm run test:12-users`** | Real Stack | **12-User Cross-Module Real-World Workflow Automation Suite:** Master 5-step serial journey executing all 12 distinct actors across all 6 roles (3 Customers, 2 Merchants, 3 Couriers, 2 Dispatchers, 1 Admin, 1 Public Guest) across the full parcel lifecycle. |
 | **`npm run test:rbac-matrix`** | Real Stack | **Master Every-Button & Strict 6-Role RBAC Matrix Suite:** Exercises every UI button, modal, canvas, toggle, and external link across Courier PWA and Admin/Ops Console, synchronized with DB state, followed by strict 6-role privilege enforcement ("no less, no more"). |
+| **`npm run test:admin-ops`** | Real Stack | **Master Admin Operations E2E Suite (Flow 14):** Validates PR #99 Admin UI Part 2: Merchants management (/ops/merchants, review, approval, suspend with reason validation, reinstate, disable), audit log integration, pricing rules management (/ops/pricing fallback & CRUD), and users pagination controls (/ops/users). |
 | **`npm run test:traffic`** | Real Stack | **Concurrent 6-Role System Load Simulation:** Multi-browser concurrent load across PUBLIC (SSE stream), CUSTOMER (parallel bookings), MERCHANT (CSV ingestion), DISPATCHER (zone assignment), COURIER (mobile POD), and ADMIN. |
 | **`npm run test:vulnerabilities`** | Real Stack | **Exhaustive Flaw & Vulnerability Audit Matrix:** 15 security scenarios auditing state machine bypass, cross-tenant IDOR, privilege escalation, JWT tampering, and boundary fuzzing. |
 | **`npm run test:live`** | Real Stack | **Master 5-Window Live System E2E** running against real Core API, live PostgreSQL DB, and physical daemons with zero route mocks. |
@@ -114,6 +116,8 @@ tests/e2e/
 │   └── evidence.ts                # Automated full-page screenshot & .zip trace bundler for grading
 │
 ├── flows/                         # End-to-End Journey Specifications
+│   ├── real-system-12-user-workflows.spec.ts # Master 12-User Cross-Module Real-World Workflow Automation Suite (12 Distinct Actors, All 6 Roles)
+│   ├── real-world-12-user-workflows.spec.ts  # Canonical alias re-exporting real-system-12-user-workflows
 │   ├── realtime-orchestration.spec.ts # Master 5-Window Real-Time Lifecycle (Customer, Applicant->Merchant, Admin, Dispatcher, Courier)
 │   ├── realtime-auth-guardrails.spec.ts # Strict Security Guardrails (Courier IDOR, Tenant Isolation, RBAC, SEC-009)
 │   ├── dry-run.spec.ts            # Offline verification test (10/10 passed)
@@ -131,6 +135,7 @@ tests/e2e/
 │   ├── 09-merchant-webhook-dispatch-lifecycle.spec.ts # Flow 9: Merchant webhooks, event filtering combinations, multi-window dispatcher assignment & HMAC security
 │   ├── 12-dispatcher-portal-exhaustive.spec.ts # Flow 12: Exhaustive Dispatcher portal single-page suite (8 suites: zones, roster, unassign modal, reschedule modal, onboarding modal, retry)
 │   ├── 13-dispatcher-cross-portal-sync.spec.ts # Flow 13: Dispatcher & cross-portal live sync (zero mocks: shift toggle, real booking, assignment, unassign eviction, courier out-for-delivery)
+│   ├── 14-admin-ops-merchants-pricing.spec.ts  # Flow 14: Master Admin Ops Suite (Merchants CRUD & transitions, pricing rules, users pagination, audit log)
 │   ├── edge-01-booking-validation.spec.ts through edge-09-auth-security-and-edge-cases.spec.ts # Complete Edge Case Suite (9 Specs: Booking, Pricing, Fleet, Exceptions, CSV, Security, Tracking, AI, Auth)
 │   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
@@ -270,6 +275,7 @@ Total statements covered across all packages: **52.4% aggregate** with domain co
 
 | Spec File | Actors / Windows | Verified Flows & Invariants | Result |
 | :--- | :---: | :--- | :---: |
+| `real-system-12-user-workflows.spec.ts` | **12 Actors across All 6 Roles** (3 Customers, 2 Merchants, 3 Couriers, 2 Dispatchers, 1 Admin, 1 Public Guest) | Complete 5-step serial daily journey: multi-customer booking, real Mailpit signup, merchant API keys & webhooks, multi-order dispatch, courier shifts, door-to-door transit, digital signature POD, failure reason codes & reschedule recovery, admin audit logs, public tracking with SEC-009 PII masking | **PASSED** |
 | `realtime-orchestration.spec.ts` | **5 Windows** (Customer A, Applicant B $\rightarrow$ Merchant, Admin, Dispatcher, Courier) | Dynamic registration, booking wizard, merchant application, admin approval, webhook registration, dispatcher assignment, mobile courier run, digital signature POD, wire webhook receiver on `:9999` | **PASSED** |
 | `realtime-auth-guardrails.spec.ts` | Courier, Merchant, Customer, Public | Courier IDOR prevention (403), Merchant tenant isolation (403), RBAC dashboard navigation guards, SEC-009 public tracking PII masking | **PASSED** |
 | `01-customer-booking.spec.ts` | Customer Portal | Complete 4-step booking wizard, dynamic quote retrieval, booking confirmation | **PASSED** |

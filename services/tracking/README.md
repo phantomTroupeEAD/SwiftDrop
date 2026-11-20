@@ -40,3 +40,4 @@ The `tracking` service is a standalone read-optimized projection service designe
 | 2026-11-10 | Phase 3 | Authenticated Tracking REST API, HS256 JWT verification, customer & merchant ownership authorization | Member 5 |
 | 2026-11-10 | Phase 4 | Standalone SSE streaming infrastructure, heartbeat, reconnect, backpressure, event source abstraction | Member 5 |
 | 2026-11-10 | Phase 5 | Production RabbitMQ consumer (`q.tracking.updates`), Redis Pub/Sub (`tracking:updates`), `status_history_id` correlation, idempotency deduplicator, and live SSE integration | Member 5 |
+| 2026-11-20 | Phase 6 | Added PostgreSQL fallback resolution (`ResolveParcelStatusEvent`) in RabbitMQ consumer for cross-module live browser SSE tracking streams | Member 5 & Member 10 |

@@ -751,18 +751,25 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
         name: 'Colombo Central Depot',
         phone: '+94770000004',
         address: '42 Galle Road',
+        street_line_1: '42 Galle Road',
         city: 'Colombo',
         postal_code: '00100',
+        zone_id: 'ZONE_COLOMBO_01',
       },
       dropoff: {
         name: 'Nimal Fernando',
         phone: '+94770000005',
         address: '12 Peradeniya Road',
+        street_line_1: '12 Peradeniya Road',
         city: 'Kandy',
         postal_code: '20000',
+        zone_id: 'ZONE_KANDY_01',
       },
       parcel: {
         weight_kg: 2.5,
+        length_cm: 20,
+        width_cm: 15,
+        height_cm: 10,
         description: 'Electronic Gadgets and Components',
       },
     };
@@ -978,18 +985,25 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
         name: 'Colombo Central Depot',
         phone: '+94770000004',
         address: '42 Galle Road',
+        street_line_1: '42 Galle Road',
         city: 'Colombo',
         postal_code: '00100',
+        zone_id: 'ZONE_COLOMBO_01',
       },
       dropoff: {
         name: 'Sunil Jayasinghe',
         phone: '+94771234567',
         address: '88 Main Street',
+        street_line_1: '88 Main Street',
         city: 'Galle',
         postal_code: '80000',
+        zone_id: 'ZONE_GALLE_01',
       },
       parcel: {
         weight_kg: 1.25,
+        length_cm: 15,
+        width_cm: 10,
+        height_cm: 8,
         description: 'Cotton Fabric Samples',
       },
     };
@@ -1006,26 +1020,33 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
     const tracking2 = jsonOrder2.data.tracking_number;
     console.log(`[E2E] Order 2 Created: Tracking = ${tracking2}`);
 
-    // Batch Generation: Order 3 (Colombo to Kurunegala)
+    // Batch Generation: Order 3 (Colombo to Negombo)
     const order3Payload = {
-      merchant_reference: `E2E-REF-KURU-${timestamp}`,
+      merchant_reference: `E2E-REF-NEGOMBO-${timestamp}`,
       service_level: 'STANDARD',
       pickup: {
         name: 'Colombo Central Depot',
         phone: '+94770000004',
         address: '42 Galle Road',
+        street_line_1: '42 Galle Road',
         city: 'Colombo',
         postal_code: '00100',
+        zone_id: 'ZONE_COLOMBO_01',
       },
       dropoff: {
         name: 'Anoma Perera',
         phone: '+94719876543',
         address: '5 Temple Road',
-        city: 'Kurunegala',
-        postal_code: '60000',
+        street_line_1: '5 Temple Road',
+        city: 'Negombo',
+        postal_code: '11500',
+        zone_id: 'ZONE_NEGOMBO_01',
       },
       parcel: {
         weight_kg: 3.8,
+        length_cm: 25,
+        width_cm: 20,
+        height_cm: 15,
         description: 'Household Appliances - Electric Kettle',
       },
     };

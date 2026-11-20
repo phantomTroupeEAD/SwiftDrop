@@ -6,8 +6,8 @@ import { SELECTORS, testId } from '../helpers/selectors';
  *
  * Edge cases covered:
  * 1. Delivery Attempt Failure Classification: Driver logs failure reason (e.g. RECIPIENT_UNAVAILABLE),
- *    which shifts task card to ATTEMPT_FAILED error state.
- * 2. Mandatory Signature Input Validation: POD modal requires signature text before confirming delivery.
+ *    which records failed attempt and updates status notice.
+ * 2. Cancellation of record delivery form without state loss: form closes cleanly on "Close details".
  *
  * Owned by: Member 10 (Cross-Workflow Quality Coordination)
  */
@@ -50,6 +50,41 @@ test.describe('Suite 4: Courier Mobile Delivery Exceptions Edge Cases', () => {
         }),
       });
     });
+
+    await courierPage.route('**/api/v1/courier/parcels', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            {
+              parcel_id: 'p0010000-0000-0000-0000-000000000001',
+              tracking_number: 'SD-20261030-99801',
+              current_status: 'OUT_FOR_DELIVERY',
+              recipient_name: 'Kasun Wickramasinghe',
+              recipient_phone: '+94771234567',
+              delivery_street: '42 Galle Road',
+              delivery_city: 'Colombo',
+              attempt_count: 0,
+            },
+          ],
+        }),
+      });
+    });
+
+    await courierPage.route('**/api/v1/deliveries/**/failed', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            parcel_status: 'ATTEMPT_FAILED',
+            attempt_number: 1,
+            is_terminal: false,
+          },
+        }),
+      });
+    });
   });
 
   test('Edge 4.1: Driver records delivery attempt failure with specific reason code', async ({
@@ -61,26 +96,30 @@ test.describe('Suite 4: Courier Mobile Delivery Exceptions Edge Cases', () => {
     await courierPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
     await courierPage.goto('/courier/dashboard');
+    await expect(courierPage.getByRole('heading', { name: 'Delivery tasks' })).toBeVisible();
 
-    // Click "Failed Attempt" on the parcel in OUT_FOR_DELIVERY status
-    const failedAttemptBtn = courierPage.getByRole('button', { name: 'Failed Attempt' }).first();
+    // Click "Report failed attempt" on the parcel in OUT_FOR_DELIVERY status
+    const failedAttemptBtn = courierPage.getByRole('button', { name: 'Report failed attempt' }).first();
     await expect(failedAttemptBtn).toBeVisible();
     await failedAttemptBtn.click();
 
-    // Verify modal appears
-    await expect(courierPage.getByText('Record Delivery Attempt Failure')).toBeVisible();
+    // Verify inline failure form appears
+    await expect(courierPage.getByText('Reason')).toBeVisible();
 
     // Select failure reason
-    const reasonSelect = courierPage.getByRole('combobox');
+    const reasonSelect = courierPage.locator('select[name="reason"]');
     await expect(reasonSelect).toBeVisible();
-    await reasonSelect.selectOption('SECURITY_ACCESS_DENIED');
+    await reasonSelect.selectOption('ACCESS_RESTRICTED');
+
+    // Fill notes
+    await courierPage.locator('input[name="notes"]').fill('Gate security refused entry without gate pass');
 
     // Submit failure log
-    await courierPage.getByRole('button', { name: 'Log Attempt & Reschedule' }).click();
+    await courierPage.getByRole('button', { name: 'Save attempt' }).click();
 
-    // Invariant: Task shifts to ATTEMPT_FAILED status badge
-    await expect(courierPage.getByText('ATTEMPT FAILED').first()).toBeVisible();
-    await expect(courierPage.getByText('Attempt Failed: SECURITY_ACCESS_DENIED')).toBeVisible();
+    // Invariant: Success notice displayed
+    await expect(courierPage.getByRole('heading', { name: 'Failed attempt recorded' })).toBeVisible();
+    await expect(courierPage.getByText(/Attempt #1 logged/i)).toBeVisible();
   });
 
   test('Edge 4.2: POD modal allows cancellation without corrupting stop status', async ({
@@ -92,19 +131,20 @@ test.describe('Suite 4: Courier Mobile Delivery Exceptions Edge Cases', () => {
     await courierPage.locator(testId(SELECTORS.AUTH.BTN_LOGIN)).click();
 
     await courierPage.goto('/courier/dashboard');
+    await expect(courierPage.getByRole('heading', { name: 'Delivery tasks' })).toBeVisible();
 
-    // Open POD modal
-    const capturePodBtn = courierPage.getByRole('button', { name: 'Capture POD' }).first();
-    await expect(capturePodBtn).toBeVisible();
-    await capturePodBtn.click();
+    // Open delivery record panel
+    const recordDeliveryBtn = courierPage.getByRole('button', { name: 'Record delivery' }).first();
+    await expect(recordDeliveryBtn).toBeVisible();
+    await recordDeliveryBtn.click();
 
-    await expect(courierPage.getByText('Capture Proof of Delivery (POD)')).toBeVisible();
+    await expect(courierPage.getByText('Recipient name')).toBeVisible();
 
-    // Click Cancel
-    await courierPage.getByRole('button', { name: 'Cancel' }).click();
+    // Click Close details
+    await courierPage.getByRole('button', { name: 'Close details' }).click();
 
-    // Invariant: Modal closes and parcel remains in OUT_FOR_DELIVERY status
-    await expect(courierPage.getByText('Capture Proof of Delivery (POD)')).not.toBeVisible();
-    await expect(capturePodBtn).toBeVisible();
+    // Invariant: Panel closes and parcel remains in OUT_FOR_DELIVERY status with buttons visible
+    await expect(courierPage.getByText('Recipient name')).not.toBeVisible();
+    await expect(recordDeliveryBtn).toBeVisible();
   });
 });

@@ -528,6 +528,7 @@ test.describe('Flow 10: Exhaustive Merchant Portal API Key Lifecycle & Security 
         address: '42 Galle Road',
         city: 'Colombo',
         postal_code: '00100',
+        zone_id: 'ZONE_COLOMBO_01',
       },
       dropoff: {
         name: 'Kasun Wickramasinghe',
@@ -535,9 +536,13 @@ test.describe('Flow 10: Exhaustive Merchant Portal API Key Lifecycle & Security 
         address: '15 Kandy Road',
         city: 'Kandy',
         postal_code: '20000',
+        zone_id: 'ZONE_KANDY_01',
       },
       parcel: {
         weight_kg: 2.0,
+        length_cm: 20,
+        width_cm: 15,
+        height_cm: 10,
         description: 'Commercial Hardware Parts',
       },
     };

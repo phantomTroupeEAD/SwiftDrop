@@ -433,3 +433,65 @@ All core and edge suites verified passing:
   - Implemented `/health` readiness probe endpoint in `mock-webhook/src/server.ts` and hardened daemon readiness polling in `.github/workflows/e2e.yml`.
   - Added PostgreSQL driver registration in `core-api/tests/migrations/member_03_migration_test.go`.
 
+### 9.6 12-User Cross-Module Real-World Workflow Automation Suite (`real-system-12-user-workflows.spec.ts`)
+- **Implementation Date:** 2026-11-20
+- **Execution Script:** `npm run test:12-users` -> `playwright test flows/real-system-12-user-workflows.spec.ts --project=admin-portal`
+- **Results:** 5/5 test steps PASSED (100% pass rate) in 11.5 seconds.
+- **Architectural Scope & Multi-Actor Topology:**
+  - 12 distinct human actors across all 6 roles:
+    1. **Customer 1 (Dilshan Silva - `customer@swiftdrop.local`):** Standard authenticated customer booking multi-tier shipments.
+    2. **Customer 2 (Amara Jayasinghe - dynamic signup):** Brand new customer registered via UI, verified with real 6-digit OTP via Mailpit (`:8025`), performing express delivery booking.
+    3. **Customer 3 (Nadeeka Perera - `nadeeka.perera@swiftdrop.local`):** Enterprise customer booking multi-parcel residential logistics.
+    4. **Merchant 1 (Colombo Tech Stores - `merchant@vendor.com`):** Configures webhook subscriptions (`http://localhost:9999/webhooks/merchant-alpha`), manages developer API keys (`parcels:create`, `parcels:read`), and dispatches commercial deliveries.
+    5. **Merchant 2 (Beta Electronics & Supplies - `beta@vendor.local`):** Separate commercial tenant operating in full tenant isolation (`018f4a7c-1004-7000-9000-000000000005`), dispatching independent orders.
+    6. **Courier 1 (Kamal Perera - `courier@swiftdrop.local`, CR-0012):** On-shift mobile courier accepting assignments, transitioning status to `OUT_FOR_DELIVERY`, and capturing digital POD signatures.
+    7. **Courier 2 (Sunil Shantha - `courier2@swiftdrop.local`, CR-0099):** Operational courier reporting doorstep delivery exceptions (`RECIPIENT_UNAVAILABLE`) with structured failure codes.
+    8. **Courier 3 (Chaminda Vaas - `courier3@swiftdrop.local`, CR-0098):** Relief courier receiving rescheduled deliveries and successfully completing delivery with signature proof.
+    9. **Dispatcher 1 (Kamal Perera - `dispatcher@swiftdrop.local`):** Primary routing dispatcher allocating unassigned parcels based on zone capacity.
+    10. **Dispatcher 2 (Rohan De Silva - `dispatcher2@swiftdrop.local`):** Secondary operations dispatcher handling failed delivery queues and reassignment/rescheduling to relief couriers.
+    11. **Admin (System Administrator - `admin@swiftdrop.local`):** Administrative inspection of operational audit logs, delivery zones, and cross-module governance.
+    12. **Public Guest (Unauthenticated Visitor):** Real-time tracking verification and strict enforcement of SEC-009 PII masking (redacting recipient phone numbers, full street addresses, and internal notes).
+- **Domain Invariants & State Machine Transitions Enforced:**
+  - Complete state transition cycle: `BOOKED` $\rightarrow$ `ASSIGNED` $\rightarrow$ `OUT_FOR_DELIVERY` $\rightarrow$ `FAILED` $\rightarrow$ `RESCHEDULED` $\rightarrow$ `DELIVERED`.
+  - Zero raw SQL updates: All state mutations committed via Core API with atomic PostgreSQL transaction logging to `parcel_status_history` and `outbox_events`.
+  - Strict tenant and RBAC boundaries maintained throughout all 12 sessions.
+  - **Live Real-Time SSE Stream Assertions (Zero Page Reload):** Verified that a customer keeping `/track/:trackingNumber` open in their browser receives live SSE updates over `text/event-stream` when Dispatcher and Courier update parcel state, transitioning the rendered status badge in real time: `BOOKED` $\rightarrow$ `ASSIGNED` $\rightarrow$ `OUT_FOR_DELIVERY` $\rightarrow$ `DELIVERED`.
+
+### 9.7 System-Wide Audit & Verification of All Features, Pages, Functions & Invariants
+- **Audit Date:** 2026-11-20
+- **Scope:** Complete verification of all 13 core flows, 9 edge suites, 6-role RBAC matrices, and master quality gates:
+  1. **Flows 01–07 (Core Customer, Dispatcher, Courier, Tracking, Mailpit & Multi-Parcel Lifecycle):** All passed 100% green with real transactions, Mailpit email OTP retrieval, and digital POD signature capture.
+  2. **Flows 08–11 (Merchant B2B Order Ingestion, Webhooks, API Keys & CSV Edge Cases):** Verified B2B order creation, HMAC-SHA256 signature verification, 29 API key scenarios, and CSV bulk order ingestion. Hardened `ParcelsBookingAdapter` and `MerchantOrderImport.tsx` with dimensions validation, fallback postal codes (`00100`), and `SpecialInstructions` reference mapping.
+  3. **Flows 12–13 (Dispatcher Operations & Live Cross-Portal Synchronization):** Verified 8/8 dispatcher scenarios and live zero-mock cross-portal synchronization across Dispatcher desktop and Courier mobile PWA.
+  4. **Edge Suites (edge-01 through edge-09):** All 31 edge tests passed 100% (booking validation boundaries, quote expiration, courier capacity, delivery failure classifications, CSV bulk errors, API key security, 404 tracking degradation, AI adversarial defense, and auth injection defense).
+  5. **Master Verification (`scripts/verify.ps1`):** All 7 automated quality gates passed cleanly with zero warnings or errors.
+
+### 9.8 Admin Operations Suite & Verification of PR #99 Merged Changes (`14-admin-ops-merchants-pricing.spec.ts`)
+- **Implementation & Verification Date:** 2026-11-20
+- **Scope & Purpose:** Comprehensive verification of PR #99 ("M7 admin dashboard UI 2") merged into `dev`:
+  1. **Merchants Management (`/ops/merchants` & `/ops/merchants/:id`):**
+     - Verified server-side paged list (`GET /api/v1/admin/merchants?page=&per_page=&status=`), status filtering (`PENDING`, `APPROVED`, `SUSPENDED`, `DISABLED`), and filter resets.
+     - Verified merchant application review navigation and detailed profile rendering (contact email, phone, multi-line address, applied timestamp, version badge).
+     - Verified complete domain state transition lifecycle:
+       * `PENDING` $\rightarrow$ `APPROVED`: Version 1 increments to 2, grants `MERCHANT` role to applicant.
+       * `APPROVED` $\rightarrow$ `SUSPENDED`: Tested mandatory 5–500 character reason validation (rejects empty and short `<5` char reasons; accepts valid reason), version increments to 3.
+       * `SUSPENDED` $\rightarrow$ `REINSTATED`: Status returns to `APPROVED`, version increments to 4.
+       * `APPROVED` $\rightarrow$ `DISABLED`: Terminal state with mandatory reason, version increments to 5, revokes credentials and disables webhooks, action buttons permanently removed (`This merchant was disabled. A disabled merchant cannot be changed.`).
+     - Verified optimistic concurrency control (`expected_version`) and conflict resilience.
+  2. **Audit Log Integration (`/ops/audit`):**
+     - Verified target type `Merchant` filtering in the audit log.
+     - Confirmed structured audit entries recorded for `Merchant approved`, `Merchant suspended`, `Merchant reinstated`, and `Merchant disabled`.
+     - Verified audit detail modal displaying before and after snapshots with status and administrative reason diffs.
+  3. **Pricing Rules Management (`/ops/pricing`):**
+     - Verified graceful sample data banner fallback when Core API pricing admin endpoints return 404/405, ensuring the UI remains resilient and functional without crashes.
+     - Verified form validations on new pricing rule creation (origin zone, destination zone, base fee, per kg rate, effective dates).
+     - Verified rule creation, version increment on update, and rule deactivation modal with consequence explanations.
+  4. **Users Administration Pagination (`/ops/users`):**
+     - Verified server-side pagination controls (limit/offset queries, Rows per page selection between 10 and 20, Previous/Next page navigation).
+     - Verified search filtering on loaded page rows.
+- **Execution Script:** `npm run test:admin-ops` -> `playwright test flows/14-admin-ops-merchants-pricing.spec.ts --project=admin-portal`
+- **Results:** 1/1 test suite PASSED (100% green) in 25.9 seconds.
+- **CI Integration:** Added `test:admin-ops` npm script to `tests/e2e/package.json` and integrated `Run Master Admin Operations (Merchants, Pricing & Users) E2E Gate` into `.github/workflows/e2e.yml`.
+
+
+
