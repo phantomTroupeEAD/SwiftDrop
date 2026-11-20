@@ -190,6 +190,7 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `admin-zone-conflict`, `admin-zone-conflict-keep-btn`, `admin-zone-conflict-discard-btn` | Version conflict while editing a zone: notice, keep my changes on the latest version, discard my changes |
 | `admin-zone-status-conflict`, `admin-zone-status-conflict-continue-btn`, `admin-zone-status-conflict-close-btn` | Version conflict while enabling or disabling a zone |
 | `admin-users-table`, `admin-users-search`, `admin-users-role-filter` | User list, search and role filter |
+| `admin-users-summary`, `admin-users-per-page`, `admin-users-prev-btn`, `admin-users-next-btn` | User list paging: "Showing a–b of N users", rows per page, previous and next (server `limit`/`offset`) |
 | `admin-user-role-btn`, `admin-user-reactivate-btn`, `admin-user-suspend-btn`, `admin-user-self-badge` | User row actions (repeated per row). The signed-in admin's own row shows the self badge instead of Change role and Suspend |
 | `admin-user-role-dialog`, `admin-user-role-select`, `admin-user-role-save-btn` | Change role dialog |
 | `admin-user-suspend-dialog`, `admin-user-suspend-confirm-btn` | Suspend confirmation |
@@ -230,6 +231,22 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `failed-empty`, `failed-empty-reset-btn`, `failed-error` | Empty state (none, or none match), its Reset button, error with reference id and Retry |
 | `failed-history-dialog`, `failed-history-item` | Attempts window and one item per attempt (repeated) |
 | `failed-retry-context` | Last failure reason and note shown in the retry window (the window itself uses the `dispatch-assign-*` ids) |
+| `merchants-filters`, `merchants-filter-status`, `merchants-reset-btn`, `merchants-refresh-btn` | Merchant list: status filter (sent to the server), Reset, refresh |
+| `merchants-table`, `merchants-row`, `merchants-view-btn`, `merchants-summary` | Table, one row per merchant (repeated), View button (repeated), "Showing a–b of N" line |
+| `merchants-per-page`, `merchants-prev-btn`, `merchants-next-btn` | Rows per page (10/20/50/100), previous and next page |
+| `merchants-empty`, `merchants-empty-reset-btn`, `merchants-error` | Empty state (none, or none match), its Reset button, load error with reference id and Retry |
+| `merchants-detail-title`, `merchants-back-link`, `merchants-detail`, `merchants-detail-refresh-btn` | Merchant page: title (business name), back to the list, details list, refresh |
+| `merchants-status`, `merchants-version`, `merchants-no-actions`, `merchants-notice` | Status badge, "Version n", text when no change is possible, success message |
+| `merchants-action-approve-btn`, `-reject-btn`, `-suspend-btn`, `-reinstate-btn`, `-disable-btn` (prefix `merchants-action-`) | One button per change the status allows |
+| `merchants-action-dialog`, `merchants-action-consequence`, `merchants-action-reason`, `merchants-reason-count`, `merchants-action-confirm-btn` | Confirm window, what will happen, reason box (reject, suspend, disable only), "n / 500", confirm. Reason error: `#merchants-reason-error` |
+| `merchants-action-conflict`, `merchants-action-error`, `merchants-detail-error` | Someone else changed the merchant (keeps the typed reason); other error with reference id; page load error ("No merchant has this id." for a 404) |
+| `pricing-sample-banner` | "Sample data" warning, shown only while the screen uses the in-memory sample API |
+| `pricing-filters`, `pricing-filter-origin`, `pricing-filter-destination`, `pricing-filter-status`, `pricing-reset-btn`, `pricing-refresh-btn` | Pricing filters (From zone, To zone, Active/Inactive/both), Reset, refresh |
+| `pricing-table`, `pricing-row`, `pricing-summary`, `pricing-per-page`, `pricing-prev-btn`, `pricing-next-btn` | Rules table, one row per rule (repeated), "Showing a–b of N", paging |
+| `pricing-add-btn`, `pricing-empty-add-btn`, `pricing-edit-btn`, `pricing-deactivate-btn` | Add rule (header and empty state), Change and Deactivate (repeated per active rule) |
+| `pricing-empty`, `pricing-empty-reset-btn`, `pricing-error` | Empty state (none, or none match), its Reset button, load error with reference id and Retry |
+| `pricing-form-dialog`, `pricing-form-origin`, `pricing-form-destination`, `pricing-form-base`, `pricing-form-perkg`, `pricing-form-from`, `pricing-form-until`, `pricing-form-save-btn`, `pricing-form-route`, `pricing-form-error` | Add/Change window. The route is a fixed line (`pricing-form-route`) when changing. Field errors: `#pricing-origin-error`, `#pricing-destination-error`, `#pricing-base-error`, `#pricing-perkg-error`, `#pricing-from-error`, `#pricing-until-error` |
+| `pricing-deactivate-dialog`, `pricing-deactivate-consequence`, `pricing-deactivate-confirm-btn`, `pricing-deactivate-error`, `pricing-stale-reload-btn` | Deactivate window, its consequence text, confirm, error, and "Close and reload the list" after a conflict |
 
 ## Ops workspace shell (Member 7)
 

@@ -9,8 +9,8 @@ export interface UserList {
   total: number;
 }
 
-export async function listUsers(token: string | null, role: Role | undefined, limit = 50): Promise<UserList> {
-  const q = new URLSearchParams({ limit: String(limit) });
+export async function listUsers(token: string | null, role: Role | undefined, limit = 50, offset = 0): Promise<UserList> {
+  const q = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (role) q.set('role', role);
   const res = await request<{ data: { items?: User[]; total?: number } }>(token, 'GET', `/api/v1/admin/users?${q.toString()}`);
   const users = res.data.items ?? [];

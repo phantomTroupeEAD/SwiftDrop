@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Hammer, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
@@ -11,6 +11,9 @@ import { Banner } from '../admin-console/ui';
 import { DispatchBoardPanel } from '../dispatch/DispatchBoardPanel';
 import { FailedDeliveriesPanel } from '../failed/FailedDeliveriesPanel';
 import { FleetPanel } from '../fleet/FleetPanel';
+import { MerchantDetailPage } from '../merchants/MerchantDetailPage';
+import { MerchantsPanel } from '../merchants/MerchantsPanel';
+import { PricingPanel } from '../pricing/PricingPanel';
 import { ReportsPanel } from '../reports/ReportsPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
 import { OPS_NAV, homePathFor, isOpsRole } from './opsNav';
@@ -138,6 +141,33 @@ export function FleetPage() {
       <PageHeader title={item.title} description={item.description} />
       {banner}
       <FleetPanel token={accessToken} canListUsers={user?.role === 'ADMIN'} onNotice={show} />
+    </>
+  );
+}
+
+export function MerchantsPage() {
+  const { accessToken } = useAuth();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const item = navItem('merchants');
+  if (id) return <MerchantDetailPage token={accessToken} merchantId={id} />;
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      <MerchantsPanel token={accessToken} onOpen={(m) => navigate(`/ops/merchants/${encodeURIComponent(m)}`)} />
+    </>
+  );
+}
+
+export function PricingPage() {
+  const { accessToken } = useAuth();
+  const { banner, show } = useNotice();
+  const item = navItem('pricing');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      {banner}
+      <PricingPanel token={accessToken} onNotice={show} />
     </>
   );
 }

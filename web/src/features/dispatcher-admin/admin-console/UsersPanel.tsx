@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Search, Users } from 'lucide-react';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
@@ -13,6 +13,8 @@ import type { Role, User } from '@/shared/types/auth';
 import { ApiError } from '../api';
 import { changeUserRole, listUsers, setUserStatus } from './consoleApi';
 import { AdminDialog, Banner, Busy, FieldError, FieldHint } from './ui';
+
+const PER_PAGE_CHOICES = ['10', '20', '50', '100'];
 
 const ROLES: Role[] = ['CUSTOMER', 'COURIER', 'DISPATCHER', 'MERCHANT', 'ADMIN'];
 
@@ -37,6 +39,9 @@ function displayName(u: User): string {
 
 export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, onNotice, onChanged }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
@@ -50,14 +55,15 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await listUsers(token, roleFilter === 'ALL' ? undefined : roleFilter);
+      const res = await listUsers(token, roleFilter === 'ALL' ? undefined : roleFilter, perPage, (page - 1) * perPage);
       setUsers(res.users);
+      setTotal(res.total);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err : new ApiError(0, 'UNKNOWN', "Couldn't load users. Try again."));
     } finally {
       setLoading(false);
     }
-  }, [token, roleFilter]);
+  }, [token, roleFilter, page, perPage]);
 
   useEffect(() => {
     void load();
@@ -73,6 +79,7 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
   const resetFilters = () => {
     setRoleFilter('ALL');
     setQuery('');
+    setPage(1);
   };
 
   const reactivate = async (u: User) => {
@@ -115,7 +122,7 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
       <CardContent className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label htmlFor="users-search">Search users</Label>
+            <Label htmlFor="users-search">Search this page</Label>
             <div className="relative">
               <Search size={15} strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
               <Input
@@ -126,12 +133,20 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Name, email or user ID"
+                aria-describedby="users-search-hint"
               />
             </div>
+            <FieldHint id="users-search-hint">The user list has no server search, so this looks only at the accounts on the current page.</FieldHint>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="users-role">Role</Label>
-            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | 'ALL')}>
+            <Select
+              value={roleFilter}
+              onValueChange={(v) => {
+                setRoleFilter(v as Role | 'ALL');
+                setPage(1);
+              }}
+            >
               <SelectTrigger id="users-role" data-testid="admin-users-role-filter">
                 <SelectValue />
               </SelectTrigger>
@@ -288,6 +303,48 @@ export const UsersPanel: React.FC<UsersPanelProps> = ({ token, currentUserId, on
                   })}
             </TableBody>
           </Table>
+        )}
+
+        {!loadError && total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-text-muted">
+            <span className="tabular-nums" data-testid="admin-users-summary">
+              {`Showing ${(page - 1) * perPage + 1}–${(page - 1) * perPage + users.length} of ${total} ${roleFilter === 'ALL' ? '' : 'matching '}${total === 1 ? 'user' : 'users'} · page ${page} of ${Math.max(Math.ceil(total / perPage), 1)}`}
+              {query.trim() ? ` · ${visible.length} match${visible.length === 1 ? '' : 'es'} your search on this page` : ''}
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="users-per-page" className="text-xs">
+                  Rows per page
+                </Label>
+                <Select
+                  value={String(perPage)}
+                  onValueChange={(v) => {
+                    setPerPage(Number(v));
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="users-per-page" className="w-24" data-testid="admin-users-per-page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PER_PAGE_CHOICES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" className="touch:min-h-[44px]" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={loading || page <= 1} data-testid="admin-users-prev-btn">
+                  <ChevronLeft aria-hidden="true" /> Previous
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="touch:min-h-[44px]" onClick={() => setPage((p) => p + 1)} disabled={loading || page * perPage >= total} data-testid="admin-users-next-btn">
+                  Next <ChevronRight aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </CardContent>
 
