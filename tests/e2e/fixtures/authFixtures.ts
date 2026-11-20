@@ -29,6 +29,7 @@ export const test = base.extend<ActorFixtures>({
   // 1. Customer Context & Page (Desktop Chrome 1280x800)
   customerContext: async ({ browser }, use) => {
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SwiftDrop-E2E-Customer',
     });
@@ -43,6 +44,7 @@ export const test = base.extend<ActorFixtures>({
   // 2. Merchant Context & Page (Desktop Chrome 1366x768)
   merchantContext: async ({ browser }, use) => {
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1366, height: 768 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SwiftDrop-E2E-Merchant',
       extraHTTPHeaders: {
@@ -60,6 +62,7 @@ export const test = base.extend<ActorFixtures>({
   // 3. Dispatcher Context & Page (Desktop Chrome 1440x900)
   dispatcherContext: async ({ browser }, use) => {
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1440, height: 900 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SwiftDrop-E2E-Dispatcher',
     });
@@ -74,6 +77,7 @@ export const test = base.extend<ActorFixtures>({
   // 4. Courier Context & Page (Mobile Viewport: 375x812, Touch Enabled)
   courierContext: async ({ browser }, use) => {
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 375, height: 812 },
       isMobile: true,
       hasTouch: true,
@@ -90,6 +94,7 @@ export const test = base.extend<ActorFixtures>({
   // 5. Admin Context & Page (Desktop Chrome 1440x900)
   adminContext: async ({ browser }, use) => {
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL || 'http://localhost:3000',
       viewport: { width: 1440, height: 900 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SwiftDrop-E2E-Admin',
     });

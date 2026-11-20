@@ -33,9 +33,9 @@ export default defineConfig({
 
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: 'on',
+    video: 'on',
+    screenshot: 'on',
     actionTimeout: 10000,
     navigationTimeout: 15000,
   },

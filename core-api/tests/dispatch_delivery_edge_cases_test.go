@@ -203,6 +203,10 @@ func (s *comprehensiveMockStorage) GetStatusWithLock(ctx context.Context, tx *sq
 	return st, s.attempts[parcelID], nil
 }
 
+func (s *comprehensiveMockStorage) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 func (s *comprehensiveMockStorage) TransitionStatus(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID, fromStatus, toStatus string, actorID uuid.UUID, actorRole, note string) error {
 	s.statuses[parcelID] = toStatus
 	return nil

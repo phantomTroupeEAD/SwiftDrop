@@ -82,7 +82,7 @@ func TestEventsReadRepository_Integration(t *testing.T) {
 	notifID := "0192e2b3-7c8a-7890-a123-000000000021"
 	hookID := "0192e2b3-7c8a-7890-a123-000000000022"
 	endpointID := "0192e2b3-7c8a-7890-a123-000000000088"
-	testMerchantID := "0192e2b3-7c8a-7890-a123-000000000077"
+	testMerchantID := "018f4a7c-1004-7000-9000-000000000004"
 	adminUserID := "018f4a7c-1001-7000-8000-000000000001"
 	merchantUserID := "018f4a7c-1004-7000-8000-000000000004"
 

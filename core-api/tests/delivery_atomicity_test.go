@@ -128,6 +128,10 @@ func (s *atomicMockStorage) GetStatusWithLock(ctx context.Context, tx *sql.Tx, p
 	return s.parcelStatus, s.attemptCount, nil
 }
 
+func (s *atomicMockStorage) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 func (s *atomicMockStorage) Write(ctx context.Context, tx *sql.Tx, aggregateType string, aggregateID uuid.UUID, aggregateVersion int, eventType string, payload any, correlationID string) error {
 	if s.failOutbox {
 		return errors.New("simulated outbox disk full failure: transaction aborted")

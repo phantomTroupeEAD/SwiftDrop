@@ -59,8 +59,8 @@ stateDiagram-v2
 6. **Scopes:** Supported scopes: `parcels:create`, `parcels:read`.
 
 ### 2.4 Webhook Security & SSRF Protection
-1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production (configurable override for local dev).
-2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. Any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately.
+1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production. In local development/testing (`allowHTTP: true`), plain `http://` and explicit custom ports (e.g. mock webhook receivers on port 9999) are permitted; default HTTPS port 443 over plain HTTP is rejected.
+2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. In production, any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately. In local development/testing, private hosts can be explicitly whitelisted (e.g. `localhost`, `127.0.0.1`) strictly when `!config.IsProduction()`.
 3. **DNS Address Limit:** DNS responses returning more than 16 IP addresses are rejected to prevent address smuggling.
 4. **Secret Generation:** Webhook signing secrets (`whsec_[0-9A-Za-z]{43}`) are generated server-side using `crypto/rand`. Callers cannot specify custom secrets.
 5. **Secret Encryption at Rest:** Signing secrets are encrypted with AES-256-GCM (`nonce || ciphertext || tag`) before persisting to `webhook_endpoints.secret_ciphertext`. Minimum ciphertext length (`nonceSize + tagSize`) is strictly validated.
@@ -136,4 +136,5 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 | 2026-11-07 | Hardened Security & Config: Base64 AES-256 keys, pepper validation, non-panicking DB querier, full prefix DB alignment | Member 4 / Antigravity |
 | 2026-11-13 | Integrated Member 1 (role promotion & audit logs), added hex key fallback, and implemented cross-module integration & E2E tests (`core-api/tests/merchants_integration_test.go`) | Member 4 / Antigravity |
 | 2026-11-15 | Implemented Member 1 two-way role management (`RevokeMerchantRole` on disablement), added Swagger request parameter models for API keys and webhooks | Member 4 / Antigravity |
+| 2026-11-17 | Aligned canonical seed merchant tenant UUID (`018f4a7c-1004-7000-9000-000000000004`) via migration `20261117000001` to resolve UUID type mismatch on portal endpoints | Member 4 / Antigravity |
 | 2026-11-19 | (Issue #92) Implemented `PostgresParcelBooking` adapter in `infrastructure/postgres_booking.go`, replaced `BookingStub` in `wiring_merchants.go`, persisting B2B orders to `parcels`, `parcel_status_history`, `outbox_events`, and `idempotency_keys` | Member 4 / Antigravity |

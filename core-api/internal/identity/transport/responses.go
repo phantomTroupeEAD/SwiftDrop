@@ -77,6 +77,49 @@ type MessageDataDTO struct {
 	Message string `json:"message"`
 }
 
+// UserProfileResponse wraps UserDTO in a data envelope.
+type UserProfileResponse struct {
+	Data UserDTO `json:"data"`
+}
+
+// UserListResponse defines paginated user directory results.
+type UserListResponse struct {
+	Items  []UserDTO `json:"items"`
+	Total  int       `json:"total"`
+	Limit  int       `json:"limit"`
+	Offset int       `json:"offset"`
+}
+
+// UserListEnvelope wraps UserListResponse.
+type UserListEnvelope struct {
+	Data UserListResponse `json:"data"`
+}
+
+// LoginResponse wraps LoginDataDTO.
+type LoginResponse struct {
+	Data LoginDataDTO `json:"data"`
+}
+
+// GoogleLoginResponse wraps GoogleLoginDataDTO.
+type GoogleLoginResponse struct {
+	Data GoogleLoginDataDTO `json:"data"`
+}
+
+// RegisterResponse wraps RegisterDataDTO.
+type RegisterResponse struct {
+	Data RegisterDataDTO `json:"data"`
+}
+
+// OTPResponse wraps OTPDataDTO.
+type OTPResponse struct {
+	Data OTPDataDTO `json:"data"`
+}
+
+// MessageResponse wraps MessageDataDTO.
+type MessageResponse struct {
+	Data MessageDataDTO `json:"data"`
+}
+
 // SingleDataEnvelope wraps successful responses per SwiftDrop API conventions.
 type SingleDataEnvelope struct {
 	Data interface{} `json:"data"`

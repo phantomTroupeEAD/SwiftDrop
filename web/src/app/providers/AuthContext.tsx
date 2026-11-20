@@ -68,6 +68,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => { active = false; };
   }, []);
 
+  // Synchronize in-memory access token when transparently refreshed by API client
+  useEffect(() => {
+    const handleTokenRefreshed = (event: Event) => {
+      const detail = (event as CustomEvent<LoginResponseData>).detail;
+      if (detail?.access_token) {
+        setAccessToken(detail.access_token);
+        if (detail.user) setUser(detail.user);
+      }
+    };
+    window.addEventListener('swiftdrop:token-refreshed', handleTokenRefreshed);
+    return () => window.removeEventListener('swiftdrop:token-refreshed', handleTokenRefreshed);
+  }, []);
+
   const refreshSession = useCallback(async () => {
     const session = await restoreSession();
     if (!session) return null;

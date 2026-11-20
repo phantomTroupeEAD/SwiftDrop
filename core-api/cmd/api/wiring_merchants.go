@@ -138,6 +138,11 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		roleAssigner = &roleAssignerAdapter{assigner: roleAssigners[0]}
 	}
 
+	var allowedPrivate []string
+	if !config.IsProduction() {
+		allowedPrivate = []string{"localhost", "127.0.0.1"}
+	}
+
 	svc := application.NewService(application.Deps{
 		Tx:        &sqlTxRunner{db: db},
 		Merchants: infrastructure.MerchantRepo{},
@@ -153,10 +158,11 @@ func registerMerchantsModule(mux *http.ServeMux, db *sql.DB, tokenProv identitya
 		Observer:  noopObserver{},
 		Now:       time.Now,
 	}, application.Config{
-		KeyEnvPrefix:  keyEnvPrefix,
-		MaxActiveKeys: 5,
-		MaxWebhooks:   10,
-		AllowHTTP:     !config.IsProduction(),
+		KeyEnvPrefix:        keyEnvPrefix,
+		MaxActiveKeys:       5,
+		MaxWebhooks:         10,
+		AllowHTTP:           !config.IsProduction(),
+		AllowedPrivateHosts: allowedPrivate,
 	})
 
 	h := &transport.Handler{

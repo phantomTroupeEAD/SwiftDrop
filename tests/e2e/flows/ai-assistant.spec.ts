@@ -246,7 +246,7 @@ test.describe('AI Assistant Comprehensive Suite', () => {
     expect(panelText).not.toMatch(/No\.\s*\d+/i);
 
     // Verify tracking action card appears and links directly to /track/SD-20261114-99881
-    const trackAction = panel.locator(testId(SELECTORS.AI_ACTION_BUTTON_TRACK || SELECTORS.AI_ASSISTANT.AI_ACTION_BUTTON_TRACK));
+    const trackAction = panel.locator(testId(SELECTORS.AI_ASSISTANT.AI_ACTION_BUTTON_TRACK));
     await expect(trackAction).toBeVisible();
     const trackHref = await trackAction.getAttribute('href');
     expect(trackHref).toBe('/track/SD-20261114-99881');
