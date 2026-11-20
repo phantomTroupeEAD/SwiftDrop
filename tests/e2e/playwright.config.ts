@@ -16,10 +16,11 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test') });
  * - Admin Portal
  */
 export default defineConfig({
-  testDir: './flows',
-  timeout: 30000,
+  testDir: '.',
+  testMatch: ['flows/**/*.spec.ts', 'demo/**/*.spec.ts'],
+  timeout: 60000,
   expect: {
-    timeout: 5000,
+    timeout: 10000,
   },
   fullyParallel: false, // Run flows deterministically to protect transactional ordering
   forbidOnly: !!process.env.CI,

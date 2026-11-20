@@ -210,3 +210,12 @@ Returns the append-only attempt history for an owned delivery. If the delivery b
 | `409` | `OUTBOX_EVENT_NOT_FAILED` | Attempted retry on a record whose status is not `FAILED`. |
 | `422` | `INVALID_LIMIT` | `limit` query parameter is outside the valid range [1, 100]. |
 
+---
+
+## 5. Unified OpenAPI / Swagger UI Documentation
+
+| Method | URI Path | Required Role | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/swagger/` & `/swagger/index.html` | Public (local/dev) | Interactive Swagger UI documentation client. |
+| `GET` | `/swagger/spec.json` | Public (local/dev) | Aggregated OpenAPI specification JSON. |
+

@@ -91,6 +91,10 @@ export default defineConfig(({ mode }) => {
           target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
           changeOrigin: true,
         },
+        '/swagger': {
+          target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
       },
     },
   };

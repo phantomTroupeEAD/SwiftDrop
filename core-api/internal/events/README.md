@@ -194,7 +194,7 @@ All endpoints return uniform envelope responses:
 | `POST` | `/api/v1/admin/events/deliveries/{id}/retry` | Admin | Re-queue a failed webhook delivery (`FAILED` $\to$ `PENDING`) |
 | `GET` | `/api/v1/merchant/webhook-deliveries` | Merchant | List tenant-scoped webhook delivery history |
 | `GET` | `/api/v1/merchant/webhook-deliveries/{id}/attempts` | Merchant | Inspect per-attempt HTTP status, duration, and error snippet |
-| `GET` | `/swagger/` | Public | Interactive Swagger UI index listing all registered API modules |
+| `GET` | `/swagger/` & `/swagger/index.html` | Public | Interactive Swagger UI index listing all registered API modules |
 | `GET` | `/swagger/{module}/` | Public | Interactive Swagger UI client loaded for `{module}` |
 | `GET` | `/swagger/{module}/spec.json` | Public | Raw OpenAPI 3.0 specification JSON |
 
