@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
@@ -21,6 +21,11 @@ import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 function CustomerBookingAlias() {
   const { search } = useLocation();
   return <Navigate to={{ pathname: '/portal/book', search }} replace />;
+}
+
+function PublicTrackingRedirect() {
+  const { trackingNumber } = useParams<{ trackingNumber?: string }>();
+  return <Navigate to={trackingNumber ? `/track/${encodeURIComponent(trackingNumber)}` : '/track'} replace />;
 }
 
 // Protected Route Guard
@@ -74,6 +79,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/tracking" element={<Navigate to="/track" replace />} />
+      <Route path="/tracking/:trackingNumber" element={<PublicTrackingRedirect />} />
       <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
       <Route path="/customer/book" element={<CustomerBookingAlias />} />
