@@ -2,63 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * SwiftDrop "Waybill" design tokens. Canonical spec: web/design.md.
+ * Paper and ink with one signal colour. Depth comes from 1px borders and tone steps, never shadows.
+ * Fonts are self-hosted (@fontsource-variable, imported in main.tsx), so the CSP needs no font hosts.
+ */
 @layer base {
   :root {
     /* Fonts */
-    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace;
+    --font-sans: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-    /* Apple Cupertino Archetype Tokens (L105-113) */
-    --canvas: #f5f5f7;
+    /* Paper and ink */
+    --canvas: #f5f3ee;
     --surface: #ffffff;
-    --surface-subtle: #fbfbfd;
-    --surface-active: #e2e8f0;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-subtle: #edf2f7;
-    --text: #0f172a;
-    --text-muted: #64748b;
-    --text-subtle: #94a3b8;
+    --surface-subtle: #faf9f6;
+    --surface-active: #ece9e2;
+    --border: #e2ded5;
+    --border-subtle: #efece6;
+    --border-strong: #8f897c;
+    --text: #15171c;
+    --text-muted: #4a4e57;
+    --text-subtle: #5b5f68;
 
-    /* Reconciled Radii (Apple Archetype L110-112 + L58) */
+    /* Chrome: the ink sidebar and dark bands */
+    --chrome: #15171c;
+    --chrome-foreground: #f5f3ee;
+    --chrome-muted: #c9c4b8;
+    --chrome-line: #3a3d45;
+    --chrome-hover: #24272e;
+    --chrome-accent: #f08c5a;
+
+    /* Radii */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-full: 9999px;
 
-    /* Default Primary (Apple Blue L36) */
-    --primary: #0071e3;
-    --primary-hover: #0077ed;
+    /* Signal (one brand accent for every role) */
+    --primary: #c2410c;
+    --primary-hover: #9a3412;
     --primary-foreground: #ffffff;
-    --primary-tint: rgba(0, 113, 227, 0.08);
-    --ring: #0071e3;
+    --primary-tint: rgba(194, 65, 12, 0.1);
+    --ring: #c2410c;
 
-    /* Semantic Status Tints (L44-53) */
-    --status-success-ink: #047857;
-    --status-success-bg: #ecfdf5;
-    --status-success-border: #a7f3d0;
-    --status-warning-ink: #b45309;
-    --status-warning-bg: #fffbeb;
-    --status-warning-border: #fde68a;
-    --status-error-ink: #b91c1c;
-    --status-error-bg: #fef2f2;
-    --status-error-border: #fecaca;
+    /* Status tints */
+    --status-success-ink: #17663f;
+    --status-success-bg: #e3f1e8;
+    --status-success-border: #bfe0cb;
+    --status-warning-ink: #8a4b00;
+    --status-warning-bg: #fbefd8;
+    --status-warning-border: #eed7a8;
+    --status-error-ink: #a61b12;
+    --status-error-bg: #fbe7e4;
+    --status-error-border: #f0c4bd;
+    --status-info-ink: #1e40af;
+    --status-info-bg: #e8eefc;
+    --status-info-border: #c9d6f7;
 
-    /* Motion Tokens (L63-67) */
+    /* Motion */
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
     --duration-fast: 150ms;
     --duration-normal: 220ms;
     --duration-slow: 350ms;
 
-    /* shadcn/ui Variable Retheme Layer */
+    /* shadcn/ui variable layer */
     --background: var(--canvas);
     --foreground: var(--text);
     --card: var(--surface);
     --card-foreground: var(--text);
     --popover: var(--surface);
     --popover-foreground: var(--text);
-    --secondary: var(--surface-subtle);
+    --secondary: var(--surface-active);
     --secondary-foreground: var(--text);
     --muted: var(--surface-subtle);
     --muted-foreground: var(--text-muted);
@@ -66,115 +83,61 @@
     --accent-foreground: var(--text);
     --destructive: var(--status-error-bg);
     --destructive-foreground: var(--status-error-ink);
-    --input: var(--border);
+    --input: var(--border-strong);
     --radius: var(--radius-md);
 
     color-scheme: light;
   }
 
+  /* Dark mode: its own steps, not a flipped light theme. */
   [data-theme="dark"] {
-    /* Apple Cupertino Dark Mode Tokens (L114-119) */
-    --canvas: #000000;
-    --surface: #1c1c1e;
-    --surface-subtle: #2c2c2e;
-    --surface-active: #27272e;
-    --border: rgba(255, 255, 255, 0.10);
-    --border-subtle: #1e1e24;
-    --text: #f8fafc;
-    --text-muted: #94a3b8;
-    --text-subtle: #64748b;
+    --canvas: #121316;
+    --surface: #1c1e23;
+    --surface-subtle: #24272e;
+    --surface-active: #2a2d34;
+    --border: #33363e;
+    --border-subtle: #2a2d34;
+    --border-strong: #6b6f78;
+    --text: #f2efe8;
+    --text-muted: #a9a49a;
+    --text-subtle: #8c887f;
 
-    --primary: #2997ff;
-    --primary-hover: #40a9ff;
-    --primary-foreground: #ffffff;
-    --primary-tint: rgba(41, 151, 255, 0.14);
-    --ring: #2997ff;
+    --chrome: #0b0c0e;
+    --chrome-foreground: #f2efe8;
+    --chrome-muted: #a9a49a;
+    --chrome-line: #2a2d34;
+    --chrome-hover: #1c1e23;
+    --chrome-accent: #f08c5a;
 
-    --status-success-ink: #34d399;
-    --status-success-bg: #064e3b;
-    --status-success-border: #047857;
-    --status-warning-ink: #fbbf24;
-    --status-warning-bg: #451a03;
-    --status-warning-border: #78350f;
-    --status-error-ink: #f87171;
-    --status-error-bg: #450a0a;
-    --status-error-border: #7f1d1d;
+    --primary: #f08c5a;
+    --primary-hover: #f5a97f;
+    --primary-foreground: #15171c;
+    --primary-tint: rgba(240, 140, 90, 0.14);
+    --ring: #f08c5a;
+
+    --status-success-ink: #6fcf97;
+    --status-success-bg: #173326;
+    --status-success-border: #24543b;
+    --status-warning-ink: #f2c14e;
+    --status-warning-bg: #3a2c0e;
+    --status-warning-border: #5c4716;
+    --status-error-ink: #ff8a80;
+    --status-error-bg: #3f1a17;
+    --status-error-border: #6b2a24;
+    --status-info-ink: #8ab4ff;
+    --status-info-bg: #1b2a4a;
+    --status-info-border: #2c4170;
 
     color-scheme: dark;
   }
 
-  /* Role Scoped Accent Overrides (L1724-1732) */
-  [data-role="PUBLIC"],
-  [data-role="CUSTOMER"] {
-    --primary: #0071e3;
-    --primary-hover: #0077ed;
-    --primary-tint: rgba(0, 113, 227, 0.08);
-    --ring: #0071e3;
-  }
-  [data-theme="dark"][data-role="PUBLIC"],
-  [data-theme="dark"][data-role="CUSTOMER"] {
-    --primary: #2997ff;
-    --primary-hover: #40a9ff;
-    --primary-tint: rgba(41, 151, 255, 0.14);
-    --ring: #2997ff;
-  }
+  /*
+   * Role scopes. Every layout root still carries data-role (AGENTS.md Rule 6), but the redesign
+   * uses one signal colour for all roles. To bring role colours back, override --primary,
+   * --primary-hover, --primary-tint and --ring per [data-role] here; nothing else changes.
+   */
 
-  [data-role="MERCHANT"] {
-    --primary: #0b5955;
-    --primary-hover: #08433f;
-    --primary-tint: rgba(11, 89, 85, 0.08);
-    --ring: #0b5955;
-  }
-  [data-theme="dark"][data-role="MERCHANT"] {
-    --primary: #85d4b5;
-    --primary-hover: #a3e3cb;
-    --primary-tint: rgba(133, 212, 181, 0.15);
-    --ring: #85d4b5;
-  }
-
-  [data-role="DISPATCHER"] {
-    --primary: #1e40af;
-    --primary-hover: #1e3a8a;
-    --primary-tint: rgba(30, 64, 175, 0.08);
-    --ring: #1e40af;
-  }
-  [data-theme="dark"][data-role="DISPATCHER"] {
-    --primary: #60a5fa;
-    --primary-hover: #93c5fd;
-    --primary-tint: rgba(96, 165, 250, 0.15);
-    --ring: #60a5fa;
-  }
-
-  [data-role="COURIER"] {
-    --primary: #b45309;
-    --primary-hover: #92400e;
-    --primary-tint: rgba(180, 83, 9, 0.08);
-    --ring: #b45309;
-  }
-  [data-theme="dark"][data-role="COURIER"] {
-    --primary: #fbbf24;
-    --primary-hover: #fcd34d;
-    --primary-tint: rgba(251, 191, 36, 0.15);
-    --ring: #fbbf24;
-  }
-
-  [data-role="ADMIN"] {
-    --primary: #18181b;
-    --primary-hover: #27272a;
-    --primary-foreground: #ffffff;
-    --primary-tint: rgba(24, 24, 27, 0.08);
-    --ring: #18181b;
-  }
-  [data-theme="dark"][data-role="ADMIN"],
-  [data-theme="dark"] [data-role="ADMIN"] {
-    --primary: #e4e4e7;
-    --primary-hover: #d4d4d8;
-    --primary-foreground: #18181b;
-    --primary-tint: rgba(228, 228, 231, 0.12);
-    --ring: #e4e4e7;
-  }
-
-  /* Dual Focus Ring Implementation (L224 & L645) */
+  /* Dual focus ring */
   :focus-visible {
     outline: none !important;
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring) !important;
@@ -191,6 +154,11 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
   }
 }
 
@@ -215,11 +183,22 @@
     outline: none !important;
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring) !important;
   }
+
+  /* Waybill signature pieces: decorative only, always aria-hidden in markup. */
+  .waybill-barcode {
+    height: 30px;
+    background: repeating-linear-gradient(90deg, var(--text) 0 2px, transparent 2px 4px, var(--text) 4px 5px, transparent 5px 8px, var(--text) 8px 11px, transparent 11px 12px, var(--text) 12px 13px, transparent 13px 17px);
+  }
+  .waybill-route { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .waybill-stop { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--text); }
+  .waybill-stop--next { width: 12px; height: 12px; background: var(--surface); border: 2px solid var(--primary); }
+  .waybill-leg { flex: 1; border-top: 2px solid var(--text); }
+  .waybill-leg--ahead { border-top-style: dashed; border-top-color: var(--border-strong); }
 }
 
 .portal-hero {
-  --hero-backdrop: #081627;
-  --hero-copy: #d9e5f3;
+  --hero-backdrop: var(--chrome);
+  --hero-copy: var(--chrome-muted);
   position: relative;
   isolation: isolate;
   display: grid;
@@ -228,14 +207,9 @@
   margin-block-end: 1.25rem;
   padding: clamp(1.5rem, 5vw, 4rem);
   overflow: hidden;
-  border-radius: 1rem;
-  color: white;
+  border-radius: var(--radius-md);
+  color: var(--chrome-foreground);
   background: var(--hero-backdrop);
-}
-
-[data-role="MERCHANT"] .portal-hero {
-  --hero-backdrop: #09281f;
-  --hero-copy: #d9eee4;
 }
 
 .portal-hero img, .portal-hero::before {
@@ -276,7 +250,7 @@
   min-height: 100vh;
   background: var(--m6-canvas);
   color: var(--m6-ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
 }
 .m6-header {
@@ -296,8 +270,7 @@
   top: 0;
   z-index: 20;
   padding: .75rem max(clamp(1rem, 2.5vw, 2rem), calc((100% - 88rem) / 2));
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
+  background: var(--surface);
   border-bottom: 1px solid var(--m6-line);
 }
 .m6-header .m6-session-action { margin-inline-start: auto; order: 2; }
@@ -329,19 +302,21 @@
 }
 .m6-header nav a:hover { color: var(--text); background: var(--surface-subtle); text-decoration: none; }
 .m6-header nav [aria-current="page"] {
-  color: var(--action-primary);
-  background: var(--action-tint);
+  color: var(--text);
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--primary);
+  border-radius: 0;
   font-weight: 600;
 }
-.m6-header .m6-brand { gap: .65rem; color: var(--m6-ink); font-weight: 700; letter-spacing: -.025em; }
+.m6-header .m6-brand { gap: .65rem; color: var(--m6-ink); font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; letter-spacing: -.025em; }
 .m6-brand-mark {
   display: grid;
   place-items: center;
   width: 2.125rem;
   height: 2.125rem;
   border-radius: var(--radius-sm);
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--chrome);
+  color: var(--chrome-accent);
 }
 @media (max-width: 56rem) {
   .m6-header { padding-block: .5rem; }
@@ -356,7 +331,7 @@
 .m6-card {
   background: var(--m6-surface);
   border: 1px solid var(--m6-line);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: clamp(1rem, 3vw, 1.5rem);
   margin-bottom: 1rem;
 }
@@ -374,8 +349,8 @@
   min-height: 44px;
   padding: .55rem .7rem;
   border: 1px solid var(--input);
-  border-radius: 9px;
-  background: var(--surface-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--m6-ink);
   font: inherit;
   font-size: 1rem;
@@ -388,56 +363,60 @@
   justify-content: center;
   min-height: 44px;
   padding: .55rem 1rem;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--action-primary);
   color: var(--action-on-primary);
   font-weight: 600;
   transition: background-color 160ms ease;
 }
 .m6-btn:hover:not(:disabled) { background: var(--action-hover); }
-.m6-btn:disabled { opacity: .65; cursor: not-allowed; }
-.m6-btn.m6-secondary { background: var(--action-tint); color: var(--action-primary); }
-.m6-btn.m6-secondary:hover:not(:disabled) { color: var(--action-hover); text-decoration: underline; }
+.m6-btn:disabled { opacity: .45; cursor: not-allowed; }
+.m6-btn.m6-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+.m6-btn.m6-secondary:hover:not(:disabled) { background: var(--surface-subtle); }
 .m6-btn.m6-danger { background: var(--status-error-bg); color: var(--status-error-ink); }
 .m6-btn.m6-danger:hover:not(:disabled) { background: var(--status-error-border); }
-.m6-error { margin: .8rem 0; padding: .65rem .8rem; border-radius: 8px; background: var(--status-error-bg); color: var(--status-error-ink); }
+.m6-error { margin: .8rem 0; padding: .65rem .8rem; border: 1px solid var(--status-error-border); border-radius: var(--radius-sm); background: var(--status-error-bg); color: var(--status-error-ink); }
 .m6-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; margin-bottom: 1.25rem; }
 .m6-steps li { border-top: 2px solid var(--m6-line); padding-top: .5rem; font-size: .85rem; color: var(--m6-muted); }
-.m6-steps li[data-completed="true"], .m6-steps li[aria-current="step"] { border-color: var(--m6-blue); color: var(--action-primary); }
+.m6-steps li[data-completed="true"] { border-color: var(--text); color: var(--text); }
+.m6-steps li[aria-current="step"] { border-color: var(--primary); color: var(--text); }
 .m6-steps li[aria-current="step"] { font-weight: 700; }
 .m6-muted { color: var(--m6-muted); }
 .m6-pill {
   display: inline-block;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: .2rem .55rem;
   background: var(--surface-active);
-  color: var(--text);
-  font-size: .8125rem;
+  color: var(--text-muted);
+  font-size: .75rem;
   font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.m6-pill::first-letter, .m6-timeline-label::first-letter { text-transform: uppercase; }
-.m6-pill[data-tone="info"] { background: var(--primary-tint); color: var(--primary); }
+.m6-timeline-label::first-letter { text-transform: uppercase; }
+.m6-pill[data-tone="info"] { background: var(--status-info-bg); color: var(--status-info-ink); }
 .m6-pill[data-tone="success"] { background: var(--status-success-bg); color: var(--status-success-ink); }
 .m6-pill[data-tone="warning"] { background: var(--status-warning-bg); color: var(--status-warning-ink); }
 .m6-pill[data-tone="error"] { background: var(--status-error-bg); color: var(--status-error-ink); }
 .m6-result-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
 .m6-result-heading h2 { margin: 0; overflow-wrap: anywhere; }
-.m6-quote-total { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.m6-quote-total { font-family: var(--font-mono); font-size: 2rem; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .m6-empty { display: grid; justify-items: start; gap: .75rem; margin-top: 1rem; }
-.m6-confirmation { margin-top: 1rem; padding: 1rem; border: 1px solid var(--status-error-ink); border-radius: 9px; overflow-wrap: anywhere; }
+.m6-confirmation { margin-top: 1rem; padding: 1rem; border: 1px solid var(--status-error-ink); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
 .m6-confirmation h3 { font-weight: 700; margin-bottom: .5rem; }
 .m6-table { width: 100%; border-collapse: collapse; text-align: left; font-variant-numeric: tabular-nums; }
 .m6-table :is(td, th) { padding: .65rem .75rem; border-bottom: 1px solid var(--m6-line); }
 .m6-table td { overflow-wrap: anywhere; }
-.m6-table th { color: var(--m6-muted); font-size: .875rem; }
+.m6-table th { color: var(--m6-muted); background: var(--surface-subtle); font-family: var(--font-mono); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .m6-order-meta span { display: none; }
 .m6-scroll { overflow: auto; margin-top: 1rem; }
-.m6-timeline { margin-top: 1rem; padding-left: 1rem; border-left: 2px solid var(--m6-line); }
+.m6-timeline { margin-top: 1rem; padding-left: 1rem; border-left: 2px solid var(--text); }
 .m6-timeline li { position: relative; padding-bottom: 1rem; }
 .m6-timeline li:last-child { padding-bottom: 0; }
-.m6-timeline li::before { content: ""; position: absolute; left: -1.32rem; top: .4rem; width: .5rem; height: .5rem; border-radius: 50%; background: var(--m6-blue); }
+.m6-timeline li::before { content: ""; position: absolute; left: -1.32rem; top: .4rem; width: .5rem; height: .5rem; border-radius: 50%; background: var(--text); }
 .m6-timeline-label, .m6-timeline time { display: block; }
-.m6-timeline time { color: var(--m6-muted); font-size: .875rem; }
+.m6-timeline time { color: var(--m6-muted); font-family: var(--font-mono); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .m6-secret { width: min(90vw, 34rem); margin: auto; }
 .m6-secret::backdrop { background: rgb(29 29 31 / 45%); }
 .m6-secret code { display: block; overflow-wrap: anywhere; margin: .8rem 0; }
@@ -456,11 +435,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .m6-btn { transition: none; }
-}
-
-[data-role="COURIER"] .portal-hero {
-  --hero-backdrop: #2b170e;
-  --hero-copy: #ffead8;
 }
 
 [data-role="COURIER"] .portal-hero { min-height: clamp(12rem, 22vw, 17rem); }

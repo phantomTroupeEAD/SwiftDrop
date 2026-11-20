@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/shared/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[8px] text-[13.5px] font-medium transition-colors duration-150 active:scale-[0.98] transition-transform duration-100 ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--ring)] disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-[15px] [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[8px] text-[13.5px] font-semibold transition-colors duration-150 active:scale-[0.98] transition-transform duration-100 ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--ring)] disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-[15px] [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -14,7 +14,7 @@ const buttonVariants = cva(
         destructive:
           "bg-[var(--status-error-bg)] text-[var(--status-error-ink)] border border-[var(--status-error-border)] shadow-none hover:bg-[var(--status-error-border)]",
         outline:
-          "border border-border bg-transparent shadow-none hover:bg-surface-subtle text-foreground",
+          "border border-border-strong bg-surface shadow-none hover:bg-surface-subtle text-foreground",
         secondary:
           "bg-surface-subtle text-foreground border border-transparent shadow-none hover:bg-surface-active",
         ghost:
