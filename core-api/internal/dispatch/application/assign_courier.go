@@ -94,6 +94,9 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 		}
 
 		// 6. Transition parcel aggregate root state machine (internal/parcels)
+		// Member 2's TransitionParcelStatusUseCase.ExecuteTx handles the parcel state machine,
+		// history insertion, concurrency validation, and publishes the canonical parcel.assigned.v1
+		// outbox event within this atomic transaction. Dispatch avoids creating a duplicate event.
 		err = uc.parcelUpdater.TransitionStatus(
 			ctx,
 			tx,

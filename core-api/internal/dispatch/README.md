@@ -81,7 +81,7 @@ internal/dispatch/
 ---
 
 ## 5. Events Emitted
-- `parcel.assigned.v1`: Published upon courier assignment or reattempt rescheduling.
+- `parcel.assigned.v1`: Canonical event emitted by Member 2's `TransitionParcelStatusUseCase.ExecuteTx` within the same transaction as courier assignment (includes `tracking_number`, `new_status`, `status_history_id`, and transition metadata). Dispatch avoids duplicate event emission.
 - `courier.unassigned.v1`: Published upon assignment cancellation.
 - `parcel.out_for_delivery.v1`: Published when courier marks run started.
 
@@ -90,6 +90,7 @@ internal/dispatch/
 ## 6. System Wiring & Dependency Injection
 All dispatch components are centrally registered in `core-api/cmd/api/wiring_dispatch_delivery.go` via `registerDispatchAndDeliveryModules(mux, dbConn, security)`.
 - **Authoritative Database Persistence:** Concrete PostgreSQL persistence drivers with `FOR UPDATE` pessimistic row locking are wired to guarantee ACID properties (Atomicity and Durability).
+- **Parcel Lifecycle Integration:** `PostgresParcelLifecycleUpdater` delegates state transitions directly to Member 2's `TransitionParcelStatusUseCase.ExecuteTx` in the active database transaction, preserving aggregate invariants, optimistic concurrency control, immutable audit history (`parcel_status_history`), and canonical outbox publication.
 - **Fail-Fast Offline Invariant:** When the database connection is unavailable (`dbConn == nil`), operations requiring persistence fail immediately with `503 Service Unavailable` (`DATABASE_UNAVAILABLE`). The system strictly forbids writing mutations to volatile in-memory maps, ensuring records never disappear silently upon application restart.
 
 ---
@@ -116,6 +117,7 @@ All dispatch components are centrally registered in `core-api/cmd/api/wiring_dis
 | 2026-11-04 | Comprehensive test gap analysis & hardening: Added BVA tests for Courier capacity [1, 200] and zone trimming, assignment reassignment error paths, AssignmentStatus enum validation, transport negative tests for malformed JSON and payload bounds, and mapped ErrParcelNotEligibleForAssignment to 409 Conflict. | Member 3 (Antigravity) |
 | 2026-11-10 | Resequenced migrations to 20261110000003_create_couriers and 20261110000004_create_dispatch_and_delivery, removed stub parcels table to sequence cleanly after Member 2 parcels | Member 3 (Antigravity) |
 | 2026-11-10 | Enforced BR-FLT-001 role validation & uniqueness in RegisterCourierUseCase: rejects non-courier user accounts with 422 USER_NOT_A_COURIER, non-existent users with 404 USER_NOT_FOUND, and duplicate profiles with 409 COURIER_PROFILE_EXISTS. | Member 3 (Antigravity) |
+| 2026-11-14 | Integrated Member 2's `TransitionParcelStatusUseCase.ExecuteTx` in `PostgresParcelLifecycleUpdater` for lifecycle transitions within existing database transactions; corrected PostgreSQL schema columns (`parcels.status`, `parcel_status_history.reason`, `actor_type`). | Member 3 (Antigravity) |
 | 2026-11-17 | Standardized `GET /api/v1/dispatch/couriers` response contract (`CourierListItemResponse`) with joined workload metrics (`courier_name`, `active_count`) and integrated zone-based filtering with board synchronization in Dispatcher UI. | Member 3 (Antigravity) |
 | 2026-11-17 | Dual-compatible cancellation request contract (`reason` & `cancellation_reason`), integrated with Dispatcher UI unassign modal action, restoring driver capacity and reverting parcel status to `CREATED`. | Member 3 (Antigravity) |
 | 2026-11-17 | Integrated `POST /api/v1/dispatch/parcels/{id}/reschedule` with Dispatcher UI, featuring `ATTEMPT_FAILED` badge indicators, supervisor notes modal, and ADR-004 reattempt state machine transition. | Member 3 (Antigravity) |
