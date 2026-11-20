@@ -433,3 +433,28 @@ All core and edge suites verified passing:
   - Implemented `/health` readiness probe endpoint in `mock-webhook/src/server.ts` and hardened daemon readiness polling in `.github/workflows/e2e.yml`.
   - Added PostgreSQL driver registration in `core-api/tests/migrations/member_03_migration_test.go`.
 
+### 9.6 12-User Cross-Module Real-World Workflow Automation Suite (`real-system-12-user-workflows.spec.ts`)
+- **Implementation Date:** 2026-11-20
+- **Execution Script:** `npm run test:12-users` -> `playwright test flows/real-system-12-user-workflows.spec.ts --project=admin-portal`
+- **Results:** 5/5 test steps PASSED (100% pass rate) in 11.5 seconds.
+- **Architectural Scope & Multi-Actor Topology:**
+  - 12 distinct human actors across all 6 roles:
+    1. **Customer 1 (Dilshan Silva - `customer@swiftdrop.local`):** Standard authenticated customer booking multi-tier shipments.
+    2. **Customer 2 (Amara Jayasinghe - dynamic signup):** Brand new customer registered via UI, verified with real 6-digit OTP via Mailpit (`:8025`), performing express delivery booking.
+    3. **Customer 3 (Nadeeka Perera - `nadeeka.perera@swiftdrop.local`):** Enterprise customer booking multi-parcel residential logistics.
+    4. **Merchant 1 (Colombo Tech Stores - `merchant@vendor.com`):** Configures webhook subscriptions (`http://localhost:9999/webhooks/merchant-alpha`), manages developer API keys (`parcels:create`, `parcels:read`), and dispatches commercial deliveries.
+    5. **Merchant 2 (Beta Electronics & Supplies - `beta@vendor.local`):** Separate commercial tenant operating in full tenant isolation (`018f4a7c-1004-7000-9000-000000000005`), dispatching independent orders.
+    6. **Courier 1 (Kamal Perera - `courier@swiftdrop.local`, CR-0012):** On-shift mobile courier accepting assignments, transitioning status to `OUT_FOR_DELIVERY`, and capturing digital POD signatures.
+    7. **Courier 2 (Sunil Shantha - `courier2@swiftdrop.local`, CR-0099):** Operational courier reporting doorstep delivery exceptions (`RECIPIENT_UNAVAILABLE`) with structured failure codes.
+    8. **Courier 3 (Chaminda Vaas - `courier3@swiftdrop.local`, CR-0098):** Relief courier receiving rescheduled deliveries and successfully completing delivery with signature proof.
+    9. **Dispatcher 1 (Kamal Perera - `dispatcher@swiftdrop.local`):** Primary routing dispatcher allocating unassigned parcels based on zone capacity.
+    10. **Dispatcher 2 (Rohan De Silva - `dispatcher2@swiftdrop.local`):** Secondary operations dispatcher handling failed delivery queues and reassignment/rescheduling to relief couriers.
+    11. **Admin (System Administrator - `admin@swiftdrop.local`):** Administrative inspection of operational audit logs, delivery zones, and cross-module governance.
+    12. **Public Guest (Unauthenticated Visitor):** Real-time tracking verification and strict enforcement of SEC-009 PII masking (redacting recipient phone numbers, full street addresses, and internal notes).
+- **Domain Invariants & State Machine Transitions Enforced:**
+  - Complete state transition cycle: `BOOKED` $\rightarrow$ `ASSIGNED` $\rightarrow$ `OUT_FOR_DELIVERY` $\rightarrow$ `FAILED` $\rightarrow$ `RESCHEDULED` $\rightarrow$ `DELIVERED`.
+  - Zero raw SQL updates: All state mutations committed via Core API with atomic PostgreSQL transaction logging to `parcel_status_history` and `outbox_events`.
+  - Strict tenant and RBAC boundaries maintained throughout all 12 sessions.
+  - **Live Real-Time SSE Stream Assertions (Zero Page Reload):** Verified that a customer keeping `/track/:trackingNumber` open in their browser receives live SSE updates over `text/event-stream` when Dispatcher and Courier update parcel state, transitioning the rendered status badge in real time: `BOOKED` $\rightarrow$ `ASSIGNED` $\rightarrow$ `OUT_FOR_DELIVERY` $\rightarrow$ `DELIVERED`.
+
+
