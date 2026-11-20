@@ -1,6 +1,6 @@
 # Parcel Management API Specifications (`/api/v1/parcels`)
 
-> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Booking, parcel detail, history, and receipts implemented. List and cancellation deferred.
+> **Module:** `internal/parcels` | **Owner:** Member 2 — Parcel Management & Pricing | **Status:** Booking, parcel detail, history, receipts, and paginated list implemented. Cancellation deferred.
 
 ---
 
@@ -162,10 +162,10 @@ Handler errors use the canonical `httpx.WriteError` envelope:
 ---
 
 ## 2. Get Parcel Details
-Retrieves authoritative parcel details for authorized callers: `CUSTOMER` (own parcels only), approved `MERCHANT` (own tenant parcels only), or `ADMIN` (unrestricted). `COURIER`, `DISPATCHER`, and non-approved merchants receive `403 Forbidden`.
+Retrieves authoritative parcel details for authorized callers: `CUSTOMER` (own parcels only), approved `MERCHANT` (own tenant parcels only), `ADMIN`, or `DISPATCHER` (global operational oversight). `COURIER` and non-approved merchants receive `403 Forbidden`.
 
 - **Method / Path:** `GET /api/v1/parcels/{id}`
-- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT` [`APPROVED`], `ADMIN`)
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT` [`APPROVED`], `ADMIN`, `DISPATCHER`)
 - **Path Parameters:**
   - `id` (string, required): Canonical Parcel UUID.
 - **Headers:**
@@ -177,7 +177,7 @@ Returns `{"data": ParcelResponse}` using the identical `ParcelResponse` schema s
 ### Error Responses
 - `400 Bad Request`: `INVALID_PARCEL_ID` — Path parameter `id` is not a valid UUID.
 - `401 Unauthorized`: `AUTH_UNAUTHORIZED`, `AUTH_MALFORMED_HEADER`, `AUTH_INVALID_TOKEN`, `AUTH_TOKEN_EXPIRED`.
-- `403 Forbidden`: `AUTH_FORBIDDEN` (`COURIER`/`DISPATCHER`), `PARCEL_FORBIDDEN` (cross-customer/cross-merchant IDOR), `INVALID_CALLER_ID`, `MISSING_TENANT_ID`, `TENANT_NOT_MERCHANT_UUID`, `MERCHANT_NOT_FOUND`, `MERCHANT_OWNER_MISMATCH`, `MERCHANT_NOT_APPROVED`.
+- `403 Forbidden`: `AUTH_FORBIDDEN` (`COURIER`), `PARCEL_FORBIDDEN` (cross-customer/cross-merchant IDOR), `INVALID_CALLER_ID`, `MISSING_TENANT_ID`, `TENANT_NOT_MERCHANT_UUID`, `MERCHANT_NOT_FOUND`, `MERCHANT_OWNER_MISMATCH`, `MERCHANT_NOT_APPROVED`.
 - `404 Not Found`: `PARCEL_NOT_FOUND` — No parcel exists for the supplied UUID.
 - `500 Internal Server Error`: `INTERNAL_ERROR`.
 
@@ -187,7 +187,7 @@ Returns `{"data": ParcelResponse}` using the identical `ParcelResponse` schema s
 Retrieves chronological lifecycle status history entries from `parcel_status_history` after enforcing caller role, approved merchant status, and object-level parcel ownership before any history rows are queried.
 
 - **Method / Path:** `GET /api/v1/parcels/{id}/history`
-- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT` [`APPROVED`], `ADMIN`)
+- **Auth Required:** Bearer JWT (`CUSTOMER`, `MERCHANT` [`APPROVED`], `ADMIN`, `DISPATCHER`)
 - **Path Parameters:**
   - `id` (string, required): Canonical Parcel UUID.
 - **Headers:**
@@ -283,16 +283,18 @@ The name comes from the booking's pickup contact. The amount and pricing rule co
 ## 6. Paginated Parcel List (`GET /api/v1/parcels`)
 
 - **Method / Path:** `GET /api/v1/parcels`
-- **Authorized Roles:** `CUSTOMER`, `MERCHANT`, `ADMIN`
+- **Authorized Roles:** `CUSTOMER`, `MERCHANT`, `ADMIN`, `DISPATCHER`
 - **Required Headers:** `Authorization: Bearer <jwt_token>`
 - **Query Parameters:**
   - `page` (optional integer, default `1`): 1-based page index.
   - `page_size` / `per_page` (optional integer, default `20`, maximum `100`): Maximum items returned per page.
+  - `status` (optional string): Filter by parcel lifecycle status (e.g. `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`).
+  - `zone_id` (optional string): Filter by origin or destination zone UUID.
 - **Authorization & Scoping Rules:**
   - `CUSTOMER`: Results are strictly scoped to `sender_id = caller.UserID`.
   - `MERCHANT`: Results are strictly scoped to `merchant_id = caller.TenantID` (requires approved status).
-  - `ADMIN`: Global view across all tenants and users.
-  - `COURIER` / `DISPATCHER`: `403 Forbidden` (`PARCEL_FORBIDDEN`).
+  - `ADMIN` & `DISPATCHER`: Global operational oversight view across all tenants and users.
+  - `COURIER`: `403 Forbidden` (`AUTH_FORBIDDEN`).
 
 ### 6.1 Success Response (`200 OK`)
 ```json

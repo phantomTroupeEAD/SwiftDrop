@@ -6,6 +6,8 @@ import (
 
 	"github.com/swiftdrop/core-api/internal/dispatch/application"
 	"github.com/swiftdrop/core-api/internal/dispatch/domain"
+	parcelsApp "github.com/swiftdrop/core-api/internal/parcels/application"
+	parcelsDomain "github.com/swiftdrop/core-api/internal/parcels/domain"
 	"github.com/swiftdrop/core-api/internal/platform/db"
 	"github.com/swiftdrop/core-api/internal/platform/httpx"
 )
@@ -48,7 +50,10 @@ func MapError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, r, http.StatusNotFound, "PARCEL_NOT_ASSIGNED", err.Error())
 	case errors.Is(err, application.ErrDuplicateActiveAssignment):
 		httpx.WriteError(w, r, http.StatusConflict, "PARCEL_ALREADY_ASSIGNED", err.Error())
-	case errors.Is(err, application.ErrInvalidParcelStatusForAssignment), errors.Is(err, application.ErrParcelNotEligibleForAssignment):
+	case errors.Is(err, application.ErrInvalidParcelStatusForAssignment),
+		errors.Is(err, application.ErrParcelNotEligibleForAssignment),
+		errors.Is(err, parcelsDomain.ErrIllegalStateTransition),
+		errors.Is(err, parcelsApp.ErrConcurrencyConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "INVALID_PARCEL_STATE", err.Error())
 	case errors.Is(err, application.ErrMaxAttemptsExceeded):
 		httpx.WriteError(w, r, http.StatusConflict, "MAX_ATTEMPTS_EXCEEDED", err.Error())

@@ -6,24 +6,53 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/swiftdrop/core-api/internal/events"
+	parcelsApp "github.com/swiftdrop/core-api/internal/parcels/application"
+	parcelsDomain "github.com/swiftdrop/core-api/internal/parcels/domain"
+	parcelsInfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 	"github.com/swiftdrop/core-api/internal/platform/db"
 )
 
 // PostgresParcelLifecycleUpdater implements application.ParcelLifecycleUpdater
-// for the monolith database, ensuring atomic status transitions and audit history.
+// for the monolith database, delegating aggregate status transitions to Member 2's
+// TransitionParcelStatusUseCase within caller transactions, ensuring atomic status
+// transitions, immutable audit history, and canonical outbox event publication.
 type PostgresParcelLifecycleUpdater struct {
-	db *sql.DB
+	db              *sql.DB
+	parcelLifecycle parcelsApp.ParcelLifecycleService
 }
 
 // NewPostgresParcelLifecycleUpdater constructs the lifecycle updater.
-func NewPostgresParcelLifecycleUpdater(db *sql.DB) *PostgresParcelLifecycleUpdater {
-	return &PostgresParcelLifecycleUpdater{db: db}
+// If parcelLifecycle is not provided and db is non-nil, it automatically initializes
+// Member 2's TransitionParcelStatusUseCase backed by PostgreSQL.
+func NewPostgresParcelLifecycleUpdater(db *sql.DB, parcelLifecycle ...parcelsApp.ParcelLifecycleService) *PostgresParcelLifecycleUpdater {
+	var lifecycle parcelsApp.ParcelLifecycleService
+	if len(parcelLifecycle) > 0 {
+		lifecycle = parcelLifecycle[0]
+	} else if db != nil {
+		parcelRepo := parcelsInfra.NewPostgresParcelRepository(db)
+		historyRepo := parcelsInfra.NewPostgresStatusHistoryRepository(db)
+		eventsOutbox := events.NewPostgresOutboxWriter()
+		txMgr := parcelsApp.NewDBTransactionManager(db)
+		if uc, err := parcelsApp.NewTransitionParcelStatusUseCase(
+			txMgr,
+			parcelRepo,
+			historyRepo,
+			eventsOutbox,
+			parcelsApp.NewUUIDv7Generator(),
+			parcelsApp.NewSystemClock(),
+		); err == nil {
+			lifecycle = uc
+		}
+	}
+	return &PostgresParcelLifecycleUpdater{
+		db:              db,
+		parcelLifecycle: lifecycle,
+	}
 }
 
 // GetStatusWithLock acquires a row-level lock on the target parcel and retrieves its status.
 func (u *PostgresParcelLifecycleUpdater) GetStatusWithLock(
-	// Check db handle
-
 	ctx context.Context,
 	tx *sql.Tx,
 	parcelID uuid.UUID,
@@ -94,9 +123,10 @@ func (u *PostgresParcelLifecycleUpdater) GetMerchantID(
 }
 
 // TransitionStatus atomically updates parcel status and appends a row to parcel_status_history.
+// When parcelLifecycle is available, it delegates to Member 2's TransitionParcelStatusUseCase.ExecuteTx
+// within the provided database transaction, ensuring aggregate invariant evaluation,
+// optimistic concurrency control, audit logging, and canonical outbox event emission.
 func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
-	// Check db handle
-
 	ctx context.Context,
 	tx *sql.Tx,
 	parcelID uuid.UUID,
@@ -104,9 +134,35 @@ func (u *PostgresParcelLifecycleUpdater) TransitionStatus(
 	actorID uuid.UUID,
 	actorRole, note string,
 ) error {
+	if u.parcelLifecycle != nil {
+		actorIDStr := actorID.String()
+		cmd := parcelsApp.TransitionParcelStatusCommand{
+			ParcelID:     parcelID.String(),
+			TargetStatus: parcelsDomain.ParcelStatus(toStatus),
+			ActorID:      &actorIDStr,
+			ActorType:    parcelsDomain.ActorTypeUser,
+			ActorRole:    actorRole,
+			Reason:       note,
+		}
+		if tx != nil {
+			_, err := u.parcelLifecycle.ExecuteTx(ctx, tx, cmd)
+			if err != nil {
+				return fmt.Errorf("failed to transition parcel status via parcel lifecycle service: %w", err)
+			}
+			return nil
+		}
+		_, err := u.parcelLifecycle.Execute(ctx, cmd)
+		if err != nil {
+			return fmt.Errorf("failed to transition parcel status via parcel lifecycle service: %w", err)
+		}
+		return nil
+	}
+
 	if tx == nil && u.db == nil {
 		return fmt.Errorf("parcel updater: %w", db.ErrNilDB)
 	}
+
+	// Fallback direct SQL update if parcelLifecycle is not wired
 	updateQuery := `
 		UPDATE parcels
 		SET status = $1, version = version + 1, updated_at = NOW()

@@ -14,29 +14,36 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, sec *identitytransport.Secur
 		return
 	}
 
-	parcelRoles := identitytransport.RequireRole(
+	bookingRoles := identitytransport.RequireRole(
 		identitydomain.RoleCustomer,
 		identitydomain.RoleMerchant,
 		identitydomain.RoleAdmin,
 	)
 
+	viewRoles := identitytransport.RequireRole(
+		identitydomain.RoleCustomer,
+		identitydomain.RoleMerchant,
+		identitydomain.RoleAdmin,
+		identitydomain.RoleDispatcher,
+	)
+
 	mux.Handle("POST /api/v1/parcels", sec.Authenticate(
-		parcelRoles(http.HandlerFunc(h.BookParcel)),
+		bookingRoles(http.HandlerFunc(h.BookParcel)),
 	))
 
 	mux.Handle("GET /api/v1/parcels", sec.Authenticate(
-		parcelRoles(http.HandlerFunc(h.ListParcels)),
+		viewRoles(http.HandlerFunc(h.ListParcels)),
 	))
 
 	mux.Handle("GET /api/v1/parcels/{id}", sec.Authenticate(
-		parcelRoles(http.HandlerFunc(h.GetParcel)),
+		viewRoles(http.HandlerFunc(h.GetParcel)),
 	))
 
 	mux.Handle("GET /api/v1/parcels/{id}/history", sec.Authenticate(
-		parcelRoles(http.HandlerFunc(h.GetParcelHistory)),
+		viewRoles(http.HandlerFunc(h.GetParcelHistory)),
 	))
 
 	mux.Handle("GET /api/v1/parcels/{id}/receipt", sec.Authenticate(
-		parcelRoles(http.HandlerFunc(h.GetParcelReceipt)),
+		viewRoles(http.HandlerFunc(h.GetParcelReceipt)),
 	))
 }
