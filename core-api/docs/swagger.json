@@ -2544,7 +2544,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin (all parcels).",
+                "description": "Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin/dispatcher (all parcels, with optional status and zone filters).",
                 "produces": [
                     "application/json"
                 ],
@@ -2569,6 +2569,18 @@
                         "type": "integer",
                         "description": "Alternative query parameter for page_size",
                         "name": "per_page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by parcel lifecycle status (e.g. CREATED, ASSIGNED, IN_TRANSIT, DELIVERED)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by origin or destination zone UUID",
+                        "name": "zone_id",
                         "in": "query"
                     }
                 ],
@@ -2711,7 +2723,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved merchants.",
+                "description": "Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, admin, or dispatcher. Disallows couriers and non-approved merchants.",
                 "produces": [
                     "application/json"
                 ],
@@ -2775,7 +2787,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, or admin.",
+                "description": "Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, admin, or dispatcher.",
                 "produces": [
                     "application/json"
                 ],

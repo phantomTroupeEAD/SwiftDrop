@@ -54,6 +54,8 @@ type QuoteConsumer interface {
 type ParcelFilter struct {
 	SenderID   *string
 	MerchantID *string
+	Status     *string
+	ZoneID     *string
 }
 
 // ParcelRepository defines the persistence port for the Parcel aggregate root.

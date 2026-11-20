@@ -82,6 +82,19 @@ export async function registerCourier(token: string | null, input: CourierCreate
   return res.data;
 }
 
+export interface CourierCandidate {
+  user_id: string;
+  display_name: string;
+  email: string;
+  phone: string;
+}
+
+/** Eligible identity users holding the COURIER role without an active fleet profile. */
+export async function listCourierCandidates(token: string | null): Promise<CourierCandidate[]> {
+  const res = await request<{ data: CourierCandidate[] | null }>(token, 'GET', '/api/v1/dispatch/couriers/candidates');
+  return res.data ?? [];
+}
+
 export interface ZoneOption {
   id: string;
   code: string;

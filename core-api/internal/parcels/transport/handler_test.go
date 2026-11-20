@@ -194,6 +194,12 @@ func (f *fakeParcelRepo) List(_ context.Context, _ db.Querier, filter applicatio
 		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
 			continue
 		}
+		if filter.Status != nil && string(p.Status) != *filter.Status {
+			continue
+		}
+		if filter.ZoneID != nil && p.OriginZoneID != *filter.ZoneID && p.DestinationZoneID != *filter.ZoneID {
+			continue
+		}
 		res = append(res, p)
 	}
 	total := len(res)
@@ -961,14 +967,18 @@ func TestParcelEndpoints_MerchantEligibilityAndForbiddenRoles(t *testing.T) {
 		{http.MethodGet, "/api/v1/parcels/" + parcelID + "/history", ""},
 	}
 
-	t.Run("courier_and_dispatcher_rejected_by_middleware", func(t *testing.T) {
-		for _, role := range []identitydomain.Role{identitydomain.RoleCourier, identitydomain.RoleDispatcher} {
-			tok := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: role})
-			for _, ep := range endpoints {
-				rec := th.doJSON(t, ep.method, ep.path, tok, testIdemKey2, ep.body)
-				assertParcelErrorEnvelope(t, rec, http.StatusForbidden, "AUTH_FORBIDDEN")
-			}
+	t.Run("courier_rejected_by_middleware", func(t *testing.T) {
+		tok := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: identitydomain.RoleCourier})
+		for _, ep := range endpoints {
+			rec := th.doJSON(t, ep.method, ep.path, tok, testIdemKey2, ep.body)
+			assertParcelErrorEnvelope(t, rec, http.StatusForbidden, "AUTH_FORBIDDEN")
 		}
+	})
+
+	t.Run("dispatcher_booking_rejected_by_middleware", func(t *testing.T) {
+		tok := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: identitydomain.RoleDispatcher})
+		rec := th.doJSON(t, http.MethodPost, "/api/v1/parcels", tok, testIdemKey2, validBookingJSON(testMerchantQuoteID))
+		assertParcelErrorEnvelope(t, rec, http.StatusForbidden, "AUTH_FORBIDDEN")
 	})
 
 	t.Run("courier_rejected_directly_by_handler_defense_in_depth", func(t *testing.T) {
@@ -1031,6 +1041,30 @@ func TestParcelEndpoints_MerchantEligibilityAndForbiddenRoles(t *testing.T) {
 	if th.historyRepo.findByParcelFn != 0 {
 		t.Fatalf("expected statusHistoryRepo.FindByParcelID not called during rejected checks, got %d", th.historyRepo.findByParcelFn)
 	}
+}
+
+func TestParcelEndpoints_DispatcherAccess(t *testing.T) {
+	th := newParcelTestHarness(t)
+
+	// Book a parcel as customer
+	custToken := th.issueToken(t, identityapp.Principal{UserID: testCustomerUserID, Role: identitydomain.RoleCustomer})
+	bookRec := th.doJSON(t, http.MethodPost, "/api/v1/parcels", custToken, testIdemKey1, validBookingJSON(testCustomerQuoteID))
+	parcelData := assertParcelDataEnvelope(t, bookRec, http.StatusCreated)
+	parcelID := parcelData["id"].(string)
+
+	dispToken := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: identitydomain.RoleDispatcher})
+
+	// Dispatcher can view parcel details
+	recParcel := th.doJSON(t, http.MethodGet, "/api/v1/parcels/"+parcelID, dispToken, "", "")
+	assertParcelDataEnvelope(t, recParcel, http.StatusOK)
+
+	// Dispatcher can view parcel history
+	recHist := th.doJSON(t, http.MethodGet, "/api/v1/parcels/"+parcelID+"/history", dispToken, "", "")
+	assertParcelDataEnvelope(t, recHist, http.StatusOK)
+
+	// Dispatcher can view parcel receipt
+	recReceipt := th.doJSON(t, http.MethodGet, "/api/v1/parcels/"+parcelID+"/receipt", dispToken, "", "")
+	assertParcelDataEnvelope(t, recReceipt, http.StatusOK)
 }
 
 func TestBookParcel_QuoteAndValidationErrors(t *testing.T) {
@@ -1414,4 +1448,61 @@ func TestParcelEndpoints_ListParcels(t *testing.T) {
 	if !ok || len(otherItems) != 0 {
 		t.Fatalf("expected 0 items for customer 2, got %v", otherData["items"])
 	}
+
+	// Dispatcher should see customer 1's parcel across tenants
+	dispToken := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: identitydomain.RoleDispatcher})
+	recDisp := th.doJSON(t, http.MethodGet, "/api/v1/parcels?page=1&page_size=20", dispToken, "", "")
+	var rootDisp map[string]any
+	if err := json.NewDecoder(recDisp.Body).Decode(&rootDisp); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+	dispData, ok := rootDisp["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data object, got %v", rootDisp["data"])
+	}
+	dispItems, ok := dispData["items"].([]any)
+	if !ok || len(dispItems) != 1 {
+		t.Fatalf("expected 1 item for dispatcher, got %v", dispData["items"])
+	}
+
+	// Dispatcher status filtering: matching status CREATED
+	recStatusMatch := th.doJSON(t, http.MethodGet, "/api/v1/parcels?status=CREATED", dispToken, "", "")
+	var rootStatusMatch map[string]any
+	_ = json.NewDecoder(recStatusMatch.Body).Decode(&rootStatusMatch)
+	statusMatchData := rootStatusMatch["data"].(map[string]any)
+	if len(statusMatchData["items"].([]any)) != 1 {
+		t.Fatalf("expected 1 item matching status CREATED, got %d", len(statusMatchData["items"].([]any)))
+	}
+
+	// Dispatcher status filtering: non-matching status DELIVERED
+	recStatusNoMatch := th.doJSON(t, http.MethodGet, "/api/v1/parcels?status=DELIVERED", dispToken, "", "")
+	var rootStatusNoMatch map[string]any
+	_ = json.NewDecoder(recStatusNoMatch.Body).Decode(&rootStatusNoMatch)
+	statusNoMatchData := rootStatusNoMatch["data"].(map[string]any)
+	if len(statusNoMatchData["items"].([]any)) != 0 {
+		t.Fatalf("expected 0 items matching status DELIVERED, got %d", len(statusNoMatchData["items"].([]any)))
+	}
+
+	// Dispatcher zone filtering: matching zone ZONE_WESTERN_01
+	recZoneMatch := th.doJSON(t, http.MethodGet, "/api/v1/parcels?zone_id=ZONE_WESTERN_01", dispToken, "", "")
+	var rootZoneMatch map[string]any
+	_ = json.NewDecoder(recZoneMatch.Body).Decode(&rootZoneMatch)
+	zoneMatchData := rootZoneMatch["data"].(map[string]any)
+	if len(zoneMatchData["items"].([]any)) != 1 {
+		t.Fatalf("expected 1 item matching zone ZONE_WESTERN_01, got %d", len(zoneMatchData["items"].([]any)))
+	}
+
+	// Dispatcher zone filtering: non-matching zone ZONE_SOUTHERN_01
+	recZoneNoMatch := th.doJSON(t, http.MethodGet, "/api/v1/parcels?zone_id=ZONE_SOUTHERN_01", dispToken, "", "")
+	var rootZoneNoMatch map[string]any
+	_ = json.NewDecoder(recZoneNoMatch.Body).Decode(&rootZoneNoMatch)
+	zoneNoMatchData := rootZoneNoMatch["data"].(map[string]any)
+	if len(zoneNoMatchData["items"].([]any)) != 0 {
+		t.Fatalf("expected 0 items matching zone ZONE_SOUTHERN_01, got %d", len(zoneNoMatchData["items"].([]any)))
+	}
+
+	// Courier is rejected with 403 Forbidden
+	courierToken := th.issueToken(t, identityapp.Principal{UserID: testCourierUserID, Role: identitydomain.RoleCourier})
+	recCourier := th.doJSON(t, http.MethodGet, "/api/v1/parcels", courierToken, "", "")
+	assertParcelErrorEnvelope(t, recCourier, http.StatusForbidden, "AUTH_FORBIDDEN")
 }

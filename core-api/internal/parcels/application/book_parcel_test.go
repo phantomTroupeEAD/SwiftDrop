@@ -236,6 +236,12 @@ func (m *mockParcelRepo) List(ctx context.Context, q db.Querier, filter ParcelFi
 		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
 			continue
 		}
+		if filter.Status != nil && string(p.Status) != *filter.Status {
+			continue
+		}
+		if filter.ZoneID != nil && p.OriginZoneID != *filter.ZoneID && p.DestinationZoneID != *filter.ZoneID {
+			continue
+		}
 		res = append(res, p)
 	}
 	total := len(res)

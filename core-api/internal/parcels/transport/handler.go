@@ -170,7 +170,7 @@ func (h *Handler) BookParcel(w http.ResponseWriter, r *http.Request) {
 
 // GetParcel godoc
 // @Summary      Retrieve authorized parcel details
-// @Description  Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved merchants.
+// @Description  Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, admin, or dispatcher. Disallows couriers and non-approved merchants.
 // @Tags         parcels
 // @Produce      json
 // @Security     BearerAuth
@@ -224,7 +224,7 @@ func (h *Handler) GetParcelReceipt(w http.ResponseWriter, r *http.Request) {
 
 // GetParcelHistory godoc
 // @Summary      Retrieve authorized chronological parcel status history
-// @Description  Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, or admin.
+// @Description  Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, admin, or dispatcher.
 // @Tags         parcels
 // @Produce      json
 // @Security     BearerAuth
@@ -257,13 +257,15 @@ func (h *Handler) GetParcelHistory(w http.ResponseWriter, r *http.Request) {
 
 // ListParcels godoc
 // @Summary      List parcels visible to caller
-// @Description  Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin (all parcels).
+// @Description  Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin/dispatcher (all parcels, with optional status and zone filters).
 // @Tags         parcels
 // @Produce      json
 // @Security     BearerAuth
 // @Param        page query int false "Page number (default 1)"
 // @Param        page_size query int false "Items per page (default 20, max 100)"
 // @Param        per_page query int false "Alternative query parameter for page_size"
+// @Param        status query string false "Filter by parcel lifecycle status (e.g. CREATED, ASSIGNED, IN_TRANSIT, DELIVERED)"
+// @Param        zone_id query string false "Filter by origin or destination zone UUID"
 // @Success      200 {object} httpx.DataEnvelope "Paginated parcels list wrapped in standard data envelope"
 // @Failure      401 {object} httpx.ErrorEnvelope "Missing or invalid Bearer token"
 // @Failure      403 {object} httpx.ErrorEnvelope "Forbidden role"
@@ -294,10 +296,15 @@ func (h *Handler) ListParcels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	status := r.URL.Query().Get("status")
+	zoneID := r.URL.Query().Get("zone_id")
+
 	result, err := h.listParcelsUseCase.Execute(r.Context(), application.ListParcelsQuery{
 		Caller:   callerContextFromPrincipal(principal),
 		Page:     page,
 		PageSize: pageSize,
+		Status:   status,
+		ZoneID:   zoneID,
 	})
 	if err != nil {
 		writeParcelError(w, r, err)

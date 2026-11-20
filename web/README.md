@@ -159,6 +159,7 @@ The router guards ensure strict authorization before any protected view is mount
 | `/portal/merchants/api-keys`| `MERCHANT` | Member 6 | Machine-to-machine API key management & one-time copy modal. |
 | `/portal/merchants/webhooks`| `MERCHANT` | Member 6 | Webhook endpoint registration & one-time signing secret modal. |
 | `/ops/dispatch` | `DISPATCHER`, `ADMIN` | Member 7 | Dispatch board: waiting parcels and couriers for a zone (`GET /api/v1/dispatch/board`, reloads every 30 s), assign (`POST /dispatch/assignments`) or reassign a failed parcel (`POST /dispatch/parcels/{id}/reschedule`). |
+| `/ops/shipments` | `DISPATCHER`, `ADMIN` | Member 7 | All Shipments browser: scrollable paginated list of all parcels across all lifecycle states (`GET /api/v1/parcels`), status tabs, zone filter, and inline milestone journey inspection modal (`GET /api/v1/tracking/:trackingNumber`). |
 | `/dispatcher/dashboard` | `DISPATCHER` | Member 7 | Live dispatch board: unassigned parcel queue, courier workloads, parcel assignment, and courier fleet onboarding modal (`POST /api/v1/dispatch/couriers`). |
 | `/ops/couriers` | `ADMIN`, `DISPATCHER` | Member 7 | Fleet: couriers with shift, zone, vehicle and workload (`GET /api/v1/dispatch/couriers`), and adding a courier (`POST /api/v1/dispatch/couriers`). Shift is shown, not edited. |
 | `/ops/zones` | `ADMIN` | Member 7 | Delivery zone geometry, base tariffs, and operational boundary setup. |
@@ -257,6 +258,18 @@ The Dispatcher workspace (`src/features/dashboards/DispatcherDashboard.tsx`) fea
 - **Transparent Session Recovery**: The shared API client (`portalRequest`) transparently detects HTTP 401 token expirations, executes silent session recovery against `/api/v1/auth/refresh` using the secure HttpOnly cookie, broadcasts a synchronization event to `AuthContext`, and retries the failed operation seamlessly without blocking the user.
 - **Courier Onboarding Modal**: Onboards eligible users holding the `COURIER` role via `GET /api/v1/dispatch/couriers/candidates` and `POST /api/v1/dispatch/couriers`.
 - **Strict UI Governance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="DISPATCHER"`, zero raw elements, and zero arbitrary Tailwind brackets.
+
+### Ops Workspace: Candidate Selection & Parcel Tracking Lookup (November 2026)
+Added two key operational capabilities to the Dispatcher and Admin operations workspace (`/ops/*`):
+- **Courier Candidate Dropdown (`/ops/couriers`):** In `AddCourierModal.tsx`, unified courier onboarding across both `ADMIN` and `DISPATCHER` roles to consume `GET /api/v1/dispatch/couriers/candidates`. Dispatchers no longer have to manually type raw UUIDs; they can select directly from unassigned identity accounts possessing the `COURIER` role, with a manual UUID entry toggle available for fallback.
+- **Operational Parcel Tracking Lookup (`/ops/tracking`):** Introduced a dedicated tracking search and milestone timeline panel (`src/features/dispatcher-admin/tracking/ParcelLookupPanel.tsx`) mounted at `/ops/tracking` and registered in `OPS_NAV`. Dispatchers and Admins can query any parcel by tracking number (`SD-YYYYMMDD-XXXXXX`), inspecting its current status, destination zone/city, and chronological milestone journey (`GET /api/v1/tracking/:trackingNumber`) with wholesale financial margins and PII strictly redacted. Features contextual deep links to the Dispatch Board (`CREATED`) and Failed Deliveries (`ATTEMPT_FAILED`).
+
+### Ops Workspace: All Shipments Browser (`/ops/shipments`) (November 2026)
+Added an authoritative, scrollable All Shipments operational browser (`src/features/dispatcher-admin/shipments/ShipmentsPanel.tsx`) mounted at `/ops/shipments` and registered in `OPS_NAV`:
+- **Complete Operational Visibility:** Dispatchers and Admins can scroll and inspect all parcels across all 9 lifecycle states (`CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `ATTEMPT_FAILED`, `RETURNED`, `CANCELLED`) without needing to know tracking numbers beforehand.
+- **Status Filter Tabs & Zone Selector:** Interactive status filter pills (`All`, `Created`, `Assigned`, `In Transit`, `Out for Delivery`, `Delivered`, `Failed`, `Returned`, `Cancelled`) and a zone dropdown selector querying `listZoneOptions`.
+- **Inline Milestone Journey Modal:** Direct "View Journey" inspection button per parcel row that queries `getParcelTracking(token, trackingNumber)` with seamless fallback to `getParcelHistory(token, parcelId)` to display routing metadata and the chronological milestone timeline with role badges.
+- **Strict Design Token & Apple HIG Compliance:** Composed 100% with `@/shared/components/ui/` primitives (`Card`, `Table`, `Badge`, `Button`, `Select`, `Dialog`, `Skeleton`), zero raw elements, zero arbitrary hex codes, responsive touch targets (`touch:min-h-[44px]`), and validated cleanly via `npm run lint:ui` and `npm run build`.
 
 ---
 

@@ -560,6 +560,16 @@ func (r *PostgresParcelRepository) List(ctx context.Context, q db.Querier, filte
 		args = append(args, *filter.MerchantID)
 		argIdx++
 	}
+	if filter.Status != nil {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, *filter.Status)
+		argIdx++
+	}
+	if filter.ZoneID != nil {
+		conditions = append(conditions, fmt.Sprintf("(origin_zone_id = $%d OR destination_zone_id = $%d)", argIdx, argIdx+1))
+		args = append(args, *filter.ZoneID, *filter.ZoneID)
+		argIdx += 2
+	}
 
 	whereClause := ""
 	if len(conditions) > 0 {

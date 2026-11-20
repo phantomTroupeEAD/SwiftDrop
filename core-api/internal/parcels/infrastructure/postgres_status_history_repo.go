@@ -140,7 +140,7 @@ func (r *PostgresStatusHistoryRepository) FindByParcelID(ctx context.Context, q 
 		}
 
 		toStatus := domain.ParcelStatus(toStatusStr)
-		entry, err := domain.NewStatusHistoryEntry(
+		entry := domain.ReconstituteStatusHistoryEntry(
 			id,
 			pID,
 			fromStatusPtr,
@@ -150,11 +150,7 @@ func (r *PostgresStatusHistoryRepository) FindByParcelID(ctx context.Context, q 
 			roleNS.String,
 			rsnNS.String,
 			occurredAt,
-			attemptCount,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("corrupt status history row in db: %w", err)
-		}
 
 		if toStatus == domain.StatusAttemptFailed {
 			attemptCount++

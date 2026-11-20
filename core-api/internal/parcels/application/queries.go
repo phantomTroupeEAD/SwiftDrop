@@ -57,6 +57,8 @@ type ListParcelsQuery struct {
 	Caller   CallerContext
 	Page     int
 	PageSize int
+	Status   string
+	ZoneID   string
 }
 
 // ListParcelsResult contains paginated parcels and metadata.
@@ -111,10 +113,18 @@ func (uc *ListParcelsUseCase) Execute(ctx context.Context, query ListParcelsQuer
 		filter.SenderID = &senderID
 	case RoleMerchant:
 		filter.MerchantID = verified.merchantID
-	case RoleAdmin:
-		// Admin can view all parcels across tenants
+	case RoleAdmin, RoleDispatcher:
+		// Admin and Dispatcher can view all parcels across tenants for operational oversight
 	default:
 		return ListParcelsResult{}, fmt.Errorf("%w: role %s not permitted to list parcels", ErrForbiddenParcelAccess, verified.role)
+	}
+
+	if status := strings.TrimSpace(query.Status); status != "" {
+		st := strings.ToUpper(status)
+		filter.Status = &st
+	}
+	if zoneID := strings.TrimSpace(query.ZoneID); zoneID != "" {
+		filter.ZoneID = &zoneID
 	}
 
 	items, total, err := uc.parcelRepo.List(ctx, nil, filter, page, pageSize)
@@ -218,6 +228,10 @@ func ResolveParcelCallerForBooking(ctx context.Context, caller CallerContext, me
 		return ResolvedBookingCaller{}, err
 	}
 
+	if verified.role != RoleCustomer && verified.role != RoleMerchant && verified.role != RoleAdmin {
+		return ResolvedBookingCaller{}, fmt.Errorf("%w: role %q cannot book parcels", ErrForbiddenParcelAccess, verified.role)
+	}
+
 	senderID := verified.userID
 	return ResolvedBookingCaller{
 		SenderID:   &senderID,
@@ -273,7 +287,7 @@ func authorizeAndResolveCaller(ctx context.Context, caller CallerContext, mercha
 
 	role := strings.ToUpper(strings.TrimSpace(caller.Role))
 	switch role {
-	case RoleCustomer, RoleAdmin:
+	case RoleCustomer, RoleAdmin, RoleDispatcher:
 		return verifiedCaller{
 			userID: userID,
 			role:   role,
@@ -340,7 +354,7 @@ func resolveVerifiedMerchant(
 
 func authorizeParcelAccess(parcel domain.Parcel, caller verifiedCaller) error {
 	switch caller.role {
-	case RoleAdmin:
+	case RoleAdmin, RoleDispatcher:
 		return nil
 
 	case RoleCustomer:

@@ -2314,8 +2314,8 @@ paths:
   /api/v1/parcels:
     get:
       description: Returns a paginated list of parcels for the authenticated customer
-        (scoped by sender_id), approved merchant (scoped by merchant_id), or admin
-        (all parcels).
+        (scoped by sender_id), approved merchant (scoped by merchant_id), or admin/dispatcher
+        (all parcels, with optional status and zone filters).
       parameters:
       - description: Page number (default 1)
         in: query
@@ -2329,6 +2329,15 @@ paths:
         in: query
         name: per_page
         type: integer
+      - description: Filter by parcel lifecycle status (e.g. CREATED, ASSIGNED, IN_TRANSIT,
+          DELIVERED)
+        in: query
+        name: status
+        type: string
+      - description: Filter by origin or destination zone UUID
+        in: query
+        name: zone_id
+        type: string
       produces:
       - application/json
       responses:
@@ -2431,7 +2440,7 @@ paths:
   /api/v1/parcels/{id}:
     get:
       description: Returns the Parcel aggregate root for the owning customer, approved
-        owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved
+        owning merchant tenant, admin, or dispatcher. Disallows couriers and non-approved
         merchants.
       parameters:
       - description: Parcel UUID
@@ -2475,7 +2484,7 @@ paths:
   /api/v1/parcels/{id}/history:
     get:
       description: Returns parcel metadata and ordered lifecycle status history entries
-        for the owning customer, approved owning merchant tenant, or admin.
+        for the owning customer, approved owning merchant tenant, admin, or dispatcher.
       parameters:
       - description: Parcel UUID
         in: path

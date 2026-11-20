@@ -15,6 +15,8 @@ import { MerchantDetailPage } from '../merchants/MerchantDetailPage';
 import { MerchantsPanel } from '../merchants/MerchantsPanel';
 import { PricingPanel } from '../pricing/PricingPanel';
 import { ReportsPanel } from '../reports/ReportsPanel';
+import { ShipmentsPanel } from '../shipments/ShipmentsPanel';
+import { ParcelLookupPanel } from '../tracking/ParcelLookupPanel';
 import { ZonesPanel } from '../zones/ZonesPanel';
 import { OPS_NAV, homePathFor, isOpsRole } from './opsNav';
 
@@ -179,6 +181,30 @@ export function ReportsPage() {
     <>
       <PageHeader title={item.title} description={item.description} />
       <ReportsPanel token={accessToken} />
+    </>
+  );
+}
+
+export function ShipmentsPage() {
+  const { accessToken } = useAuth();
+  const { banner, show } = useNotice();
+  const item = navItem('shipments');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      {banner}
+      <ShipmentsPanel token={accessToken} onNotice={show} />
+    </>
+  );
+}
+
+export function TrackingPage() {
+  const { accessToken } = useAuth();
+  const item = navItem('tracking');
+  return (
+    <>
+      <PageHeader title={item.title} description={item.description} />
+      <ParcelLookupPanel token={accessToken} />
     </>
   );
 }
