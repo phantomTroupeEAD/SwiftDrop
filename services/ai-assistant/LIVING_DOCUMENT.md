@@ -109,7 +109,7 @@ flowchart TD
 
     subgraph MockMode["CI & Testing Engine (Offline Deterministic Mock)"]
         RegexMatcher["Deterministic Regex Pattern Matcher"]
-        IntentRouting["Intent Routing:<br/>1. Tracking code: ^SD-\d{8}-\d{5}$<br/>2. Tracking without code: 'track', 'where is'<br/>3. Active parcels: 'my parcel', 'active shipments'<br/>4. Fee estimate: 'cost', 'fee', 'how much'<br/>5. Policies: 'prohibited', 'rules', 'sla'<br/>6. Default help overview"]
+        IntentRouting["Intent Routing:<br/>1. Tracking code: Crockford Base32 ^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$<br/>2. Tracking without code: 'track', 'where is'<br/>3. Active parcels: 'my parcel', 'active shipments'<br/>4. Fee estimate: 'cost', 'fee', 'how much'<br/>5. Policies: 'prohibited', 'rules', 'sla'<br/>6. Default help overview"]
         RegexMatcher --> IntentRouting
     end
 
@@ -133,7 +133,7 @@ flowchart TD
 - **Zero-Dependency CI Engine:** Enabled when `MOCK_LLM_MODE=true` or when `LLM_API_KEY` is not provided.
 - **Structured Intent Routing Hierarchy:**
   1. Tracking with canonical code: Executes `track_parcel_status`.
-  2. Tracking inquiry without code: Prompts user for canonical `SD-YYYYMMDD-XXXXX` format.
+  2. Tracking inquiry without code: Prompts user for canonical `SD-YYYYMMDD-XXXXXX` format.
   3. Active parcels inquiry: Executes `list_active_parcels` forwarding caller's Bearer JWT.
   4. Fee and quote inquiry: Parses weight and 5-digit postal codes, executes `estimate_delivery_fee`, and attaches `NAVIGATE_BOOKING` action card.
   5. Policy and shipping rules: Queries `explain_company_policies`.
@@ -262,7 +262,7 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
 ### Tool 1: `track_parcel_status` / `track_parcel` (`src/tools/tracking_tool.py`, `src/mcp/server.py`)
 - **Purpose:** Public shipment milestone lookup.
 - **Target Endpoint:** `GET /api/v1/tracking/public/{trackingNumber}` on Member 5's Tracking API (`TRACKING_API_URL`).
-- **Input Model:** `TrackParcelInput` — Enforces non-backtracking regex `^SD-\d{8}-\d{5}$` (e.g. `SD-20261021-04921`) and safe URL encoding (`urllib.parse.quote`).
+- **Input Model:** `TrackParcelInput` — Enforces non-backtracking Crockford Base32 regex `^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$` (e.g. `SD-20261120-JR47QE`, `SD-20261117-EPV1M4`) and safe URL encoding (`urllib.parse.quote`).
 - **Privacy Enforcement (`SEC-009`):** Strips recipient phone numbers (`+9477...`), full street addresses, recipient names, and internal driver notes. Only milestones, status description, and destination city are returned.
 - **Deterministic 404 Handling:** Catches HTTP 404 and returns `{found: False, tracking_number: ..., message: ..., grounded: True}`. Eliminates LLM hallucination for unknown parcels.
 
@@ -470,7 +470,7 @@ python -m pytest services/ai-assistant/tests/ -v
 3. **`test_domain_chat.py` (7 Tests):**
    - Chat message validation, empty rejection, approved relative URLs, prohibited XSS/open-redirect schemes, prompt length capping (1,000 chars), history capping (10 turns), response schema.
 4. **`test_domain_tools.py` (7 Tests):**
-   - Tracking regex validation (`^SD-\d{8}-\d{5}$`), invalid tracking rejection, fee estimation bounds (`0.0 < weight <= 50.0`), 5-digit postal code regex, active parcel limits (`1 <= limit <= 50`), policy query sanitization.
+   - Tracking regex validation (`^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$`), invalid tracking rejection, fee estimation bounds (`0.0 < weight <= 50.0`), 5-digit postal code regex, active parcel limits (`1 <= limit <= 50`), policy query sanitization.
 5. **`test_domain_errors.py` (6 Tests):**
    - Status code mappings: 422 (Validation), 400 (Injection), 404 (Not Found), 502 (Upstream), 429 (Rate Limit), 401 (Auth).
 6. **`test_cache.py` (6 Tests):**
@@ -591,12 +591,13 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 - **Resolution:**
   1. Updated System Prompt Rule 1 to require introduction only on initial greetings or explicit identity queries; standard inquiries and follow-ups answer directly.
   2. Added explicit multi-turn entity continuity guidelines in system prompt for LLMs to resolve pronouns and implicit references.
-  3. Upgraded `MockLLMAdapter` to inspect `history` and extract previous tracking codes (`SD-YYYYMMDD-XXXXX`), postal codes, and weights.
+  3. Upgraded `MockLLMAdapter` to inspect `history` and extract previous tracking codes (`SD-YYYYMMDD-XXXXXX`), postal codes, and weights.
   4. Added dedicated conversational acknowledgment ("thanks") and direct fallback handling without repetitive greeting.
 
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
 | :--- | :--- | :--- | :--- |
+| `1.1.0` | 2026-11-20 | Upgraded tracking number validation to canonical Crockford Base32 format (`SD-YYYYMMDD-XXXXXX`) across Pydantic schema, MockLLMAdapter regex, FastMCP tool definitions, system prompts, and test suite. | Member 10 |
 | `0.1.0` | 2026-10-21 | Initial architecture placeholder | Architecture Setup |
 | `2.0.0` | 2026-10-25 | Harmonized specifications with audit findings | Member 10 & Review Agent |
 | `2.1.0` | 2026-11-02 | **Phase 1 Scaffolding Complete:** Created `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, secure `Dockerfile`, complete layered package tree, removed shadowed `cmd/` directory, automated smoke tests. | `4 passed in 0.05s` |
