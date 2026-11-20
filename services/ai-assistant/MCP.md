@@ -139,7 +139,7 @@ File: `mcp_settings.json`
 ### Tool Parameters
 
 #### `track_parcel`
-- `tracking_number` *(string, required)*: Parcel tracking code (format: `SD-YYYYMMDD-XXXXX`).
+- `tracking_number` *(string, required)*: Parcel tracking code (format: `SD-YYYYMMDD-XXXXXX`, e.g. `SD-20261120-JR47QE` or `SD-20261117-EPV1M4`).
 
 #### `estimate_shipping_fee`
 - `weight_kg` *(float, required)*: Package gross weight in kilograms (`0.01` to `50.0`).

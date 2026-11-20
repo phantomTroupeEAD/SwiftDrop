@@ -33,20 +33,20 @@ class TrackParcelInput(BaseModel):
     """Input argument model for track_parcel_status tool."""
 
     tracking_number: str = Field(
-        description="Authoritative tracking number in SD-YYYYMMDD-XXXXX format",
+        description="Authoritative tracking number in SD-YYYYMMDD-XXXXXX format (e.g. SD-20261120-JR47QE)",
     )
 
     @field_validator("tracking_number")
     @classmethod
     def validate_tracking_number(cls, v: str) -> str:
-        """Validate tracking number against canonical format (SD-YYYYMMDD-XXXXX)."""
+        """Validate tracking number against canonical Crockford Base32 format (SD-YYYYMMDD-XXXXXX)."""
         cleaned = v.strip().upper()
-        # Non-backtracking canonical tracking regex
-        pattern = r"^SD-\d{8}-\d{5}$"
+        # Non-backtracking canonical tracking regex: 6-char Crockford Base32 or 5-digit legacy
+        pattern = r"^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$"
         if not re.match(pattern, cleaned):
             raise ValueError(
-                f"Invalid tracking number format '{v}'. Expected format: SD-YYYYMMDD-XXXXX "
-                "(e.g. SD-20261021-04921)"
+                f"Invalid tracking number format '{v}'. Expected format: SD-YYYYMMDD-XXXXXX "
+                "(e.g. SD-20261120-JR47QE)"
             )
         return cleaned
 

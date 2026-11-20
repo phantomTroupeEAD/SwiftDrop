@@ -25,7 +25,7 @@ It also functions as an official **Model Context Protocol (FastMCP) Server**, en
 
 ## 🌟 Key Capabilities
 
-- **Natural Language Tracking:** Public tracking queries returning sanitized milestone timelines without disclosing personal customer information (`SEC-009`).
+- **Natural Language Tracking:** Public tracking queries returning sanitized milestone timelines without disclosing personal customer information (`SEC-009`), supporting canonical Crockford Base32 tracking numbers (`SD-YYYYMMDD-XXXXXX`).
 - **Instant Shipping Fee Estimation:** Instantaneous price estimations calculated via Core API's pricing engine.
 - **Sri Lanka Postal Directory & Town Resolution:** Built-in directory of all 25 districts and sub-district towns (e.g. Hunnasgiriya `20948`, Kahatagasdigiliya `50130`, Walasmulla `82450`, Kadugannawa `20430`, Mawanella `71500`, Mirissa `81740`, Nivitigala `70450`), enabling instant postal code lookups and automated quote routing with length-bounded fuzzy substring matching.
 - **Robust XML & Structured Tool Interception:** Seamlessly intercepts XML function-calling formats (`<function=...><parameter=...>` and `<tool_call>`) emitted by open-weights models (such as Nemotron and Qwen), suppressing raw markup from streaming tokens, executing authoritative tools against Core/Tracking APIs, and synthesizing clean, grounded conversational replies.

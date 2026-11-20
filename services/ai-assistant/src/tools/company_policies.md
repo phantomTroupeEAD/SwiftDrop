@@ -77,7 +77,7 @@ SwiftDrop operates standard and expedited dispatch routes across Sri Lanka:
    - Claims lodged after 7 calendar days will not be eligible for indemnification.
 
 2. **Claim Requirements:**
-   - Valid SwiftDrop tracking number (format: `SD-YYYYMMDD-XXXXX`).
+   - Valid SwiftDrop tracking number (format: `SD-YYYYMMDD-XXXXXX`).
    - High-resolution photographic evidence of the outer packaging, shipping label, and damaged contents.
    - Original commercial invoice or purchase receipt proving item value.
 
