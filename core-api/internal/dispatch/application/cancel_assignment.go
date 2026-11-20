@@ -45,7 +45,16 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 	}
 
 	return uc.txManager.WithTransaction(ctx, func(tx *sql.Tx) error {
-		// 1. Lock and verify parcel status (SELECT ... FOR UPDATE) to ensure mutual exclusion
+		// 1. Fetch active assignment for this parcel with lock
+		asgn, err := uc.assignmentRepo.GetActiveByParcelID(ctx, tx, parcelUUID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch active assignment: %w", err)
+		}
+		if asgn == nil {
+			return ErrAssignmentNotFound
+		}
+
+		// 2. Lock and verify parcel status (SELECT ... FOR UPDATE) to ensure mutual exclusion
 		// against concurrent courier run start (ASSIGNED -> OUT_FOR_DELIVERY) or delivery completion.
 		status, _, err := uc.parcelUpdater.GetStatusWithLock(ctx, tx, parcelUUID)
 		if err != nil {
@@ -53,15 +62,6 @@ func (uc *CancelAssignmentUseCase) Execute(ctx context.Context, cmd CancelAssign
 		}
 		if status != "ASSIGNED" {
 			return fmt.Errorf("%w: cannot cancel assignment when parcel is in status %s", ErrInvalidParcelStatusForAssignment, status)
-		}
-
-		// 2. Fetch active assignment for this parcel with lock
-		asgn, err := uc.assignmentRepo.GetActiveByParcelID(ctx, tx, parcelUUID)
-		if err != nil {
-			return fmt.Errorf("failed to fetch active assignment: %w", err)
-		}
-		if asgn == nil {
-			return ErrAssignmentNotFound
 		}
 
 		// 3. Transition assignment aggregate to CANCELLED
