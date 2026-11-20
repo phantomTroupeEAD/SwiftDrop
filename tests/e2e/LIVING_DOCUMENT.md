@@ -466,5 +466,32 @@ All core and edge suites verified passing:
   4. **Edge Suites (edge-01 through edge-09):** All 31 edge tests passed 100% (booking validation boundaries, quote expiration, courier capacity, delivery failure classifications, CSV bulk errors, API key security, 404 tracking degradation, AI adversarial defense, and auth injection defense).
   5. **Master Verification (`scripts/verify.ps1`):** All 7 automated quality gates passed cleanly with zero warnings or errors.
 
+### 9.8 Admin Operations Suite & Verification of PR #99 Merged Changes (`14-admin-ops-merchants-pricing.spec.ts`)
+- **Implementation & Verification Date:** 2026-11-20
+- **Scope & Purpose:** Comprehensive verification of PR #99 ("M7 admin dashboard UI 2") merged into `dev`:
+  1. **Merchants Management (`/ops/merchants` & `/ops/merchants/:id`):**
+     - Verified server-side paged list (`GET /api/v1/admin/merchants?page=&per_page=&status=`), status filtering (`PENDING`, `APPROVED`, `SUSPENDED`, `DISABLED`), and filter resets.
+     - Verified merchant application review navigation and detailed profile rendering (contact email, phone, multi-line address, applied timestamp, version badge).
+     - Verified complete domain state transition lifecycle:
+       * `PENDING` $\rightarrow$ `APPROVED`: Version 1 increments to 2, grants `MERCHANT` role to applicant.
+       * `APPROVED` $\rightarrow$ `SUSPENDED`: Tested mandatory 5–500 character reason validation (rejects empty and short `<5` char reasons; accepts valid reason), version increments to 3.
+       * `SUSPENDED` $\rightarrow$ `REINSTATED`: Status returns to `APPROVED`, version increments to 4.
+       * `APPROVED` $\rightarrow$ `DISABLED`: Terminal state with mandatory reason, version increments to 5, revokes credentials and disables webhooks, action buttons permanently removed (`This merchant was disabled. A disabled merchant cannot be changed.`).
+     - Verified optimistic concurrency control (`expected_version`) and conflict resilience.
+  2. **Audit Log Integration (`/ops/audit`):**
+     - Verified target type `Merchant` filtering in the audit log.
+     - Confirmed structured audit entries recorded for `Merchant approved`, `Merchant suspended`, `Merchant reinstated`, and `Merchant disabled`.
+     - Verified audit detail modal displaying before and after snapshots with status and administrative reason diffs.
+  3. **Pricing Rules Management (`/ops/pricing`):**
+     - Verified graceful sample data banner fallback when Core API pricing admin endpoints return 404/405, ensuring the UI remains resilient and functional without crashes.
+     - Verified form validations on new pricing rule creation (origin zone, destination zone, base fee, per kg rate, effective dates).
+     - Verified rule creation, version increment on update, and rule deactivation modal with consequence explanations.
+  4. **Users Administration Pagination (`/ops/users`):**
+     - Verified server-side pagination controls (limit/offset queries, Rows per page selection between 10 and 20, Previous/Next page navigation).
+     - Verified search filtering on loaded page rows.
+- **Execution Script:** `npm run test:admin-ops` -> `playwright test flows/14-admin-ops-merchants-pricing.spec.ts --project=admin-portal`
+- **Results:** 1/1 test suite PASSED (100% green) in 25.9 seconds.
+- **CI Integration:** Added `test:admin-ops` npm script to `tests/e2e/package.json` and integrated `Run Master Admin Operations (Merchants, Pricing & Users) E2E Gate` into `.github/workflows/e2e.yml`.
+
 
 

@@ -128,6 +128,13 @@ jobs:
           cd tests/e2e
           npm run test:rbac-matrix
 
+      - name: Run Master Admin Operations (Merchants, Pricing & Users) E2E Gate
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:admin-ops
+
       - name: Run Concurrent 6-Role User Traffic Load Simulation
         env:
           BASE_URL: http://localhost:3000

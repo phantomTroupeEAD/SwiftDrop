@@ -72,6 +72,7 @@ npx playwright install chromium
 | :--- | :---: | :--- |
 | **`npm run test:12-users`** | Real Stack | **12-User Cross-Module Real-World Workflow Automation Suite:** Master 5-step serial journey executing all 12 distinct actors across all 6 roles (3 Customers, 2 Merchants, 3 Couriers, 2 Dispatchers, 1 Admin, 1 Public Guest) across the full parcel lifecycle. |
 | **`npm run test:rbac-matrix`** | Real Stack | **Master Every-Button & Strict 6-Role RBAC Matrix Suite:** Exercises every UI button, modal, canvas, toggle, and external link across Courier PWA and Admin/Ops Console, synchronized with DB state, followed by strict 6-role privilege enforcement ("no less, no more"). |
+| **`npm run test:admin-ops`** | Real Stack | **Master Admin Operations E2E Suite (Flow 14):** Validates PR #99 Admin UI Part 2: Merchants management (/ops/merchants, review, approval, suspend with reason validation, reinstate, disable), audit log integration, pricing rules management (/ops/pricing fallback & CRUD), and users pagination controls (/ops/users). |
 | **`npm run test:traffic`** | Real Stack | **Concurrent 6-Role System Load Simulation:** Multi-browser concurrent load across PUBLIC (SSE stream), CUSTOMER (parallel bookings), MERCHANT (CSV ingestion), DISPATCHER (zone assignment), COURIER (mobile POD), and ADMIN. |
 | **`npm run test:vulnerabilities`** | Real Stack | **Exhaustive Flaw & Vulnerability Audit Matrix:** 15 security scenarios auditing state machine bypass, cross-tenant IDOR, privilege escalation, JWT tampering, and boundary fuzzing. |
 | **`npm run test:live`** | Real Stack | **Master 5-Window Live System E2E** running against real Core API, live PostgreSQL DB, and physical daemons with zero route mocks. |
@@ -134,6 +135,7 @@ tests/e2e/
 │   ├── 09-merchant-webhook-dispatch-lifecycle.spec.ts # Flow 9: Merchant webhooks, event filtering combinations, multi-window dispatcher assignment & HMAC security
 │   ├── 12-dispatcher-portal-exhaustive.spec.ts # Flow 12: Exhaustive Dispatcher portal single-page suite (8 suites: zones, roster, unassign modal, reschedule modal, onboarding modal, retry)
 │   ├── 13-dispatcher-cross-portal-sync.spec.ts # Flow 13: Dispatcher & cross-portal live sync (zero mocks: shift toggle, real booking, assignment, unassign eviction, courier out-for-delivery)
+│   ├── 14-admin-ops-merchants-pricing.spec.ts  # Flow 14: Master Admin Ops Suite (Merchants CRUD & transitions, pricing rules, users pagination, audit log)
 │   ├── edge-01-booking-validation.spec.ts through edge-09-auth-security-and-edge-cases.spec.ts # Complete Edge Case Suite (9 Specs: Booking, Pricing, Fleet, Exceptions, CSV, Security, Tracking, AI, Auth)
 │   └── member-06-merchant.spec.ts # Merchant profile & API key management
 │
