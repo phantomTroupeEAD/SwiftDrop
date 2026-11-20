@@ -100,7 +100,7 @@ jobs:
           cd tests/e2e
           npm ci
           npm --prefix mock-webhook ci
-          npx playwright install chromium --with-deps
+          npx playwright install chromium firefox webkit --with-deps
 
       - name: Start Mock Webhook Receiver Daemon
         run: |
@@ -148,6 +148,22 @@ jobs:
         run: |
           cd tests/e2e
           npm run test:live-guardrails
+
+      - name: Run Master Resiliency Gates (Offline PWA, Concurrency & Chaos DLQ)
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:edge-10
+          npm run test:edge-11
+          npm run test:edge-12
+
+      - name: Run Cross-Engine Browser Verification (Firefox & WebKit)
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:cross-engine
 
       - name: Dump Container Logs on Failure
         if: failure()

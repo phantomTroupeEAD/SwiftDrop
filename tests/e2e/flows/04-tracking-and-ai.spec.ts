@@ -94,6 +94,26 @@ test.describe('Flow 4: Public Tracking & AI Assistant Grounding E2E Flow', () =>
       });
     });
 
+    await customerPage.route('**/api/v1/ai/chat/stream', async (route) => {
+      const sseFrames = [
+        'event: tool_start\ndata: {"tool": "estimate_delivery_fee"}\n\n',
+        'event: tool_end\ndata: {"tool": "estimate_delivery_fee", "success": true}\n\n',
+        'event: token\ndata: {"delta": "Based on your parameters (2.5 kg from 00100 to 00400), the estimated Standard delivery fee is 500 LKR."}\n\n',
+        'event: action_card\ndata: {"action_type": "NAVIGATE_BOOKING", "target_url": "/portal/book", "label": "Book Delivery Now", "prefill_data": {"pickup_postal_code": "00100", "delivery_postal_code": "00400", "weight_kg": 2.5, "service_type": "STANDARD"}}\n\n',
+        'event: done\ndata: {"conversation_id": "conv_mock_881"}\n\n',
+      ].join('');
+
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+        body: sseFrames,
+      });
+    });
+
     await customerPage.route('**/api/v1/ai/chat', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -106,6 +107,14 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, fmt.Errorf("failed to split host/port: %w", err)
+			}
+
+			// In containerized dev/test environments where allowPrivateHosts is enabled,
+			// route loopback targets to host gateway if configured
+			if sc.allowPrivateHosts && (host == "localhost" || host == "127.0.0.1") {
+				if gw := os.Getenv("WEBHOOK_LOCAL_HOST_GATEWAY"); gw != "" {
+					host = gw
+				}
 			}
 
 			// Check if host is direct IP

@@ -304,6 +304,10 @@ services:
       - NOTIFICATION_PROVIDER=mock
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
+      - WEBHOOK_ALLOW_PRIVATE_HOSTS=${WEBHOOK_ALLOW_PRIVATE_HOSTS:-true}
+      - WEBHOOK_LOCAL_HOST_GATEWAY=${WEBHOOK_LOCAL_HOST_GATEWAY:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

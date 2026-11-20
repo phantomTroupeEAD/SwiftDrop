@@ -493,5 +493,31 @@ All core and edge suites verified passing:
 - **Results:** 1/1 test suite PASSED (100% green) in 25.9 seconds.
 - **CI Integration:** Added `test:admin-ops` npm script to `tests/e2e/package.json` and integrated `Run Master Admin Operations (Merchants, Pricing & Users) E2E Gate` into `.github/workflows/e2e.yml`.
 
+### 9.9 Advanced System Resiliency & Cross-Engine Matrix Suites (Edge Suites 10, 11, 12 & Cross-Engine)
+- **Implementation & Verification Date:** 2026-11-20
+- **Scope & Invariants Enforced:**
+  1. **Edge Suite 10 — Courier Offline Resilience & PWA Network Recovery (`edge-10-courier-offline-resilience.spec.ts`):**
+     - Simulates mobile connectivity drop in the field using Playwright's `context.setOffline(true)`.
+     - *Test Case 1 (Exception Failure Offline Recovery):* While a parcel is `OUT_FOR_DELIVERY`, courier fills exception reason and notes, triggers submission while offline. Verified that DOM does not crash, form inputs remain intact, and UI displays graceful `<p role="alert">Could not reach SwiftDrop. Try again.</p>`. Reconnection via `context.setOffline(false)` allows immediate resubmission without retyping or reload, successfully updating status to `ATTEMPT_FAILED`.
+     - *Test Case 2 (Signature POD Canvas Offline Recovery):* Courier captures recipient electronic signature canvas data. Network dropped before confirmation. Offline alert displayed; signature data and recipient name preserved in memory. Reconnected; confirmed delivery; verified status transition to `DELIVERED`.
+     - *Command:* `npm run test:edge-10` (2/2 passed, 8.2s).
+  2. **Edge Suite 11 — Concurrent Dispatch Assignment Race & PostgreSQL FOR UPDATE Invariant (`edge-11-concurrent-dispatch-race.spec.ts`):**
+     - *Race 1 (Simultaneous Double Assignment):* Two dispatchers simultaneously assign the exact same unassigned parcel to two different couriers at the exact same millisecond via `Promise.all`.
+     - *Invariant Verification:* PostgreSQL row locking (`SELECT ... FOR UPDATE` in `GetStatusWithLock`) strictly serializes transactions. Exactly ONE request succeeds (`201 Created`), while competing request is gracefully rejected (`409 Conflict`, code: `INVALID_PARCEL_STATE`). Confirmed database consistency: exactly 1 active assignment row in `courier_assignments`, parcel status is `ASSIGNED`, and exactly 1 transition record exists in `parcel_status_history`.
+     - *Race 2 (Simultaneous Assignment Cancellation vs Courier Start-Run):* Fired concurrent cancellation vs `start-run` requests. State machine invariants guaranteed mutual exclusion and preserved database consistency (`CREATED`).
+     - *Command:* `npm run test:edge-11` (2/2 passed, 3.7s).
+  3. **Edge Suite 12 — Sustained Webhook Target Outage, Exponential Backoff & DLQ Fault-Tolerance (`edge-12-webhook-outage-dlq.spec.ts`):**
+     - Injects sustained 500 internal errors via `:9999/webhooks/merchant-chaos`.
+     - Verifies `services/messaging` webhook dispatcher detects non-terminal failure and records failed attempt in PostgreSQL `webhook_delivery_attempts` table (`response_status_code = 500`).
+     - Verifies exponential retry backoff calculation scheduling future `next_attempt_at` timestamp.
+     - *Zero Head-of-Line Blocking Invariant:* Proves that failing chaos deliveries for Merchant 1 do NOT block, delay, or poison concurrent webhook deliveries for healthy Merchant 2 (`:9999/webhooks/merchant-beta`), which arrive with verified HMAC-SHA256 signatures.
+     - *Command:* `npm run test:edge-12` (1/1 passed, 3.6s).
+  4. **Cross-Engine Browser Matrix (Firefox & WebKit):**
+     - Configured `customer-portal-firefox` (Desktop Firefox / Gecko) and `tracking-portal-webkit` (Desktop Safari / WebKit) project targets in `playwright.config.ts`.
+     - Verified customer tracking and public tracking lookup under both non-Chromium browser engines to ensure Apple HIG design tokens and UI primitives render with zero cross-browser layout breakage.
+     - *Command:* `npm run test:cross-engine` (2/2 passed, 27.9s).
+- **CI Pipeline Integration:** Added all four suites to `.github/workflows/e2e.yml` with Playwright `chromium firefox webkit --with-deps` installation.
+
+
 
 
