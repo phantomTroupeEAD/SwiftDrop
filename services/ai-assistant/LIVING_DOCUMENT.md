@@ -281,8 +281,8 @@ All tool interactions are centralized through the **Tool Registry (`src/tools/re
 - **PII Stripping:** Strips recipient street address and phone numbers before output is processed.
 
 ### Tool 4: `explain_company_policies` (`src/tools/policy_tool.py`, `src/mcp/server.py`)
-- **Purpose:** Answers questions regarding prohibited goods, packaging guidelines, insurance, and delivery transit SLA times.
-- **Authoritative Static Grounding:** `src/tools/company_policies.md` contains packaging limits (50kg, 300cm girth), prohibited goods (explosives, narcotics, uncertified batteries), transit SLAs (Express 24h, Standard 48-72h, Outstation 3-5 days), delivery attempt limits (3 attempts), and claims window (7 days).
+- **Purpose:** Answers questions regarding prohibited goods, packaging guidelines, insurance, tariffs, transit SLAs, lifecycle state rules, delivery attempt limits, and dispute claims.
+- **Authoritative Static Grounding:** `src/tools/company_policies.md` contains a comprehensive 12-section operating manual covering: packaging standards (50kg, 300cm girth, 150cm max dimension, L*W*H/5000 volumetric conversion), prohibited commodities (hazardous materials, uncertified batteries >100Wh, narcotics, weapons, perishables, bullion), pricing rules & COD (LKR integer cents, Standard 1.0x, Express 1.5x, Same-Day 2.0x, zone pair tariffs, 15m quote validity, LKR 100,000 max COD), transit SLAs & regional directory (Express 24h, Standard 48-72h, Outstation 3-5 days, 25 districts & sub-district postal resolution), parcel lifecycle (canonical 9-state machine, immutable history audit), delivery attempts & RTS (ADR-004 3-attempt ceiling, 7 standardized reason codes, dispatcher authorization gate, 5-day depot holding, automated RTS), proof of delivery & fleet operations (mandatory photo/signature/OTP proof, AT-006 assigned courier IDOR defense, motorcycle 25/van 60/truck 120 capacity limits), merchant integration (onboarding lifecycle, `sd_live_*` API keys, webhook HTTPS & SSRF defenses, 5-tier retry, DLQ), tracking & privacy (canonical `SD-YYYYMMDD-XXXXXX` Crockford Base32 format, SEC-009 privacy masking, 15s SSE keepalive), identity & RBAC (5 roles, tenant isolation, secure sessions, append-only audit trail), AI assistant guardrails (read-only authority, zero hallucination, mandatory 3D dimensions, whole LKR formatting, tiered rate limits), and claims & dispute resolution (7 calendar days window, proof requirements, LKR 5,000 uninsured ceiling, 1.5% declared value insurance, 5-7 business days committee resolution).
 - **Dynamic Override Precedence:** Queries Member 7's `GET /api/v1/admin/settings` using `AI_SERVICE_ROLE_TOKEN`. Caches results for 30 minutes. If Core API is unreachable, transparently falls back to the static markdown without failing.
 
 ---
@@ -597,6 +597,7 @@ docker run -p 8000:8000 --env-file services/ai-assistant/.env swiftdrop/ai-assis
 ### Technical Changelog
 | Version | Date | Status & Accomplishments | Verified By |
 | :--- | :--- | :--- | :--- |
+| `2.15.0` | 2026-11-20 | Expanded `company_policies.md` into an authoritative 12-section enterprise courier policy manual cross-aligned with all Core API domain modules, living contracts, and SRS v1.0; verified 100% test pass rate across all 280 tests. | Member 10 |
 | `1.1.0` | 2026-11-20 | Upgraded tracking number validation to canonical Crockford Base32 format (`SD-YYYYMMDD-XXXXXX`) across Pydantic schema, MockLLMAdapter regex, FastMCP tool definitions, system prompts, and test suite. | Member 10 |
 | `0.1.0` | 2026-10-21 | Initial architecture placeholder | Architecture Setup |
 | `2.0.0` | 2026-10-25 | Harmonized specifications with audit findings | Member 10 & Review Agent |
