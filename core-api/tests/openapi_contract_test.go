@@ -34,6 +34,10 @@ import (
 	pricingapp "github.com/swiftdrop/core-api/internal/pricing/application"
 	pricinginfra "github.com/swiftdrop/core-api/internal/pricing/infrastructure"
 	pricingtransport "github.com/swiftdrop/core-api/internal/pricing/transport"
+	notificationsapp "github.com/swiftdrop/core-api/internal/notifications/application"
+	notificationsdomain "github.com/swiftdrop/core-api/internal/notifications/domain"
+	notificationsinfra "github.com/swiftdrop/core-api/internal/notifications/infrastructure"
+	notificationstransport "github.com/swiftdrop/core-api/internal/notifications/transport"
 )
 
 type swaggerDocument struct {
@@ -52,6 +56,28 @@ type testFixedClock struct {
 
 func (c testFixedClock) Now() time.Time {
 	return c.now
+}
+
+type fakeNotificationRepository struct{}
+
+func (f *fakeNotificationRepository) ListByUserID(_ context.Context, _ notificationsapp.ListFilter) ([]*notificationsdomain.Notification, *notificationsapp.PaginationCursor, error) {
+	return nil, nil, nil
+}
+
+func (f *fakeNotificationRepository) GetUnreadCount(_ context.Context, _ string, _ bool) (int, error) {
+	return 0, nil
+}
+
+func (f *fakeNotificationRepository) FindByID(_ context.Context, _ string) (*notificationsdomain.Notification, error) {
+	return nil, nil
+}
+
+func (f *fakeNotificationRepository) MarkAsRead(_ context.Context, _ string, _ string, _ bool, _ time.Time) (*notificationsdomain.Notification, error) {
+	return nil, nil
+}
+
+func (f *fakeNotificationRepository) MarkAllAsRead(_ context.Context, _ string, _ bool, _ time.Time) (int64, error) {
+	return 0, nil
 }
 
 type fakeMerchantReader struct{}
@@ -213,6 +239,17 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 
 		parcelstransport.RegisterRoutes(mux, parcelHandler, security)
 	}
+
+	// 7. Notifications Operations
+	var notifRepo notificationsapp.NotificationRepository
+	if db != nil {
+		notifRepo = notificationsinfra.NewPostgresRepository(db)
+	} else {
+		notifRepo = &fakeNotificationRepository{}
+	}
+	notifSvc := notificationsapp.NewService(notifRepo)
+	notifHandler := notificationstransport.NewHandler(notifSvc)
+	notificationstransport.RegisterRoutes(mux, notifHandler, security)
 
 	// 4. Standalone & Health Endpoints
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {

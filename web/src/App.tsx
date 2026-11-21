@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
+import { NotificationProvider } from '@/app/providers/NotificationContext';
+import { Toaster } from '@/shared/components/ui/sonner';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
@@ -14,6 +16,7 @@ import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+import { NotificationsPage } from '@/features/notifications/NotificationsPage';
 
 function CustomerBookingAlias() {
   const { search } = useLocation();
@@ -127,6 +130,14 @@ export const AppRoutes: React.FC = () => {
 
       {/* Aliases mapping to role consoles */}
       <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
@@ -161,9 +172,12 @@ export const AppRoutes: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <NotificationProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <Toaster />
+        </BrowserRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 };

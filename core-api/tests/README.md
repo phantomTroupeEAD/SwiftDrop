@@ -25,6 +25,7 @@ The following high-value end-to-end acceptance tests verify key architectural in
 | `at_006_courier_idor_test.go` | **AT-006** | IDOR Defense: Verifies that only the legitimately assigned courier can perform delivery actions (`start-run`, `proof-photo`, `complete`, `failed`). Foreign couriers are barred with `403 Forbidden` (`COURIER_NOT_ASSIGNED`). |
 | `adr_004_delivery_ceiling_test.go` | **ADR-004** | Attempt Ceiling: Sequential verification of attempts 1 and 2 transitioning to `ATTEMPT_FAILED`, attempt 3 transitioning to terminal `RETURNED`, blocking of 4th attempts, and immediate return on `REFUSED_BY_RECIPIENT`. |
 | `delivery_atomicity_test.go` | **Atomicity** | Single Transaction Guarantee: Proves that downstream outbox or database constraint errors trigger an atomic rollback, leaving parcel status, delivery attempts, and assignments uncorrupted. |
+| `notifications_integration_test.go` | **In-App Notifications** | Real-Time Notification Lifecycle: Verifies complete inbox REST flow, keyset cursor pagination (`created_at`, `id`), user isolation, dispatcher broadcast triage (`role:DISPATCHER`), unread counters, and IDOR defenses. |
 
 ---
 

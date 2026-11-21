@@ -232,8 +232,22 @@ func main() {
 	authTrackingSvc := service.NewAuthenticatedTrackingService(trackingRepo)
 	authTrackingHandler := trackinghttp.NewAuthenticatedTrackingHandler(authTrackingSvc, jwtVerifier, logger)
 
+	// In-Web Notifications: UserEventHub & SSE Handler
+	userEventHub := events.NewUserEventHub(logger)
+	var notifRepo repository.NotificationRepository
+	if repo, ok := trackingRepo.(repository.NotificationRepository); ok {
+		notifRepo = repo
+	}
+	notifSSEHandler := trackinghttp.NewNotificationSSEHandler(
+		jwtVerifier,
+		userEventHub,
+		notifRepo,
+		time.Duration(cfg.SSEHeartbeatSeconds)*time.Second,
+		logger,
+	)
+
 	// 10. Construct HTTP router with middleware pipeline
-	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler, authTrackingHandler)
+	router := trackinghttp.NewRouter(cfg, logger, healthHandler, publicTrackingHandler, sseHandler, authTrackingHandler, notifSSEHandler)
 
 	// 11. Initialize HTTP server
 	srv := trackinghttp.NewServer(cfg, router, logger)

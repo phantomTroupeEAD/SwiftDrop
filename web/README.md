@@ -275,6 +275,24 @@ npm run preview
 
 ---
 
+
+### In-Web Real-Time Notification System (November 2026)
+Implemented an authenticated in-web notification pipeline for all user consoles (Admin, Dispatcher, Courier, Customer, Merchant):
+- **Notification Stream Hook (`useNotificationStream`)**: Connects to the Tracking API SSE endpoint (`/api/v1/notifications/stream?token=<jwt>`) using the authenticated session access token. Features automatic reconnect with exponential backoff and jitter.
+- **Notification Context (`NotificationProvider`)**: Holds in-memory notification list and unread counter. Dispatches instant `toast()` alerts via `sonner` when live delivery events or exceptions arrive.
+- **Toast Notifications (`<Toaster />`)**: Authoritative `<Toaster />` from `@/shared/components/ui/sonner` mounted at the root in `src/App.tsx`.
+- **Interactive Notification Bell (`NotificationBell`)**:
+  - Mounted in `DashboardLayout.tsx` (Admin, Dispatcher, Courier) and `PortalLayout.tsx` (Customer, Merchant).
+  - Displays unread counter badge.
+  - Dropdown menu allows viewing recent notification items, reading full details, one-click "Mark all read", and a persistent footer action ("View all notifications") linking directly to `/notifications`.
+  - 100% compliant with Apple HIG, `@/shared/components/ui/` primitives, and zero arbitrary brackets.
+- **Dedicated Notifications Inbox Page (`NotificationsPage` at `/notifications`)**:
+  - Protected inbox view accessible to all authenticated roles (`<ProtectedRoute><NotificationsPage /></ProtectedRoute>`).
+  - Contextual layout encapsulation: dynamically adapts between `DashboardLayout` for operational roles (`ADMIN`, `DISPATCHER`, `COURIER`) and `PortalLayout` for customer and merchant tenants (`CUSTOMER`, `MERCHANT`).
+  - Filter tabs powered by `@/shared/components/ui/tabs`: easily toggle between 'All' and 'Unread' notifications with active counts.
+  - Rich notification cards built with `@/shared/components/ui/card` and `Badge`, featuring event-type badges, title, relative timestamps, body text, individual "Mark as read" actions, and direct-action tracking links (`/track/{trackingNumber}`) when `metadata.tracking_number` is present.
+  - Global "Mark all as read" action and responsive empty states for both unread and total inbox streams.
+
 ## 9. Living Documentation Maintenance Policy
 - **Member 6** synchronously updates this document and [`web/API.md`](./API.md) whenever new customer or merchant routes, workflows, or views are introduced.
 - **Member 7** synchronously updates this document and [`web/API.md`](./API.md) whenever new dispatcher boards, courier mobile workflows, or admin views are added.

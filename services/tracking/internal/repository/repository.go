@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/swiftdrop/tracking/internal/domain"
+	"github.com/swiftdrop/tracking/internal/dto"
 )
 
 // TrackingRepository defines read-only projection queries for parcel tracking.
@@ -16,6 +17,12 @@ type TrackingRepository interface {
 	CheckReadiness(ctx context.Context) error
 	Ping(ctx context.Context) error
 	Close() error
+}
+
+// NotificationRepository defines read operations for user in-app notifications.
+type NotificationRepository interface {
+	ListRecentNotifications(ctx context.Context, userID string, limit int) ([]dto.InAppNotificationDTO, error)
+	GetUnreadNotificationCount(ctx context.Context, userID string) (int, error)
 }
 
 // PoolConfig encapsulates PostgreSQL connection pool and timeout settings.
