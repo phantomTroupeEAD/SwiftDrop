@@ -55,3 +55,57 @@ func NewQuoteResponse(q domain.Quote) QuoteResponse {
 		ExpiresAt:          q.ExpiresAt.UTC().Format(time.RFC3339),
 	}
 }
+
+// PricingRuleResponse represents the public JSON projection of a pricing rule / tariff.
+type PricingRuleResponse struct {
+	ID                string  `json:"id"`
+	Version           int     `json:"version"`
+	OriginZoneID      string  `json:"origin_zone_id"`
+	DestinationZoneID string  `json:"destination_zone_id"`
+	BaseWeightKg      float64 `json:"base_weight_kg"`
+	MaxWeightKg       float64 `json:"max_weight_kg"`
+	BaseFeeCents      int64   `json:"base_fee_cents"`
+	PerKgRateCents    int64   `json:"per_kg_rate_cents"`
+	Currency          string  `json:"currency"`
+	EffectiveFrom     string  `json:"effective_from"`
+	EffectiveUntil    *string `json:"effective_until,omitempty"`
+	IsActive          bool    `json:"is_active"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
+}
+
+// NewPricingRuleResponse projects a domain Tariff entity into PricingRuleResponse.
+func NewPricingRuleResponse(tariff domain.Tariff) PricingRuleResponse {
+	var effUntil *string
+	if tariff.EffectiveUntil != nil {
+		formatted := tariff.EffectiveUntil.UTC().Format(time.RFC3339)
+		effUntil = &formatted
+	}
+
+	updatedAt := tariff.UpdatedAt.UTC().Format(time.RFC3339)
+	if tariff.UpdatedAt.IsZero() {
+		updatedAt = tariff.CreatedAt.UTC().Format(time.RFC3339)
+	}
+
+	currency := string(tariff.BaseFee.Currency)
+	if currency == "" {
+		currency = string(domain.CurrencyLKR)
+	}
+
+	return PricingRuleResponse{
+		ID:                tariff.ID,
+		Version:           tariff.Version,
+		OriginZoneID:      tariff.OriginZoneID,
+		DestinationZoneID: tariff.DestinationZoneID,
+		BaseWeightKg:      1.0,
+		MaxWeightKg:       domain.MaxChargeableWeightKg,
+		BaseFeeCents:      tariff.BaseFee.Amount,
+		PerKgRateCents:    tariff.PerKgRate.Amount,
+		Currency:          currency,
+		EffectiveFrom:     tariff.EffectiveFrom.UTC().Format(time.RFC3339),
+		EffectiveUntil:    effUntil,
+		IsActive:          tariff.IsActive,
+		CreatedAt:         tariff.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:         updatedAt,
+	}
+}
