@@ -40,12 +40,6 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
           <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
           SwiftDrop
         </Link>
-        <div className="flex items-center gap-2">
-          {user && <NotificationBell />}
-          {user
-            ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
-            : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
-        </div>
         <nav aria-label="Portal navigation">
           {(profile === 'customer' || profile === 'merchant') && <NavLink to="/dashboard" end>Home</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
@@ -64,6 +58,12 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
           {profile === 'dispatcher' && <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
         </nav>
+        <div className="m6-header-actions flex items-center gap-2">
+          {user && <NotificationBell />}
+          {user
+            ? <Button type="button" variant="outline" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
+            : <Button asChild variant="outline"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
+        </div>
       </header>
   );
 }
