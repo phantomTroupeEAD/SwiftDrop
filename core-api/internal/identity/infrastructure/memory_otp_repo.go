@@ -69,9 +69,21 @@ func (r *MemoryOTPRepository) SaveOTP(_ context.Context, email, code string) err
 	return nil
 }
 
+// VerifyOTP validates the provided code with the same expiry and attempt limits as
+// VerifyAndConsumeOTP, but keeps the record on success so a later step can consume it.
+func (r *MemoryOTPRepository) VerifyOTP(_ context.Context, email, code string) error {
+	return r.verify(email, code, false)
+}
+
 // VerifyAndConsumeOTP validates the provided code against the stored record,
 // enforces expiry and attempt limits, and deletes the record on success.
 func (r *MemoryOTPRepository) VerifyAndConsumeOTP(_ context.Context, email, code string) error {
+	return r.verify(email, code, true)
+}
+
+// verify holds the shared rules: expiry, a 3-attempt limit counted across both
+// VerifyOTP and VerifyAndConsumeOTP, and deletion of the record when consumed.
+func (r *MemoryOTPRepository) verify(email, code string, consume bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -102,7 +114,9 @@ func (r *MemoryOTPRepository) VerifyAndConsumeOTP(_ context.Context, email, code
 		return domain.ErrOTPInvalid
 	}
 
-	// Valid — single-use: consume and delete
-	delete(r.records, email)
+	// Valid. When consuming, the code is single-use: delete it.
+	if consume {
+		delete(r.records, email)
+	}
 	return nil
 }

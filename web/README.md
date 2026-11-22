@@ -7,7 +7,9 @@ Read the [SwiftDrop design spec](design.md) (the "Waybill" look) and the [design
 The team agreed to replace the Apple Cupertino look. The whole app now uses the Waybill design from the "SwiftDrop UI Redesign" canvas; [`design.md`](design.md) is the binding spec and records the decision.
 
 - **Tokens** (`src/index.css`, `tailwind.config.js`): paper `canvas`, ink `text`, signal `primary` (`#c2410c`), a `chrome` family for ink areas, `border-strong` for control borders and `status-info` for in-progress statuses. Every token has a dark value under `[data-theme="dark"]`.
-- **Fonts:** Space Grotesk (headings), Inter (text) and JetBrains Mono (tracking numbers, money, times), self-hosted through `@fontsource-variable/*` and imported in `src/main.tsx`. No CSP change is needed.
+- **Fonts:** Space Grotesk (headings), Inter (text) and JetBrains Mono (tracking numbers, money, times), self-hosted through `@fontsource-variable/*` and imported in `src/main.tsx`. No CSP change is needed. `vite.config.ts` never inlines font files as `data:` URLs, because the production CSP (`default-src 'self'`, no `font-src`) blocks `data:` fonts; keep it that way.
+- **Google sign-in button:** sized to the width the form has (at most 360px), because Google treats `width` as a minimum; a fixed 360px pushed the sign-in page sideways on phones.
+- **`index.html`:** `<body>` uses `bg-canvas text-text`, so overscroll and the short "Restoring your session…" screen show paper instead of the old dark slate.
 - **One signal colour for all roles.** `data-role` stays on every layout root; per-role colours can come back by overriding four tokens per role in `index.css` (pending Design Owner confirmation).
 - **Primitives:** uppercase status badges, `active` badges in the info blue, 600-weight buttons, `border-strong` on inputs, selects, checkboxes and outline buttons, mono uppercase table headers, and a connected step rail in `Stepper`.
 - **Screens rebuilt:** the landing page (`/`), sign-in (`/auth/login`, split layout with a role panel), and the ops shell (`/ops/*`, ink sidebar). Register and password reset lost the blurred photo background. Portal screens follow through the restyled `m6-*` classes. All `data-testid` values are unchanged.
@@ -70,7 +72,7 @@ All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/feat
 - Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
 - Sign-in is a split layout: the form on paper on the left, an ink panel on the right listing where each role lands. Register and password reset use a 12px card on paper. No background photo, blur or glow effects.
 - Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
-- Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Three-step registration (Email → Verify → Details, shown with the shared `Stepper`): the customer enters their details only after `POST /api/v1/auth/register/verify-otp` confirms the emailed code. Includes the resend cooldown timer, 6-digit numeric input, terms checkbox, and a return to the code step (details kept) if the code expires before the account is created.
 - Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
 - Google OAuth button integrated directly into the login card using semantic button primitives and standard SVG glyphs.
 - Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).
@@ -319,6 +321,24 @@ npm run preview
 ```
 
 ---
+
+
+### In-Web Real-Time Notification System (November 2026)
+Implemented an authenticated in-web notification pipeline for all user consoles (Admin, Dispatcher, Courier, Customer, Merchant):
+- **Notification Stream Hook (`useNotificationStream`)**: Connects to the Tracking API SSE endpoint (`/api/v1/notifications/stream?token=<jwt>`) using the authenticated session access token. Features automatic reconnect with exponential backoff and jitter.
+- **Notification Context (`NotificationProvider`)**: Holds in-memory notification list and unread counter. Dispatches instant `toast()` alerts via `sonner` when live delivery events or exceptions arrive.
+- **Toast Notifications (`<Toaster />`)**: Authoritative `<Toaster />` from `@/shared/components/ui/sonner` mounted at the root in `src/App.tsx`.
+- **Interactive Notification Bell (`NotificationBell`)**:
+  - Mounted in `DashboardLayout.tsx` (Admin, Dispatcher, Courier) and `PortalLayout.tsx` (Customer, Merchant).
+  - Displays unread counter badge.
+  - Dropdown menu allows viewing recent notification items, reading full details, one-click "Mark all read", and a persistent footer action ("View all notifications") linking directly to `/notifications`.
+  - 100% compliant with Apple HIG, `@/shared/components/ui/` primitives, and zero arbitrary brackets.
+- **Dedicated Notifications Inbox Page (`NotificationsPage` at `/notifications`)**:
+  - Protected inbox view accessible to all authenticated roles (`<ProtectedRoute><NotificationsPage /></ProtectedRoute>`).
+  - Contextual layout encapsulation: dynamically adapts between `DashboardLayout` for operational roles (`ADMIN`, `DISPATCHER`, `COURIER`) and `PortalLayout` for customer and merchant tenants (`CUSTOMER`, `MERCHANT`).
+  - Filter tabs powered by `@/shared/components/ui/tabs`: easily toggle between 'All' and 'Unread' notifications with active counts.
+  - Rich notification cards built with `@/shared/components/ui/card` and `Badge`, featuring event-type badges, title, relative timestamps, body text, individual "Mark as read" actions, and direct-action tracking links (`/track/{trackingNumber}`) when `metadata.tracking_number` is present.
+  - Global "Mark all as read" action and responsive empty states for both unread and total inbox streams.
 
 ## 9. Living Documentation Maintenance Policy
 - **Member 6** synchronously updates this document and [`web/API.md`](./API.md) whenever new customer or merchant routes, workflows, or views are introduced.

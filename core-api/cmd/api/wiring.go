@@ -275,6 +275,18 @@ func BuildAppContainer() *AppContainer {
 		log.Println("[NOTICE] Member 07 Admin Operations not active: PostgreSQL connection (*sql.DB) is required")
 	}
 
+	// 13. Register In-App Notifications Module
+	if dbConn != nil {
+		if err := registerNotificationsModule(mux, dbConn, security); err != nil {
+			if config.IsProduction() {
+				log.Fatalf("[FATAL] Failed to initialize Notifications Module: %v", err)
+			}
+			log.Printf("[NOTICE] Notifications Module not active in local mode: %v\n", err)
+		}
+	} else {
+		log.Println("[NOTICE] Notifications Module not active: PostgreSQL connection (*sql.DB) is required")
+	}
+
 	return &AppContainer{
 		Mux:         mux,
 		AuthSvc:     authService,

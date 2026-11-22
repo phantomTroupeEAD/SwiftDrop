@@ -25,6 +25,7 @@ export const SELECTORS = {
     REGISTER_EMAIL: 'register-email-input',
     REGISTER_SEND_OTP_BTN: 'register-send-otp-btn',
     REGISTER_OTP: 'register-otp-input',
+    REGISTER_VERIFY_OTP_BTN: 'register-verify-otp-btn',
     REGISTER_FIRST_NAME: 'register-first-name-input',
     REGISTER_LAST_NAME: 'register-last-name-input',
     REGISTER_PHONE: 'register-phone-input',

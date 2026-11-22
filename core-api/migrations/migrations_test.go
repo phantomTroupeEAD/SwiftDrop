@@ -176,6 +176,46 @@ func TestIdempotencyMigration_SchemaContract(t *testing.T) {
 	}
 }
 
+func TestUserNotificationsMigration_SchemaContract(t *testing.T) {
+	upBytes, err := os.ReadFile("20261120000001_create_user_notifications.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read user_notifications up migration: %v", err)
+	}
+	upSQL := string(upBytes)
+
+	requiredUpTokens := []string{
+		"CREATE TABLE IF NOT EXISTS user_notifications",
+		"id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+		"user_id TEXT NOT NULL",
+		"tenant_id TEXT",
+		"event_type TEXT NOT NULL",
+		"aggregate_id TEXT NOT NULL",
+		"title TEXT NOT NULL",
+		"body TEXT NOT NULL",
+		"metadata JSONB NOT NULL DEFAULT '{}'",
+		"is_read BOOLEAN NOT NULL DEFAULT FALSE",
+		"created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+		"read_at TIMESTAMPTZ",
+		"idx_user_notifications_user_unread",
+		"idx_user_notifications_tenant",
+		"idx_user_notifications_created_at",
+	}
+	for _, token := range requiredUpTokens {
+		if !strings.Contains(upSQL, token) {
+			t.Errorf("user_notifications up migration missing expected schema token %q", token)
+		}
+	}
+
+	downBytes, err := os.ReadFile("20261120000001_create_user_notifications.down.sql")
+	if err != nil {
+		t.Fatalf("failed to read user_notifications down migration: %v", err)
+	}
+	downSQL := string(downBytes)
+	if !strings.Contains(downSQL, "DROP TABLE IF EXISTS user_notifications;") {
+		t.Errorf("user_notifications down migration must drop table user_notifications")
+	}
+}
+
 // TestMigrations_LiveLifecycle_UpDownUp verifies complete database migration reversibility.
 // It executes: Up (apply all) -> Down (roll back all in reverse order) -> Up (re-apply from scratch).
 // This guarantees that all .down.sql scripts execute cleanly and foreign key drop order is preserved.

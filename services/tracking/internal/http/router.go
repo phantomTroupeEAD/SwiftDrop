@@ -29,6 +29,7 @@ func NewRouter(
 		trackingHandler     *PublicTrackingHandler
 		sseHandler          *SSEHandler
 		authTrackingHandler *AuthenticatedTrackingHandler
+		notifSSEHandler     *NotificationSSEHandler
 	)
 
 	for _, h := range handlers {
@@ -39,6 +40,8 @@ func NewRouter(
 			sseHandler = v
 		case *AuthenticatedTrackingHandler:
 			authTrackingHandler = v
+		case *NotificationSSEHandler:
+			notifSSEHandler = v
 		}
 	}
 
@@ -55,6 +58,11 @@ func NewRouter(
 	// Phase 3: Authenticated Tracking REST Endpoint
 	if authTrackingHandler != nil {
 		mux.HandleFunc("GET /api/v1/tracking/{tracking_number}", authTrackingHandler.GetAuthenticatedTracking)
+	}
+
+	// In-Web Notifications: Authenticated SSE Streaming Endpoint
+	if notifSSEHandler != nil {
+		mux.HandleFunc("GET /api/v1/notifications/stream", notifSSEHandler.StreamNotifications)
 	}
 
 	// Pipeline: RequestID -> Recover -> AccessLog -> Mux

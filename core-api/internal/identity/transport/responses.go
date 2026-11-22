@@ -72,6 +72,14 @@ type OTPDataDTO struct {
 	CooldownSeconds int    `json:"cooldown_seconds"`
 }
 
+// VerifyOTPDataDTO is returned when a registration code is correct. The code stays valid
+// until it expires and must still be sent with POST /api/v1/auth/register.
+type VerifyOTPDataDTO struct {
+	Message  string `json:"message"`
+	Email    string `json:"email"`
+	Verified bool   `json:"verified"`
+}
+
 // MessageDataDTO is a generic message response payload.
 type MessageDataDTO struct {
 	Message string `json:"message"`
@@ -113,6 +121,11 @@ type RegisterResponse struct {
 // OTPResponse wraps OTPDataDTO.
 type OTPResponse struct {
 	Data OTPDataDTO `json:"data"`
+}
+
+// VerifyOTPResponse wraps VerifyOTPDataDTO.
+type VerifyOTPResponse struct {
+	Data VerifyOTPDataDTO `json:"data"`
 }
 
 // MessageResponse wraps MessageDataDTO.

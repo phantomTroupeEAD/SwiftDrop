@@ -45,3 +45,16 @@ type WebhookAttemptRecord struct {
 	ErrorMessage        string
 	NextAttemptAt       *time.Time
 }
+
+// InAppNotification represents a persistent notification stored in user_notifications table.
+type InAppNotification struct {
+	ID          string          `json:"id"`
+	UserID      string          `json:"user_id"`
+	TenantID    *string         `json:"tenant_id,omitempty"`
+	EventType   string          `json:"event_type"`
+	AggregateID string          `json:"aggregate_id"`
+	Title       string          `json:"title"`
+	Body        string          `json:"body"`
+	Metadata    json.RawMessage `json:"metadata"`
+	CreatedAt   time.Time       `json:"created_at"`
+}

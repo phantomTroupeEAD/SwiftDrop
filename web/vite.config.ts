@@ -13,7 +13,7 @@ const MOCK_USERS: Record<string, { role: string; name: string; tenant_id: string
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'SWIFTDROP_');
-  const demoAuth = env.SWIFTDROP_DEMO_AUTH === '1';
+  const demoAuth = env.SWIFTDROP_DEMO_AUTH === '1' || process.env.SWIFTDROP_DEMO_AUTH === '1' || !env.SWIFTDROP_CORE_API_URL;
   return {
     plugins: [
       react(),
@@ -66,6 +66,149 @@ export default defineConfig(({ mode }) => {
               });
               return;
             }
+
+            // Real-Time SSE Stream Demo Handler
+            if (req.url?.startsWith('/api/v1/notifications/stream')) {
+              res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+              });
+
+              // Initial unread count
+              res.write(`event: unread_count\ndata: {"count":3}\n\n`);
+
+              const seedNotifications = [
+                {
+                  notification_id: 'notif-001',
+                  user_id: 'usr_customer_001',
+                  event_type: 'parcel.out_for_delivery.v1',
+                  aggregate_id: 'prcl-001',
+                  title: 'Out for Delivery',
+                  body: 'Courier Kamal Perera has started the delivery run for parcel SD-20261121-88912.',
+                  metadata: { tracking_number: 'SD-20261121-88912', courier_name: 'Kamal Perera' },
+                  is_read: false,
+                  created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+                },
+                {
+                  notification_id: 'notif-002',
+                  user_id: 'usr_customer_001',
+                  event_type: 'parcel.in_transit.v1',
+                  aggregate_id: 'prcl-001',
+                  title: 'Parcel In Transit',
+                  body: 'Your shipment is moving between Colombo Central Hub and Kandy Depot.',
+                  metadata: { tracking_number: 'SD-20261121-88912' },
+                  is_read: false,
+                  created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+                },
+                {
+                  notification_id: 'notif-003',
+                  user_id: 'usr_customer_001',
+                  event_type: 'parcel.booked.v1',
+                  aggregate_id: 'prcl-001',
+                  title: 'Parcel Booked',
+                  body: 'Your express shipment SD-20261121-88912 has been confirmed.',
+                  metadata: { tracking_number: 'SD-20261121-88912' },
+                  is_read: false,
+                  created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+                },
+              ];
+
+              for (const n of seedNotifications) {
+                res.write(`event: notification\ndata: ${JSON.stringify(n)}\n\n`);
+              }
+
+              // Keepalive comment ping every 15s
+              const keepaliveInterval = setInterval(() => {
+                res.write(':keepalive\n\n');
+              }, 15000);
+
+              // Push a live incoming real-time notification after 3s to demonstrate live SSE + Sonner toast
+              const liveTimer = setTimeout(() => {
+                const live = {
+                  notification_id: 'notif-live-004',
+                  user_id: 'usr_customer_001',
+                  event_type: 'parcel.delivered.v1',
+                  aggregate_id: 'prcl-001',
+                  title: 'Parcel Delivered Successfully',
+                  body: 'Parcel SD-20261121-88912 has been delivered. Recipient signed with photo proof.',
+                  metadata: { tracking_number: 'SD-20261121-88912' },
+                  is_read: false,
+                  created_at: new Date().toISOString(),
+                };
+                res.write(`event: notification\ndata: ${JSON.stringify(live)}\n\n`);
+              }, 3000);
+
+              req.on('close', () => {
+                clearInterval(keepaliveInterval);
+                clearTimeout(liveTimer);
+              });
+              return;
+            }
+
+            if (req.url?.startsWith('/api/v1/notifications/unread-count') && req.method === 'GET') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ data: { unread_count: 3 } }));
+              return;
+            }
+
+            if (req.url?.startsWith('/api/v1/notifications') && req.method === 'GET') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  data: [
+                    {
+                      id: 'notif-001',
+                      user_id: 'usr_customer_001',
+                      event_type: 'parcel.out_for_delivery.v1',
+                      aggregate_id: 'prcl-001',
+                      title: 'Out for Delivery',
+                      body: 'Courier Kamal Perera has started the delivery run for parcel SD-20261121-88912.',
+                      metadata: { tracking_number: 'SD-20261121-88912' },
+                      is_read: false,
+                      created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+                    },
+                    {
+                      id: 'notif-002',
+                      user_id: 'usr_customer_001',
+                      event_type: 'parcel.in_transit.v1',
+                      aggregate_id: 'prcl-001',
+                      title: 'Parcel In Transit',
+                      body: 'Your shipment is moving between Colombo Central Hub and Kandy Depot.',
+                      metadata: { tracking_number: 'SD-20261121-88912' },
+                      is_read: false,
+                      created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+                    },
+                    {
+                      id: 'notif-003',
+                      user_id: 'usr_customer_001',
+                      event_type: 'parcel.booked.v1',
+                      aggregate_id: 'prcl-001',
+                      title: 'Parcel Booked',
+                      body: 'Your express shipment SD-20261121-88912 has been confirmed.',
+                      metadata: { tracking_number: 'SD-20261121-88912' },
+                      is_read: false,
+                      created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+                    },
+                  ],
+                  meta: { limit: 20, has_more: false, next_cursor: null },
+                })
+              );
+              return;
+            }
+
+            if (req.url?.match(/\/api\/v1\/notifications\/[^/]+\/read/) && req.method === 'PATCH') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ data: { is_read: true, read_at: new Date().toISOString() } }));
+              return;
+            }
+
+            if (req.url?.startsWith('/api/v1/notifications/read-all') && req.method === 'PATCH') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ data: { updated_count: 3 } }));
+              return;
+            }
             next();
           });
         },
@@ -75,6 +218,12 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
+    },
+    build: {
+      // Never inline font files as data: URLs. The production CSP (default-src 'self', no
+      // font-src) blocks data: fonts, so small subsets would fail to load. Other assets keep
+      // Vite's default 4 KB inline rule (returning undefined).
+      assetsInlineLimit: (filePath: string) => (/\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined),
     },
     server: {
       port: 3000,
@@ -87,7 +236,15 @@ export default defineConfig(({ mode }) => {
           target: env.SWIFTDROP_TRACKING_API_URL || 'http://127.0.0.1:8081',
           changeOrigin: true,
         },
+        '/api/v1/notifications/stream': {
+          target: env.SWIFTDROP_TRACKING_API_URL || 'http://127.0.0.1:8081',
+          changeOrigin: true,
+        },
         '/api': {
+          target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
+        '/swagger': {
           target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
           changeOrigin: true,
         },

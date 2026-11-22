@@ -20,8 +20,10 @@ core-api/cmd/api/
 ├── wiring_events.go            # Member 8: Global middleware pipeline, events routes, Swagger UI routes
 ├── wiring_merchants.go         # Member 4: Merchant onboarding, credentials, and webhook endpoints
 ├── wiring_member02.go          # Member 2: Pricing quotes & Parcel booking/retrieval/history endpoints
+├── wiring_notifications.go     # In-app notifications: repository, service, handler, and routes
 ├── wiring_merchants_test.go    # Unit tests for merchant module wiring and encryption key validation
 ├── wiring_member02_test.go     # Unit tests for Member 2 route registration, validation, and security
+├── wiring_notifications_test.go# Unit tests for notifications route registration and security middleware
 └── wiring_test.go              # Health probes, local mock fallback, and Swagger configuration tests
 ```
 
@@ -70,6 +72,16 @@ All database-backed domain modules observe a consistent registration contract:
     - `GET /api/v1/parcels/{id}`
     - `GET /api/v1/parcels/{id}/history`
 
+### In-App Notifications Registration Function (`wiring_notifications.go`)
+
+- **`registerNotificationsModule(mux *http.ServeMux, db *sql.DB, sec *identitytransport.SecurityMiddleware) error`**
+  - Connects `PostgresRepository`, `application.Service`, and `transport.Handler`.
+  - Registers the following routes protected by Bearer JWT (`SecurityMiddleware.Authenticate`):
+    - `GET /api/v1/notifications`
+    - `GET /api/v1/notifications/unread-count`
+    - `PATCH /api/v1/notifications/{id}/read`
+    - `PATCH /api/v1/notifications/read-all`
+
 ---
 
 ## 5. Endpoints Exposed
@@ -86,6 +98,10 @@ All database-backed domain modules observe a consistent registration contract:
 | `POST` | `/api/v1/parcels` | Parcels | Bearer JWT (CUSTOMER, MERCHANT, ADMIN) | Atomically books parcel with quote and idempotency |
 | `GET` | `/api/v1/parcels/{id}` | Parcels | Bearer JWT (CUSTOMER, MERCHANT, ADMIN) | Retrieves authorized parcel aggregate |
 | `GET` | `/api/v1/parcels/{id}/history` | Parcels | Bearer JWT (CUSTOMER, MERCHANT, ADMIN) | Chronological lifecycle status history audit trail |
+| `GET` | `/api/v1/notifications` | Notifications | Bearer JWT | Queries paginated notifications for authenticated user |
+| `GET` | `/api/v1/notifications/unread-count` | Notifications | Bearer JWT | Returns unread notification count |
+| `PATCH` | `/api/v1/notifications/{id}/read` | Notifications | Bearer JWT | Marks individual notification as read |
+| `PATCH` | `/api/v1/notifications/read-all` | Notifications | Bearer JWT | Marks all notifications for user as read |
 
 ---
 

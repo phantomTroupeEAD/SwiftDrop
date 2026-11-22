@@ -137,6 +137,7 @@ test.describe.serial('SwiftDrop Real-World 12-User Multi-Role Workflow Automatio
     expect(realOtp).toMatch(/^\d{6}$/);
 
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Amara');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Jayasinghe');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771239988');

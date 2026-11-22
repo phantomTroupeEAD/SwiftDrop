@@ -98,3 +98,60 @@ func TestMemoryOTPRepository(t *testing.T) {
 		wg.Wait()
 	})
 }
+
+func TestMemoryOTPRepository_VerifyOTP(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("a correct code is kept so the final step can consume it", func(t *testing.T) {
+		repo := NewMemoryOTPRepository()
+		email := "verify-keep@swiftdrop.local"
+		_ = repo.SaveOTP(ctx, email, "123456")
+
+		if err := repo.VerifyOTP(ctx, email, "123456"); err != nil {
+			t.Fatalf("expected correct code to verify, got %v", err)
+		}
+		// Checking again (e.g. the user pressed the button twice) still works.
+		if err := repo.VerifyOTP(ctx, email, "123456"); err != nil {
+			t.Fatalf("expected second check to pass, got %v", err)
+		}
+		if err := repo.VerifyAndConsumeOTP(ctx, email, "123456"); err != nil {
+			t.Fatalf("expected the final step to consume the kept code, got %v", err)
+		}
+		if err := repo.VerifyOTP(ctx, email, "123456"); err != domain.ErrOTPInvalid {
+			t.Errorf("expected ErrOTPInvalid once consumed, got %v", err)
+		}
+	})
+
+	t.Run("wrong codes share one 3-attempt limit with VerifyAndConsumeOTP", func(t *testing.T) {
+		repo := NewMemoryOTPRepository()
+		email := "verify-attempts@swiftdrop.local"
+		_ = repo.SaveOTP(ctx, email, "654321")
+
+		if err := repo.VerifyOTP(ctx, email, "111111"); err != domain.ErrOTPInvalid {
+			t.Errorf("attempt 1: expected ErrOTPInvalid, got %v", err)
+		}
+		if err := repo.VerifyAndConsumeOTP(ctx, email, "222222"); err != domain.ErrOTPInvalid {
+			t.Errorf("attempt 2: expected ErrOTPInvalid, got %v", err)
+		}
+		if err := repo.VerifyOTP(ctx, email, "333333"); err != domain.ErrOTPMaxAttempts {
+			t.Errorf("attempt 3: expected ErrOTPMaxAttempts, got %v", err)
+		}
+		// Locked out: even the right code no longer works.
+		if err := repo.VerifyOTP(ctx, email, "654321"); err != domain.ErrOTPInvalid {
+			t.Errorf("after lockout: expected ErrOTPInvalid, got %v", err)
+		}
+	})
+
+	t.Run("an expired code returns ErrOTPExpired", func(t *testing.T) {
+		repo := NewMemoryOTPRepository()
+		email := "verify-expired@swiftdrop.local"
+		repo.records[email] = &otpRecord{
+			code:        "999999",
+			expiresAt:   time.Now().Add(-1 * time.Second),
+			cooldownEnd: time.Now().Add(-1 * time.Second),
+		}
+		if err := repo.VerifyOTP(ctx, email, "999999"); err != domain.ErrOTPExpired {
+			t.Errorf("expected ErrOTPExpired, got %v", err)
+		}
+	})
+}

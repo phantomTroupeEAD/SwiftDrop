@@ -27,6 +27,9 @@ const (
 
 	// QueueTrackingUpdates provides real-time event projection for Tracking API (Member 05).
 	QueueTrackingUpdates = "q.tracking.updates"
+
+	// QueueInAppNotifications processes in-app notifications for users.
+	QueueInAppNotifications = "q.inapp.notifications"
 )
 
 // QueueDefinition defines a queue and its topic routing key bindings.
@@ -49,6 +52,10 @@ func WorkQueues() []QueueDefinition {
 		{
 			Name:        QueueTrackingUpdates,
 			RoutingKeys: []string{"parcel.#", "courier.#"},
+		},
+		{
+			Name:        QueueInAppNotifications,
+			RoutingKeys: []string{"parcel.#"},
 		},
 	}
 }

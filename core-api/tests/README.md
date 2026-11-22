@@ -32,6 +32,7 @@ The following high-value end-to-end acceptance tests verify key architectural in
 | `at_012_webhook_retry_chaos_test.go` | **AT-012** | Webhook HMAC & Chaos Retry: Validates canonical HMAC-SHA256 signature formatting (`t=...,v1=...`), tamper detection, exponential retry backoff on transient HTTP 500 errors, and Dead-Letter Queue (DLQ) escalation. |
 | `at_013_assignment_concurrency_test.go` | **AT-013** | Concurrency Race: 10 simultaneous goroutines racing to assign the same parcel. Verifies that row locking and `idx_assignments_parcel_single_active` serialize all requests: exactly 1 succeeds (`201 Created`), 9 fail (`409 Conflict`), and exactly 1 active assignment is persisted. |
 | `delivery_atomicity_test.go` | **Atomicity** | Single Transaction Guarantee: Proves that downstream outbox or database constraint errors trigger an atomic rollback, leaving parcel status, delivery attempts, and assignments uncorrupted. |
+| `notifications_integration_test.go` | **In-App Notifications** | Real-Time Notification Lifecycle: Verifies complete inbox REST flow, keyset cursor pagination (`created_at`, `id`), user isolation, dispatcher broadcast triage (`role:DISPATCHER`), unread counters, and IDOR defenses. |
 | `test_auth_helpers.go` | **Auth Fixtures** | Shared Token Helpers: Reuses canonical `identityinfra.JWTTokenProvider` to issue signed test tokens for Customer, Merchant Alpha, Merchant Beta, Dispatcher, Courier, and Admin. Verified by `test_auth_helpers_test.go`. |
 
 ---

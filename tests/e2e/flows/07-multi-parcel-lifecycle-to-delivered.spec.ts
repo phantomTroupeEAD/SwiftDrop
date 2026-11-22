@@ -58,6 +58,7 @@ test.describe('Flow 7: Multi-Parcel Real Lifecycle (Zero Mocks)', () => {
 
     // Step 1.3: Fill Registration Form & Accept Terms
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill(firstName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill(lastName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill(phone);

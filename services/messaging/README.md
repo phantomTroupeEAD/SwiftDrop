@@ -37,6 +37,7 @@ The **SwiftDrop Messaging Service** provides the asynchronous integration backbo
   | `q.notifications.worker` | `parcel.#` | `swiftdrop.dlq.exchange` | Customer milestone transactional emails |
   | `q.webhooks.dispatcher` | `parcel.#`, `courier.#`, `merchant.#` | `swiftdrop.dlq.exchange` | Outbound HMAC-signed merchant webhooks |
   | `q.tracking.updates` | `parcel.#`, `courier.#` | `swiftdrop.dlq.exchange` | Projection stream for Member 05 Tracking API |
+  | `q.inapp.notifications` | `parcel.#` | `swiftdrop.dlq.exchange` | In-app user notification processing |
 
 ---
 

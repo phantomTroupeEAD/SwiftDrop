@@ -9,10 +9,10 @@ import {
   Truck,
   Store,
   User,
-  Bell,
-  Search,
+    Search,
 } from 'lucide-react';
 import { Role } from '@/shared/types/auth';
+import { NotificationBell } from '@/shared/components/NotificationBell';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -110,12 +110,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <span>Search operations...</span>
           </div>
 
-          <button
-            title="Notifications"
-            className="p-2 text-text-muted hover:text-text hover:bg-surface-subtle rounded-lg transition"
-          >
-            <Bell className="w-4 h-4" />
-          </button>
+          <NotificationBell />
 
           <div className="h-5 w-px bg-surface-subtle" />
 

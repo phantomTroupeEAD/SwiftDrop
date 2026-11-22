@@ -6,7 +6,8 @@
 | --- | --- |
 | `login-email-input`, `login-password-input`, `login-submit-btn` | Sign-in email, password, and submit |
 | `register-email-input`, `register-send-otp-btn` | Registration email and verification-code request |
-| `register-otp-input`, `register-first-name-input`, `register-last-name-input`, `register-phone-input`, `register-password-input`, `register-terms-checkbox`, `register-submit-btn` | Verification code, customer details, terms consent, and account creation |
+| `register-otp-input`, `register-verify-otp-btn` | Step 2: the emailed 6-digit code and the button that checks it with the server (the details form appears only after it succeeds) |
+| `register-email-verified`, `register-first-name-input`, `register-last-name-input`, `register-phone-input`, `register-password-input`, `register-terms-checkbox`, `register-submit-btn` | Step 3: "Email verified" banner, customer details, terms consent, and account creation |
 | `booking-wizard`, `booking-{pickup,dropoff}-{name,phone,address,city,postal}-input` | Booking form and address fields |
 | `booking-{weight,length,width,height,description}-input`, `booking-service-select` | Parcel details |
 | `booking-next-btn`, `booking-back-btn`, `quote-price-cents`, `booking-submit-btn`, `booking-confirmation`, `booking-receipt-btn`, `booking-receipt` | Booking navigation, authoritative quote, submission, result and official receipt |
@@ -271,3 +272,13 @@ Routes `/ops/*` for ADMIN and DISPATCHER, built in `src/features/dispatcher-admi
 | Booking selector | Purpose |
 | --- | --- |
 | `booking-special-instructions-input` | Optional handling or delivery instructions sent as `special_instructions` |
+
+## In-App Notifications (NotificationBell & Inbox)
+
+| IDs | Purpose |
+| --- | --- |
+| `notification-bell-btn` | Notification bell dropdown toggle |
+| `notification-bell-count` | Unread notification count badge on bell |
+| `notification-mark-all-read` | Mark all notifications as read action |
+| `notification-view-all-btn` | Link to full notifications inbox page |
+

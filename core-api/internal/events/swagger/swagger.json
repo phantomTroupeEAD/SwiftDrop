@@ -1895,6 +1895,52 @@
                 }
             }
         },
+        "/api/v1/auth/register/verify-otp": {
+            "post": {
+                "description": "Checks the 6-digit code from send-otp without using it up, so the customer can confirm their email before entering their details. A wrong code uses one of the same 3 attempts as registration. The code must still be sent with POST /api/v1/auth/register, which consumes it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identity"
+                ],
+                "summary": "Check a registration verification code",
+                "parameters": [
+                    {
+                        "description": "Registration email and code",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.VerifyOTPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.VerifyOTPResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing fields, invalid email, or a wrong, expired or locked code",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Email already registered",
+                        "schema": {
+                            "$ref": "#/definitions/internal_identity_transport.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/courier/dashboard": {
             "get": {
                 "security": [
@@ -2532,6 +2578,201 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.DataEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Queries notifications for the authenticated user (and role:DISPATCHER broadcasts if caller is a dispatcher) with keyset cursor pagination.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "List user notifications",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pagination cursor from previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of items to return (1-100, default 20)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid pagination parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/notifications/read-all": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Marks all unread notifications as read for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark all notifications as read",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_MarkAllReadResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/notifications/unread-count": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns total unread notification count for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get unread notification count",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_UnreadCountResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/notifications/{id}/read": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Marks a specific notification as read by ID if owned by the caller.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark notification as read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Notification ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_NotificationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid notification ID",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Notification not owned by caller",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Notification not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope"
                         }
                     }
                 }
@@ -3567,6 +3808,30 @@
                 }
             }
         },
+        "github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_MarkAllReadResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_notifications_transport.MarkAllReadResponse"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_NotificationResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_notifications_transport.NotificationResponse"
+                }
+            }
+        },
+        "github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_UnreadCountResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_notifications_transport.UnreadCountResponse"
+                }
+            }
+        },
         "internal_identity_transport.ErrorDetail": {
             "type": "object",
             "properties": {
@@ -3921,6 +4186,39 @@
                 }
             }
         },
+        "internal_identity_transport.VerifyOTPDataDTO": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "verified": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_identity_transport.VerifyOTPRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "otp": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_identity_transport.VerifyOTPResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_identity_transport.VerifyOTPDataDTO"
+                }
+            }
+        },
         "internal_merchants_transport.AdminChangeStatusRequest": {
             "type": "object",
             "properties": {
@@ -3981,6 +4279,61 @@
                 "url": {
                     "type": "string",
                     "example": "https://httpbin.org/post"
+                }
+            }
+        },
+        "internal_notifications_transport.MarkAllReadResponse": {
+            "type": "object",
+            "properties": {
+                "updated_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_notifications_transport.NotificationResponse": {
+            "type": "object",
+            "properties": {
+                "aggregate_id": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_read": {
+                    "type": "boolean"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_notifications_transport.UnreadCountResponse": {
+            "type": "object",
+            "properties": {
+                "unread_count": {
+                    "type": "integer"
                 }
             }
         },

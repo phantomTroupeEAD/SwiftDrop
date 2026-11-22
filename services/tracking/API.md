@@ -166,3 +166,47 @@ Retrieves full parcel status history, destination details, and operational miles
 - `403 Forbidden`: `ACCESS_DENIED` — Authenticated caller is not the authorized owner of the parcel.
 - `404 Not Found`: `TRACKING_NOT_FOUND` — Parcel does not exist.
 - `503 Service Unavailable`: `DEPENDENCY_UNAVAILABLE` — Database connection unavailable.
+
+---
+
+## 4. Authenticated In-App Notification Stream
+Streams real-time in-app notifications and unread counters over an authenticated Server-Sent Events (SSE) connection. Subscribes users to their personal notifications and operations staff to role broadcasts (e.g. `role:DISPATCHER`).
+
+- **Method / Path:** `GET /api/v1/notifications/stream`
+- **Auth Required:** Bearer JWT in `Authorization` header (`Authorization: Bearer <jwt>`) OR query parameter (`?token=<jwt>`).
+- **Response Headers:**
+  - `Content-Type: text/event-stream`
+  - `Cache-Control: no-cache, no-transform`
+  - `Connection: keep-alive`
+  - `X-Accel-Buffering: no`
+
+### Wire Protocol & Initial Hydration
+Upon successful handshake, the stream emits:
+1. `event: unread_count` carrying the current unread counter snapshot:
+   ```text
+   event: unread_count
+   data: {"count":3}
+   ```
+2. Recent unread notification items:
+   ```text
+   id: 0192e2b3-7c8a-7890-a123-000000000042
+   event: notification
+   data: {"notification_id":"0192e2b3-7c8a-7890-a123-000000000042","user_id":"user-101","event_type":"parcel.out_for_delivery.v1","aggregate_id":"parcel-101","title":"Out for Delivery","body":"Parcel SD-20261120-ABC123 is out for doorstep delivery today.","metadata":{"tracking_number":"SD-20261120-ABC123","status":"OUT_FOR_DELIVERY"},"is_read":false,"created_at":"2026-11-19T08:00:00Z"}
+   ```
+3. Periodic 15-second heartbeat comments to prevent edge proxy timeouts:
+   ```text
+   :keepalive
+   ```
+
+### Real-Time Live Push Framing
+When a domain event completes processing in the Messaging Service, the connected client receives an immediate SSE event:
+```text
+id: 0192e2b3-7c8a-7890-a123-000000000043
+event: notification
+data: {"notification_id":"0192e2b3-7c8a-7890-a123-000000000043","user_id":"user-101","event_type":"parcel.delivered.v1","aggregate_id":"parcel-101","title":"Parcel Delivered","body":"Parcel SD-20261120-ABC123 has been successfully delivered.","metadata":{"tracking_number":"SD-20261120-ABC123","status":"DELIVERED"},"is_read":false,"created_at":"2026-11-19T08:15:00Z"}
+```
+
+### HTTP Error Envelopes
+- `400 Bad Request`: `MISSING_TOKEN` — Missing access token in `Authorization` header or query parameter.
+- `401 Unauthorized`: `UNAUTHORIZED` — Invalid, malformed, or expired access token.
+- `503 Service Unavailable`: `HUB_UNAVAILABLE` — In-memory notification hub is unavailable.
