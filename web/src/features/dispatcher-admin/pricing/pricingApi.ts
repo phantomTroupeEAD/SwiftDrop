@@ -81,6 +81,9 @@ export async function listRules(token: string | null, page: number, perPage: num
       if (filter.active) q.set('is_active', filter.active);
       const res = await request<{ data: PricingRule[] | null; meta: PageMeta }>(token, 'GET', `${BASE}?${q.toString()}`);
       backend = 'real';
+      if (res.data && Array.isArray(res.data)) {
+        mockPricing.registerRules(res.data);
+      }
       return { rows: res.data ?? [], meta: res.meta };
     } catch (err) {
       if (!routeMissing(err)) throw err;
