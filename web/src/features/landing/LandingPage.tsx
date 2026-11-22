@@ -220,20 +220,12 @@ export const LandingPage: React.FC = () => {
                 </Button>
               </div>
             </div>
-            <figure className="overflow-hidden rounded-md bg-chrome text-chrome-foreground">
-              <figcaption className="sr-only">Example API request and response</figcaption>
-              <div className="border-b border-chrome-line px-5 py-3.5 font-mono text-xs text-chrome-muted">REQUEST</div>
-              <pre className="whitespace-pre-wrap p-5 font-mono text-sm leading-relaxed">
-                <span className="text-chrome-accent">POST</span>{' /api/v1/merchants/me/orders\nAuthorization: Bearer sd_live_••••••••\nIdempotency-Key: 7f3c…'}
-              </pre>
-              <div className="flex gap-3 border-y border-chrome-line px-5 py-3.5 font-mono text-xs">
-                <span className="text-chrome-muted">RESPONSE</span>
-                <span className="text-chrome-foreground">201 Created</span>
-              </div>
-              <pre className="whitespace-pre-wrap p-5 font-mono text-sm leading-relaxed">
-                {'{ "data": {\n    "tracking_number": '}<span className="text-chrome-accent">{'"SD-20261107-9988"'}</span>{',\n    "status": "CREATED" } }'}
-              </pre>
-            </figure>
+            <img
+              src="/merchant-fulfillment-hero.jpg"
+              alt="Loading docks at a parcel fulfillment center"
+              className="aspect-video w-full rounded-md object-cover"
+              loading="lazy"
+            />
           </div>
         </section>
       </main>
