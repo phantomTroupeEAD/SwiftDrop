@@ -1,6 +1,17 @@
 # SwiftDrop Unified Web Application (`web/`)
 
-Read the [SwiftDrop UI design system](design.mdx) before building a screen. Start with the end user's role preset and complete the screen brief.
+Read the [SwiftDrop design spec](design.md) (the "Waybill" look) and the [design process guide](design.mdx) before building a screen. Complete the screen brief.
+
+## Waybill redesign (20 November 2026)
+
+The team agreed to replace the Apple Cupertino look. The whole app now uses the Waybill design from the "SwiftDrop UI Redesign" canvas; [`design.md`](design.md) is the binding spec and records the decision.
+
+- **Tokens** (`src/index.css`, `tailwind.config.js`): paper `canvas`, ink `text`, signal `primary` (`#c2410c`), a `chrome` family for ink areas, `border-strong` for control borders and `status-info` for in-progress statuses. Every token has a dark value under `[data-theme="dark"]`.
+- **Fonts:** Space Grotesk (headings), Inter (text) and JetBrains Mono (tracking numbers, money, times), self-hosted through `@fontsource-variable/*` and imported in `src/main.tsx`. No CSP change is needed.
+- **One signal colour for all roles.** `data-role` stays on every layout root; per-role colours can come back by overriding four tokens per role in `index.css` (pending Design Owner confirmation).
+- **Primitives:** uppercase status badges, `active` badges in the info blue, 600-weight buttons, `border-strong` on inputs, selects, checkboxes and outline buttons, mono uppercase table headers, and a connected step rail in `Stepper`.
+- **Screens rebuilt:** the landing page (`/`), sign-in (`/auth/login`, split layout with a role panel), and the ops shell (`/ops/*`, ink sidebar). Register and password reset lost the blurred photo background. Portal screens follow through the restyled `m6-*` classes. All `data-testid` values are unchanged.
+- `public/scratch-apple.html` and `public/login-bg.jpg` are no longer used by the app and are kept only as history.
 
 After sign-in, the customer and merchant home pages share the same layout and display recent shipments and status counts from their account-scoped APIs. Counts describe the returned collection. Merchant integrations and customer business-account applications have separate sections.
 
@@ -10,9 +21,9 @@ Customers can open SwiftDrop Assistant using the floating chat icon at the botto
 
 The customer and merchant dashboards share the navigation header with their portal pages. On phones, navigation wraps below the brand and session action. Empty shipment lists link to the next action, and merchant profile errors have an independent retry.
 
-## Member 6 Apple-style frontend
+## Member 6 frontend
 
-The customer and merchant workflows use `public/scratch-apple.html` as their visual reference. From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
+The customer and merchant workflows follow [`design.md`](design.md). From `web/`, run `npm ci` and `npm run dev`. Open `/track` for public tracking, `/auth/register` for registration, or sign in as a customer or merchant to open the corresponding portal. The static prototypes and `/design-preview` are separate review surfaces.
 
 Public tracking and registration use the centered blue profile. Customer booking and merchant applications use the blue customer profile. Merchant orders, API keys, and webhooks use the teal merchant profile. On phones, merchant orders show tracking and status first, with reference and date below.
 
@@ -55,9 +66,9 @@ Implemented an authoritative, image-heavy public landing page (`src/features/lan
 - **Strict Compliance**: 100% composed from `@/shared/components/ui/` primitives with `data-role="PUBLIC"` scoping, zero raw elements, and zero arbitrary brackets. Tested cleanly with `npm run lint:ui` and `npm run build`.
 
 ### Authentication Screens Refinement (November 2026)
-All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/features/auth/RegisterPage.tsx`, and `src/features/auth/ForgotPasswordPage.tsx`) strictly conform to `design.md` Apple Cupertino Precision (`[data-style="apple"]`, `[data-role="PUBLIC"]`):
+All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/features/auth/RegisterPage.tsx`, and `src/features/auth/ForgotPasswordPage.tsx`) follow `design.md` (Waybill, `[data-role="PUBLIC"]`):
 - Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
-- Floating solid white/neutral modal cards (`bg-surface rounded-2xl border border-border`) over the cinematic twilight logistics background (`public/login-bg.jpg`) with an ambient blur and contrast veil (`bg-canvas/75 backdrop-blur-sm`).
+- Sign-in is a split layout: the form on paper on the left, an ink panel on the right listing where each role lands. Register and password reset use a 12px card on paper. No background photo, blur or glow effects.
 - Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
 - Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
 - Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
