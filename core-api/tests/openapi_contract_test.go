@@ -28,16 +28,16 @@ import (
 	merchantsapp "github.com/swiftdrop/core-api/internal/merchants/application"
 	merchantsinfra "github.com/swiftdrop/core-api/internal/merchants/infrastructure"
 	merchantstransport "github.com/swiftdrop/core-api/internal/merchants/transport"
+	notificationsapp "github.com/swiftdrop/core-api/internal/notifications/application"
+	notificationsdomain "github.com/swiftdrop/core-api/internal/notifications/domain"
+	notificationsinfra "github.com/swiftdrop/core-api/internal/notifications/infrastructure"
+	notificationstransport "github.com/swiftdrop/core-api/internal/notifications/transport"
 	parcelsapp "github.com/swiftdrop/core-api/internal/parcels/application"
 	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 	parcelstransport "github.com/swiftdrop/core-api/internal/parcels/transport"
 	pricingapp "github.com/swiftdrop/core-api/internal/pricing/application"
 	pricinginfra "github.com/swiftdrop/core-api/internal/pricing/infrastructure"
 	pricingtransport "github.com/swiftdrop/core-api/internal/pricing/transport"
-	notificationsapp "github.com/swiftdrop/core-api/internal/notifications/application"
-	notificationsdomain "github.com/swiftdrop/core-api/internal/notifications/domain"
-	notificationsinfra "github.com/swiftdrop/core-api/internal/notifications/infrastructure"
-	notificationstransport "github.com/swiftdrop/core-api/internal/notifications/transport"
 )
 
 type swaggerDocument struct {
