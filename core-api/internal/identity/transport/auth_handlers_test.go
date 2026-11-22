@@ -643,3 +643,100 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 		}
 	})
 }
+
+// ─── Verify OTP Tests ────────────────────────────────────────────────────────
+
+func TestVerifyRegistrationOTP(t *testing.T) {
+	// A router whose OTP store the test can write to, so it can plant a known code.
+	hasher := infrastructure.NewStandardPasswordHasher()
+	tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-at-least-32-chars-long")
+	otpRepo := infrastructure.NewMemoryOTPRepository()
+	authService := application.NewAuthService(infrastructure.NewMockUserRepository(hasher), infrastructure.NewMockTokenRepository(), hasher, tokenProvider).
+		WithOTP(otpRepo, infrastructure.NewDevEmailSender())
+	mux := http.NewServeMux()
+	transport.RegisterRoutes(mux, transport.NewAuthHandler(authService), transport.NewSecurityMiddleware(tokenProvider))
+
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register/verify-otp", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	errorCode := func(t *testing.T, rec *httptest.ResponseRecorder) string {
+		t.Helper()
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+			t.Fatalf("response is not a JSON error envelope: %s", rec.Body.String())
+		}
+		return env.Error.Code
+	}
+
+	t.Run("200 OK and verified=true for the correct code, which stays usable", func(t *testing.T) {
+		email := "handler-verify@example.com"
+		_ = otpRepo.SaveOTP(context.Background(), email, "135790")
+
+		rec := post(`{"email":"handler-verify@example.com","otp":"135790"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Data struct {
+				Email    string `json:"email"`
+				Verified bool   `json:"verified"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if !resp.Data.Verified || resp.Data.Email != email {
+			t.Errorf("unexpected body: %s", rec.Body.String())
+		}
+		// The code was not used up: the final step still accepts it.
+		if err := otpRepo.VerifyAndConsumeOTP(context.Background(), email, "135790"); err != nil {
+			t.Errorf("expected the code to remain valid for registration, got %v", err)
+		}
+	})
+
+	t.Run("400 AUTH_OTP_INVALID for a wrong code", func(t *testing.T) {
+		_ = otpRepo.SaveOTP(context.Background(), "handler-wrong@example.com", "135790")
+		rec := post(`{"email":"handler-wrong@example.com","otp":"000000"}`)
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "AUTH_OTP_INVALID" {
+			t.Fatalf("Expected 400 AUTH_OTP_INVALID, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("400 VALIDATION_FAILED for a malformed code, without using an attempt", func(t *testing.T) {
+		email := "handler-typo@example.com"
+		_ = otpRepo.SaveOTP(context.Background(), email, "135790")
+		for _, typo := range []string{"12345", "1234567", "12a456"} {
+			rec := post(`{"email":"` + email + `","otp":"` + typo + `"}`)
+			if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "VALIDATION_FAILED" {
+				t.Fatalf("otp %q: expected 400 VALIDATION_FAILED, got %d: %s", typo, rec.Code, rec.Body.String())
+			}
+		}
+		// Three typos used no attempts, so the right code still works.
+		if rec := post(`{"email":"` + email + `","otp":"135790"}`); rec.Code != http.StatusOK {
+			t.Fatalf("Expected 200 after typos, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("400 VALIDATION_FAILED when email or otp is missing", func(t *testing.T) {
+		for _, body := range []string{`{"email":"x@example.com"}`, `{"otp":"123456"}`, `{}`} {
+			if rec := post(body); rec.Code != http.StatusBadRequest {
+				t.Fatalf("body %s: expected 400, got %d", body, rec.Code)
+			}
+		}
+	})
+
+	t.Run("409 AUTH_EMAIL_ALREADY_EXISTS for a registered email", func(t *testing.T) {
+		rec := post(`{"email":"admin@swiftdrop.local","otp":"123456"}`)
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "AUTH_EMAIL_ALREADY_EXISTS" {
+			t.Fatalf("Expected 409 AUTH_EMAIL_ALREADY_EXISTS, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}

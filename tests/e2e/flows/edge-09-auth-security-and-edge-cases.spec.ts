@@ -221,6 +221,7 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     const realOtp = await getRegistrationOTPFromMailpit(email);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Kasun');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771234567');
@@ -244,6 +245,7 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     const realOtp = await getRegistrationOTPFromMailpit(email);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Kasun');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771234567');
@@ -262,17 +264,15 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_OTP))).toBeVisible({ timeout: 10000 });
 
-    // Intentionally wrong OTP
+    // Intentionally wrong OTP: rejected by POST /auth/register/verify-otp on the code step
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill('000000');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Kasun');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771234567');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_PASSWORD)).fill('Password123!');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_TERMS_CHECKBOX)).check();
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_SUBMIT_BTN)).click();
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
 
     await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('alert')).toContainText(/incorrect|invalid|information/i);
+    // The details form only appears after the server confirms the code
+    await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME))).not.toBeVisible();
+    await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_OTP))).toBeVisible();
   });
 
   test('Edge 9.14: Step 2 - OTP Attempt Exhaustion Enforces pgOTPMaxAttempts = 3', async ({ page }) => {
@@ -282,22 +282,23 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
     await page.locator(testId(SELECTORS.AUTH.REGISTER_SEND_OTP_BTN)).click();
 
     await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_OTP))).toBeVisible({ timeout: 10000 });
+    const realOtp = await getRegistrationOTPFromMailpit(email);
 
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Kasun');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771234567');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_PASSWORD)).fill('Password123!');
-    await page.locator(testId(SELECTORS.AUTH.REGISTER_TERMS_CHECKBOX)).check();
-
-    // 3 failed attempts
+    // 3 failed attempts on the verify step
     for (let i = 1; i <= 3; i++) {
       await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(`11111${i}`);
-      await page.locator(testId(SELECTORS.AUTH.REGISTER_SUBMIT_BTN)).click();
+      await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
       await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 });
     }
 
     // On 3rd attempt, code must be invalidated
     await expect(page.getByRole('alert')).toContainText(/attempts|request a new code|incorrect|invalid/i);
+
+    // Even the real emailed code is refused now: the verify step shares the 3-attempt limit
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
+    await expect(page.getByRole('alert')).toContainText(/incorrect|invalid|request a new code/i, { timeout: 10000 });
+    await expect(page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME))).not.toBeVisible();
   });
 
   test('Edge 9.15: Step 2 - OTP Replay Prevention Enforces Single-Use Consumption', async ({ page }) => {
@@ -310,6 +311,7 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     const realOtp = await getRegistrationOTPFromMailpit(email);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('First');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Last');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94771234567');
@@ -358,6 +360,7 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     const realOtp = await getRegistrationOTPFromMailpit(email);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
 
     const xssName = '<script>alert("XSS")</script><img src=x onerror=alert(1)>';
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill(xssName);
@@ -381,6 +384,7 @@ test.describe('Suite 9: Sign-Up Security, OTP Lifecycle & Invariant Protection',
 
     const realOtp = await getRegistrationOTPFromMailpit(email);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(realOtp);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Kasun');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('not-a-phone-1234');

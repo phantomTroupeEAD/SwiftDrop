@@ -110,6 +110,7 @@ test.describe('Flow 8: Unified Commercial Merchant Onboarding, B2B Order Ingesti
 
     // Complete registration form
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(otpCode);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill(firstName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill(lastName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill(phone);

@@ -72,9 +72,21 @@ func (r *PostgresOTPRepository) SaveOTP(ctx context.Context, email, code string)
 	return nil
 }
 
+// VerifyOTP validates the provided code with the same expiry and attempt limits as
+// VerifyAndConsumeOTP, but keeps the record on success so a later step can consume it.
+func (r *PostgresOTPRepository) VerifyOTP(ctx context.Context, email, code string) error {
+	return r.verify(ctx, email, code, false)
+}
+
 // VerifyAndConsumeOTP validates the provided code against the stored record,
 // enforces expiry and attempt limits, and deletes the record on success.
 func (r *PostgresOTPRepository) VerifyAndConsumeOTP(ctx context.Context, email, code string) error {
+	return r.verify(ctx, email, code, true)
+}
+
+// verify holds the shared rules in one row-locked transaction: expiry, a 3-attempt limit
+// counted across both VerifyOTP and VerifyAndConsumeOTP, and deletion when consumed.
+func (r *PostgresOTPRepository) verify(ctx context.Context, email, code string, consume bool) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin otp verification tx: %w", err)
@@ -143,11 +155,13 @@ func (r *PostgresOTPRepository) VerifyAndConsumeOTP(ctx context.Context, email, 
 		return domain.ErrOTPInvalid
 	}
 
-	if _, delErr := tx.ExecContext(ctx, `DELETE FROM email_otps WHERE email = $1`, email); delErr != nil {
-		return fmt.Errorf("failed to consume otp: %w", delErr)
+	if consume {
+		if _, delErr := tx.ExecContext(ctx, `DELETE FROM email_otps WHERE email = $1`, email); delErr != nil {
+			return fmt.Errorf("failed to consume otp: %w", delErr)
+		}
 	}
 	if commitErr := tx.Commit(); commitErr != nil {
-		return fmt.Errorf("failed to commit otp consumption: %w", commitErr)
+		return fmt.Errorf("failed to commit otp verification: %w", commitErr)
 	}
 	return nil
 }

@@ -24,6 +24,7 @@ const SELECTORS = {
     REGISTER_EMAIL: 'register-email-input',
     REGISTER_SEND_OTP_BTN: 'register-send-otp-btn',
     REGISTER_OTP: 'register-otp-input',
+    REGISTER_VERIFY_OTP_BTN: 'register-verify-otp-btn',
     REGISTER_FIRST_NAME: 'register-first-name-input',
     REGISTER_LAST_NAME: 'register-last-name-input',
     REGISTER_PHONE: 'register-phone-input',
@@ -66,6 +67,7 @@ test.describe('Flow 11: Merchant Orders Page & Bulk CSV Ingestion Edge Cases Sui
 
     const otpCodeA = await getRegistrationOTPFromMailpit(merchantAEmail);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(otpCodeA);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Sunil');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Silva');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill(phone);
@@ -383,6 +385,7 @@ test.describe('Flow 11: Merchant Orders Page & Bulk CSV Ingestion Edge Cases Sui
     await pageB.locator(testId(SELECTORS.AUTH.REGISTER_SEND_OTP_BTN)).click();
     const otpCodeB = await getRegistrationOTPFromMailpit(merchantBEmail);
     await pageB.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(otpCodeB);
+    await pageB.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await pageB.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Anura');
     await pageB.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Kumara');
     await pageB.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill('+94770000005');

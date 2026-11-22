@@ -612,3 +612,63 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 		}
 	})
 }
+
+func TestAuthService_VerifyRegistrationOTP(t *testing.T) {
+	ctx := context.Background()
+
+	// A service whose OTP store the test can write to, so it can plant a known code.
+	build := func() (*application.AuthService, *infrastructure.MemoryOTPRepository) {
+		hasher := infrastructure.NewStandardPasswordHasher()
+		tokenProvider := infrastructure.NewJWTTokenProvider("test-secret-key-at-least-32-chars-long")
+		otpRepo := infrastructure.NewMemoryOTPRepository()
+		svc := application.NewAuthService(infrastructure.NewMockUserRepository(hasher), infrastructure.NewMockTokenRepository(), hasher, tokenProvider).
+			WithOTP(otpRepo, infrastructure.NewDevEmailSender())
+		return svc, otpRepo
+	}
+
+	t.Run("a correct code verifies and Register can still use it", func(t *testing.T) {
+		svc, otpRepo := build()
+		email := "verify-first@example.com"
+		_ = otpRepo.SaveOTP(ctx, email, "246810")
+
+		res, err := svc.VerifyRegistrationOTP(ctx, application.VerifyRegistrationOTPCommand{Email: "  Verify-First@Example.com ", OTP: " 246810 "})
+		if err != nil {
+			t.Fatalf("VerifyRegistrationOTP failed: %v", err)
+		}
+		if res.Email != email {
+			t.Errorf("expected normalised email %s, got %s", email, res.Email)
+		}
+
+		_, err = svc.Register(ctx, application.RegisterCustomerCommand{
+			Email: email, OTP: "246810", FirstName: "Alice", LastName: "Johnson",
+			Phone: "+94771234567", Password: "SecurePassword123!", TermsAccepted: true,
+		})
+		if err != nil {
+			t.Fatalf("Register after a successful check failed: %v", err)
+		}
+	})
+
+	t.Run("a wrong code returns ErrOTPInvalid", func(t *testing.T) {
+		svc, otpRepo := build()
+		email := "verify-wrong@example.com"
+		_ = otpRepo.SaveOTP(ctx, email, "246810")
+		if _, err := svc.VerifyRegistrationOTP(ctx, application.VerifyRegistrationOTPCommand{Email: email, OTP: "000000"}); err != domain.ErrOTPInvalid {
+			t.Errorf("expected ErrOTPInvalid, got %v", err)
+		}
+	})
+
+	t.Run("an invalid email returns ErrInvalidEmail", func(t *testing.T) {
+		svc, _ := build()
+		if _, err := svc.VerifyRegistrationOTP(ctx, application.VerifyRegistrationOTPCommand{Email: "not-an-email", OTP: "123456"}); err != domain.ErrInvalidEmail {
+			t.Errorf("expected ErrInvalidEmail, got %v", err)
+		}
+	})
+
+	t.Run("an already registered email returns ErrEmailAlreadyExists", func(t *testing.T) {
+		svc, otpRepo := build()
+		_ = otpRepo.SaveOTP(ctx, "customer@swiftdrop.local", "246810")
+		if _, err := svc.VerifyRegistrationOTP(ctx, application.VerifyRegistrationOTPCommand{Email: "customer@swiftdrop.local", OTP: "246810"}); err != domain.ErrEmailAlreadyExists {
+			t.Errorf("expected ErrEmailAlreadyExists, got %v", err)
+		}
+	})
+}

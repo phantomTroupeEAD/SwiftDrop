@@ -593,6 +593,27 @@ definitions:
       data:
         $ref: '#/definitions/internal_identity_transport.UserDTO'
     type: object
+  internal_identity_transport.VerifyOTPDataDTO:
+    properties:
+      email:
+        type: string
+      message:
+        type: string
+      verified:
+        type: boolean
+    type: object
+  internal_identity_transport.VerifyOTPRequest:
+    properties:
+      email:
+        type: string
+      otp:
+        type: string
+    type: object
+  internal_identity_transport.VerifyOTPResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_identity_transport.VerifyOTPDataDTO'
+    type: object
   internal_merchants_transport.AdminChangeStatusRequest:
     properties:
       expected_version:
@@ -1950,6 +1971,40 @@ paths:
           schema:
             $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
       summary: Request email verification code for registration
+      tags:
+      - identity
+  /api/v1/auth/register/verify-otp:
+    post:
+      consumes:
+      - application/json
+      description: Checks the 6-digit code from send-otp without using it up, so the
+        customer can confirm their email before entering their details. A wrong code
+        uses one of the same 3 attempts as registration. The code must still be sent
+        with POST /api/v1/auth/register, which consumes it.
+      parameters:
+      - description: Registration email and code
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_identity_transport.VerifyOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_identity_transport.VerifyOTPResponse'
+        "400":
+          description: Missing fields, invalid email, or a wrong, expired or locked
+            code
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+        "409":
+          description: Email already registered
+          schema:
+            $ref: '#/definitions/internal_identity_transport.ErrorEnvelope'
+      summary: Check a registration verification code
       tags:
       - identity
   /api/v1/courier/dashboard:

@@ -72,7 +72,7 @@ All primary authentication screens (`src/features/auth/LoginPage.tsx`, `src/feat
 - Composed strictly from authoritative primitives in `@/shared/components/ui/` (`Card`, `Button`, `Input`, `Label`, `Checkbox`, `Separator`, `Dialog`).
 - Sign-in is a split layout: the form on paper on the left, an ink panel on the right listing where each role lands. Register and password reset use a 12px card on paper. No background photo, blur or glow effects.
 - Integrated internal input affix buttons (`pr-10`) for password show/hide toggling without layout shifts.
-- Complete 2-step registration with email verification code cooldown timer, 6-digit numeric pattern input, and terms checkbox.
+- Three-step registration (Email → Verify → Details, shown with the shared `Stepper`): the customer enters their details only after `POST /api/v1/auth/register/verify-otp` confirms the emailed code. Includes the resend cooldown timer, 6-digit numeric input, terms checkbox, and a return to the code step (details kept) if the code expires before the account is created.
 - Complete password recovery flow (`/auth/forgot-password`) with 2-step OTP verification, password confirmation, cooldown timer, and semantic status banners.
 - Google OAuth button integrated directly into the login card using semantic button primitives and standard SVG glyphs.
 - Fully preserved test IDs (`login-email-input`, `login-password-input`, `login-submit-btn`, `login-theme-preview-link`, `register-submit-btn`).

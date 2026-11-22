@@ -118,6 +118,32 @@ func (s *AuthService) SendRegistrationOTP(ctx context.Context, cmd SendRegistrat
 	}, nil
 }
 
+// VerifyRegistrationOTP checks a registration code without using it up, so the customer can
+// confirm their email before entering their details. A wrong code uses up one of the same
+// 3 attempts that Register checks, so this step gives no extra guesses. Register must still
+// be called with the same code, and consumes it.
+func (s *AuthService) VerifyRegistrationOTP(ctx context.Context, cmd VerifyRegistrationOTPCommand) (*VerifyRegistrationOTPResult, error) {
+	// 1. Validate and normalize email
+	emailVO, err := domain.NewEmail(cmd.Email)
+	if err != nil {
+		return nil, domain.ErrInvalidEmail
+	}
+
+	// 2. The email must still be free (it may have been registered since the code was sent)
+	if _, err := s.userRepo.FindByEmail(ctx, emailVO.String()); err == nil {
+		return nil, domain.ErrEmailAlreadyExists
+	}
+
+	// 3. Check the code, keeping it for Register (same rule as Register: no OTP store, no check)
+	if s.otpRepo != nil {
+		if err := s.otpRepo.VerifyOTP(ctx, emailVO.String(), strings.TrimSpace(cmd.OTP)); err != nil {
+			return nil, err
+		}
+	}
+
+	return &VerifyRegistrationOTPResult{Email: emailVO.String()}, nil
+}
+
 // Register verifies the OTP, hashes the password, and creates the customer account.
 func (s *AuthService) Register(ctx context.Context, cmd RegisterCustomerCommand) (*RegisterResult, error) {
 	// 1. Validate and normalize email
