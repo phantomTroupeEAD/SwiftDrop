@@ -318,10 +318,13 @@ func TestZonePagingAndAuditPaging(t *testing.T) {
 	run := time.Now().Format("150405")
 	ctx := context.Background()
 	const n = 5
+	// The seeded Sri Lankan zones use real postal codes, which start with most digit pairs. Test
+	// prefixes must stay in a range no real code uses (93 is free; so are 13-19, 23-29, 33-39,
+	// 44-49, 52-59, 62-69, 72-79, 83-89, 92-95 and 97-98), or a seeded code can collide with them.
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("ZONE_T_PAGE_%s_%d", run, i)
 		if _, err := svc.CreateZone(ctx, adminActor, application.CreateZoneInput{
-			ID: id, Code: fmt.Sprintf("T-PG-%s-%d", run, i), Name: "Page", PostalPrefixes: []string{fmt.Sprintf("5%d%s", i, run[:2])}}); err != nil {
+			ID: id, Code: fmt.Sprintf("T-PG-%s-%d", run, i), Name: "Page", PostalPrefixes: []string{fmt.Sprintf("93%d%s", i, run[:2])}}); err != nil {
 			t.Fatal(err)
 		}
 	}

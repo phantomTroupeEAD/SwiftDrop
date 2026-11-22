@@ -85,7 +85,9 @@ apply_secret outbox-relay-secrets "$TMP/outbox-relay-secrets.env"
 echo "DATABASE_URL=$(url swiftdrop_worker "$WORKER_PASSWORD")" > "$TMP/event-worker-secrets.env"
 apply_secret event-worker-secrets "$TMP/event-worker-secrets.env"
 
-printf 'RABBITMQ_DEFAULT_USER=swiftdrop\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_URL=amqp://swiftdrop:%s@rabbitmq:5672/\n' \
+# Full service name, not just "rabbitmq": KEDA reads this URL from its own namespace (keda),
+# where the short name does not resolve, so the event-worker autoscaler could not connect.
+printf 'RABBITMQ_DEFAULT_USER=swiftdrop\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_URL=amqp://swiftdrop:%s@rabbitmq.swiftdrop.svc.cluster.local:5672/\n' \
   "$RABBITMQ_PASSWORD" "$RABBITMQ_PASSWORD" > "$TMP/rabbitmq-secrets.env"
 apply_secret rabbitmq-secrets "$TMP/rabbitmq-secrets.env"
 
