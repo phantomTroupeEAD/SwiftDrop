@@ -132,6 +132,10 @@ func (s *concurrentMockAssignmentStorage) GetStatusWithLock(ctx context.Context,
 	return st, s.attempts[parcelID], nil
 }
 
+func (s *concurrentMockAssignmentStorage) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 func (s *concurrentMockAssignmentStorage) TransitionStatus(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID, fromStatus, toStatus string, actorID uuid.UUID, actorRole, note string) error {
 	s.statuses[parcelID] = toStatus
 	return nil

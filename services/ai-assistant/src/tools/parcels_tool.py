@@ -12,12 +12,14 @@ from src.tools.registry import register_tool
 
 def sanitize_parcel_item(item: Dict[str, Any]) -> Dict[str, Any]:
     """Strip sensitive PII (recipient phone, recipient street address) from parcel record."""
-    recipient = item.get("recipient") or {}
-    recipient_city = (
-        recipient.get("city")
-        if isinstance(recipient, dict)
-        else item.get("recipient_city", "Unknown")
-    )
+    recipient = item.get("recipient")
+    recipient_city = "Unknown"
+    if isinstance(recipient, dict) and recipient.get("city"):
+        recipient_city = str(recipient["city"])
+    elif item.get("recipient_city"):
+        recipient_city = str(item["recipient_city"])
+    elif item.get("destination_city"):
+        recipient_city = str(item["destination_city"])
 
     return {
         "id": item.get("id"),
@@ -75,7 +77,11 @@ async def parcels_tool(
             "Please configure SWIFTDROP_API_KEY (or SWIFTDROP_AUTH_TOKEN) in environment or provide authorization."
         )
 
-    target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/parcels"
+    role = str(context.get("role") or "").upper()
+    if api_key or role == "MERCHANT":
+        target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/merchant/orders"
+    else:
+        target_url = f"{settings.core_api_base_url.rstrip('/')}/api/v1/parcels"
 
     headers: Dict[str, str] = {
         "Accept": "application/json",
@@ -120,12 +126,16 @@ async def parcels_tool(
                 f"Malformed non-JSON response received: {json_err}",
             )
 
-        # Handle list response directly or envelope {"parcels": [...], "items": [...]}
+        # Handle list response directly or envelope {"data": [...], "parcels": [...], "items": [...]}
         items: List[Dict[str, Any]] = []
         if isinstance(raw_parcels, list):
             items = raw_parcels
         elif isinstance(raw_parcels, dict):
-            items = raw_parcels.get("parcels") or raw_parcels.get("items") or []
+            raw_items = raw_parcels.get("data") or raw_parcels.get("parcels") or raw_parcels.get("items") or []
+            if isinstance(raw_items, list):
+                items = raw_items
+            elif isinstance(raw_items, dict):
+                items = [raw_items]
 
         sanitized_items = [sanitize_parcel_item(p) for p in items if isinstance(p, dict)]
 

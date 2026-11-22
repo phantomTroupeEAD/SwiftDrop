@@ -111,6 +111,7 @@ type AuditWriter interface {
 
 type RoleAssigner interface { // Member 1 (U-15)
 	GrantMerchantRole(ctx context.Context, q Querier, userID, merchantID string) error
+	RevokeMerchantRole(ctx context.Context, q Querier, userID string) error
 }
 
 type KeyGenerator interface {

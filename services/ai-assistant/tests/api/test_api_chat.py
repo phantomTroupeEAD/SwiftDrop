@@ -60,6 +60,21 @@ def test_chat_endpoint_tracking_inquiry_grounded(client: TestClient):
     assert data["latency_ms"] >= 0
 
 
+def test_chat_endpoint_crockford_base32_tracking_inquiry(client: TestClient):
+    """Verify Crockford Base32 tracking numbers (e.g. SD-20261120-JR47QE) trigger track_parcel_status tool."""
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"prompt": "Track package SD-20261120-JR47QE"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "reply" in data
+    assert "SD-20261120-JR47QE" in data["reply"]
+    assert "track_parcel_status" in data["tools_called"]
+    assert data["grounded"] is True
+    assert data["latency_ms"] >= 0
+
+
 def test_chat_endpoint_pricing_quote_with_action_card(client: TestClient):
     """Verify shipping fee query returns quotes and NAVIGATE_BOOKING action card."""
     response = client.post(

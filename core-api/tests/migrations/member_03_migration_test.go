@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,17 +70,28 @@ func TestMember03_Migrations_Execution(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
+	if err := db.Ping(); err != nil {
+		t.Skipf("cannot connect to database: %v; skipping live database execution test", err)
+	}
+
 	migrationsDir := filepath.Join("..", "..", "migrations")
 
+	// Ensure prerequisite base tables exist if running against an isolated test database
+	_, _ = db.Exec(`
+		CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+		CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY DEFAULT gen_random_uuid());
+		CREATE TABLE IF NOT EXISTS parcels (id UUID PRIMARY KEY DEFAULT gen_random_uuid());
+	`)
+
 	// 1. Apply up migrations
-	up06, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000006_create_couriers.up.sql"))
+	up04, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000004_create_couriers.up.sql"))
 	require.NoError(t, err)
-	_, err = db.Exec(string(up06))
+	_, err = db.Exec(string(up04))
 	require.NoError(t, err)
 
-	up07, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000007_create_dispatch_and_delivery.up.sql"))
+	up05, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000005_create_dispatch_and_delivery.up.sql"))
 	require.NoError(t, err)
-	_, err = db.Exec(string(up07))
+	_, err = db.Exec(string(up05))
 	require.NoError(t, err)
 
 	// 2. Validate tables exist in schema
@@ -91,13 +103,19 @@ func TestMember03_Migrations_Execution(t *testing.T) {
 	}
 
 	// 3. Rollback
-	down07, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000007_create_dispatch_and_delivery.down.sql"))
+	down05, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000005_create_dispatch_and_delivery.down.sql"))
 	require.NoError(t, err)
-	_, err = db.Exec(string(down07))
+	_, err = db.Exec(string(down05))
 	require.NoError(t, err)
 
-	down06, err := os.ReadFile(filepath.Join(migrationsDir, "20261021000006_create_couriers.down.sql"))
+	down04, err := os.ReadFile(filepath.Join(migrationsDir, "20261110000004_create_couriers.down.sql"))
 	require.NoError(t, err)
-	_, err = db.Exec(string(down06))
+	_, err = db.Exec(string(down04))
+	require.NoError(t, err)
+
+	// 4. Re-apply to leave schema in clean state for subsequent tests
+	_, err = db.Exec(string(up04))
+	require.NoError(t, err)
+	_, err = db.Exec(string(up05))
 	require.NoError(t, err)
 }

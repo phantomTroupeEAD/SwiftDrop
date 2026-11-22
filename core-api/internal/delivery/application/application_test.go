@@ -94,6 +94,10 @@ func (m *MockParcelLifecycleUpdater) GetStatusWithLock(ctx context.Context, tx *
 	return st, m.attemptsMap[parcelID], nil
 }
 
+func (m *MockParcelLifecycleUpdater) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 // MockOutboxWriter tracks emitted domain events.
 type MockOutboxWriter struct {
 	events []string

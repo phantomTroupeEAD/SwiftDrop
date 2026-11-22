@@ -129,7 +129,7 @@ func LoadConfig(defaultProbePort int) (*Config, error) {
 		return nil, fmt.Errorf("%w: invalid WEBHOOK_RETRY_SCHEDULE: %v", ErrInvalidConfig, err)
 	}
 
-	allowPrivateHosts := getEnvBool("WEBHOOK_ALLOW_PRIVATE_HOSTS", false)
+	allowPrivateHosts := getEnvBool("WEBHOOK_ALLOW_PRIVATE_HOSTS", appEnv == "local" || appEnv == "test")
 
 	// Encryption key validation: accepts 64 hex characters or base64 (32 bytes AES-256 key)
 	encKey := getEnv("WEBHOOK_SECRET_ENCRYPTION_KEY", "")

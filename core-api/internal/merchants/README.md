@@ -59,8 +59,8 @@ stateDiagram-v2
 6. **Scopes:** Supported scopes: `parcels:create`, `parcels:read`.
 
 ### 2.4 Webhook Security & SSRF Protection
-1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production (configurable override for local dev).
-2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. Any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately.
+1. **HTTPS Scheme Enforcement:** Only `https://` URLs are accepted in production. In local development/testing (`allowHTTP: true`), plain `http://` and explicit custom ports (e.g. mock webhook receivers on port 9999) are permitted; default HTTPS port 443 over plain HTTP is rejected.
+2. **SSRF Guardrails:** URL hostnames are resolved with a 2-second timeout. In production, any IP matching loopback (`127.0.0.0/8`, `::1`), RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), cloud metadata services (`169.254.169.254`), or IPv6 Unique Local Addresses (`fc00::/7`) is rejected immediately. In local development/testing, private hosts can be explicitly whitelisted (e.g. `localhost`, `127.0.0.1`) strictly when `!config.IsProduction()`.
 3. **DNS Address Limit:** DNS responses returning more than 16 IP addresses are rejected to prevent address smuggling.
 4. **Secret Generation:** Webhook signing secrets (`whsec_[0-9A-Za-z]{43}`) are generated server-side using `crypto/rand`. Callers cannot specify custom secrets.
 5. **Secret Encryption at Rest:** Signing secrets are encrypted with AES-256-GCM (`nonce || ciphertext || tag`) before persisting to `webhook_endpoints.secret_ciphertext`. Minimum ciphertext length (`nonceSize + tagSize`) is strictly validated.
@@ -92,8 +92,9 @@ core-api/internal/merchants/
 │   └── errors.go                # Application validation and conflict errors
 ├── infrastructure/              # Adapters and external drivers
 │   ├── postgres.go              # PostgreSQL repository implementations (database/sql + lib/pq)
+│   ├── postgres_booking.go      # PostgreSQL parcel booking adapter (writes to parcels, outbox, status history)
 │   ├── crypto.go                # KeyGenerator, HMAC Hasher, AES-GCM Cipher, Host Resolver
-│   └── booking_stub.go          # In-memory booking engine stub (stand-in for Member 2)
+│   └── booking_stub.go          # Legacy in-memory stub kept for standalone unit tests
 └── transport/                   # HTTP REST delivery layer
     ├── http.go                  # HTTP routes, request decoding, error mapping (httpx)
     └── auth.go                  # TokenVerifier adapter interface and JWT claims
@@ -118,9 +119,9 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 
 | Dependency | Owner | Current Implementation Status |
 | :--- | :--- | :--- |
-| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` and `roleAssignerAdapter` in `cmd/api/wiring_merchants.go` to Member 1's `UserService.AssignRole`. |
+| **Token Verification & Role Assignment** | Member 1 (Identity) | Wired via `jwtVerifierAdapter` and `roleAssignerAdapter` in `cmd/api/wiring_merchants.go` to Member 1's `UserService.AssignRole` and `UserService.RevokeMerchantRole` (demotes disabled merchants to CUSTOMER). |
 | **Audit Logging** | Member 1 / Platform | Wired via `infrastructure.AuditWriter` inserting into canonical `audit_logs` table (`20261109000001_create_audit_logs.up.sql`). |
-| **Parcel Booking Engine** | Member 2 (Parcels) | Integrated with `infrastructure.BookingStub`; will switch to Member 2's `ParcelService` once published. |
+| **Parcel Booking Engine** | Member 2 (Parcels) | Production database adapter `infrastructure.PostgresParcelBooking` replaces the in-memory stub. Persists B2B merchant orders directly to PostgreSQL `parcels` table with `merchant_id`, assigns Crockford Base32 tracking numbers (`SD-YYYYMMDD-XXXXXX`), commits `CREATED` audit trail to `parcel_status_history`, records `parcel.booked.v1` in `outbox_events` for webhook delivery, and queries PostgreSQL for `GET /api/v1/merchant/orders`. |
 | **Admin UI & Action Endpoints** | Member 7 (Admin) | Stand-in handlers implemented at `/api/v1/admin/merchants/*`; ready for gateway routing. |
 | **Webhook Delivery Worker** | Member 8 (Messaging) | View `merchant_webhook_targets` exposes active webhook subscriptions joined with merchant status for consumer worker dispatch. |
 
@@ -134,3 +135,7 @@ The merchants module owns migrations `000100` through `000400` in `core-api/migr
 | 2026-11-07 | Completed Steps 1–4: Migrations, Domain, Application, Infrastructure, Transport & Wiring | Member 4 / Antigravity |
 | 2026-11-07 | Hardened Security & Config: Base64 AES-256 keys, pepper validation, non-panicking DB querier, full prefix DB alignment | Member 4 / Antigravity |
 | 2026-11-13 | Integrated Member 1 (role promotion & audit logs), added hex key fallback, and implemented cross-module integration & E2E tests (`core-api/tests/merchants_integration_test.go`) | Member 4 / Antigravity |
+| 2026-11-15 | Implemented Member 1 two-way role management (`RevokeMerchantRole` on disablement), added Swagger request parameter models for API keys and webhooks | Member 4 / Antigravity |
+| 2026-11-17 | Aligned canonical seed merchant tenant UUID (`018f4a7c-1004-7000-9000-000000000004`) via migration `20261117000001` to resolve UUID type mismatch on portal endpoints | Member 4 / Antigravity |
+| 2026-11-19 | (Issue #92) Implemented `PostgresParcelBooking` adapter in `infrastructure/postgres_booking.go`, replaced `BookingStub` in `wiring_merchants.go`, persisting B2B orders to `parcels`, `parcel_status_history`, `outbox_events`, and `idempotency_keys` | Member 4 / Antigravity |
+| 2026-11-20 | Hardened `ParcelsBookingAdapter` in `infrastructure/parcels_adapter.go` with flexible address keys (`address`), postal code fallback (`00100`), and mapped `MerchantReference` across `SpecialInstructions` in booking & list queries | Member 4 / Member 10 / Antigravity |

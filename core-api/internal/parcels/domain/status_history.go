@@ -103,6 +103,38 @@ func NewStatusHistoryEntry(
 	return entry, nil
 }
 
+// ReconstituteStatusHistoryEntry creates a status history audit record loaded from persistent storage
+// without re-evaluating state transition rules.
+func ReconstituteStatusHistoryEntry(
+	id string,
+	parcelID string,
+	fromStatus *ParcelStatus,
+	toStatus ParcelStatus,
+	actorID *string,
+	actorType ActorType,
+	actorRole string,
+	reason string,
+	occurredAt time.Time,
+) StatusHistoryEntry {
+	var actorIDCopy *string
+	if actorID != nil {
+		trimmed := strings.TrimSpace(*actorID)
+		actorIDCopy = &trimmed
+	}
+
+	return StatusHistoryEntry{
+		ID:         strings.TrimSpace(id),
+		ParcelID:   strings.TrimSpace(parcelID),
+		FromStatus: fromStatus,
+		ToStatus:   toStatus,
+		ActorID:    actorIDCopy,
+		ActorType:  actorType,
+		ActorRole:  strings.TrimSpace(actorRole),
+		Reason:     strings.TrimSpace(reason),
+		OccurredAt: occurredAt,
+	}
+}
+
 // Validate ensures that the history record represents a valid, legal state transition.
 func (e StatusHistoryEntry) Validate(attemptCount int) error {
 	if strings.TrimSpace(e.ID) == "" {

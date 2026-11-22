@@ -94,6 +94,9 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 		}
 
 		// 6. Transition parcel aggregate root state machine (internal/parcels)
+		// Member 2's TransitionParcelStatusUseCase.ExecuteTx handles the parcel state machine,
+		// history insertion, concurrency validation, and publishes the canonical parcel.assigned.v1
+		// outbox event within this atomic transaction. Dispatch avoids creating a duplicate event.
 		err = uc.parcelUpdater.TransitionStatus(
 			ctx,
 			tx,
@@ -115,6 +118,9 @@ func (uc *AssignCourierUseCase) Execute(ctx context.Context, cmd AssignCourierCo
 			"courier_id":    asgn.CourierID.String(),
 			"assigned_by":   asgn.AssignedBy.String(),
 			"assigned_at":   asgn.AssignedAt.Format(time.RFC3339),
+		}
+		if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+			eventPayload["merchant_id"] = *mID
 		}
 		err = uc.outboxWriter.Write(
 			ctx,

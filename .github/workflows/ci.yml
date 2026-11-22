@@ -153,6 +153,18 @@ jobs:
           cache: true
           cache-dependency-path: services/tracking/go.sum
 
+      - name: Check Formatting (gofmt)
+        run: |
+          UNFORMATTED=$(gofmt -l $(find services/tracking -name "*.go" -not -path "*/vendor/*" 2>/dev/null) 2>/dev/null || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "Error: Unformatted Go files found:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Go Vet
+        run: cd services/tracking && go vet ./...
+
       - name: Run Tests (-race)
         run: cd services/tracking && go test -v -race ./...
 
@@ -187,6 +199,33 @@ jobs:
 
       - name: Install & Build
         run: cd web && npm ci && npm run build
+
+  e2e-fast-checks:
+    name: E2E Harness Isolation & Mock Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'tests/e2e/package-lock.json'
+
+      - name: Install E2E Dependencies
+        run: |
+          cd tests/e2e
+          npm ci
+          npm --prefix mock-webhook ci
+
+      - name: Install Playwright Chromium Browser
+        run: cd tests/e2e && npx playwright install chromium --with-deps
+
+      - name: Run Multi-Actor Isolation Dry-Run Tests
+        run: cd tests/e2e && npm run test:dry-run
+
+      - name: Run Mock Webhook In-Memory Receiver Tests
+        run: cd tests/e2e && npm run test:webhook
 
   docker-build-verification:
     name: Docker Build (${{ matrix.service.name }})

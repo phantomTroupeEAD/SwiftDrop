@@ -78,6 +78,7 @@ def _filter_policy_sections(full_text: str, query: str) -> str:
     description="Explain courier policies, prohibited goods, packaging standards, transit SLAs, and dispute rules.",
     input_schema=CompanyPolicyInput,
     is_read_only=True,
+    aliases=["company_policies", "get_policies", "company_policy"],
 )
 async def policy_tool(
     input_data: CompanyPolicyInput,

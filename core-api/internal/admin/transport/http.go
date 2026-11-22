@@ -197,6 +197,18 @@ func pageParams(r *http.Request) (page, perPage int, err error) {
 	return page, perPage, nil
 }
 
+// auditFilterParams reads the audit filters from the query string. A parameter that is sent
+// twice is refused, so a request can never mean two things at once.
+func auditFilterParams(r *http.Request) (application.AuditFilter, error) {
+	q := r.URL.Query()
+	for _, name := range []string{"action", "target_type", "target_id", "actor_role", "from", "to"} {
+		if len(q[name]) > 1 {
+			return application.AuditFilter{}, fmt.Errorf("%w: %s was sent more than once", application.ErrValidation, name)
+		}
+	}
+	return application.ParseAuditFilter(q.Get("action"), q.Get("target_type"), q.Get("target_id"), q.Get("actor_role"), q.Get("from"), q.Get("to"))
+}
+
 // replyPage writes {"data": [...], "meta": {page, per_page, total_items, total_pages}}.
 func replyPage[T any](w http.ResponseWriter, data []T, page, perPage, total int) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -388,10 +400,16 @@ func (h *Handlers) updateSetting(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        page      query int false "Page, from 1"          default(1)
 // @Param        per_page  query int false "Items per page, 1-100" default(20)
+// @Param        action      query string false "Exact action, for example ZONE_CREATED"
+// @Param        target_type query string false "Exact target type, for example ZONE"
+// @Param        target_id   query string false "Exact target id, for example ZONE_COLOMBO_01"
+// @Param        actor_role  query string false "ADMIN, DISPATCHER, COURIER, MERCHANT, CUSTOMER or SYSTEM"
+// @Param        from        query string false "First Sri Lanka day to include, YYYY-MM-DD"
+// @Param        to          query string false "Last Sri Lanka day to include, YYYY-MM-DD"
 // @Success      200 {object} httpx.PaginatedEnvelope{data=[]application.AuditRow}
 // @Failure      401 {object} httpx.ErrorResponse "Missing or invalid token"
 // @Failure      403 {object} httpx.ErrorResponse "Role is not ADMIN"
-// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: bad page or per_page"
+// @Failure      422 {object} httpx.ErrorResponse "VALIDATION_FAILED: bad page, per_page or filter"
 // @Router       /api/v1/admin/audit-logs [get]
 func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 	page, perPage, err := pageParams(r)
@@ -399,7 +417,12 @@ func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	rows, total, err := h.Svc.Store.ListAudit(r.Context(), (page-1)*perPage, perPage)
+	filter, err := auditFilterParams(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	rows, total, err := h.Svc.Store.ListAudit(r.Context(), filter, (page-1)*perPage, perPage)
 	if err != nil {
 		h.fail(w, r, err)
 		return

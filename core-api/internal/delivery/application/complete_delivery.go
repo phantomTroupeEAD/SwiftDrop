@@ -144,6 +144,9 @@ func (uc *CompleteDeliveryUseCase) Execute(ctx context.Context, cmd CompleteDeli
 			"received_by_name": proof.ReceivedByName,
 			"delivered_at":     deliveredAt.Format(time.RFC3339),
 		}
+		if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+			eventPayload["merchant_id"] = *mID
+		}
 		err = uc.outboxWriter.Write(
 			ctx,
 			tx,

@@ -159,6 +159,9 @@ export const RegisterPage: React.FC = () => {
       }
 
       if (!res.ok) {
+        if (data?.error?.message) {
+          throw new Error(data.error.message);
+        }
         const message = 'Registration is unavailable right now. Please try again later.';
         throw new Error(friendlyApiError(res, data?.error?.code, message));
       }
@@ -179,36 +182,20 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary overflow-hidden">
-      {/* Background Image Layer with Ambient Blur & Contrast Scrim (Aligned with Login) */}
-      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
-        <img
-          src="/login-bg.jpg"
-          alt=""
-          className="h-full w-full object-cover object-center filter blur-sm scale-105"
-        />
-        {/* Soft atmospheric glow orbs */}
-        <div className="absolute -top-32 -left-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-50" />
-        <div className="absolute -bottom-32 -right-32 size-96 rounded-full bg-primary-tint blur-3xl opacity-40" />
-
-        {/* Ambient overlay scrim & blur veil for WCAG contrast in light/dark themes */}
-        <div className="absolute inset-0 bg-canvas/75 backdrop-blur-sm" />
-      </div>
+    <main data-role="PUBLIC" className="relative min-h-screen bg-canvas text-text flex flex-col justify-between antialiased selection:bg-primary-tint selection:text-primary">
 
       {/* Top Header */}
       <header className="relative z-10 px-4 sm:px-8 py-5">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Link
             to="/"
-            className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-text hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-text"
             aria-label="SwiftDrop Home"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-tint text-primary border border-border">
-              <Package className="size-4" aria-hidden="true" />
-            </div>
-            <span className="text-lg font-bold">
-              Swift<span className="text-primary">Drop</span>
+            <span className="grid size-8 place-items-center rounded-sm bg-chrome text-primary">
+              <Package size={17} strokeWidth={2} aria-hidden="true" />
             </span>
+            SwiftDrop
           </Link>
 
           <Button asChild variant="ghost" size="sm" className="text-xs text-text-muted hover:text-text">
@@ -222,9 +209,9 @@ export const RegisterPage: React.FC = () => {
 
       {/* Centralized Clean Register Window */}
       <div className="relative z-10 mx-auto flex w-full max-w-md sm:max-w-lg flex-col gap-4 px-4 my-auto py-6">
-        <Card className="border border-border bg-surface rounded-2xl">
+        <Card className="border border-border bg-surface rounded-md">
           <CardHeader className="text-center space-y-2 pb-5 pt-7">
-            <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary-tint text-primary border border-border mb-1">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-sm bg-chrome text-primary mb-1">
               {success ? (
                 <CheckCircle2 className="size-5 text-status-success-ink" aria-hidden="true" />
               ) : (
@@ -480,7 +467,7 @@ export const RegisterPage: React.FC = () => {
             )}
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-2xl">
+          <CardFooter className="flex flex-col gap-2.5 border-t border-border py-4 px-6 text-center bg-surface-subtle rounded-b-md">
             <p className="text-xs text-text-muted">
               Already have an account?{' '}
               <Button asChild variant="link" className="text-xs font-semibold text-primary">

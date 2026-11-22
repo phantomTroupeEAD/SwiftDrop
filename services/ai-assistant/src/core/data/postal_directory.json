@@ -1195,5 +1195,19 @@
     "code": "91400",
     "district": "Monaragala",
     "province": "Uva"
+  },
+  {
+    "city": "Hunnasgiriya",
+    "alias": "hunnasgiriya",
+    "code": "20948",
+    "district": "Kandy",
+    "province": "Central"
+  },
+  {
+    "city": "Kahatagasdigiliya",
+    "alias": "kahatagasdigiliya",
+    "code": "50130",
+    "district": "Anuradhapura",
+    "province": "North Central"
   }
 ]
