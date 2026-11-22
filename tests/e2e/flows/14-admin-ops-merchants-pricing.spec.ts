@@ -327,63 +327,75 @@ test.describe('Flow 14: Admin Ops — Merchants, Pricing & Users Pagination', ()
     }
     await expect(page.locator('[data-testid="pricing-table"]')).toBeVisible({ timeout: 6000 });
 
-    // Verify Add Rule Modal & Validation
+    // The live pricing list is read-only until the server has the create, change and deactivate
+    // routes: the screen then says so and hides those buttons. When the server (or the sample
+    // fallback) can write, run the full add, change and deactivate lifecycle.
     const addRuleBtn = page.locator('[data-testid="pricing-add-btn"]');
-    await expect(addRuleBtn).toBeVisible();
-    await addRuleBtn.click();
+    const canWrite = await addRuleBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    if (!canWrite) {
+      await expect(page.locator('[data-testid="pricing-readonly-banner"]')).toContainText(/Read only/i);
+      await expect(page.locator('[data-testid="pricing-edit-btn"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="pricing-deactivate-btn"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="pricing-row"]').first()).toBeVisible();
+      await expect(page.locator('[data-testid="pricing-summary"]')).toContainText(/Showing \d+–\d+ of \d+ rules?/i);
+    } else {
+      // Verify Add Rule Modal & Validation
+      await expect(addRuleBtn).toBeVisible();
+      await addRuleBtn.click();
 
-    const pricingDialog = page.locator('[data-testid="pricing-form-dialog"]');
-    await expect(pricingDialog).toBeVisible();
+      const pricingDialog = page.locator('[data-testid="pricing-form-dialog"]');
+      await expect(pricingDialog).toBeVisible();
 
-    // Attempt submit without filling fields
-    await page.locator('[data-testid="pricing-form-save-btn"]').click();
-    await expect(page.getByText('Choose where parcels start.')).toBeVisible();
-    await expect(page.getByText('Choose where parcels go.')).toBeVisible();
+      // Attempt submit without filling fields
+      await page.locator('[data-testid="pricing-form-save-btn"]').click();
+      await expect(page.getByText('Choose where parcels start.')).toBeVisible();
+      await expect(page.getByText('Choose where parcels go.')).toBeVisible();
 
-    // Fill valid pricing rule values
-    await page.locator('[data-testid="pricing-form-origin"]').click();
-    await page.getByRole('option', { name: /ZONE_COLOMBO_01|Colombo/i }).first().click();
+      // Fill valid pricing rule values
+      await page.locator('[data-testid="pricing-form-origin"]').click();
+      await page.getByRole('option', { name: /ZONE_COLOMBO_01|Colombo/i }).first().click();
 
-    await page.locator('[data-testid="pricing-form-destination"]').click();
-    await page.getByRole('option', { name: /ZONE_COLOMBO_01|Colombo/i }).first().click();
+      await page.locator('[data-testid="pricing-form-destination"]').click();
+      await page.getByRole('option', { name: /ZONE_COLOMBO_01|Colombo/i }).first().click();
 
-    await page.locator('[data-testid="pricing-form-base"]').fill('450.00');
-    await page.locator('[data-testid="pricing-form-perkg"]').fill('85.00');
+      await page.locator('[data-testid="pricing-form-base"]').fill('450.00');
+      await page.locator('[data-testid="pricing-form-perkg"]').fill('85.00');
 
-    // Sri Lanka local date for first day
-    const todayStr = new Date().toISOString().split('T')[0];
-    await page.locator('[data-testid="pricing-form-from"]').fill(todayStr);
+      // Sri Lanka local date for first day
+      const todayStr = new Date().toISOString().split('T')[0];
+      await page.locator('[data-testid="pricing-form-from"]').fill(todayStr);
 
-    // Save Rule
-    await page.locator('[data-testid="pricing-form-save-btn"]').click();
-    await expect(pricingDialog).not.toBeVisible({ timeout: 8000 });
+      // Save Rule
+      await page.locator('[data-testid="pricing-form-save-btn"]').click();
+      await expect(pricingDialog).not.toBeVisible({ timeout: 8000 });
 
-    // Verify notice displayed
-    await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible({ timeout: 8000 });
+      // Verify notice displayed
+      await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible({ timeout: 8000 });
 
-    // Test Rule Change (Update Version)
-    const editBtn = page.locator('[data-testid="pricing-edit-btn"]').first();
-    await expect(editBtn).toBeVisible();
-    await editBtn.click();
+      // Test Rule Change (Update Version)
+      const editBtn = page.locator('[data-testid="pricing-edit-btn"]').first();
+      await expect(editBtn).toBeVisible();
+      await editBtn.click();
 
-    await expect(pricingDialog).toBeVisible();
-    await page.locator('[data-testid="pricing-form-base"]').fill('475.00');
-    await page.locator('[data-testid="pricing-form-save-btn"]').click();
-    await expect(pricingDialog).not.toBeVisible({ timeout: 8000 });
-    await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible();
+      await expect(pricingDialog).toBeVisible();
+      await page.locator('[data-testid="pricing-form-base"]').fill('475.00');
+      await page.locator('[data-testid="pricing-form-save-btn"]').click();
+      await expect(pricingDialog).not.toBeVisible({ timeout: 8000 });
+      await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible();
 
-    // Test Rule Deactivate
-    const deactivateBtn = page.locator('[data-testid="pricing-deactivate-btn"]').first();
-    await expect(deactivateBtn).toBeVisible();
-    await deactivateBtn.click();
+      // Test Rule Deactivate
+      const deactivateBtn = page.locator('[data-testid="pricing-deactivate-btn"]').first();
+      await expect(deactivateBtn).toBeVisible();
+      await deactivateBtn.click();
 
-    const deactDialog = page.locator('[data-testid="pricing-deactivate-dialog"]');
-    await expect(deactDialog).toBeVisible();
-    await expect(page.locator('[data-testid="pricing-deactivate-consequence"]')).toBeVisible();
+      const deactDialog = page.locator('[data-testid="pricing-deactivate-dialog"]');
+      await expect(deactDialog).toBeVisible();
+      await expect(page.locator('[data-testid="pricing-deactivate-consequence"]')).toBeVisible();
 
-    await page.locator('[data-testid="pricing-deactivate-confirm-btn"]').click();
-    await expect(deactDialog).not.toBeVisible({ timeout: 8000 });
-    await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible();
+      await page.locator('[data-testid="pricing-deactivate-confirm-btn"]').click();
+      await expect(deactDialog).not.toBeVisible({ timeout: 8000 });
+      await expect(page.locator('[data-testid="ops-notice"]')).toBeVisible();
+    }
 
     // =========================================================================
     // STEP 10: Users Administration Pagination Controls (/ops/users)
