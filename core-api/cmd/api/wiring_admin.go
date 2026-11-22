@@ -13,6 +13,7 @@ import (
 	admintransport "github.com/swiftdrop/core-api/internal/admin/transport"
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	identitytransport "github.com/swiftdrop/core-api/internal/identity/transport"
+	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 )
 
 // adminLockTimeout bounds how long an admin write waits for the zone prefix lock
@@ -35,13 +36,36 @@ func registerAdminModule(mux *http.ServeMux, db *sql.DB, sec *identitytransport.
 		Svc:  &application.Service{Store: &infrastructure.Store{DB: db, LockTimeout: adminLockTimeout}},
 		Auth: identityAuthAdapter{sec: sec},
 		Log:  slog.Default(),
-		// Members 2 and 3 have not published a read interface for delivery numbers yet.
-		// The stand-in returns empty days and says so in the report's "source" field.
-		Reports:      application.NoDeliveryData{},
-		ReportSource: application.NoDeliveryDataSource,
+		// Delivery numbers come from the parcels module's own read model, so the admin
+		// module still never runs SQL on the parcels tables.
+		Reports:      parcelDeliveryReports{reader: parcelsinfra.NewDeliveryStatsReader(db)},
+		ReportSource: deliveryReportSource,
 	}
 	h.Register(mux)
 	return nil
+}
+
+// deliveryReportSource is the report's "source" text when the numbers are real.
+const deliveryReportSource = "live: parcel status history"
+
+// parcelDeliveryReports adapts the parcels module's DeliveryStatsReader to the admin
+// module's ReportReader port, so neither module imports the other.
+type parcelDeliveryReports struct {
+	reader interface {
+		DailyDeliveryCounts(ctx context.Context, from, to time.Time) ([]parcelsinfra.DailyDeliveryCount, error)
+	}
+}
+
+func (p parcelDeliveryReports) Deliveries(ctx context.Context, from, to time.Time) ([]application.DeliveryDay, error) {
+	rows, err := p.reader.DailyDeliveryCounts(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]application.DeliveryDay, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, application.DeliveryDay{Date: r.Date, Delivered: r.Delivered, Failed: r.Failed, Returned: r.Returned})
+	}
+	return out, nil
 }
 
 // identityAuthAdapter adapts Member 1's middleware to admin's Auth port, so the

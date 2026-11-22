@@ -323,7 +323,7 @@ Deliveries per day over a period (SRS FR-ADM-008). **Role: `ADMIN` or `DISPATCHE
 
 The period may not be longer than the `reports.max_range_days` setting (default 92 days, also used if the setting cannot be read). A longer period is `422 VALIDATION_FAILED`.
 
-The numbers are read through a Go interface (`application.ReportReader`) that Members 2 and 3 will implement; this module never runs SQL on their tables. Until they do, a stand-in answers with empty days and says so in `source`.
+The numbers are read through a Go interface (`application.ReportReader`); this module never runs SQL on the parcels tables. Core API wires it to the parcels module's `DeliveryStatsReader`, which counts `parcel_status_history` rows per Sri Lanka day: `delivered` = changes to `DELIVERED`, `failed` = changes to `ATTEMPT_FAILED` (each failed attempt counts), `returned` = changes to `RETURNED`. Only days with at least one of these appear in `days`. `source` is `live: parcel status history`. If no reader is wired, a stand-in answers with empty days and a `source` that starts with `stand-in`, and the web screen shows a not-available note.
 
 **200:**
 
@@ -332,11 +332,13 @@ The numbers are read through a Go interface (`application.ReportReader`) that Me
   "data": {
     "from": "2026-10-01",
     "to": "2026-10-03",
-    "days": [],
-    "delivered": 0,
-    "failed": 0,
-    "success_rate": null,
-    "source": "stand-in: no parcel data until Members 2 and 3 connect"
+    "days": [
+      { "date": "2026-10-02", "delivered": 4, "failed": 1, "returned": 0 }
+    ],
+    "delivered": 4,
+    "failed": 1,
+    "success_rate": 0.8,
+    "source": "live: parcel status history"
   }
 }
 ```
