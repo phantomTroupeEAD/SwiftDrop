@@ -149,6 +149,10 @@ export const LoginPage: React.FC = () => {
 
       if (googleButtonContainerRef.current) {
         googleButtonContainerRef.current.innerHTML = '';
+        // Google treats `width` as a minimum, so size the button to the space it has: on a
+        // 375px phone the form is narrower than 360px. The container itself is still hidden
+        // here, so measure its visible parent.
+        const available = googleButtonContainerRef.current.parentElement?.clientWidth || 360;
         window.google.accounts.id.renderButton(googleButtonContainerRef.current, {
           theme: 'outline',
           size: 'large',
@@ -156,7 +160,7 @@ export const LoginPage: React.FC = () => {
           text: 'signin_with',
           shape: 'rectangular',
           logo_alignment: 'left',
-          width: 360,
+          width: Math.max(200, Math.min(360, Math.floor(available))),
         });
       }
     };

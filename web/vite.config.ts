@@ -76,6 +76,12 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      // Never inline font files as data: URLs. The production CSP (default-src 'self', no
+      // font-src) blocks data: fonts, so small subsets would fail to load. Other assets keep
+      // Vite's default 4 KB inline rule (returning undefined).
+      assetsInlineLimit: (filePath: string) => (/\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined),
+    },
     server: {
       port: 3000,
       proxy: {
