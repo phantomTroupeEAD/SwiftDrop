@@ -56,7 +56,6 @@ func (r *PostgresRepository) ListByUserID(ctx context.Context, filter applicatio
 	if filter.Cursor != nil && !filter.Cursor.CreatedAt.IsZero() && filter.Cursor.ID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", argIdx, argIdx+1))
 		args = append(args, filter.Cursor.CreatedAt, filter.Cursor.ID)
-		argIdx += 2
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT %d", limit+1))

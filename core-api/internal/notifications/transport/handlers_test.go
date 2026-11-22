@@ -87,19 +87,6 @@ func (m *mockRepo) MarkAllAsRead(ctx context.Context, userID string, isDispatche
 	return updated, nil
 }
 
-func setupTestServer() (*http.ServeMux, *mockRepo) {
-	repo := newMockRepo()
-	svc := application.NewService(repo)
-	handler := transport.NewHandler(svc)
-
-	mux := http.NewServeMux()
-	// Create mock security middleware that doesn't reject if principal is already in context
-	sec := identitytransport.NewSecurityMiddleware(nil)
-	transport.RegisterRoutes(mux, handler, sec)
-
-	return mux, repo
-}
-
 func withAuth(r *http.Request, userID string, role identitydomain.Role) *http.Request {
 	principal := &identityapplication.Principal{
 		UserID: userID,
