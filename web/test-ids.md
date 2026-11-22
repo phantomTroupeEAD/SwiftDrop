@@ -241,6 +241,7 @@ Screen: `/admin/dashboard` (ADMIN only), built in `src/features/dispatcher-admin
 | `merchants-action-approve-btn`, `-reject-btn`, `-suspend-btn`, `-reinstate-btn`, `-disable-btn` (prefix `merchants-action-`) | One button per change the status allows |
 | `merchants-action-dialog`, `merchants-action-consequence`, `merchants-action-reason`, `merchants-reason-count`, `merchants-action-confirm-btn` | Confirm window, what will happen, reason box (reject, suspend, disable only), "n / 500", confirm. Reason error: `#merchants-reason-error` |
 | `merchants-action-conflict`, `merchants-action-error`, `merchants-detail-error` | Someone else changed the merchant (keeps the typed reason); other error with reference id; page load error ("No merchant has this id." for a 404) |
+| `pricing-readonly-banner` | "Read only" notice, shown on live data while the server cannot add, change or deactivate rules (the write buttons are hidden then) |
 | `pricing-sample-banner` | "Sample data" warning, shown only while the screen uses the in-memory sample API |
 | `pricing-filters`, `pricing-filter-origin`, `pricing-filter-destination`, `pricing-filter-status`, `pricing-reset-btn`, `pricing-refresh-btn` | Pricing filters (From zone, To zone, Active/Inactive/both), Reset, refresh |
 | `pricing-table`, `pricing-row`, `pricing-summary`, `pricing-per-page`, `pricing-prev-btn`, `pricing-next-btn` | Rules table, one row per rule (repeated), "Showing a–b of N", paging |

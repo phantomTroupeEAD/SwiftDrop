@@ -13,7 +13,7 @@ import { listZoneOptions, type ZoneOption } from '../fleet/fleetApi';
 import { DeactivateRuleModal } from './DeactivateRuleModal';
 import { PricingRuleFormModal, dayOf } from './PricingRuleFormModal';
 import { formatLkr } from './pricingMoney';
-import { currentBackend, listRules, type PricingRule } from './pricingApi';
+import { currentBackend, listRules, resetWritesProbe, writesAvailable, type PricingRule } from './pricingApi';
 import type { PageMeta } from '../admin-console/consoleApi';
 
 // Pricing rules: what a parcel costs on each route is set here as a base fee and a rate per
@@ -46,6 +46,8 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [sample, setSample] = useState(false);
+  // Add, Change and Deactivate only appear when the server can do them (always true for the sample API).
+  const [canWrite, setCanWrite] = useState(false);
   const [editing, setEditing] = useState<PricingRule | 'new' | null>(null);
   const [deactivating, setDeactivating] = useState<PricingRule | null>(null);
 
@@ -61,6 +63,7 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
       setRows(res.rows);
       setMeta(res.meta);
       setSample(currentBackend() === 'sample');
+      void writesAvailable().then(setCanWrite);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'UNKNOWN', "Couldn't load pricing rules. Try again."));
     } finally {
@@ -136,6 +139,12 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
         </Banner>
       )}
 
+      {!sample && !canWrite && !error && meta && (
+        <Banner tone="info" testId="pricing-readonly-banner">
+          Read only. These are the live pricing rules, read from the server, and quotes already use them. The server can list rules but cannot yet add, change or deactivate them, so those buttons are hidden until it can.
+        </Banner>
+      )}
+
       <Card role="region" aria-labelledby="pricing-title">
         <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div className="grid gap-1.5">
@@ -143,12 +152,19 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
             <CardDescription>A base fee and a rate per kilogram for each route. The server uses these to work out every quote.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="icon" onClick={() => void load()} disabled={loading} aria-label="Refresh pricing rules" title="Refresh pricing rules" data-testid="pricing-refresh-btn">
+            <Button type="button" variant="outline" size="icon" onClick={() => {
+                resetWritesProbe();
+                void load();
+              }}
+              disabled={loading}
+              aria-label="Refresh pricing rules" title="Refresh pricing rules" data-testid="pricing-refresh-btn">
               <RefreshCw className={loading ? 'animate-spin' : undefined} aria-hidden="true" />
             </Button>
-            <Button type="button" onClick={() => setEditing('new')} disabled={Boolean(error) && rows.length === 0 && !meta} data-testid="pricing-add-btn">
-              <Plus aria-hidden="true" /> Add rule
-            </Button>
+            {canWrite && (
+              <Button type="button" onClick={() => setEditing('new')} disabled={Boolean(error) && rows.length === 0 && !meta} data-testid="pricing-add-btn">
+                <Plus aria-hidden="true" /> Add rule
+              </Button>
+            )}
           </div>
         </CardHeader>
 
@@ -213,15 +229,17 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
             <div data-testid="pricing-empty" className="flex flex-col items-center gap-2 rounded-md border border-border bg-surface-subtle px-4 py-12 text-center">
               {filtered ? <SearchX size={24} strokeWidth={2} className="text-text-muted" aria-hidden="true" /> : <Receipt size={24} strokeWidth={2} className="text-text-muted" aria-hidden="true" />}
               <CardTitle>{filtered ? 'No rules match your filters' : 'No pricing rules yet'}</CardTitle>
-              <CardDescription>{filtered ? 'Try other zones or another status.' : 'Add a rule for a route so parcels can be priced.'}</CardDescription>
+              <CardDescription>{filtered ? 'Try other zones or another status.' : canWrite ? 'Add a rule for a route so parcels can be priced.' : 'The server has no pricing rules yet.'}</CardDescription>
               {filtered ? (
                 <Button type="button" variant="outline" className="mt-2" onClick={reset} data-testid="pricing-empty-reset-btn">
                   Reset filters
                 </Button>
               ) : (
-                <Button type="button" className="mt-2" onClick={() => setEditing('new')} data-testid="pricing-empty-add-btn">
-                  <Plus aria-hidden="true" /> Add rule
-                </Button>
+                canWrite && (
+                  <Button type="button" className="mt-2" onClick={() => setEditing('new')} data-testid="pricing-empty-add-btn">
+                    <Plus aria-hidden="true" /> Add rule
+                  </Button>
+                )
               )}
             </div>
           ) : (
@@ -233,7 +251,7 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
                     <TableHead className="text-right">Base fee</TableHead>
                     <TableHead className="text-right">Per kg</TableHead>
                     <TableHead>Applies</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    {canWrite && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -252,9 +270,11 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
                           <TableCell>
                             <Skeleton className="h-4 w-40" />
                           </TableCell>
-                          <TableCell>
-                            <Skeleton className="ml-auto h-8 w-32" />
-                          </TableCell>
+                          {canWrite && (
+                            <TableCell>
+                              <Skeleton className="ml-auto h-8 w-32" />
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     : rows.map((r) => (
@@ -273,20 +293,22 @@ export const PricingPanel: React.FC<PricingPanelProps> = ({ token, onNotice }) =
                           <TableCell className="whitespace-nowrap font-mono text-xs tabular-nums">
                             {dayText(r.effective_from)} {r.effective_until ? `to ${dayText(r.effective_until)}` : 'onwards'}
                           </TableCell>
-                          <TableCell className="text-right">
-                            {r.is_active ? (
-                              <div className="flex justify-end gap-2">
-                                <Button type="button" size="sm" variant="outline" className="touch:min-h-[44px]" onClick={() => setEditing(r)} aria-label={`Change rule ${r.id}, ${routeLabel(r)}`} data-testid="pricing-edit-btn">
-                                  Change
-                                </Button>
-                                <Button type="button" size="sm" variant="outline" className="touch:min-h-[44px]" onClick={() => setDeactivating(r)} aria-label={`Deactivate rule ${r.id}, ${routeLabel(r)}`} data-testid="pricing-deactivate-btn">
-                                  Deactivate
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-text-muted">No changes</span>
-                            )}
-                          </TableCell>
+                          {canWrite && (
+                            <TableCell className="text-right">
+                              {r.is_active ? (
+                                <div className="flex justify-end gap-2">
+                                  <Button type="button" size="sm" variant="outline" className="touch:min-h-[44px]" onClick={() => setEditing(r)} aria-label={`Change rule ${r.id}, ${routeLabel(r)}`} data-testid="pricing-edit-btn">
+                                    Change
+                                  </Button>
+                                  <Button type="button" size="sm" variant="outline" className="touch:min-h-[44px]" onClick={() => setDeactivating(r)} aria-label={`Deactivate rule ${r.id}, ${routeLabel(r)}`} data-testid="pricing-deactivate-btn">
+                                    Deactivate
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-text-muted">No changes</span>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                 </TableBody>
