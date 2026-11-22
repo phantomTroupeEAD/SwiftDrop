@@ -39,9 +39,10 @@ func registerPricingModule(mux *http.ServeMux, db *sql.DB, sec *identitytranspor
 
 	// 2. Application Use Cases
 	quoteUC := pricingapp.NewGenerateQuoteUseCase(tariffRepo, quoteRepo, clock, idGen)
+	listRulesUC := pricingapp.NewListPricingRulesUseCase(tariffRepo)
 
 	// 3. Transport Handler & Routes
-	pricingHandler, err := pricingtransport.NewHandler(quoteUC, merchantReader)
+	pricingHandler, err := pricingtransport.NewHandler(quoteUC, merchantReader, listRulesUC)
 	if err != nil {
 		return fmt.Errorf("pricing: initialize handler: %w", err)
 	}

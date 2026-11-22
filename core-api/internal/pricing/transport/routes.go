@@ -21,4 +21,10 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, sec *identitytransport.Secur
 			identitydomain.RoleAdmin,
 		)(http.HandlerFunc(h.CreateQuote)),
 	))
+
+	mux.Handle("GET /api/v1/admin/pricing-rules", sec.Authenticate(
+		identitytransport.RequireRole(identitydomain.RoleAdmin)(
+			http.HandlerFunc(h.ListPricingRules),
+		),
+	))
 }

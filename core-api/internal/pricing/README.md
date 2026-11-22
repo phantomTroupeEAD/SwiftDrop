@@ -3,7 +3,7 @@
 > **Domain:** Deterministic Fee Estimation, Tariffs & Volumetric Weight
 > **Primary Owner:** Member 2 — Parcel Management & Pricing
 > **Clean Architecture Boundary:** Modular Monolith Internal Module
-> **Status:** HTTP Transport Implemented (`POST /api/v1/pricing/quotes`, Ready for Startup Wiring)
+> **Status:** HTTP Transport Implemented (`POST /api/v1/pricing/quotes`, `GET /api/v1/admin/pricing-rules`, Ready for Startup Wiring)
 
 ---
 
@@ -90,6 +90,7 @@ internal/pricing/
 | 2026-11-11 | Implemented Pricing HTTP Transport (`POST /api/v1/pricing/quotes` in `transport/`), `SystemClock`, `MerchantReader` port + `MerchantRepoAdapter`, `httpx` envelopes, `swag` annotations, `httptest` suite, and updated `API.md`/`README.md` | Member 2 |
 | 2026-11-13 | Phase 3 API Startup Wiring & Swagger Integration: Implemented `cmd/api/wiring_member02.go` (`registerPricingModule`), wired pricing routes into `cmd/api/wiring.go` under `if dbConn != nil` guard, added tests in `cmd/api/wiring_member02_test.go`, regenerated OpenAPI specs via `swag init`, and synchronized `docs/swagger.json`, `docs/swagger.yaml`, and `internal/events/swagger/swagger.json`. | Member 2 |
 | 2026-11-18 | Migration 20261118000001: Seeded canonical Sri Lankan delivery zones, postal code prefixes, and active baseline pricing rules across all enabled zones for local, staging, and E2E environments. | Member 2 & CQA |
+| 2026-11-22 | Implemented Admin Pricing Rules listing API (`GET /api/v1/admin/pricing-rules`): Added `ListTariffsFilter` and `List` on `TariffRepository`, `ListPricingRulesUseCase`, PostgreSQL repository pagination/filtering implementation, HTTP handler and routes guarded by `identitytransport.RequireRole(identitydomain.RoleAdmin)`, DTO response mapping with Option A base weight (1.0 kg) and max weight (30.0 kg), comprehensive unit and integration test suites, and updated API docs/OpenAPI specs. | Member 2 |
 
 ---
 
