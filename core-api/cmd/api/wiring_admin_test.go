@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	adminapp "github.com/swiftdrop/core-api/internal/admin/application"
 	admintransport "github.com/swiftdrop/core-api/internal/admin/transport"
 	identityapp "github.com/swiftdrop/core-api/internal/identity/application"
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	"github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	identitytransport "github.com/swiftdrop/core-api/internal/identity/transport"
+	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 )
 
 func TestRegisterAdminModule_Validation(t *testing.T) {
@@ -149,5 +154,46 @@ func TestIdentityAuthAdapter(t *testing.T) {
 	}
 	if seen.Role != "ADMIN" || seen.UserID == "" {
 		t.Fatalf("principal not passed through: %+v", seen)
+	}
+}
+
+type fakeDailyCounts struct {
+	rows []parcelsinfra.DailyDeliveryCount
+	err  error
+}
+
+func (f fakeDailyCounts) DailyDeliveryCounts(context.Context, time.Time, time.Time) ([]parcelsinfra.DailyDeliveryCount, error) {
+	return f.rows, f.err
+}
+
+// The delivery report reads real numbers from the parcels module. The adapter must copy
+// every day across unchanged and pass a database failure up, never hide it as "no data".
+func TestParcelDeliveryReportsAdapter(t *testing.T) {
+	p := parcelDeliveryReports{reader: fakeDailyCounts{rows: []parcelsinfra.DailyDeliveryCount{
+		{Date: "2026-11-17", Delivered: 4, Failed: 1, Returned: 0},
+		{Date: "2026-11-20", Delivered: 2, Failed: 0, Returned: 1},
+	}}}
+	got, err := p.Deliveries(context.Background(), time.Now().Add(-time.Hour), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []adminapp.DeliveryDay{
+		{Date: "2026-11-17", Delivered: 4, Failed: 1, Returned: 0},
+		{Date: "2026-11-20", Delivered: 2, Failed: 0, Returned: 1},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+
+	empty, err := parcelDeliveryReports{reader: fakeDailyCounts{}}.Deliveries(context.Background(), time.Now(), time.Now())
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("no rows: got %+v, %v; want an empty, non-nil list", empty, err)
+	}
+
+	if _, err := (parcelDeliveryReports{reader: fakeDailyCounts{err: errors.New("db down")}}).Deliveries(context.Background(), time.Now(), time.Now()); err == nil {
+		t.Fatal("expected the database error to be returned")
+	}
+	if strings.HasPrefix(deliveryReportSource, "stand-in") {
+		t.Fatal("the live source must not start with \"stand-in\": the web screen would still show the not-live warning")
 	}
 }
