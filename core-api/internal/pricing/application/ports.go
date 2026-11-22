@@ -7,8 +7,15 @@ import (
 	"github.com/swiftdrop/core-api/internal/pricing/domain"
 )
 
+// ListTariffsFilter specifies filtering criteria when listing pricing rules / tariffs.
+type ListTariffsFilter struct {
+	OriginZoneID      string
+	DestinationZoneID string
+	ActiveOnly        *bool
+}
+
 // TariffRepository defines how the application retrieves
-// an applicable pricing tariff.
+// pricing tariffs.
 type TariffRepository interface {
 	FindApplicable(
 		ctx context.Context,
@@ -16,6 +23,13 @@ type TariffRepository interface {
 		destinationZoneID string,
 		at time.Time,
 	) (domain.Tariff, error)
+
+	List(
+		ctx context.Context,
+		filter ListTariffsFilter,
+		offset int,
+		limit int,
+	) ([]domain.Tariff, int, error)
 }
 
 // QuoteRepository defines how generated pricing quotes are persisted.
