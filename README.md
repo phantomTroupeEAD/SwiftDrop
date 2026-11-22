@@ -250,44 +250,136 @@ swiftdrop/
 
 ## 6. Local Development & Quick Start
 
+There are two ways to run SwiftDrop on your machine:
+
+- **Option A, full stack in Docker:** one command starts every service. Use it to try the whole system or test across modules.
+- **Option B, develop one part:** Docker runs only the infrastructure (Postgres, RabbitMQ and so on), and you run the part you are changing (core-api, web, messaging) from source with live reload.
+
 ### 6.1 Prerequisites
-Ensure the following tools are installed on your workstation:
-- **Go:** `v1.22+`
-- **Docker & Docker Compose:** `v24.0+`
-- **Node.js & npm:** `v20.x+` (for frontend workspaces)
-- **Python:** `v3.11+` (for AI Assistant service)
-- **golangci-lint:** `v1.57+` (optional for local linting; enforced in CI)
 
-### 6.2 Running Infrastructure Services
-Start the authoritative PostgreSQL instance and RabbitMQ message broker:
+| Tool | Version | Needed for |
+| :--- | :--- | :--- |
+| Git | any recent | everything |
+| Docker Desktop (with Compose v2) | 24+ | both options |
+| Go | 1.22 | core-api, messaging, tracking (Option B) |
+| Node.js and npm | 20+ | web, `tests/e2e` |
+| Python | 3.11 | ai-assistant (Option B) |
+| golangci-lint | v1.64.8 (the CI version) | optional, local linting |
+
+**Windows:** use **Git Bash** for `.sh` scripts and `make`. If you don't have `make`, `.\scripts\make.ps1 <target>` in PowerShell runs the same targets (`up`, `down`, `ps`, `logs`, `seed`, `reset`, and others).
+
+### 6.2 Clone and configure
+
 ```bash
-# Start background infrastructure (PostgreSQL, RabbitMQ, Redis)
-docker compose up -d postgres rabbitmq redis
+git clone https://github.com/phantomTroupeEAD/SwiftDrop.git
+cd SwiftDrop
+git switch dev                         # feature branches start from dev
+
+cp deploy/.env.example deploy/.env     # optional: the stack runs with the built-in defaults
 ```
 
-### 6.3 Running Core API Service
+Compose reads only `deploy/.env`; it ignores a `.env` in the repo root. The defaults are for local use only. Never put real secrets in this file or commit it.
+
+### 6.3 Option A: run the full stack in Docker
+
 ```bash
-# Navigate to Core API
+make up            # Windows PowerShell: .\scripts\make.ps1 up
+make ps            # wait until every container is "healthy"
+make seed          # optional: loads deploy/seeds/*.sql (sample couriers)
+```
+
+The first `make up` builds every image, which can take several minutes. Migrations run automatically (the `core-api-migrate` service) before core-api starts.
+
+| What | URL |
+| :--- | :--- |
+| **Web app, through the gateway** (use this one) | http://localhost |
+| Web app, direct | http://localhost:3000 |
+| Core API | http://localhost:8080 (Swagger UI: http://localhost:8080/swagger/) |
+| Tracking API | http://localhost:8081 |
+| AI assistant | http://localhost:8000 (MCP: 8002) |
+| Mailpit (notification emails from the event worker land here) | http://localhost:8025 |
+| RabbitMQ management | http://localhost:15672 (user `swiftdrop`, password `swiftdrop_dev`) |
+| MinIO console | http://localhost:9001 (`minioadmin` / `minioadmin`) |
+| Traefik dashboard | http://127.0.0.1:8090 |
+| Postgres | `localhost:5433` (user `swiftdrop`, password `swiftdrop_dev_password`, database `swiftdrop_db`) |
+
+Optional monitoring: `docker compose -f deploy/docker-compose.yml --profile observability up -d` adds Prometheus (http://localhost:9090) and Grafana (http://localhost:3001, `admin` / `admin`).
+
+Useful commands: `make logs` (follow logs), `make down` (stop, keep data), `make reset` (stop **and delete all local data**).
+
+After you change code, rebuild just that service, for example `docker compose -f deploy/docker-compose.yml up -d --build core-api`.
+
+### 6.4 Demo accounts (local only)
+
+The migrations create one account per role:
+
+| Role | Email | Password |
+| :--- | :--- | :--- |
+| Admin | `admin@swiftdrop.local` | `AdminPassword123!` |
+| Dispatcher | `dispatcher@swiftdrop.local` | `Dispatcher123!` |
+| Courier | `courier@swiftdrop.local` | `CourierPassword123!` |
+| Merchant | `merchant@vendor.com` | `Merchant123!` |
+| Customer | `customer@swiftdrop.local` | `CustomerPassword123!` |
+
+These passwords are public and work **only on your machine**. In production they are replaced by secrets or the accounts are suspended. To create more staff, sign up a new account, then give it a role in **Admin → Users**. Locally, registration and password-reset codes are not emailed. core-api prints them in its log: `docker compose -f deploy/docker-compose.yml logs core-api` (Option B: your terminal). Set `SMTP_HOST` to send real emails.
+
+### 6.5 Option B: develop one part from source
+
+**1. Start only the infrastructure:**
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d postgres rabbitmq redis mailpit minio
+```
+
+**2. Core API** (port 8080):
+
+```bash
 cd core-api
-
-# Execute database migrations
-go run cmd/migrate/main.go up
-
-# Start the Core API modular monolith
-go run cmd/api/main.go
+export DATABASE_URL="postgres://swiftdrop:swiftdrop_dev_password@localhost:5433/swiftdrop_db?sslmode=disable"
+go run ./cmd/api
 ```
-The Core API serves traffic on `http://localhost:8080`. Health probes are available at:
-- Liveness Probe: `GET http://localhost:8080/health/live`
-- Readiness Probe: `GET http://localhost:8080/health/ready`
 
-### 6.4 Running the Asynchronous Workers
+- PowerShell: `$env:DATABASE_URL = "postgres://..."`.
+- On start, core-api applies any new migrations itself. `go run ./cmd/migrate` applies them without starting the API.
+- If Postgres is not reachable, core-api still starts with in-memory demo users (same accounts as 6.4), but modules that need the database are off.
+- Health checks: http://localhost:8080/health/live and `/health/ready` (ready also checks the database).
+
+**3. Web app** (port 3000, live reload):
+
 ```bash
-# In a separate terminal, launch Outbox Relay
-cd services/messaging && go run cmd/relay/main.go
-
-# Launch Event Worker (Notifications & Webhooks)
-cd services/messaging && go run cmd/worker/main.go
+cd web
+npm install
+echo "SWIFTDROP_CORE_API_URL=http://127.0.0.1:8080" > .env.local
+npm run dev
 ```
+
+- Open http://localhost:3000. Vite forwards `/api` to core-api, `/api/v1/tracking` to port 8081 and `/api/v1/ai` to port 8000.
+- **Set `SWIFTDROP_CORE_API_URL`.** Without it, Vite starts in demo-login mode: you can open the screens, but nothing talks to the real backend.
+- If the full Docker stack is also running, port 3000 is already taken by the `web` container. Stop it first: `docker compose -f deploy/docker-compose.yml stop web`.
+
+**4. Messaging** (outbox relay and event worker), only if you work on events, notifications or webhooks: see [`services/messaging/README.md`](services/messaging/README.md) section 10. Its `.env.example` lists the variables (`DATABASE_URL` as above, `RABBITMQ_URL=amqp://swiftdrop:swiftdrop_dev@localhost:5672/`).
+
+**5. Other services:** tracking `cd services/tracking && go run ./cmd/tracking` (port 8081); AI assistant `cd services/ai-assistant && pip install -r requirements.txt && uvicorn src.main:app --port 8000 --reload` (add `MOCK_LLM_MODE=true USE_MOCK_UPSTREAM=true` to run without an LLM key).
+
+### 6.6 Run the tests
+
+```bash
+cd core-api && go test ./...                 # unit tests
+cd web && npm run build                      # UI lint + type check + build
+cd tests/e2e && npm install && npx playwright test   # end-to-end, needs the full stack (Option A)
+```
+
+Before you push, run `./scripts/verify.sh` (Windows: `.\scripts\verify.ps1`); see section 7.
+
+### 6.7 Common problems
+
+| Problem | Fix |
+| :--- | :--- |
+| `port is already allocated` | Another program (or a second copy of the stack) uses that port. Stop it, or change the port in `deploy/.env` (for example `POSTGRES_PORT`). |
+| Login works but every page shows errors (Option B) | `web/.env.local` is missing `SWIFTDROP_CORE_API_URL`, so you are in demo-login mode. Add it and restart `npm run dev`. |
+| A container stays "unhealthy" | `make logs`, or `docker compose -f deploy/docker-compose.yml logs <service>`, shows why. |
+| Old data or a failed migration | `make reset`, then `make up`. This **deletes** all local data. |
+| `go test -race` fails at once on Windows with `0xc0000139` | The race detector cannot start on that Windows setup. Run `go test ./...` without `-race`; CI runs the race tests on Linux. |
 
 ---
 
