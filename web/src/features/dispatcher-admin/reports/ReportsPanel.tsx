@@ -206,7 +206,7 @@ export const ReportsPanel: React.FC<ReportsPanelProps> = ({ token }) => {
 
         {isStandIn && report && (
           <Banner tone="attn" testId="reports-source-note">
-            These numbers are not live yet. The server says: {report.source}.
+            Delivery figures are not available yet. This report will fill in automatically once delivery tracking is connected.
           </Banner>
         )}
 
@@ -261,7 +261,7 @@ export const ReportsPanel: React.FC<ReportsPanelProps> = ({ token }) => {
               )}
 
               <p className="text-xs text-text-muted" data-testid="reports-period">
-                Period {report.from} to {report.to}. Source: {report.source}
+                Period {report.from} to {report.to}.
               </p>
             </>
           )

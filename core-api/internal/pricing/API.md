@@ -121,14 +121,70 @@ Handler errors use the canonical `httpx.WriteError` envelope:
 
 ---
 
-## 2. Admin Pricing Tariff Rules Management (Candidate Endpoints — Not Yet Implemented)
+## 2. Admin Pricing Tariff Rules Management
 
+### List Pricing Rules
+Retrieves a paginated list of geographic pricing rules (tariffs) from PostgreSQL for administrative oversight, filtering, and audit.
+
+- **Method / Path:** `GET /api/v1/admin/pricing-rules`
+- **Auth Required:** **Bearer JWT required** (`ADMIN` role strictly enforced)
+- **Headers:**
+  - `Authorization: Bearer <jwt>` (Mandatory)
+
+### Query Parameters
+| Parameter | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `page` | Integer | No | `1` | Page number ($\ge 1$). |
+| `per_page` | Integer | No | `20` | Page size ($1 \le \text{per\_page} \le 100$). |
+| `origin_zone_id` | String | No | - | Optional filter matching canonical `^ZONE_[A-Z0-9_]{2,27}$`. |
+| `destination_zone_id` | String | No | - | Optional filter matching canonical `^ZONE_[A-Z0-9_]{2,27}$`. |
+| `is_active` | Boolean | No | - | Optional filter (`true` or `false`). |
+
+### Success Response (`200 OK`)
+Wrapped in the canonical `httpx.NewPaginatedResponse` list envelope (`{"data": [...], "meta": {...}}`):
+```json
+{
+  "data": [
+    {
+      "id": "rule_west_central_v2",
+      "version": 2,
+      "origin_zone_id": "ZONE_WESTERN_01",
+      "destination_zone_id": "ZONE_CENTRAL_01",
+      "base_weight_kg": 1.0,
+      "max_weight_kg": 30.0,
+      "base_fee_cents": 35000,
+      "per_kg_rate_cents": 8000,
+      "currency": "LKR",
+      "effective_from": "2026-11-10T00:00:00Z",
+      "effective_until": null,
+      "is_active": true,
+      "created_at": "2026-11-10T00:00:00Z",
+      "updated_at": "2026-11-10T00:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total_items": 1,
+    "total_pages": 1
+  }
+}
+```
+
+### Error Responses
+- `401 Unauthorized`: `AUTH_UNAUTHORIZED` — Missing or invalid Bearer JWT.
+- `403 Forbidden`: `AUTH_FORBIDDEN` — Authenticated role is not `ADMIN` (e.g. `CUSTOMER`, `MERCHANT`, `COURIER`, `DISPATCHER`).
+- `422 Unprocessable Entity`:
+  - `VALIDATION_FAILED` — Invalid query parameter values (e.g. `page < 1`, `per_page < 1`, `per_page > 100`, or non-boolean `is_active`).
+  - `INVALID_ZONE_ID` — `origin_zone_id` or `destination_zone_id` query filter does not match `^ZONE_[A-Z0-9_]{2,27}$`.
+- `500 Internal Server Error`: `INTERNAL_ERROR` — Database query failure.
+
+---
+
+### Candidate Administrative Endpoints (Deferred / Not Yet Implemented)
 > [!NOTE]
-> **Boundary Coordination (Member 2 / Member 7):**
-> Member 2's pricing context owns candidate backend tariff CRUD REST endpoints; Member 7 owns the Admin UI portal. These endpoints are deferred/unimplemented in the current HTTP transport milestone.
-
+> Create, Update, and Delete endpoints remain deferred for future iterations per focused Member 2 listing scope.
 - `POST /api/v1/admin/pricing-rules`: Create a new tariff rule for a zone-pair.
-- `GET /api/v1/admin/pricing-rules`: List all active/inactive tariff rules.
 - `GET /api/v1/admin/pricing-rules/{id}`: Retrieve detailed pricing rule definition.
 - `PUT /api/v1/admin/pricing-rules/{id}`: Update tariff fee or validity window (creates new rule version).
 - `DELETE /api/v1/admin/pricing-rules/{id}`: Deactivate tariff rule.

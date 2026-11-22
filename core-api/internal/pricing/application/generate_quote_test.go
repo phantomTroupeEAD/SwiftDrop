@@ -30,6 +30,16 @@ func (f *fakeTariffRepository) FindApplicable(
 	return f.tariff, f.err
 }
 
+func (f *fakeTariffRepository) List(
+	ctx context.Context,
+	filter ListTariffsFilter,
+	offset int,
+	limit int,
+) ([]domain.Tariff, int, error) {
+	f.called = true
+	return []domain.Tariff{f.tariff}, 1, f.err
+}
+
 // fakeQuoteRepository simulates quote persistence.
 type fakeQuoteRepository struct {
 	savedQuote domain.Quote

@@ -81,6 +81,9 @@ export async function listRules(token: string | null, page: number, perPage: num
       if (filter.active) q.set('is_active', filter.active);
       const res = await request<{ data: PricingRule[] | null; meta: PageMeta }>(token, 'GET', `${BASE}?${q.toString()}`);
       backend = 'real';
+      if (res.data && Array.isArray(res.data)) {
+        mockPricing.registerRules(res.data);
+      }
       return { rows: res.data ?? [], meta: res.meta };
     } catch (err) {
       if (!routeMissing(err)) throw err;
@@ -92,18 +95,33 @@ export async function listRules(token: string | null, page: number, perPage: num
 
 export async function createRule(token: string | null, input: RuleInput, idempotencyKey: string): Promise<PricingRule> {
   if (backend === 'sample') return mockPricing.create(input);
-  const res = await request<{ data: PricingRule }>(token, 'POST', BASE, input, idempotencyKey);
-  return res.data;
+  try {
+    const res = await request<{ data: PricingRule }>(token, 'POST', BASE, input, idempotencyKey);
+    return res.data;
+  } catch (err) {
+    if (routeMissing(err)) return mockPricing.create(input);
+    throw err;
+  }
 }
 
 export async function updateRule(token: string | null, id: string, expectedVersion: number, change: RuleChange): Promise<PricingRule> {
   if (backend === 'sample') return mockPricing.update(id, expectedVersion, change);
-  const res = await request<{ data: PricingRule }>(token, 'PUT', `${BASE}/${encodeURIComponent(id)}`, { expected_version: expectedVersion, ...change });
-  return res.data;
+  try {
+    const res = await request<{ data: PricingRule }>(token, 'PUT', `${BASE}/${encodeURIComponent(id)}`, { expected_version: expectedVersion, ...change });
+    return res.data;
+  } catch (err) {
+    if (routeMissing(err)) return mockPricing.update(id, expectedVersion, change);
+    throw err;
+  }
 }
 
 export async function deactivateRule(token: string | null, id: string, expectedVersion: number): Promise<PricingRule> {
   if (backend === 'sample') return mockPricing.deactivate(id, expectedVersion);
-  const res = await request<{ data: PricingRule }>(token, 'DELETE', `${BASE}/${encodeURIComponent(id)}?expected_version=${expectedVersion}`);
-  return res.data;
+  try {
+    const res = await request<{ data: PricingRule }>(token, 'DELETE', `${BASE}/${encodeURIComponent(id)}?expected_version=${expectedVersion}`);
+    return res.data;
+  } catch (err) {
+    if (routeMissing(err)) return mockPricing.deactivate(id, expectedVersion);
+    throw err;
+  }
 }

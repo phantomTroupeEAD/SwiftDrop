@@ -15,6 +15,7 @@ import (
 	identitydomain "github.com/swiftdrop/core-api/internal/identity/domain"
 	identityinfra "github.com/swiftdrop/core-api/internal/identity/infrastructure"
 	identitytransport "github.com/swiftdrop/core-api/internal/identity/transport"
+	"github.com/swiftdrop/core-api/internal/platform/httpx"
 	"github.com/swiftdrop/core-api/internal/platform/middleware"
 	"github.com/swiftdrop/core-api/internal/pricing/application"
 	"github.com/swiftdrop/core-api/internal/pricing/domain"
@@ -30,14 +31,30 @@ const (
 )
 
 type fakeTariffRepository struct {
-	tariff domain.Tariff
-	err    error
-	called bool
+	tariff     domain.Tariff
+	tariffs    []domain.Tariff
+	totalCount int
+	err        error
+	called     bool
 }
 
 func (f *fakeTariffRepository) FindApplicable(_ context.Context, _, _ string, _ time.Time) (domain.Tariff, error) {
 	f.called = true
 	return f.tariff, f.err
+}
+
+func (f *fakeTariffRepository) List(_ context.Context, _ application.ListTariffsFilter, _, _ int) ([]domain.Tariff, int, error) {
+	f.called = true
+	if f.err != nil {
+		return nil, 0, f.err
+	}
+	if f.tariffs != nil {
+		return f.tariffs, f.totalCount, nil
+	}
+	if f.tariff.ID == "" {
+		return []domain.Tariff{}, 0, nil
+	}
+	return []domain.Tariff{f.tariff}, 1, nil
 }
 
 type fakeQuoteRepository struct {
@@ -138,7 +155,8 @@ func newTestHarness(t *testing.T) *testHarness {
 	}
 
 	uc := application.NewGenerateQuoteUseCase(tariffRepo, quoteRepo, fakeClock{now: now}, idGen)
-	h, err := NewHandler(uc, merchantReader)
+	listUC := application.NewListPricingRulesUseCase(tariffRepo)
+	h, err := NewHandler(uc, merchantReader, listUC)
 	if err != nil {
 		t.Fatalf("NewHandler failed: %v", err)
 	}
@@ -759,4 +777,232 @@ func TestCreateQuote_InputValidationAndFailureErrors(t *testing.T) {
 
 		assertErrorEnvelope(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR")
 	})
+}
+
+func TestListPricingRules_Success_Admin(t *testing.T) {
+	th := newTestHarness(t)
+	token := th.issueToken(t, identityapp.Principal{
+		UserID: testAdminUserID,
+		Email:  "admin@swiftdrop.local",
+		Role:   identitydomain.RoleAdmin,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules?page=1&per_page=10", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	th.mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data []PricingRuleResponse `json:"data"`
+		Meta httpx.PageMeta        `json:"meta"`
+	}
+
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 item in data, got %d", len(resp.Data))
+	}
+	rule := resp.Data[0]
+	if rule.ID != "rule_west_central_v2" {
+		t.Errorf("expected ID rule_west_central_v2, got %s", rule.ID)
+	}
+	if rule.OriginZoneID != "ZONE_WESTERN_01" {
+		t.Errorf("expected origin zone ZONE_WESTERN_01, got %s", rule.OriginZoneID)
+	}
+	if rule.DestinationZoneID != "ZONE_CENTRAL_01" {
+		t.Errorf("expected destination zone ZONE_CENTRAL_01, got %s", rule.DestinationZoneID)
+	}
+	if rule.BaseFeeCents != 35000 {
+		t.Errorf("expected base_fee_cents 35000, got %d", rule.BaseFeeCents)
+	}
+	if rule.PerKgRateCents != 8000 {
+		t.Errorf("expected per_kg_rate_cents 8000, got %d", rule.PerKgRateCents)
+	}
+	if rule.Currency != "LKR" {
+		t.Errorf("expected currency LKR, got %s", rule.Currency)
+	}
+	if rule.BaseWeightKg != 1.0 {
+		t.Errorf("expected base_weight_kg 1.0, got %f", rule.BaseWeightKg)
+	}
+	if rule.MaxWeightKg != 30.0 {
+		t.Errorf("expected max_weight_kg 30.0, got %f", rule.MaxWeightKg)
+	}
+	if !rule.IsActive {
+		t.Errorf("expected is_active true")
+	}
+	if rule.Version != 2 {
+		t.Errorf("expected version 2, got %d", rule.Version)
+	}
+	if resp.Meta.Page != 1 || resp.Meta.PerPage != 10 || resp.Meta.TotalItems != 1 || resp.Meta.TotalPages != 1 {
+		t.Errorf("unexpected pagination meta: %+v", resp.Meta)
+	}
+}
+
+func TestListPricingRules_Empty_Admin(t *testing.T) {
+	th := newTestHarness(t)
+	th.tariffRepo.tariffs = []domain.Tariff{}
+	th.tariffRepo.totalCount = 0
+
+	token := th.issueToken(t, identityapp.Principal{
+		UserID: testAdminUserID,
+		Email:  "admin@swiftdrop.local",
+		Role:   identitydomain.RoleAdmin,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	th.mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data []PricingRuleResponse `json:"data"`
+		Meta httpx.PageMeta        `json:"meta"`
+	}
+
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Data == nil {
+		t.Fatal("expected empty slice for data, got nil")
+	}
+	if len(resp.Data) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(resp.Data))
+	}
+	if resp.Meta.TotalItems != 0 {
+		t.Errorf("expected total_items 0, got %d", resp.Meta.TotalItems)
+	}
+}
+
+func TestListPricingRules_Unauthorized(t *testing.T) {
+	th := newTestHarness(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules", nil)
+	rec := httptest.NewRecorder()
+
+	th.mux.ServeHTTP(rec, req)
+
+	assertErrorEnvelope(t, rec, http.StatusUnauthorized, "AUTH_UNAUTHORIZED")
+}
+
+func TestListPricingRules_Forbidden_NonAdmin(t *testing.T) {
+	nonAdminRoles := []struct {
+		name string
+		role identitydomain.Role
+	}{
+		{"CUSTOMER", identitydomain.RoleCustomer},
+		{"MERCHANT", identitydomain.RoleMerchant},
+		{"COURIER", identitydomain.RoleCourier},
+		{"DISPATCHER", identitydomain.RoleDispatcher},
+	}
+
+	for _, tc := range nonAdminRoles {
+		t.Run(tc.name, func(t *testing.T) {
+			th := newTestHarness(t)
+			token := th.issueToken(t, identityapp.Principal{
+				UserID: testOtherUserID,
+				Role:   tc.role,
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+
+			th.mux.ServeHTTP(rec, req)
+
+			assertErrorEnvelope(t, rec, http.StatusForbidden, "AUTH_FORBIDDEN")
+		})
+	}
+}
+
+func TestListPricingRules_ValidationErrors(t *testing.T) {
+	th := newTestHarness(t)
+	token := th.issueToken(t, identityapp.Principal{
+		UserID: testAdminUserID,
+		Role:   identitydomain.RoleAdmin,
+	})
+
+	testCases := []struct {
+		name         string
+		query        string
+		expectedCode string
+	}{
+		{
+			name:         "invalid page 0",
+			query:        "page=0",
+			expectedCode: "VALIDATION_FAILED",
+		},
+		{
+			name:         "invalid page negative",
+			query:        "page=-5",
+			expectedCode: "VALIDATION_FAILED",
+		},
+		{
+			name:         "invalid per_page 0",
+			query:        "per_page=0",
+			expectedCode: "VALIDATION_FAILED",
+		},
+		{
+			name:         "invalid per_page exceeding max",
+			query:        "per_page=500",
+			expectedCode: "VALIDATION_FAILED",
+		},
+		{
+			name:         "invalid is_active boolean format",
+			query:        "is_active=maybe",
+			expectedCode: "VALIDATION_FAILED",
+		},
+		{
+			name:         "invalid origin zone ID format",
+			query:        "origin_zone_id=bad_zone",
+			expectedCode: "INVALID_ZONE_ID",
+		},
+		{
+			name:         "invalid destination zone ID format",
+			query:        "destination_zone_id=invalid",
+			expectedCode: "INVALID_ZONE_ID",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules?"+tc.query, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+
+			th.mux.ServeHTTP(rec, req)
+
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, tc.expectedCode)
+		})
+	}
+}
+
+func TestListPricingRules_InternalError(t *testing.T) {
+	th := newTestHarness(t)
+	th.tariffRepo.err = errors.New("database connection pool timeout")
+
+	token := th.issueToken(t, identityapp.Principal{
+		UserID: testAdminUserID,
+		Role:   identitydomain.RoleAdmin,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/pricing-rules", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	th.mux.ServeHTTP(rec, req)
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR")
 }

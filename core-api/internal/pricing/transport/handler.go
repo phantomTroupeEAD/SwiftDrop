@@ -5,6 +5,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/swiftdrop/core-api/internal/events"
@@ -19,12 +20,17 @@ const maxQuoteBodyBytes int64 = 64 * 1024
 
 // Handler exposes HTTP REST handlers for the pricing module.
 type Handler struct {
-	quoteUseCase   *application.GenerateQuoteUseCase
-	merchantReader application.MerchantReader
+	quoteUseCase     *application.GenerateQuoteUseCase
+	listRulesUseCase *application.ListPricingRulesUseCase
+	merchantReader   application.MerchantReader
 }
 
 // NewHandler constructs a pricing HTTP Handler with required use case and merchant reader ports.
-func NewHandler(quoteUseCase *application.GenerateQuoteUseCase, merchantReader application.MerchantReader) (*Handler, error) {
+func NewHandler(
+	quoteUseCase *application.GenerateQuoteUseCase,
+	merchantReader application.MerchantReader,
+	listRulesUseCase ...*application.ListPricingRulesUseCase,
+) (*Handler, error) {
 	if quoteUseCase == nil {
 		return nil, errors.New("pricing transport: nil generate quote use case")
 	}
@@ -32,9 +38,15 @@ func NewHandler(quoteUseCase *application.GenerateQuoteUseCase, merchantReader a
 		return nil, errors.New("pricing transport: nil merchant reader")
 	}
 
+	var listUC *application.ListPricingRulesUseCase
+	if len(listRulesUseCase) > 0 {
+		listUC = listRulesUseCase[0]
+	}
+
 	return &Handler{
-		quoteUseCase:   quoteUseCase,
-		merchantReader: merchantReader,
+		quoteUseCase:     quoteUseCase,
+		listRulesUseCase: listUC,
+		merchantReader:   merchantReader,
 	}, nil
 }
 
@@ -97,6 +109,103 @@ func (h *Handler) CreateQuote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = httpx.WriteData(w, http.StatusCreated, NewQuoteResponse(quote))
+}
+
+// ListPricingRules godoc
+// @Summary      List delivery pricing rules (admin)
+// @Description  Retrieves a paginated list of geographic pricing rules / tariffs for administrators.
+// @Tags         admin-pricing
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page                query int    false "Page number, starting from 1" default(1)
+// @Param        per_page            query int    false "Number of items per page (1-100)" default(20)
+// @Param        origin_zone_id      query string false "Filter by origin zone ID (e.g. ZONE_WESTERN_01)"
+// @Param        destination_zone_id query string false "Filter by destination zone ID (e.g. ZONE_CENTRAL_01)"
+// @Param        is_active           query bool   false "Filter by active status (true/false)"
+// @Success      200 {object} httpx.PaginatedEnvelope{data=[]PricingRuleResponse} "Paginated pricing rules"
+// @Failure      401 {object} httpx.ErrorEnvelope "Missing or invalid Bearer token"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden: role is not ADMIN"
+// @Failure      422 {object} httpx.ErrorEnvelope "Semantic validation failure (e.g. invalid zone format or paging)"
+// @Failure      500 {object} httpx.ErrorEnvelope "Internal server error"
+// @Router       /api/v1/admin/pricing-rules [get]
+func (h *Handler) ListPricingRules(w http.ResponseWriter, r *http.Request) {
+	if h.listRulesUseCase == nil {
+		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Pricing rules use case is not configured")
+		return
+	}
+
+	q := r.URL.Query()
+
+	page := 1
+	if v := q.Get("page"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil || p < 1 {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Invalid pagination parameters",
+				httpx.ErrorDetail{Field: "page", Issue: "page must be a whole number from 1"})
+			return
+		}
+		page = p
+	}
+
+	perPage := 20
+	if v := q.Get("per_page"); v != "" {
+		pp, err := strconv.Atoi(v)
+		if err != nil || pp < 1 || pp > 100 {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Invalid pagination parameters",
+				httpx.ErrorDetail{Field: "per_page", Issue: "per_page must be a whole number between 1 and 100"})
+			return
+		}
+		perPage = pp
+	}
+
+	var activeOnly *bool
+	if v := q.Get("is_active"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Invalid filter parameter",
+				httpx.ErrorDetail{Field: "is_active", Issue: "is_active must be true or false"})
+			return
+		}
+		activeOnly = &b
+	}
+
+	originZoneID := strings.TrimSpace(q.Get("origin_zone_id"))
+	if originZoneID != "" {
+		if err := domain.ValidateZoneID(originZoneID); err != nil {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "INVALID_ZONE_ID", "Origin zone ID is invalid",
+				httpx.ErrorDetail{Field: "origin_zone_id", Issue: "must match ^ZONE_[A-Z0-9_]{2,27}$"})
+			return
+		}
+	}
+
+	destZoneID := strings.TrimSpace(q.Get("destination_zone_id"))
+	if destZoneID != "" {
+		if err := domain.ValidateZoneID(destZoneID); err != nil {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "INVALID_ZONE_ID", "Destination zone ID is invalid",
+				httpx.ErrorDetail{Field: "destination_zone_id", Issue: "must match ^ZONE_[A-Z0-9_]{2,27}$"})
+			return
+		}
+	}
+
+	result, err := h.listRulesUseCase.Execute(r.Context(), application.ListPricingRulesQuery{
+		OriginZoneID:      originZoneID,
+		DestinationZoneID: destZoneID,
+		ActiveOnly:        activeOnly,
+		Page:              page,
+		PerPage:           perPage,
+	})
+	if err != nil {
+		writePricingError(w, r, err)
+		return
+	}
+
+	responses := make([]PricingRuleResponse, 0, len(result.Rules))
+	for _, rule := range result.Rules {
+		responses = append(responses, NewPricingRuleResponse(rule))
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	_ = httpx.WriteJSON(w, http.StatusOK, httpx.NewPaginatedResponse(responses, result.Page, result.PerPage, result.TotalItems))
 }
 
 func (h *Handler) resolveQuoteOwnership(ctx context.Context) (ownershipContext, *httpErrorSpec) {
