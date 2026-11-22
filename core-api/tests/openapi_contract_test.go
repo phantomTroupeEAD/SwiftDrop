@@ -28,6 +28,10 @@ import (
 	merchantsapp "github.com/swiftdrop/core-api/internal/merchants/application"
 	merchantsinfra "github.com/swiftdrop/core-api/internal/merchants/infrastructure"
 	merchantstransport "github.com/swiftdrop/core-api/internal/merchants/transport"
+	notificationsapp "github.com/swiftdrop/core-api/internal/notifications/application"
+	notificationsdomain "github.com/swiftdrop/core-api/internal/notifications/domain"
+	notificationsinfra "github.com/swiftdrop/core-api/internal/notifications/infrastructure"
+	notificationstransport "github.com/swiftdrop/core-api/internal/notifications/transport"
 	parcelsapp "github.com/swiftdrop/core-api/internal/parcels/application"
 	parcelsinfra "github.com/swiftdrop/core-api/internal/parcels/infrastructure"
 	parcelstransport "github.com/swiftdrop/core-api/internal/parcels/transport"
@@ -52,6 +56,28 @@ type testFixedClock struct {
 
 func (c testFixedClock) Now() time.Time {
 	return c.now
+}
+
+type fakeNotificationRepository struct{}
+
+func (f *fakeNotificationRepository) ListByUserID(_ context.Context, _ notificationsapp.ListFilter) ([]*notificationsdomain.Notification, *notificationsapp.PaginationCursor, error) {
+	return nil, nil, nil
+}
+
+func (f *fakeNotificationRepository) GetUnreadCount(_ context.Context, _ string, _ bool) (int, error) {
+	return 0, nil
+}
+
+func (f *fakeNotificationRepository) FindByID(_ context.Context, _ string) (*notificationsdomain.Notification, error) {
+	return nil, nil
+}
+
+func (f *fakeNotificationRepository) MarkAsRead(_ context.Context, _ string, _ string, _ bool, _ time.Time) (*notificationsdomain.Notification, error) {
+	return nil, nil
+}
+
+func (f *fakeNotificationRepository) MarkAllAsRead(_ context.Context, _ string, _ bool, _ time.Time) (int64, error) {
+	return 0, nil
 }
 
 type fakeMerchantReader struct{}
@@ -112,16 +138,23 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 	hasher := identityinfra.NewStandardPasswordHasher()
 	var userRepo identityapp.UserRepository
 	var tokenRepo identityapp.TokenRepository
+	var auditWriter identityapp.AuditWriter
 	if db != nil {
 		userRepo = identityinfra.NewPostgresUserRepository(db)
 		tokenRepo = identityinfra.NewPostgresTokenRepository(db)
+		auditWriter = identityinfra.NewPostgresAuditWriter(db)
 	} else {
 		userRepo = identityinfra.NewMockUserRepository(hasher)
 		tokenRepo = identityinfra.NewMockTokenRepository()
+		auditWriter = identityinfra.NewMockAuditWriter()
 	}
 	authSvc := identityapp.NewAuthService(userRepo, tokenRepo, hasher, tokenProv)
 	authHandler := identitytransport.NewAuthHandler(authSvc)
 	identitytransport.RegisterRoutes(mux, authHandler, security)
+
+	userService := identityapp.NewUserService(userRepo, auditWriter)
+	adminHandler := identitytransport.NewAdminHandler(userService)
+	identitytransport.RegisterAdminRoutes(mux, adminHandler, security)
 
 	// 2. Events Routes
 	eventsHandler := eventstransport.NewHandler(nil)
@@ -206,13 +239,29 @@ func buildContractTestRouter(db *sql.DB) (http.Handler, *identityinfra.JWTTokenP
 			panic(err)
 		}
 
-		parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, merchantReader)
+		listParcelsUC, err := parcelsapp.NewListParcelsUseCase(parcelRepo, merchantReader)
+		if err != nil {
+			panic(err)
+		}
+
+		parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, listParcelsUC, merchantReader)
 		if err != nil {
 			panic(err)
 		}
 
 		parcelstransport.RegisterRoutes(mux, parcelHandler, security)
 	}
+
+	// 7. Notifications Operations
+	var notifRepo notificationsapp.NotificationRepository
+	if db != nil {
+		notifRepo = notificationsinfra.NewPostgresRepository(db)
+	} else {
+		notifRepo = &fakeNotificationRepository{}
+	}
+	notifSvc := notificationsapp.NewService(notifRepo)
+	notifHandler := notificationstransport.NewHandler(notifSvc)
+	notificationstransport.RegisterRoutes(mux, notifHandler, security)
 
 	// 4. Standalone & Health Endpoints
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) {

@@ -72,7 +72,7 @@ export function MerchantOrderImport({ token, onComplete }: { token: string | nul
   return <section className="m6-card">
     <h2>Import orders</h2>
     <p><a download="swiftdrop-orders.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(template)}`}>Download CSV template</a></p>
-    <p id="csv-contract" className="text-sm text-text-muted">Dimensions and descriptions are checked in the preview. The current merchant order API accepts weight only for parcel details.</p>
+    <p id="csv-contract" className="text-sm text-text-muted">Dimensions, weight, and descriptions are validated in the preview and submitted with each order.</p>
     <label className="m6-field">CSV file
       <Input ref={fileInput} type="file" aria-describedby="csv-contract" accept=".csv,text/csv" disabled={loading || busy || hasAttempted}
         data-testid="batch-csv-file-input" onChange={async event => {
@@ -115,6 +115,7 @@ export function MerchantOrderImport({ token, onComplete }: { token: string | nul
                 const contact = (prefix: 'pickup' | 'dropoff') => ({
                   name: row.fields[`${prefix}_name`], phone: row.fields[`${prefix}_phone`],
                   address_lines: [row.fields[`${prefix}_address`]], city: row.fields[`${prefix}_city`],
+                  postal_code: '00100',
                   zone_id: row.fields[`${prefix}_zone_id`],
                 });
                 let result: string | undefined;
@@ -125,6 +126,10 @@ export function MerchantOrderImport({ token, onComplete }: { token: string | nul
                       merchant_reference: row.fields.merchant_reference, service_level: 'STANDARD',
                       pickup: contact('pickup'), dropoff: contact('dropoff'), parcel: {
                         weight_kg: Number(row.fields.weight_kg),
+                        length_cm: Number(row.fields.length_cm),
+                        width_cm: Number(row.fields.width_cm),
+                        height_cm: Number(row.fields.height_cm),
+                        description: row.fields.description,
                       },
                     },
                   });

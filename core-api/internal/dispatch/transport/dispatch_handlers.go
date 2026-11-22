@@ -19,6 +19,7 @@ type DispatchHandler struct {
 	assignCourierUC    *application.AssignCourierUseCase
 	cancelAssignmentUC *application.CancelAssignmentUseCase
 	rescheduleParcelUC *application.RescheduleParcelUseCase
+	courierCandidatesQ *application.GetCourierCandidatesQueryHandler
 }
 
 // NewDispatchHandler constructs a DispatchHandler instance with all required use cases.
@@ -38,6 +39,28 @@ func NewDispatchHandler(
 		cancelAssignmentUC: cancelAssignmentUC,
 		rescheduleParcelUC: rescheduleParcelUC,
 	}
+}
+
+// WithCandidatesQuery sets the courier candidates query handler.
+func (h *DispatchHandler) WithCandidatesQuery(q *application.GetCourierCandidatesQueryHandler) *DispatchHandler {
+	h.courierCandidatesQ = q
+	return h
+}
+
+// GetCourierCandidates handles GET /api/v1/dispatch/couriers/candidates
+func (h *DispatchHandler) GetCourierCandidates(w http.ResponseWriter, r *http.Request) {
+	if h.courierCandidatesQ == nil {
+		_ = httpx.WriteData(w, http.StatusOK, []application.CourierCandidateDTO{})
+		return
+	}
+
+	candidates, err := h.courierCandidatesQ.Execute(r.Context())
+	if err != nil {
+		MapError(w, r, err)
+		return
+	}
+
+	_ = httpx.WriteData(w, http.StatusOK, candidates)
 }
 
 // RegisterCourier handles POST /api/v1/dispatch/couriers
@@ -85,13 +108,54 @@ func (h *DispatchHandler) RegisterCourier(w http.ResponseWriter, r *http.Request
 func (h *DispatchHandler) ListCouriers(w http.ResponseWriter, r *http.Request) {
 	zoneID := strings.TrimSpace(r.URL.Query().Get("zone_id"))
 
+	if h.dispatchBoardQ != nil {
+		board, err := h.dispatchBoardQ.Execute(r.Context(), zoneID)
+		if err == nil && board != nil {
+			resp := make([]CourierListItemResponse, len(board.ActiveCouriers))
+			for i, c := range board.ActiveCouriers {
+				resp[i] = CourierListItemResponse{
+					UserID:            c.CourierID,
+					CourierID:         c.CourierID,
+					CourierName:       c.Name,
+					Name:              c.Name,
+					EmployeeCode:      c.EmployeeCode,
+					CurrentZoneID:     c.CurrentZoneID,
+					ActiveCount:       c.ActiveAssignments,
+					ActiveAssignments: c.ActiveAssignments,
+					MaxCapacity:       c.MaxCapacity,
+					Status:            string(c.Status),
+					VehicleType:       string(c.VehicleType),
+				}
+			}
+			_ = httpx.WriteData(w, http.StatusOK, resp)
+			return
+		}
+	}
+
 	loads, err := h.listCouriersQ.Execute(r.Context(), zoneID, nil, nil)
 	if err != nil {
 		MapError(w, r, err)
 		return
 	}
 
-	_ = httpx.WriteData(w, http.StatusOK, loads)
+	resp := make([]CourierListItemResponse, len(loads))
+	for i, c := range loads {
+		resp[i] = CourierListItemResponse{
+			UserID:            c.UserID.String(),
+			CourierID:         c.UserID.String(),
+			CourierName:       c.EmployeeCode,
+			Name:              c.EmployeeCode,
+			EmployeeCode:      c.EmployeeCode,
+			CurrentZoneID:     c.CurrentZoneID,
+			ActiveCount:       0,
+			ActiveAssignments: 0,
+			MaxCapacity:       c.MaxCapacity,
+			Status:            string(c.Status),
+			VehicleType:       string(c.Vehicle),
+		}
+	}
+
+	_ = httpx.WriteData(w, http.StatusOK, resp)
 }
 
 // GetDispatchBoard handles GET /api/v1/dispatch/board?zone_id=...
@@ -107,6 +171,7 @@ func (h *DispatchHandler) GetDispatchBoard(w http.ResponseWriter, r *http.Reques
 	resp := DispatchBoardResponse{
 		ZoneID:            board.ZoneID,
 		UnassignedParcels: board.UnassignedParcels,
+		AssignedParcels:   board.AssignedParcels,
 		CourierLoads:      board.ActiveCouriers,
 	}
 

@@ -1,8 +1,10 @@
-name: SwiftDrop Tier 2 Gateway System Release Gate
+name: SwiftDrop Tier 2 & Tier 3 E2E System Release Gate
 
 on:
-  pull_request:
+  push:
     branches: [ main ]
+  pull_request:
+    branches: [ main, dev ]
   workflow_dispatch:
 
 concurrency:
@@ -11,9 +13,9 @@ concurrency:
 
 jobs:
   gateway-system-verification:
-    name: Live Gateway & OpenAPI System Gate
+    name: Live Gateway, OpenAPI Fuzzing & Master Cross-Module E2E Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout Code
@@ -27,6 +29,13 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'tests/e2e/package-lock.json'
 
       - name: Start Full Docker Compose Cluster
         env:
@@ -86,6 +95,76 @@ jobs:
             --checks not_a_server_error \
             --max-examples 10
 
+      - name: Install E2E Dependencies & Playwright Browsers
+        run: |
+          cd tests/e2e
+          npm ci
+          npm --prefix mock-webhook ci
+          npx playwright install chromium firefox webkit --with-deps
+
+      - name: Start Mock Webhook Receiver Daemon
+        run: |
+          cd tests/e2e
+          npm --prefix mock-webhook start &
+          timeout 30s bash -c '
+            until curl -sf http://localhost:9999/health; do
+              echo "Waiting for Mock Webhook receiver..."
+              sleep 1
+            done
+          '
+          echo "Mock webhook server is ready!"
+
+      - name: Run Master Flaw & Vulnerability Audit Matrix
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:vulnerabilities
+
+      - name: Run Master Every-Button & Strict 6-Role RBAC Privilege Matrix
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:rbac-matrix
+
+      - name: Run Master Admin Operations (Merchants, Pricing & Users) E2E Gate
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:admin-ops
+
+      - name: Run Concurrent 6-Role User Traffic Load Simulation
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:traffic
+
+      - name: Run Live System Security & IDOR Guardrails
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:live-guardrails
+
+      - name: Run Master Resiliency Gates (Offline PWA, Concurrency & Chaos DLQ)
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:edge-10
+          npm run test:edge-11
+          npm run test:edge-12
+
+      - name: Run Cross-Engine Browser Verification (Firefox & WebKit)
+        env:
+          BASE_URL: http://localhost:3000
+        run: |
+          cd tests/e2e
+          npm run test:cross-engine
+
       - name: Dump Container Logs on Failure
         if: failure()
         run: |
@@ -98,6 +177,15 @@ jobs:
         with:
           name: e2e-system-logs
           path: test-artifacts/
+
+      - name: Upload Playwright Test Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-test-report
+          path: |
+            tests/e2e/artifacts/report/
+            tests/e2e/test-results/
 
       - name: Teardown Docker Compose Cluster
         if: always()

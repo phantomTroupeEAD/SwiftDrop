@@ -54,6 +54,18 @@ type SendRegistrationOTPResult struct {
 	CooldownSeconds int // seconds before the user may request another OTP (60)
 }
 
+// VerifyRegistrationOTPCommand checks a registration code before the customer enters
+// their details. The code is not used up: Register still needs it and consumes it.
+type VerifyRegistrationOTPCommand struct {
+	Email string
+	OTP   string
+}
+
+// VerifyRegistrationOTPResult confirms that the code matches the pending registration.
+type VerifyRegistrationOTPResult struct {
+	Email string
+}
+
 // RegisterCustomerCommand contains the full payload required to create a new Customer account.
 // The OTP must have been issued via SendRegistrationOTP for this email before calling Register.
 type RegisterCustomerCommand struct {

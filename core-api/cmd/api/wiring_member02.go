@@ -102,8 +102,13 @@ func registerParcelsModule(mux *http.ServeMux, db *sql.DB, sec *identitytranspor
 		return fmt.Errorf("parcels: initialize get parcel history use case: %w", err)
 	}
 
+	listParcelsUC, err := parcelsapp.NewListParcelsUseCase(parcelRepo, merchantReader)
+	if err != nil {
+		return fmt.Errorf("parcels: initialize list parcels use case: %w", err)
+	}
+
 	// 3. Transport Handler & Routes
-	parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, merchantReader)
+	parcelHandler, err := parcelstransport.NewHandler(bookUC, getParcelUC, getHistoryUC, listParcelsUC, merchantReader)
 	if err != nil {
 		return fmt.Errorf("parcels: initialize handler: %w", err)
 	}

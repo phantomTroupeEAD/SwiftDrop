@@ -29,6 +29,11 @@ func RegisterRoutes(
 	)
 
 	mux.Handle(
+		"GET /api/v1/dispatch/couriers/candidates",
+		security.Authenticate(dispatcherOrAdmin(http.HandlerFunc(dispatchHandler.GetCourierCandidates))),
+	)
+
+	mux.Handle(
 		"GET /api/v1/dispatch/board",
 		security.Authenticate(dispatcherOrAdmin(http.HandlerFunc(dispatchHandler.GetDispatchBoard))),
 	)

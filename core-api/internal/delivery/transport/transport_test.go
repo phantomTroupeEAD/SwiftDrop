@@ -83,6 +83,10 @@ func (m *mockDeliveryParcelUpdater) GetStatusWithLock(ctx context.Context, tx *s
 	return s, m.attempts[parcelID], nil
 }
 
+func (m *mockDeliveryParcelUpdater) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 type mockDeliveryOutboxWriter struct{}
 
 func (m *mockDeliveryOutboxWriter) Write(ctx context.Context, tx *sql.Tx, aggregateType string, aggregateID uuid.UUID, aggregateVersion int, eventType string, payload any, correlationID string) error {

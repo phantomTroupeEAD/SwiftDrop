@@ -104,6 +104,12 @@ func TestValidateTransition(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:    "ASSIGNED to OUT_FOR_DELIVERY (depot departure)",
+			from:    StatusAssigned,
+			to:      StatusOutForDelivery,
+			wantErr: nil,
+		},
+		{
 			name:    "ASSIGNED to CANCELLED (rejected per rule: cancellation only while CREATED)",
 			from:    StatusAssigned,
 			to:      StatusCancelled,

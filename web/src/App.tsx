@@ -1,6 +1,8 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
+import { NotificationProvider } from '@/app/providers/NotificationContext';
+import { Toaster } from '@/shared/components/ui/sonner';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
@@ -12,14 +14,21 @@ import { RoleHome } from '@/features/dashboards/RoleHome';
 import type { Role } from '@/shared/types/auth';
 import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
+import { MerchantDocs } from '@/features/customer-merchant/portal/MerchantDocs';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+import { NotificationsPage } from '@/features/notifications/NotificationsPage';
 // TEMP-M7-OPS-ROUTES (import): ops workspace for ADMIN and DISPATCHER. Remove with the line below.
 import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 
 function CustomerBookingAlias() {
   const { search } = useLocation();
   return <Navigate to={{ pathname: '/portal/book', search }} replace />;
+}
+
+function PublicTrackingRedirect() {
+  const { trackingNumber } = useParams<{ trackingNumber?: string }>();
+  return <Navigate to={trackingNumber ? `/track/${encodeURIComponent(trackingNumber)}` : '/track'} replace />;
 }
 
 // Protected Route Guard
@@ -58,7 +67,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: Role }> = ({ 
     return <Navigate to="/auth/login" replace />;
   }
   if (role === 'MERCHANT') return <MerchantSessionGate>{children}</MerchantSessionGate>;
-  if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
+  if (role && user?.role !== role && !(role === 'CUSTOMER' && user?.role === 'MERCHANT')) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -73,6 +82,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/tracking" element={<Navigate to="/track" replace />} />
+      <Route path="/tracking/:trackingNumber" element={<PublicTrackingRedirect />} />
       <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
       <Route path="/customer/book" element={<CustomerBookingAlias />} />
@@ -80,6 +91,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
       <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
       <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/docs" element={<ProtectedRoute role="MERCHANT"><MerchantDocs /></ProtectedRoute>} />
 
       {/* Dev-Only Design System Parity Studio (Gated out of production) */}
       {import.meta.env.DEV && (
@@ -133,6 +145,14 @@ export const AppRoutes: React.FC = () => {
 
       {/* Aliases mapping to role consoles */}
       <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
@@ -167,9 +187,12 @@ export const AppRoutes: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <NotificationProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <Toaster />
+        </BrowserRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 };

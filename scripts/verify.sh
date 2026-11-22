@@ -64,6 +64,10 @@ if command -v go >/dev/null 2>&1; then
         echo "  Running services/messaging tests..."
         (cd services/messaging && go test -v -race ./...) || FAILED=1
     fi
+    if [ -f "services/tracking/go.mod" ]; then
+        echo "  Running services/tracking tests..."
+        (cd services/tracking && go test -v -race ./...) || FAILED=1
+    fi
     if [ ! -f "core-api/go.mod" ] && [ ! -f "services/messaging/go.mod" ] && [ -f "go.mod" ]; then
         go test -v -race ./... || FAILED=1
     fi
@@ -87,10 +91,30 @@ fi
 
 # 5. Web Frontend Quality Gate (lint:ui + build)
 if [ -d "web" ] && command -v npm >/dev/null 2>&1; then
-    echo "[5/5] Running web quality verification (npm run build)..."
+    echo "[5/7] Running web quality verification (npm run build)..."
     (cd web && npm run build) || FAILED=1
     if [ $FAILED -eq 0 ]; then
         echo "  [PASS] Web build and UI guardrails passed."
+    fi
+fi
+
+# 6. AI Assistant Quality Gate (unit tests)
+if [ -d "services/ai-assistant" ] && command -v pytest >/dev/null 2>&1; then
+    echo "[6/7] Running AI Assistant unit tests..."
+    (cd services/ai-assistant && pytest tests/unit -q) || FAILED=1
+    if [ $FAILED -eq 0 ]; then
+        echo "  [PASS] AI Assistant unit tests passed."
+    fi
+else
+    echo "[6/7] Skipping AI Assistant pytest (pytest not installed locally)."
+fi
+
+# 7. E2E Harness Isolation & Mock Gate (dry-run & webhook)
+if [ -d "tests/e2e" ] && command -v npm >/dev/null 2>&1; then
+    echo "[7/7] Running E2E harness dry-run & webhook tests..."
+    (cd tests/e2e && npm run test:dry-run && npm run test:webhook) || FAILED=1
+    if [ $FAILED -eq 0 ]; then
+        echo "  [PASS] E2E dry-run and mock tests passed."
     fi
 fi
 

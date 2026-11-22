@@ -14,38 +14,57 @@ export const SELECTORS = {
   // 1. Common Authentication & Layout
   // ---------------------------------------------------------------------------
   AUTH: {
-    INPUT_EMAIL: 'input-email',
-    INPUT_PASSWORD: 'input-password',
-    BTN_LOGIN: 'btn-login',
+    INPUT_EMAIL: 'login-email-input',
+    INPUT_PASSWORD: 'login-password-input',
+    BTN_LOGIN: 'login-submit-btn',
     BTN_LOGOUT: 'btn-logout',
     USER_PROFILE_MENU: 'user-profile-menu',
     AUTH_ERROR_ALERT: 'auth-error-alert',
+
+    // Registration (Step 1 & Step 2)
+    REGISTER_EMAIL: 'register-email-input',
+    REGISTER_SEND_OTP_BTN: 'register-send-otp-btn',
+    REGISTER_OTP: 'register-otp-input',
+    REGISTER_VERIFY_OTP_BTN: 'register-verify-otp-btn',
+    REGISTER_FIRST_NAME: 'register-first-name-input',
+    REGISTER_LAST_NAME: 'register-last-name-input',
+    REGISTER_PHONE: 'register-phone-input',
+    REGISTER_PASSWORD: 'register-password-input',
+    REGISTER_TERMS_CHECKBOX: 'register-terms-checkbox',
+    REGISTER_SUBMIT_BTN: 'register-submit-btn',
   },
 
   // ---------------------------------------------------------------------------
   // 2. Customer Portal — Booking & Fee Estimation
   // ---------------------------------------------------------------------------
   CUSTOMER: {
-    // Fee Estimation Wizard
-    INPUT_WEIGHT: 'input-weight',
-    INPUT_LENGTH: 'input-length',
-    INPUT_WIDTH: 'input-width',
-    INPUT_HEIGHT: 'input-height',
-    SELECT_PICKUP_ZONE: 'select-pickup-zone',
-    SELECT_DELIVERY_ZONE: 'select-delivery-zone',
-    BTN_GET_QUOTE: 'btn-get-quote',
-    QUOTE_AMOUNT: 'quote-amount',
-    QUOTE_BASE_TARIFF: 'quote-base-tariff',
-    QUOTE_WEIGHT_SURCHARGE: 'quote-weight-surcharge',
-
-    // Booking Submission
-    INPUT_RECIPIENT_NAME: 'input-recipient-name',
-    INPUT_RECIPIENT_PHONE: 'input-recipient-phone',
-    INPUT_DELIVERY_ADDRESS: 'input-delivery-address',
-    INPUT_POSTAL_CODE: 'input-postal-code',
-    BTN_SUBMIT_BOOKING: 'btn-submit-booking',
-    BOOKING_CONFIRMATION_CARD: 'booking-confirmation-card',
+    // Fee Estimation & Booking Wizard
+    BOOKING_WIZARD: 'booking-wizard',
+    INPUT_PICKUP_POSTAL: 'booking-pickup-postal-input',
+    INPUT_DROPOFF_POSTAL: 'booking-dropoff-postal-input',
+    INPUT_PICKUP_NAME: 'booking-pickup-name-input',
+    INPUT_PICKUP_PHONE: 'booking-pickup-phone-input',
+    INPUT_PICKUP_ADDRESS: 'booking-pickup-address-input',
+    INPUT_PICKUP_CITY: 'booking-pickup-city-input',
+    INPUT_DROPOFF_NAME: 'booking-dropoff-name-input',
+    INPUT_DROPOFF_PHONE: 'booking-dropoff-phone-input',
+    INPUT_DROPOFF_ADDRESS: 'booking-dropoff-address-input',
+    INPUT_DROPOFF_CITY: 'booking-dropoff-city-input',
+    INPUT_WEIGHT: 'booking-weight-input',
+    INPUT_LENGTH: 'booking-length-input',
+    INPUT_WIDTH: 'booking-width-input',
+    INPUT_HEIGHT: 'booking-height-input',
+    INPUT_DESCRIPTION: 'booking-description-input',
+    SELECT_SERVICE: 'booking-service-select',
+    BTN_GET_QUOTE: 'booking-next-btn',
+    BTN_NEXT: 'booking-next-btn',
+    BTN_BACK: 'booking-back-btn',
+    QUOTE_PRICE_CENTS: 'quote-price-cents',
+    BTN_SUBMIT_BOOKING: 'booking-submit-btn',
+    BOOKING_CONFIRMATION: 'booking-confirmation',
     BOOKING_CONFIRMATION_TRACKING_NO: 'booking-confirmation-tracking-no',
+    BTN_RECEIPT: 'booking-receipt-btn',
+    BOOKING_RECEIPT: 'booking-receipt',
     PARCEL_STATUS_BADGE: 'parcel-status-badge',
   },
 
@@ -53,6 +72,10 @@ export const SELECTORS = {
   // 3. Dispatcher Board — Routing & Courier Assignment
   // ---------------------------------------------------------------------------
   DISPATCHER: {
+    DISPATCHER_BOARD: 'dispatcher-board',
+    COURIER_SELECT: 'dispatcher-courier-select',
+    ASSIGN_BTN: 'dispatcher-assign-btn',
+    RETRY_BTN: 'dispatcher-retry-btn',
     DISPATCH_UNASSIGNED_TABLE: 'dispatch-unassigned-table',
     ROW_PARCEL_ITEM: 'row-parcel-item',
     SELECT_COURIER_DROPDOWN: 'select-courier-dropdown',
@@ -60,6 +83,13 @@ export const SELECTORS = {
     BADGE_ASSIGNMENT_STATUS: 'badge-assignment-status',
     FILTER_ZONE_DROPDOWN: 'filter-zone-dropdown',
     COURIER_CAPACITY_METER: 'courier-capacity-meter',
+    ASSIGNED_PARCELS_LIST: 'dispatcher-assigned-parcels',
+    RESCHEDULE_BTN: 'reschedule-btn',
+    UNASSIGN_BTN: 'unassign-btn',
+    ONBOARD_COURIER_BTN: 'onboard-courier-btn',
+    REGISTER_COURIER_SUBMIT_BTN: 'register-courier-submit-btn',
+    CONFIRM_CANCEL_ASSIGNMENT_BTN: 'confirm-cancel-assignment-btn',
+    CONFIRM_RESCHEDULE_BTN: 'confirm-reschedule-btn',
   },
 
   // ---------------------------------------------------------------------------
@@ -116,6 +146,10 @@ export const SELECTORS = {
   // 7. Tracking & Real-Time SSE
   // ---------------------------------------------------------------------------
   TRACKING: {
+    SEARCH_INPUT: 'tracking-search-input',
+    SEARCH_BTN: 'tracking-search-btn',
+    STATUS_BADGE: 'tracking-status-badge',
+    TIMELINE: 'tracking-timeline',
     INPUT_TRACKING_NUMBER: 'input-tracking-number',
     BTN_TRACK_PARCEL: 'btn-track-parcel',
     TRACKING_RESULT_CARD: 'tracking-result-card',

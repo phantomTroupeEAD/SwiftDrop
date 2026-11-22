@@ -12,6 +12,7 @@ The `identity` module serves as the authoritative security boundary for SwiftDro
 
 ### Key Responsibilities:
 - User login authentication via email and secure password verification.
+- Customer self-registration in three steps: send a 6-digit email code (`POST /api/v1/auth/register/send-otp`), check it (`POST /api/v1/auth/register/verify-otp`; the code is kept and wrong codes use the same 3 attempts), then create the account with the same code (`POST /api/v1/auth/register`, which consumes it). See `API.md` sections 1, 1b and 2.
 - Interactive Web Developer Login Portal UI (`GET /login` and `GET /`) with 1-click role autofill and live RBAC tester.
 - Stateless JWT issuance with standard claims (`sub`, `email`, `role`, `tenant_id`, `exp`).
 - HttpOnly refresh token session cookie handling (`swiftdrop_refresh_token`).
@@ -28,7 +29,7 @@ The `identity` module serves as the authoritative security boundary for SwiftDro
 | **`ADMIN`** | `admin@swiftdrop.local` | `AdminPassword123!` | System Administrator | *None* (`null`) | `usr_01HADMIN000000000000000001` |
 | **`DISPATCHER`** | `dispatcher@swiftdrop.local` | `Dispatcher123!` | Central Dispatcher | *None* (`null`) | `usr_01HDISPATCH00000000000002` |
 | **`COURIER`** | `courier@swiftdrop.local` | `CourierPassword123!` | Kamal Perera | *None* (`null`) | `usr_01HCOURIER00000000000003` |
-| **`MERCHANT`** | `merchant@vendor.com` | `Merchant123!` | Colombo Tech Stores | `mrc_01HMERCHANTTENANT00001` | `usr_01HMERCHANT00000000000004` |
+| **`MERCHANT`** | `merchant@vendor.com` | `Merchant123!` | Colombo Tech Stores | `018f4a7c-1004-7000-9000-000000000004` | `usr_01HMERCHANT00000000000004` |
 | **`CUSTOMER`** | `customer@swiftdrop.local` | `CustomerPassword123!` | Nimal Fernando | *None* (`null`) | `usr_01HCUSTOMER00000000000005` |
 
 ---

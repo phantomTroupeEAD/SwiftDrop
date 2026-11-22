@@ -56,11 +56,15 @@ func (r *AssignParcelRequest) Validate() []httpx.ErrorDetail {
 
 // CancelAssignmentRequest represents the JSON payload to cancel an active assignment.
 type CancelAssignmentRequest struct {
-	Reason string `json:"reason"`
+	Reason             string `json:"reason"`
+	CancellationReason string `json:"cancellation_reason,omitempty"`
 }
 
 // Validate checks cancel assignment request fields.
 func (r *CancelAssignmentRequest) Validate() error {
+	if strings.TrimSpace(r.Reason) == "" && strings.TrimSpace(r.CancellationReason) != "" {
+		r.Reason = strings.TrimSpace(r.CancellationReason)
+	}
 	if strings.TrimSpace(r.Reason) == "" {
 		return errors.New("cancellation reason is required")
 	}

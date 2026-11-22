@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -108,6 +109,14 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 				return nil, fmt.Errorf("failed to split host/port: %w", err)
 			}
 
+			// In containerized dev/test environments where allowPrivateHosts is enabled,
+			// route loopback targets to host gateway if configured
+			if sc.allowPrivateHosts && (host == "localhost" || host == "127.0.0.1") {
+				if gw := os.Getenv("WEBHOOK_LOCAL_HOST_GATEWAY"); gw != "" {
+					host = gw
+				}
+			}
+
 			// Check if host is direct IP
 			if directIP := net.ParseIP(host); directIP != nil {
 				if !sc.allowPrivateHosts && IsPrivateOrBlockedIP(directIP) {
@@ -132,9 +141,17 @@ func NewSafeClient(timeout time.Duration, allowPrivateHosts bool, resolver Resol
 				}
 			}
 
-			// Dial first safe IP directly
-			safeTarget := net.JoinHostPort(ips[0].IP.String(), port)
-			return dialer.DialContext(ctx, network, safeTarget)
+			// Try dialing safe IPs in order (handles dual-stack IPv4/IPv6 fallback)
+			var lastErr error
+			for _, ipAddr := range ips {
+				safeTarget := net.JoinHostPort(ipAddr.IP.String(), port)
+				conn, err := dialer.DialContext(ctx, network, safeTarget)
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			return nil, lastErr
 		},
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,

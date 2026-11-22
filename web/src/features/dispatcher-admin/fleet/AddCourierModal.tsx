@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { ApiError } from "../api";
-import { listUsers } from "../admin-console/consoleApi";
 import {
   AdminDialog,
   Banner,
@@ -20,16 +19,17 @@ import {
   FieldHint,
 } from "../admin-console/ui";
 import {
+  listCourierCandidates,
   registerCourier,
+  type CourierCandidate,
   type CourierCreateInput,
   type VehicleType,
   type ZoneOption,
 } from "./fleetApi";
-import type { User } from "@/shared/types/auth";
 
 // Adds a courier profile for an account that already has the COURIER role (dispatch API.md
-// section 1). An admin picks the account from the courier accounts that have no profile yet.
-// A dispatcher cannot read the user list, so they enter the account id they were given.
+// section 1). Both admins and dispatchers query the dedicated candidates endpoint to pick an
+// unprovisioned courier account, with a manual UUID entry fallback.
 
 const VEHICLES: { value: VehicleType; label: string }[] = [
   { value: "MOTORCYCLE", label: "Motorcycle" },
@@ -59,8 +59,8 @@ const FIELD_FOR: Record<string, keyof Errors> = {
 
 interface AddCourierModalProps {
   token: string | null;
-  /** ADMIN picks from a list; DISPATCHER enters an account id. */
-  canListUsers: boolean;
+  /** Retained for backwards-compatibility; candidate listing is available for all staff */
+  canListUsers?: boolean;
   zones: ZoneOption[];
   /** Accounts that already have a fleet profile, so they are not offered again. */
   existingIds: Set<string>;
@@ -70,14 +70,14 @@ interface AddCourierModalProps {
 
 export const AddCourierModal: React.FC<AddCourierModalProps> = ({
   token,
-  canListUsers,
   zones,
   existingIds,
   onClose,
   onSaved,
 }) => {
-  const [accounts, setAccounts] = useState<User[] | null>(null);
-  const [accountsError, setAccountsError] = useState<ApiError | null>(null);
+  const [candidates, setCandidates] = useState<CourierCandidate[] | null>(null);
+  const [candidatesError, setCandidatesError] = useState<ApiError | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
   const [userId, setUserId] = useState("");
   const [code, setCode] = useState("");
   const [vehicle, setVehicle] = useState<VehicleType>("MOTORCYCLE");
@@ -88,37 +88,35 @@ export const AddCourierModal: React.FC<AddCourierModalProps> = ({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!canListUsers) return;
     let cancelled = false;
-    listUsers(token, "COURIER", 200)
-      .then((res) => !cancelled && setAccounts(res.users))
-      .catch(
-        (err) =>
-          !cancelled &&
-          setAccountsError(
+    listCourierCandidates(token)
+      .then((res) => !cancelled && setCandidates(res))
+      .catch((err) => {
+        if (!cancelled) {
+          setCandidatesError(
             err instanceof ApiError
               ? err
-              : new ApiError(0, "UNKNOWN", "Couldn't load courier accounts."),
-          ),
-      );
+              : new ApiError(0, "UNKNOWN", "Couldn't load courier candidates."),
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [canListUsers, token]);
+  }, [token]);
 
   const available = useMemo(
-    () => (accounts ?? []).filter((u) => !existingIds.has(u.id)),
-    [accounts, existingIds],
+    () => (candidates ?? []).filter((c) => !existingIds.has(c.user_id)),
+    [candidates, existingIds],
   );
-  const noAccounts =
-    canListUsers && accounts !== null && available.length === 0;
+  const noCandidates = candidates !== null && available.length === 0;
 
   const validate = (): Errors => {
     const e: Errors = {};
     if (!userId.trim())
-      e.user = canListUsers
-        ? "Choose a courier account."
-        : "Enter the courier account id.";
+      e.user = manualEntry
+        ? "Enter the courier account id."
+        : "Choose a courier candidate.";
     else if (!UUID.test(userId.trim()))
       e.user =
         "The account id must look like 3fa85f64-5717-4562-b3fc-2c963f66afa6.";
@@ -202,20 +200,39 @@ export const AddCourierModal: React.FC<AddCourierModalProps> = ({
           )}
 
           <div className="grid content-start gap-1.5">
-            <Label htmlFor="fleet-user">
-              {canListUsers ? "Courier account" : "Courier account id"}
-            </Label>
-            {canListUsers ? (
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="fleet-user">
+                {manualEntry ? "Courier account id" : "Courier candidate"}
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto p-0 text-xs text-text-muted hover:text-text"
+                onClick={() => {
+                  setManualEntry(!manualEntry);
+                  setUserId("");
+                  setErrors((x) => ({ ...x, user: undefined }));
+                }}
+                data-testid="fleet-toggle-entry-mode"
+              >
+                {manualEntry
+                  ? "Choose from eligible candidates"
+                  : "Enter UUID manually"}
+              </Button>
+            </div>
+
+            {!manualEntry ? (
               <>
-                {accountsError && (
-                  <Banner tone="err" reference={accountsError.correlationId}>
-                    {accountsError.message}
+                {candidatesError && (
+                  <Banner tone="err" reference={candidatesError.correlationId}>
+                    {candidatesError.message}
                   </Banner>
                 )}
-                {accounts === null && !accountsError && (
-                  <FieldHint>Loading courier accounts…</FieldHint>
+                {candidates === null && !candidatesError && (
+                  <FieldHint>Loading eligible courier candidates…</FieldHint>
                 )}
-                {noAccounts && (
+                {noCandidates && (
                   <Banner tone="info" testId="fleet-add-no-accounts">
                     Every account with the Courier role already has a profile.
                     To add someone new, first give their account the Courier
@@ -238,17 +255,13 @@ export const AddCourierModal: React.FC<AddCourierModalProps> = ({
                         errors.user ? "fleet-user-error" : undefined
                       }
                     >
-                      <SelectValue placeholder="Choose an account" />
+                      <SelectValue placeholder="Choose a candidate" />
                     </SelectTrigger>
                     <SelectContent>
-                      {available.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.display_name ||
-                            [u.first_name, u.last_name]
-                              .filter(Boolean)
-                              .join(" ") ||
-                            u.email}{" "}
-                          · {u.email}
+                      {available.map((c) => (
+                        <SelectItem key={c.user_id} value={c.user_id}>
+                          {c.display_name || c.email} · {c.email}{" "}
+                          {c.phone ? `(${c.phone})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -275,8 +288,7 @@ export const AddCourierModal: React.FC<AddCourierModalProps> = ({
                 />
                 {!errors.user && (
                   <FieldHint id="fleet-user-hint">
-                    Ask an admin for the account id from Users and roles. The
-                    account must have the Courier role.
+                    Enter the 36-character UUID of an account possessing the Courier role.
                   </FieldHint>
                 )}
               </>
@@ -406,7 +418,7 @@ export const AddCourierModal: React.FC<AddCourierModalProps> = ({
           </Button>
           <Button
             type="submit"
-            disabled={saving || noAccounts}
+            disabled={saving || (!manualEntry && noCandidates)}
             data-testid="fleet-add-save-btn"
           >
             {saving ? <Busy label="Adding..." /> : "Add courier"}

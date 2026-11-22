@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,9 +11,11 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/swiftdrop/tracking/internal/domain"
+	"github.com/swiftdrop/tracking/internal/dto"
 )
 
 var _ TrackingRepository = (*PostgresTrackingRepository)(nil)
+var _ NotificationRepository = (*PostgresTrackingRepository)(nil)
 
 // PostgresTrackingRepository implements TrackingRepository against PostgreSQL
 // with strictly read-only semantics.
@@ -559,4 +562,123 @@ func (r *PostgresTrackingRepository) FindTrackingSummary(ctx context.Context, tr
 	}
 
 	return parcel, records, nil
+}
+
+// ListRecentNotifications retrieves the latest notifications for a user or dispatcher role.
+func (r *PostgresTrackingRepository) ListRecentNotifications(ctx context.Context, userID string, limit int) ([]dto.InAppNotificationDTO, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, r.queryTimeout)
+	defer cancel()
+
+	const query = `
+		SELECT
+			id, user_id, tenant_id, event_type, aggregate_id, title, body, metadata, is_read, created_at
+		FROM user_notifications
+		WHERE user_id = $1 OR user_id = 'role:DISPATCHER'
+		ORDER BY created_at DESC
+		LIMIT $2;
+	`
+
+	rows, err := r.db.QueryContext(queryCtx, query, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifs []dto.InAppNotificationDTO
+	for rows.Next() {
+		var (
+			n        dto.InAppNotificationDTO
+			tenantID sql.NullString
+			metaRaw  []byte
+		)
+		err := rows.Scan(
+			&n.ID,
+			&n.UserID,
+			&tenantID,
+			&n.EventType,
+			&n.AggregateID,
+			&n.Title,
+			&n.Body,
+			&metaRaw,
+			&n.IsRead,
+			&n.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan notification: %w", err)
+		}
+		if tenantID.Valid {
+			t := tenantID.String
+			n.TenantID = &t
+		}
+		if len(metaRaw) > 0 {
+			var meta map[string]any
+			if json.Unmarshal(metaRaw, &meta) == nil {
+				n.Metadata = meta
+			}
+		}
+		notifs = append(notifs, n)
+	}
+	return notifs, rows.Err()
+}
+
+// GetUnreadNotificationCount counts unread notifications for a user or dispatcher role.
+func (r *PostgresTrackingRepository) GetUnreadNotificationCount(ctx context.Context, userID string) (int, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, r.queryTimeout)
+	defer cancel()
+
+	const query = `
+		SELECT COUNT(*)
+		FROM user_notifications
+		WHERE (user_id = $1 OR user_id = 'role:DISPATCHER')
+		  AND is_read = false;
+	`
+	var count int
+	err := r.db.QueryRowContext(queryCtx, query, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count unread notifications: %w", err)
+	}
+	return count, nil
+}
+
+// ResolveParcelStatusEvent enriches an asynchronous status event when only parcel_id is present.
+func (r *PostgresTrackingRepository) ResolveParcelStatusEvent(ctx context.Context, parcelID string) (trackingNumber string, status string, statusHistoryID string, occurredAt time.Time, err error) {
+	if r.db == nil {
+		return "", "", "", time.Time{}, domain.ErrDatabaseUnavailable
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, r.queryTimeout)
+	defer cancel()
+
+	const parcelQuery = `
+		SELECT tracking_number, status
+		FROM parcels
+		WHERE id = $1
+		LIMIT 1;
+	`
+	if err := r.db.QueryRowContext(timeoutCtx, parcelQuery, parcelID).Scan(&trackingNumber, &status); err != nil {
+		return "", "", "", time.Time{}, err
+	}
+
+	const historyQuery = `
+		SELECT id, to_status, occurred_at
+		FROM parcel_status_history
+		WHERE parcel_id = $1
+		ORDER BY occurred_at DESC, id DESC
+		LIMIT 1;
+	`
+	var histStatus string
+	if err := r.db.QueryRowContext(timeoutCtx, historyQuery, parcelID).Scan(&statusHistoryID, &histStatus, &occurredAt); err == nil {
+		if histStatus != "" {
+			status = histStatus
+		}
+	} else {
+		statusHistoryID = parcelID
+		occurredAt = time.Now().UTC()
+	}
+
+	return trackingNumber, status, statusHistoryID, occurredAt, nil
 }

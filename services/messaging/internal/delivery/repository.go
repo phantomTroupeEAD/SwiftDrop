@@ -35,6 +35,8 @@ type Repository interface {
 
 	InsertNotification(ctx context.Context, task NotificationTask) error
 	InsertWebhook(ctx context.Context, task WebhookTask) error
+	InsertInAppNotification(ctx context.Context, n InAppNotification) error
+	GetParcelOwnership(ctx context.Context, parcelID string) (senderID *string, merchantID *string, err error)
 	GetMerchantTargets(ctx context.Context, merchantID, eventType string) ([]MerchantWebhookTarget, error)
 	GetEndpointByID(ctx context.Context, endpointID string) (*MerchantWebhookTarget, error)
 }
@@ -479,4 +481,76 @@ func (r *PostgresDeliveryRepository) GetEndpointByID(ctx context.Context, endpoi
 	}
 	tgt.SubscribedEventTypes = []string(types)
 	return &tgt, nil
+}
+
+// InsertInAppNotification inserts an in-app user notification into user_notifications table.
+func (r *PostgresDeliveryRepository) InsertInAppNotification(ctx context.Context, n InAppNotification) error {
+	const query = `
+		INSERT INTO user_notifications (
+			id, user_id, tenant_id, event_type, aggregate_id, title, body, metadata, is_read, created_at
+		) VALUES (
+			COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()),
+			$2, $3, $4, $5, $6, $7,
+			CASE WHEN $8::text = '' OR $8 IS NULL THEN '{}'::jsonb ELSE $8::jsonb END,
+			false,
+			CASE WHEN $9 = '0001-01-01 00:00:00Z'::timestamptz OR $9 IS NULL THEN now() ELSE $9 END
+		);
+	`
+	var metaStr string
+	if len(n.Metadata) > 0 {
+		metaStr = string(n.Metadata)
+	} else {
+		metaStr = "{}"
+	}
+
+	createdAt := n.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
+	_, err := r.db.ExecContext(
+		ctx,
+		query,
+		n.ID,
+		n.UserID,
+		n.TenantID,
+		n.EventType,
+		n.AggregateID,
+		n.Title,
+		n.Body,
+		metaStr,
+		createdAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert in-app notification: %w", err)
+	}
+	return nil
+}
+
+// GetParcelOwnership retrieves sender_id and merchant_id for a parcel.
+func (r *PostgresDeliveryRepository) GetParcelOwnership(ctx context.Context, parcelID string) (*string, *string, error) {
+	const query = `
+		SELECT sender_id, merchant_id
+		FROM parcels
+		WHERE id = $1;
+	`
+	var senderID, merchantID sql.NullString
+	err := r.db.QueryRowContext(ctx, query, parcelID).Scan(&senderID, &merchantID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("failed to get parcel ownership: %w", err)
+	}
+
+	var sID, mID *string
+	if senderID.Valid && senderID.String != "" {
+		s := senderID.String
+		sID = &s
+	}
+	if merchantID.Valid && merchantID.String != "" {
+		m := merchantID.String
+		mID = &m
+	}
+	return sID, mID, nil
 }

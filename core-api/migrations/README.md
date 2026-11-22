@@ -41,3 +41,33 @@ Automated testing in [`migrations_test.go`](migrations_test.go) enforces:
    - All migrations apply (`Up`).
    - All migrations roll back completely leaving 0 application tables (`Down`).
    - All migrations re-apply cleanly from scratch (`Up`).
+
+---
+
+## 4. Migration Catalog & Table Schemas
+
+### `20261120000001_create_user_notifications`
+- **Direction:** `20261120000001_create_user_notifications.up.sql` / `20261120000001_create_user_notifications.down.sql`
+- **Domain Scope:** User In-App Notifications & Event Fanout
+- **Table:** `user_notifications`
+
+#### Schema Definition
+| Column | Type | Constraints / Defaults | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY DEFAULT gen_random_uuid()` | Unique notification identifier |
+| `user_id` | `TEXT` | `NOT NULL` | Target recipient user ID |
+| `tenant_id` | `TEXT` | `NULL` | Tenant/Merchant scope identifier (optional) |
+| `event_type` | `TEXT` | `NOT NULL` | Originating domain event type (e.g. `parcel.booked.v1`) |
+| `aggregate_id` | `TEXT` | `NOT NULL` | ID of the source aggregate root |
+| `title` | `TEXT` | `NOT NULL` | Notification headline |
+| `body` | `TEXT` | `NOT NULL` | Full notification message body |
+| `metadata` | `JSONB` | `NOT NULL DEFAULT '{}'` | Additional payload context & attributes |
+| `is_read` | `BOOLEAN` | `NOT NULL DEFAULT FALSE` | Read status flag |
+| `created_at` | `TIMESTAMPTZ` | `NOT NULL DEFAULT now()` | Event receipt & record creation timestamp |
+| `read_at` | `TIMESTAMPTZ` | `NULL` | Timestamp when user marked notification as read |
+
+#### Indexes
+- `idx_user_notifications_user_unread ON user_notifications (user_id, is_read, created_at DESC)`: Optimizes user inbox feed queries for unread notifications and pagination.
+- `idx_user_notifications_tenant ON user_notifications (tenant_id, created_at DESC) WHERE tenant_id IS NOT NULL`: Partial index for tenant-scoped notification queries and filtering.
+- `idx_user_notifications_created_at ON user_notifications (created_at)`: Supports retention cleanup, archival, and time-range filtering.
+

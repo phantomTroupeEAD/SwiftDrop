@@ -15,10 +15,11 @@ import (
 )
 
 type mockDeliveryRepo struct {
-	mu            sync.Mutex
-	notifications []delivery.NotificationTask
-	webhooks      []delivery.WebhookTask
-	targets       []delivery.MerchantWebhookTarget
+	mu                 sync.Mutex
+	notifications      []delivery.NotificationTask
+	webhooks           []delivery.WebhookTask
+	inAppNotifications []delivery.InAppNotification
+	targets            []delivery.MerchantWebhookTarget
 }
 
 func newMockDeliveryRepo() *mockDeliveryRepo {
@@ -107,6 +108,18 @@ func (m *mockDeliveryRepo) GetEndpointByID(ctx context.Context, endpointID strin
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockDeliveryRepo) InsertInAppNotification(ctx context.Context, n delivery.InAppNotification) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.inAppNotifications = append(m.inAppNotifications, n)
+	return nil
+}
+
+func (m *mockDeliveryRepo) GetParcelOwnership(ctx context.Context, parcelID string) (*string, *string, error) {
+	s := "user-mock-sender"
+	return &s, nil, nil
 }
 
 type mockAcknowledger struct {

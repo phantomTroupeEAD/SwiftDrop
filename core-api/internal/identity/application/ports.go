@@ -46,6 +46,10 @@ type TokenProvider interface {
 // used to verify email ownership before account creation.
 type OTPRepository interface {
 	SaveOTP(ctx context.Context, email, code string) error
+	// VerifyOTP checks a code with the same expiry and attempt rules as VerifyAndConsumeOTP
+	// (a wrong code uses up one of the same attempts) but keeps the code on success, so a
+	// later step can still consume it.
+	VerifyOTP(ctx context.Context, email, code string) error
 	VerifyAndConsumeOTP(ctx context.Context, email, code string) error
 	CheckCooldown(ctx context.Context, email string) error
 }

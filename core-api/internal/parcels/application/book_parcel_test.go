@@ -224,6 +224,44 @@ func (m *mockParcelRepo) UpdateStatus(ctx context.Context, q db.Querier, parcel 
 	return nil
 }
 
+func (m *mockParcelRepo) List(ctx context.Context, q db.Querier, filter ParcelFilter, page, pageSize int) ([]domain.Parcel, int, error) {
+	if m.findErr != nil {
+		return nil, 0, m.findErr
+	}
+	var res []domain.Parcel
+	for _, p := range m.parcels {
+		if filter.SenderID != nil && (p.SenderID == nil || *p.SenderID != *filter.SenderID) {
+			continue
+		}
+		if filter.MerchantID != nil && (p.MerchantID == nil || *p.MerchantID != *filter.MerchantID) {
+			continue
+		}
+		if filter.Status != nil && string(p.Status) != *filter.Status {
+			continue
+		}
+		if filter.ZoneID != nil && p.OriginZoneID != *filter.ZoneID && p.DestinationZoneID != *filter.ZoneID {
+			continue
+		}
+		res = append(res, p)
+	}
+	total := len(res)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []domain.Parcel{}, total, nil
+	}
+	end := offset + pageSize
+	if end > total {
+		end = total
+	}
+	return res[offset:end], total, nil
+}
+
 func (m *mockParcelRepo) ListByMerchantID(ctx context.Context, q db.Querier, merchantID string) ([]domain.Parcel, error) {
 	if m.findErr != nil {
 		return nil, m.findErr

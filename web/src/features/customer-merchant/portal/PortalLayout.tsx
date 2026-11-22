@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { LogIn, LogOut, Package } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
+import { NotificationBell } from '@/shared/components/NotificationBell';
 import { portalRequest, PortalError, statusLabel } from './api';
 
 type PortalProfile = 'public' | 'customer' | 'merchant' | 'dispatcher' | 'courier';
@@ -39,9 +40,12 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
           <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
           SwiftDrop
         </Link>
-        {user
-          ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
-          : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
+        <div className="flex items-center gap-2">
+          {user && <NotificationBell />}
+          {user
+            ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
+            : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
+        </div>
         <nav aria-label="Portal navigation">
           {(profile === 'customer' || profile === 'merchant') && <NavLink to="/dashboard" end>Home</NavLink>}
           {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
@@ -52,10 +56,12 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
             <NavLink to="/portal/merchants/orders">Orders</NavLink>
             <NavLink to="/portal/merchants/api-keys">API keys</NavLink>
             <NavLink to="/portal/merchants/webhooks">Webhooks</NavLink>
+            <NavLink to="/portal/merchants/docs">API docs</NavLink>
           </>}
-          {profile === 'public'
-            ? <NavLink to="/track">Track a parcel</NavLink>
-            : profile === 'courier' ? <NavLink to="/courier/dashboard" end>Delivery tasks</NavLink> : profile === 'dispatcher' ? <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink> : <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+          {profile === 'customer' && <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
+          {profile === 'public' && <NavLink to="/track">Track a parcel</NavLink>}
+          {profile === 'courier' && <NavLink to="/courier/dashboard" end>Delivery tasks</NavLink>}
+          {profile === 'dispatcher' && <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink>}
           {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
         </nav>
       </header>

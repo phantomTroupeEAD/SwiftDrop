@@ -53,6 +53,36 @@ Onboards an existing authenticated user into the operational courier delivery fl
 
 ---
 
+## 1.1 List Eligible Courier Candidates
+
+Retrieves active identity users holding the `COURIER` role who do not yet have an active operational profile in the delivery fleet. Used by the Dispatcher frontend to populate onboarding dropdown selections without requiring manual UUID entry.
+
+- **Method / Path:** `GET /api/v1/dispatch/couriers/candidates`
+- **Auth Required:** Bearer JWT (`ADMIN`, `DISPATCHER`)
+- **Headers:** 
+  - `Authorization: Bearer <token>`
+
+### Success Response (`200 OK`)
+```json
+{
+  "data": [
+    {
+      "user_id": "018f4a7c-1003-7000-8000-000000000003",
+      "display_name": "Kamal Perera",
+      "email": "courier@swiftdrop.local",
+      "phone": "+94770000003"
+    }
+  ]
+}
+```
+
+### Error Responses
+- `401 Unauthorized`: `AUTH_UNAUTHORIZED` — Missing or expired bearer token.
+- `403 Forbidden`: `AUTH_FORBIDDEN` — Caller lacks `DISPATCHER` or `ADMIN` role.
+- `503 Service Unavailable`: `DATABASE_UNAVAILABLE` — Database connection is offline.
+
+---
+
 ## 2. List Couriers by Zone
 
 Retrieves active couriers and their concurrent parcel workload counts, optionally filtered by delivery zone.
@@ -104,6 +134,16 @@ Retrieves an operational snapshot of pending unassigned parcels and current cour
         "recipient_city": "Colombo",
         "status": "CREATED",
         "created_at": "2026-11-02T09:15:00Z"
+      }
+    ],
+    "assigned_parcels": [
+      {
+        "id": "7fa85f64-5717-4562-b3fc-2c963f66afa8",
+        "tracking_number": "SD-20261102-1002",
+        "weight_kg": 4.0,
+        "recipient_city": "Colombo",
+        "status": "ASSIGNED",
+        "courier_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
       }
     ],
     "courier_loads": [
@@ -170,10 +210,15 @@ Assigns an eligible parcel (`CREATED` or `ATTEMPT_FAILED`) to an on-shift courie
 
 ## 5. Cancel Courier Assignment
 
-Cancels an active assignment, freeing up driver capacity and reverting the parcel to `CREATED`.
+Cancels an active assignment, freeing up driver capacity and reverting the parcel status to `CREATED`.
 
 - **Method / Path:** `POST /api/v1/dispatch/assignments/{id}/cancel`
 - **Auth Required:** Bearer JWT (`DISPATCHER`, `ADMIN`)
+- **Headers:**
+  - `Authorization: Bearer <token>`
+  - `Content-Type: application/json`
+
+> **Note on `{id}` parameter:** The URL path parameter `{id}` accepts the target parcel UUID. Active assignment resolution fetches and locks the active assignment record for the specified parcel atomically.
 
 ### Request Body
 ```json
@@ -181,6 +226,7 @@ Cancels an active assignment, freeing up driver capacity and reverting the parce
   "reason": "Courier vehicle mechanical breakdown on route"
 }
 ```
+*(Accepts either `"reason"` or `"cancellation_reason"` for maximum client backward-compatibility).*
 
 ### Success Response (`200 OK`)
 ```json
@@ -234,15 +280,24 @@ Dispatcher approves and authorizes a new delivery reattempt for a parcel previou
 
 ## 7. Toggle Courier Shift
 
-Transitions a courier between operational shift states (`ON_SHIFT`, `OFF_SHIFT`, `ON_BREAK`).
+Transitions a courier between operational shift states (`ON_SHIFT`, `OFF_SHIFT`, `ON_BREAK`). Supports self-service toggling by couriers as well as administrative override by dispatchers/admins.
 
 - **Method / Path:** `POST /api/v1/courier/shift`
 - **Auth Required:** Bearer JWT (`COURIER`, `DISPATCHER`, `ADMIN`)
 
 ### Request Body
+#### Courier Self-Service:
 ```json
 {
   "target_status": "ON_SHIFT"
+}
+```
+
+#### Administrative Override (Dispatcher / Admin):
+```json
+{
+  "courier_id": "018f4a7c-1003-7000-8000-000000000008",
+  "target_status": "ON_BREAK"
 }
 ```
 

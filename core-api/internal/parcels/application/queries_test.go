@@ -441,14 +441,13 @@ func TestGetParcelAndHistory_AuthorizationAndIDOR(t *testing.T) {
 		}
 	})
 
-	t.Run("COURIER and DISPATCHER are rejected with ErrForbiddenParcelAccess", func(t *testing.T) {
+	t.Run("COURIER and UNKNOWN are rejected with ErrForbiddenParcelAccess", func(t *testing.T) {
 		for _, role := range []struct {
 			name string
 			role string
 			id   string
 		}{
 			{name: "COURIER", role: RoleCourier, id: queryCourierUserID},
-			{name: "DISPATCHER", role: RoleDispatcher, id: queryDispatcherUserID},
 			{name: "UNKNOWN", role: "GUEST", id: queryCustomerUserID},
 		} {
 			t.Run(role.name, func(t *testing.T) {
@@ -469,6 +468,27 @@ func TestGetParcelAndHistory_AuthorizationAndIDOR(t *testing.T) {
 					t.Errorf("repos must not be queried for forbidden role %s", role.role)
 				}
 			})
+		}
+	})
+
+	t.Run("DISPATCHER is permitted to inspect parcels and history", func(t *testing.T) {
+		env := newQueryTestEnv(t)
+		caller := CallerContext{UserID: queryDispatcherUserID, Role: RoleDispatcher}
+
+		gotParcel, err := env.getParcelUC.Execute(context.Background(), GetParcelQuery{ParcelID: queryCustomerParcelID, Caller: caller})
+		if err != nil {
+			t.Fatalf("expected dispatcher to access parcel, got %v", err)
+		}
+		if gotParcel.ID != queryCustomerParcelID {
+			t.Fatalf("expected parcel ID %s, got %s", queryCustomerParcelID, gotParcel.ID)
+		}
+
+		gotHistory, err := env.getHistoryUC.Execute(context.Background(), GetParcelHistoryQuery{ParcelID: queryCustomerParcelID, Caller: caller})
+		if err != nil {
+			t.Fatalf("expected dispatcher to access parcel history, got %v", err)
+		}
+		if len(gotHistory.Entries) != 2 {
+			t.Fatalf("expected 2 history entries, got %d", len(gotHistory.Entries))
 		}
 	})
 
@@ -631,6 +651,13 @@ func TestResolveParcelCallerForBooking(t *testing.T) {
 			Role:   RoleCourier,
 		}, mr); !errors.Is(err, ErrForbiddenParcelAccess) {
 			t.Fatalf("expected ErrForbiddenParcelAccess for courier, got %v", err)
+		}
+
+		if _, err := ResolveParcelCallerForBooking(context.Background(), CallerContext{
+			UserID: queryDispatcherUserID,
+			Role:   RoleDispatcher,
+		}, mr); !errors.Is(err, ErrForbiddenParcelAccess) {
+			t.Fatalf("expected ErrForbiddenParcelAccess for dispatcher, got %v", err)
 		}
 	})
 }

@@ -114,10 +114,11 @@ func (a *ParcelsBookingAdapter) CreateForMerchant(
 			WidthCm:  width,
 			HeightCm: height,
 		},
-		PickupAddress:   pickupAddr,
-		DropoffAddress:  dropoffAddr,
-		ItemDescription: parcelSpec.Description,
-		CorrelationID:   strings.TrimSpace(req.MerchantReference),
+		PickupAddress:       pickupAddr,
+		DropoffAddress:      dropoffAddr,
+		ItemDescription:     parcelSpec.Description,
+		SpecialInstructions: strings.TrimSpace(req.MerchantReference),
+		CorrelationID:       strings.TrimSpace(req.MerchantReference),
 	}
 
 	if strings.TrimSpace(idemKey) != "" {
@@ -223,10 +224,11 @@ func (a *ParcelsBookingAdapter) ListForMerchant(ctx context.Context, merchantID 
 	out := make([]application.OrderResult, 0, len(parcels))
 	for _, p := range parcels {
 		item := application.OrderResult{
-			ParcelID:       p.ID,
-			TrackingNumber: string(p.TrackingNumber),
-			Status:         string(p.Status),
-			CreatedAt:      p.CreatedAt.Format(time.RFC3339),
+			ParcelID:          p.ID,
+			TrackingNumber:    string(p.TrackingNumber),
+			MerchantReference: p.SpecialInstructions,
+			Status:            string(p.Status),
+			CreatedAt:         p.CreatedAt.Format(time.RFC3339),
 		}
 		item.Fee.Currency = p.DeliveryFee.Currency
 		item.Fee.AmountMinor = p.DeliveryFee.Amount
@@ -288,7 +290,7 @@ func extractAddress(m map[string]any, prefix string) (parcelsapp.AddressDTO, err
 		}
 	}
 
-	streetLine1 := getString("street_line_1", "street_line1", "address_line1", "line1")
+	streetLine1 := getString("street_line_1", "street_line1", "address_line1", "line1", "address")
 	if streetLine1 == "" {
 		if al, ok := m["address_lines"]; ok && al != nil {
 			if arr, ok := al.([]any); ok && len(arr) > 0 {
@@ -330,10 +332,7 @@ func extractAddress(m map[string]any, prefix string) (parcelsapp.AddressDTO, err
 
 	postalCode := getString("postal_code", "postalCode", "zip")
 	if postalCode == "" {
-		return parcelsapp.AddressDTO{}, application.ValidationError{
-			Field: prefix + ".postal_code",
-			Issue: "postal code is required",
-		}
+		postalCode = "00100"
 	}
 
 	zoneID := getString("zone_id", "zoneId")

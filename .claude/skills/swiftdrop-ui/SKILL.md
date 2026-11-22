@@ -12,23 +12,21 @@ Follow this every time you create, change or review a screen in `web/`. It point
 | File | What it is for |
 | :-- | :-- |
 | `AGENTS.md` (section "React & TypeScript Frontend", Rules 1 to 9) | Binding frontend rules. Rule 4 freezes `web/design.md`, `web/tailwind.config.js`, `web/src/index.css`, `web/components.json` and every primitive in `web/src/shared/components/ui/`. Rule 9 freezes the legacy ledger. |
-| `web/design.md` | **Canonical design spec.** Tokens, role palettes, radii, typography, component rules, UI states, banned patterns. Do not edit it unless a human explicitly asks. If it conflicts with `web/public/scratch-apple.html`, stop and ask. |
+| `web/design.md` | **Canonical design spec** ("Waybill", adopted 2026-11-20). Tokens, role scopes, radii, fonts, component rules, UI states, banned patterns, decision log. Do not edit it unless a human explicitly asks. `web/public/scratch-apple.html` is history only and no longer the visual origin. |
 | `web/design.mdx` | **Process.** Action rules (section 2), role profiles (section 4), the screen brief (section 5), the review checklist (section 7). Its older shared-colour and role-palette tables are superseded by `design.md`; where numbers differ, `design.md` wins. |
 | `web/test-ids.md` | Stable test selectors. Add or update an entry when a testable control changes. |
 | `web/README.md`, `web/API.md` | Routes, role access, consumed API contracts. |
 | `web/scripts/lint-ui.mjs` | The guardrails CI enforces (see section 3). |
 | `core-api/internal/<module>/API.md` | The backend contract for the screen's data. Check it before building. |
 
-## 2. Role presets
+## 2. Role scopes and colour
 
-Put `data-role="ADMIN"` (or the role) on the screen's root wrapper (AGENTS.md Rule 6). The tokens in `web/src/index.css` then cascade. Never write the hex values in feature code; use `bg-primary`, `text-primary`, `ring-ring` and the other token classes.
+Put `data-role="ADMIN"` (or the role) on the screen's root wrapper (AGENTS.md Rule 6). Every role currently uses the same signal colour (`#c2410c`, dark `#f08c5a`); the role is shown as a label, not a colour (`design.md` section 3, pending Design Owner confirmation). Never write hex values in feature code; use token classes:
 
-| Role | Primary | Hover | Tint |
-| :-- | :-- | :-- | :-- |
-| `ADMIN` | `#18181b` (dark mode `#e4e4e7`) | `#27272a` | `rgba(24,24,27,.08)` |
-| `COURIER` | `#b45309` | `#92400e` | `rgba(180,83,9,.08)` |
-
-Other roles for reference: `PUBLIC` and `CUSTOMER` `#0071e3`, `MERCHANT` `#0b5955`, `DISPATCHER` `#1e40af`. Primary foreground is white. Check `design.md` section 3 for the current values. Use the role colour only for the main action, focus ring and active selection (colour budget about 3 percent). Status badges keep their own colours and never take the role colour.
+- Paper and ink: `bg-canvas`, `bg-surface`, `bg-surface-subtle`, `bg-surface-active`, `text-text`, `text-text-muted`, `border-border`, `border-border-strong`.
+- Signal: `bg-primary`, `text-primary`, `text-primary-hover` (orange text on paper), `ring-ring`. Use it only for the main action, focus ring and current selection.
+- Ink areas (ops sidebar, dark bands, label-card strips): `bg-chrome`, `text-chrome-foreground`, `text-chrome-muted`, `border-chrome-line`, `bg-chrome-hover`, `text-chrome-accent`.
+- Status: `Badge` variants; in-progress statuses use `status-info-*`, never the brand colour.
 
 ## 3. Hard rules (CI fails on these)
 
@@ -46,8 +44,8 @@ Also banned by `design.md`: any shadow (`shadow-*`, blur radius above 0; depth c
 
 From `design.md` sections 2, 5 and 6; confirm there before relying on a number.
 
-- **Type:** page title 32px/700, section heading 19px/600, card title 15px/600, body 14px, controls 13.5px, table headers and captions 12px. Tracking numbers, weights, money, timestamps and coordinates use `font-mono` with tabular numerals.
-- **Spacing:** page container max 1200px (fluid wider screens are allowed per the decision log), padding 32px 40px desktop and 20px 16px on phones; grid gap 20px; form rows 16px; label to input 6px.
+- **Type:** Space Grotesk for headings (`font-display`, the default for `h1`–`h3`), Inter for text, JetBrains Mono (`font-mono`) for tracking numbers, weights, money, timestamps, ids and table headers. Page title 32px/700, section heading 19px/600, card title 15px/600, body 14px, controls 13.5px, table headers and captions 12px mono uppercase.
+- **Spacing:** fluid page container up to 1600px, side padding 16px on phones and 32–56px on wider screens; grid gap 20px; form rows 16px; label to input 6px.
 - **Radii:** buttons, inputs, selects, textarea, badges 8px; cards, tables, popovers 12px; dialogs and sheets 16px; pills and dots full.
 - **Touch targets:** primary controls must be at least 44px high on phones (below 900px) and always on courier screens. Use the `touch:` variants (`touch:min-h-[44px]` is already built into the Button and Input primitives).
 - **Icons:** `lucide-react`, stroke width 2, size 15px in nav and actions, 22px in card headers, 24px in empty states.

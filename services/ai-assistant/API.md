@@ -31,7 +31,7 @@ The AI Assistant service exposes approved read-only tools via the Model Context 
 ### 2.1 `track_parcel_status`
 - **Description:** Retrieve real-time tracking milestones, status description, and destination city for a parcel.
 - **Parameters:**
-  - `tracking_number` (string, required): Parcel tracking code matching pattern `^SD-\d{8}-\d{5}$` (e.g. `SD-20261102-00001`).
+  - `tracking_number` (string, required): Parcel tracking code matching canonical Crockford Base32 pattern `^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$` (e.g. `SD-20261120-JR47QE` or `SD-20261117-EPV1M4`).
 - **Target Upstream Endpoint:** `GET http://tracking-api:8081/api/v1/tracking/public/{tracking_number}`
 - **Security & Privacy:** Strictly enforces SEC-009 privacy masking (omits phone numbers, street addresses, driver notes).
 - **Generative UI Action:** Returns `VIEW_TRACKING` / `NAVIGATE_TRACKING` action card targeting `/track/{tracking_number}`.

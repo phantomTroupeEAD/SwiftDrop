@@ -27,7 +27,9 @@ function ShipmentOverview({ merchant, token }: { merchant: boolean; token: strin
     const options = { token, signal: controller.signal };
     const request = merchant
       ? portalRequest<Shipment[]>('/merchant/orders', options)
-      : portalRequest<{ items: Shipment[] }>('/parcels?page=1&page_size=20', { ...options, allowUnwrapped: true }).then(data => data.items);
+      : portalRequest<{ items: Shipment[] } | Shipment[]>('/parcels?page=1&page_size=20', { ...options, allowUnwrapped: true }).then(
+          data => (Array.isArray(data) ? data : data?.items ?? [])
+        );
     void request.then(rows => {
       if (!Array.isArray(rows)) throw new Error('Unexpected shipment list');
       if (!controller.signal.aborted) setResult({ rows });

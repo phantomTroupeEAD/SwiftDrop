@@ -13,6 +13,7 @@ The `tracking` service is a standalone read-optimized projection service designe
 - Public tracking lookup by canonical tracking number (`SD-YYYYMMDD-XXXXXX`).
 - Authenticated tracking lookup with ownership authorization (`GET /api/v1/tracking/{tracking_number}`).
 - Canonical Server-Sent Events (SSE) streaming (`GET /api/v1/tracking/public/{tracking_number}/stream`).
+- Authenticated in-app notification streaming via SSE (`GET /api/v1/notifications/stream`).
 - Strict SEC-009 public data sanitization and PII redaction.
 - Production RabbitMQ consumer (`q.tracking.updates`) ingesting parcel lifecycle events.
 - Redis 7 Pub/Sub horizontal fan-out on channel `tracking:updates` across Tracking API replicas.
@@ -40,3 +41,5 @@ The `tracking` service is a standalone read-optimized projection service designe
 | 2026-11-10 | Phase 3 | Authenticated Tracking REST API, HS256 JWT verification, customer & merchant ownership authorization | Member 5 |
 | 2026-11-10 | Phase 4 | Standalone SSE streaming infrastructure, heartbeat, reconnect, backpressure, event source abstraction | Member 5 |
 | 2026-11-10 | Phase 5 | Production RabbitMQ consumer (`q.tracking.updates`), Redis Pub/Sub (`tracking:updates`), `status_history_id` correlation, idempotency deduplicator, and live SSE integration | Member 5 |
+| 2026-11-20 | In-Web Notifications Phase 2 | Authenticated SSE notification stream (`/api/v1/notifications/stream`), UserEventHub, unread counter push, initial hydration from `user_notifications` | Member 5 |
+| 2026-11-20 | Phase 6 | Added PostgreSQL fallback resolution (`ResolveParcelStatusEvent`) in RabbitMQ consumer for cross-module live browser SSE tracking streams | Member 5 & Member 10 |

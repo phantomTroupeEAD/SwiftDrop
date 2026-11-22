@@ -86,6 +86,10 @@ func (s *idorMockStorage) GetStatusWithLock(ctx context.Context, tx *sql.Tx, par
 	return st, s.attemptNums[parcelID], nil
 }
 
+func (s *idorMockStorage) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 func (s *idorMockStorage) Write(ctx context.Context, tx *sql.Tx, aggregateType string, aggregateID uuid.UUID, aggregateVersion int, eventType string, payload any, correlationID string) error {
 	return nil
 }

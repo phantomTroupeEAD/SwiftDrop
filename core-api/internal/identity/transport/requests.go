@@ -18,6 +18,13 @@ type SendOTPRequest struct {
 	Email string `json:"email"`
 }
 
+// VerifyOTPRequest defines the JSON payload for checking a registration code before the
+// customer enters their details.
+type VerifyOTPRequest struct {
+	Email string `json:"email"`
+	OTP   string `json:"otp"`
+}
+
 // RegisterRequest defines the full JSON payload for OTP-verified customer registration.
 type RegisterRequest struct {
 	Email         string `json:"email"`

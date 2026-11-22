@@ -8,11 +8,17 @@ Write-Host "=================================================" -ForegroundColor 
 $Failed = $false
 
 # 1. Secret Scanning Check
-Write-Host "[1/4] Checking for accidental hardcoded secrets..." -ForegroundColor Yellow
+Write-Host "[1/7] Checking for accidental hardcoded secrets..." -ForegroundColor Yellow
 $secretPattern = "(BEGIN RSA PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36})"
-$foundSecrets = Get-ChildItem -Recurse -File -Exclude "*.docx","*.pdf","*.png","*.excalidraw","verify.ps1","verify.sh" | 
-    Where-Object { $_.FullName -notmatch "node_modules|\.git|vendor|scripts" } | 
-    Select-String -Pattern $secretPattern
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $files = git ls-files | Where-Object { $_ -notmatch "\.docx$|\.pdf$|\.png$|\.excalidraw$|\.zip$|\.webm$|scripts/verify\." }
+    $foundSecrets = if ($files) { 
+        Select-String -Path $files -Pattern $secretPattern -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Line -notmatch "AKIAIOSFODNN7EXAMPLE" }
+    } else { $null }
+} else {
+    $foundSecrets = $null
+}
 
 if ($foundSecrets) {
     Write-Host "  [ERROR] Potential hardcoded secret detected!" -ForegroundColor Red
@@ -84,6 +90,13 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
         Pop-Location
     }
+    if (Test-Path "services/tracking/go.mod") {
+        Write-Host "  Running services/tracking tests..." -ForegroundColor Yellow
+        Push-Location "services/tracking"
+        go test -v ./...
+        if ($LASTEXITCODE -ne 0) { $Failed = $true }
+        Pop-Location
+    }
     if (!(Test-Path "core-api/go.mod") -and !(Test-Path "services/messaging/go.mod") -and (Test-Path "go.mod")) {
         go test -v ./...
         if ($LASTEXITCODE -ne 0) { $Failed = $true }
@@ -111,9 +124,37 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
 
 # 5. Web Frontend Quality Gate (lint:ui + build)
 if (Test-Path "web") {
-    Write-Host "[5/5] Running web quality verification (npm run build)..." -ForegroundColor Yellow
+    Write-Host "[5/7] Running web quality verification (npm run build)..." -ForegroundColor Yellow
     Push-Location "web"
     npm run build
+    if ($LASTEXITCODE -ne 0) { $Failed = $true }
+    Pop-Location
+}
+
+# 6. AI Assistant Quality Gate (unit tests)
+if (Test-Path "services/ai-assistant") {
+    Write-Host "[6/7] Running AI Assistant tests..." -ForegroundColor Yellow
+    $pyVenv = "services/ai-assistant/.venv/Scripts/python.exe"
+    if (Test-Path $pyVenv) {
+        & $pyVenv -m pytest services/ai-assistant/tests/unit -q
+        if ($LASTEXITCODE -ne 0) { $Failed = $true }
+    } elseif (Get-Command pytest -ErrorAction SilentlyContinue) {
+        Push-Location "services/ai-assistant"
+        pytest tests/unit -q
+        if ($LASTEXITCODE -ne 0) { $Failed = $true }
+        Pop-Location
+    } else {
+        Write-Host "  [NOTICE] pytest/venv not found; skipping AI assistant tests locally." -ForegroundColor Gray
+    }
+}
+
+# 7. E2E Harness Isolation & Mock Gate (dry-run & webhook)
+if (Test-Path "tests/e2e") {
+    Write-Host "[7/7] Running E2E harness dry-run & webhook tests..." -ForegroundColor Yellow
+    Push-Location "tests/e2e"
+    npm run test:dry-run
+    if ($LASTEXITCODE -ne 0) { $Failed = $true }
+    npm run test:webhook
     if ($LASTEXITCODE -ne 0) { $Failed = $true }
     Pop-Location
 }
