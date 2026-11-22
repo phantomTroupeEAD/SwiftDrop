@@ -472,6 +472,37 @@ definitions:
       width_cm:
         type: number
     type: object
+  internal_pricing_transport.PricingRuleResponse:
+    properties:
+      base_fee_cents:
+        type: integer
+      base_weight_kg:
+        type: number
+      created_at:
+        type: string
+      currency:
+        type: string
+      destination_zone_id:
+        type: string
+      effective_from:
+        type: string
+      effective_until:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      max_weight_kg:
+        type: number
+      origin_zone_id:
+        type: string
+      per_kg_rate_cents:
+        type: integer
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -752,6 +783,68 @@ paths:
       summary: Retry failed webhook delivery
       tags:
       - events
+  /api/v1/admin/pricing-rules:
+    get:
+      description: Retrieves a paginated list of geographic pricing rules / tariffs
+        for administrators.
+      parameters:
+      - default: 1
+        description: Page number, starting from 1
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Number of items per page (1-100)
+        in: query
+        name: per_page
+        type: integer
+      - description: Filter by origin zone ID (e.g. ZONE_WESTERN_01)
+        in: query
+        name: origin_zone_id
+        type: string
+      - description: Filter by destination zone ID (e.g. ZONE_CENTRAL_01)
+        in: query
+        name: destination_zone_id
+        type: string
+      - description: Filter by active status (true/false)
+        in: query
+        name: is_active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated pricing rules
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PaginatedEnvelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_pricing_transport.PricingRuleResponse'
+                  type: array
+              type: object
+        "401":
+          description: Missing or invalid Bearer token
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: 'Forbidden: role is not ADMIN'
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "422":
+          description: Semantic validation failure (e.g. invalid zone format or paging)
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List delivery pricing rules (admin)
+      tags:
+      - admin-pricing
   /api/v1/admin/reports/deliveries:
     get:
       parameters:
