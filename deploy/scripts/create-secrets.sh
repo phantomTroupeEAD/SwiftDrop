@@ -64,7 +64,7 @@ create_from_env event-worker-secrets
 
 # --- RabbitMQ ---
 MQ_PASS="$(rand 24)"
-printf 'RABBITMQ_DEFAULT_USER=swiftdrop\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_URL=amqp://swiftdrop:%s@rabbitmq:5672/\n' "$MQ_PASS" "$MQ_PASS" > "$TMP/rabbitmq-secrets.env"
+printf 'RABBITMQ_DEFAULT_USER=swiftdrop\nRABBITMQ_DEFAULT_PASS=%s\nRABBITMQ_URL=amqp://swiftdrop:%s@rabbitmq.swiftdrop.svc.cluster.local:5672/\n' "$MQ_PASS" "$MQ_PASS" > "$TMP/rabbitmq-secrets.env"
 create_from_env rabbitmq-secrets
 
 # --- core-api (+ the same webhook key for the worker) ---

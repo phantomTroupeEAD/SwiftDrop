@@ -18,7 +18,7 @@ Variables shared across multiple backend services and daemons:
 | `DATABASE_URL` | PostgreSQL connection DSN (`postgres://user:pass@host:5432/dbname?sslmode=disable`). Each service logs in with its own role (D6): core-api `swiftdrop_app`, tracking `swiftdrop_tracking_ro`, relay `swiftdrop_relay`, worker `swiftdrop_worker`, reconciler `swiftdrop_reconciler`. In Kubernetes the value comes from the matching key of `postgres-secrets` (§7). Never the `swiftdrop` superuser. | `postgres://swiftdrop_app:<change-me-local-only>@postgres:5432/swiftdrop_db?sslmode=disable` | **Yes** | **Yes** | Core API, Tracking, Outbox Relay, Event Worker, Reconciler |
 | `DB_MAX_OPEN_CONNS` | Maximum database connection pool size per pod (D8 budget: Core 12, Tracking 5, Relay 5, Worker 10, Reconciler 2; max 105 active vs 150 server limit). | `12` | No | No | Core API, Tracking, Outbox Relay |
 | `DB_MAX_IDLE_CONNS` | Maximum idle connection pool size per pod. | `5` | No | No | Core API, Tracking, Outbox Relay |
-| `RABBITMQ_URL` | AMQP 0-9-1 connection URI (cluster user `swiftdrop`, vhost `/`). | `amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/` | **Yes** | **Yes** | Outbox Relay, Event Worker, Tracking |
+| `RABBITMQ_URL` | AMQP 0-9-1 connection URI (cluster user `swiftdrop`, vhost `/`). On Kubernetes the host is `rabbitmq.swiftdrop.svc.cluster.local`, because KEDA reads this URL from the `keda` namespace, where the short name `rabbitmq` does not resolve. Compose keeps `rabbitmq`. | `amqp://swiftdrop:swiftdrop_dev@rabbitmq:5672/` | **Yes** | **Yes** | Outbox Relay, Event Worker, Tracking |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`| OpenTelemetry Collector gRPC/HTTP endpoint. | `http://tempo:4317` | No | No | Core API, Tracking, Worker |
 
 ---
