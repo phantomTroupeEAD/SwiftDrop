@@ -70,6 +70,8 @@ npx playwright install chromium
 
 | Command | Environment | Description |
 | :--- | :---: | :--- |
+| **`npm run demo`** | Real Stack | **SwiftDrop Evaluator Demo-as-Code Showcase:** Complete 16-step end-to-end automated walkthrough with live Apple-grade HUD commentary, natural human-paced typing, admin setup, customer booking, dispatching, mobile courier POD, tracking, merchant onboarding, bulk CSV import (32 orders), API key generation, Swagger UI OpenAPI order execution, webhook delivery, and viewer inspection. |
+| **`npm run demo:headed`** | Visual | Runs the Evaluator Demo-as-Code Showcase in a visible browser window with cinematic HUD commentary and natural human typing. |
 | **`npm run test:12-users`** | Real Stack | **12-User Cross-Module Real-World Workflow Automation Suite:** Master 5-step serial journey executing all 12 distinct actors across all 6 roles (3 Customers, 2 Merchants, 3 Couriers, 2 Dispatchers, 1 Admin, 1 Public Guest) across the full parcel lifecycle. |
 | **`npm run test:rbac-matrix`** | Real Stack | **Master Every-Button & Strict 6-Role RBAC Matrix Suite:** Exercises every UI button, modal, canvas, toggle, and external link across Courier PWA and Admin/Ops Console, synchronized with DB state, followed by strict 6-role privilege enforcement ("no less, no more"). |
 | **`npm run test:admin-ops`** | Real Stack | **Master Admin Operations E2E Suite (Flow 14):** Validates PR #99 Admin UI Part 2: Merchants management (/ops/merchants, review, approval, suspend with reason validation, reinstate, disable), audit log integration, pricing rules management (/ops/pricing fallback & CRUD), and users pagination controls (/ops/users). |
@@ -117,7 +119,16 @@ tests/e2e/
 ├── helpers/                       # Cross-Cutting Quality Helpers
 │   ├── selectors.ts               # Authoritative data-testid contract registry across all 5 portals
 │   ├── sseListener.ts             # Async Server-Sent Events stream subscriber for live tracking
+│   ├── mailpitHelper.ts           # Real Mailpit transactional email OTP retrieval
+│   ├── dbReset.ts                 # Clean DB reset leaving canonical Admin account
 │   └── evidence.ts                # Automated full-page screenshot & .zip trace bundler for grading
+│
+├── demo/                          # Evaluator Demo-as-Code Showcase
+│   ├── evaluator-demo.spec.ts     # Master 16-step serial demonstration walkthrough
+│   └── helpers/                   # Demo-specific presenters & utilities
+│       ├── hud.ts                 # Apple-grade glassmorphic presenter HUD banner
+│       ├── typing.ts              # Natural human typing & fast-typing simulators
+│       └── csvGenerator.ts        # Valid 32-order bulk merchant CSV generator
 │
 ├── flows/                         # End-to-End Journey Specifications
 │   ├── real-system-12-user-workflows.spec.ts # Master 12-User Cross-Module Real-World Workflow Automation Suite (12 Distinct Actors, All 6 Roles)

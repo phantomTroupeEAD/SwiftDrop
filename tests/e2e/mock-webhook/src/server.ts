@@ -95,6 +95,7 @@ function handleWebhook(tenant: 'alpha' | 'beta' | 'gamma' | 'omega') {
 }
 
 // 1. Registered Merchant Receivers
+app.post('/webhook', handleWebhook('alpha'));
 app.post('/webhooks/merchant-alpha', handleWebhook('alpha'));
 app.post('/webhooks/merchant-beta', handleWebhook('beta'));
 app.post('/webhooks/merchant-gamma', handleWebhook('gamma'));
@@ -206,6 +207,10 @@ app.post('/api/test-trigger', (req: Request, res: Response) => {
 });
 
 app.get('/dashboard', (_req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, '../public/dashboard.html'));
+});
+
+app.get('/viewer', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, '../public/dashboard.html'));
 });
 

@@ -13,6 +13,7 @@ var UnifiedSwaggerJSON []byte
 // RegisterSwaggerRoutes registers the Swagger UI and spec endpoints on the multiplexer.
 func RegisterSwaggerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /swagger/", handleSwaggerUnifiedUI)
+	mux.HandleFunc("GET /swagger/index.html", handleSwaggerUnifiedUI)
 	mux.HandleFunc("GET /swagger/spec.json", handleUnifiedSpec)
 	mux.HandleFunc("GET /swagger/swagger.json", handleUnifiedSpec)
 	mux.HandleFunc("GET /api/v1/openapi.json", handleUnifiedSpec)
@@ -44,7 +45,9 @@ func handleUnifiedSpec(w http.ResponseWriter, _ *http.Request) {
 
 func handleSwaggerUnifiedUI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/swagger/")
-	if path != "" && !strings.HasSuffix(path, "/") {
+	if path == "index.html" || path == "index.html/" {
+		path = ""
+	} else if path != "" && !strings.HasSuffix(path, "/") {
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
 		return
 	}
