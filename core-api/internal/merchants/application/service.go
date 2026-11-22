@@ -187,6 +187,9 @@ func (s *Service) ChangeStatus(ctx context.Context, a Actor, merchantID string, 
 				return err
 			}
 		case domain.ActionDisable:
+			if err := s.Roles.RevokeMerchantRole(ctx, q, v.OwnerUserID); err != nil {
+				return err
+			}
 			nk, err := s.Creds.RevokeAll(ctx, q, v.ID, now)
 			if err != nil {
 				return err

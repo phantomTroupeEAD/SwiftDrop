@@ -93,7 +93,7 @@ def test_mock_adapter_tracking_query_missing_code():
         adapter = MockLLMAdapter()
         response = await adapter.generate_reply("Can you track my package please?", [], uuid4())
 
-        assert "SD-YYYYMMDD-XXXXX" in response.reply
+        assert "SD-YYYYMMDD-XXXXXX" in response.reply
         assert len(response.tools_called) == 0
     asyncio.run(_test())
 

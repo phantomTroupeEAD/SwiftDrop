@@ -82,7 +82,7 @@ func ValidateTransition(from, to ParcelStatus, attemptCount int) error {
 		}
 
 	case StatusAssigned:
-		if to == StatusPickedUp {
+		if to == StatusPickedUp || to == StatusOutForDelivery {
 			return nil
 		}
 

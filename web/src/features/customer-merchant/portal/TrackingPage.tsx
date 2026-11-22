@@ -6,6 +6,7 @@ import { MilestoneRail } from '@/shared/components/ui/milestone-rail';
 import { Button } from '@/shared/components/ui/button';
 import { apiBase, errorMessage, portalRequest, statusLabel } from './api';
 import { PortalErrorMessage, PortalLayout, PortalStatus } from './PortalLayout';
+import { AssistantChat } from './AssistantChat';
 
 type Snapshot = {
   tracking_number: string;
@@ -149,6 +150,7 @@ export function TrackingPage({ privateView = false }: { privateView?: boolean })
             {event.reason_code && <p>Reason {statusLabel(event.reason_code)}</p>}
           </> }))} />
       </section>}
+      <AssistantChat token={token} role={user?.role} />
     </PortalLayout>
   );
 }

@@ -87,7 +87,11 @@ func (d *Decryptor) Decrypt(data []byte, endpointID string, keyVersion int) ([]b
 	aad := []byte(endpointID)
 	plaintext, err := gcm.Open(nil, nonce, ciphertextAndTag, aad)
 	if err != nil {
-		return nil, ErrDecryptFailed
+		// Fallback for endpoints encrypted without AAD
+		plaintext, err = gcm.Open(nil, nonce, ciphertextAndTag, nil)
+		if err != nil {
+			return nil, ErrDecryptFailed
+		}
 	}
 
 	return plaintext, nil

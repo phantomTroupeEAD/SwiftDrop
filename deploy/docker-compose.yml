@@ -51,7 +51,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-swiftdrop_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/bootstrap-roles.sql:/docker-entrypoint-initdb.d/01-bootstrap-roles.sql:ro
@@ -304,6 +304,10 @@ services:
       - NOTIFICATION_PROVIDER=mock
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
+      - WEBHOOK_ALLOW_PRIVATE_HOSTS=${WEBHOOK_ALLOW_PRIVATE_HOSTS:-true}
+      - WEBHOOK_LOCAL_HOST_GATEWAY=${WEBHOOK_LOCAL_HOST_GATEWAY:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

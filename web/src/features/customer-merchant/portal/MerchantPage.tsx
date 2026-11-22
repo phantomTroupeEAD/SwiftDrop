@@ -52,6 +52,54 @@ function OneTimeSecret({ secret, close }: { secret: string; close: () => void })
   </DialogContent></Dialog>;
 }
 
+function ConfirmRemovalDialog({
+  remove,
+  section,
+  pending,
+  actionError,
+  onConfirm,
+  onClose,
+}: {
+  remove: { id: string; label: string };
+  section: Section;
+  pending: boolean;
+  actionError: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}>
+      <DialogContent
+        showClose={!pending}
+        className="space-y-4 p-6"
+        aria-label="Confirm credential removal"
+        onEscapeKeyDown={event => { if (pending) event.preventDefault(); }}
+        onInteractOutside={event => event.preventDefault()}
+      >
+        <DialogTitle>{section === 'api-keys' ? 'Revoke API key' : 'Remove webhook'}</DialogTitle>
+        <DialogDescription className="break-all text-text">
+          <strong className="font-semibold text-text">{remove.label}</strong>{' '}
+          {section === 'api-keys' ? 'will no longer be able to authenticate requests.' : 'will stop receiving SwiftDrop events.'}
+        </DialogDescription>
+        <PortalErrorMessage message={actionError} />
+        <div className="m6-actions">
+          <Button
+            variant="destructive"
+            disabled={pending}
+            data-testid="merchant-credential-confirm-btn"
+            onClick={onConfirm}
+          >
+            {section === 'api-keys' ? (pending ? 'Revoking key…' : 'Revoke key') : (pending ? 'Removing webhook…' : 'Remove webhook')}
+          </Button>
+          <Button variant="outline" disabled={pending} onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function MerchantPage({ section }: { section: Section }) {
   const { accessToken } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -134,7 +182,10 @@ export function MerchantPage({ section }: { section: Section }) {
         const events = data.getAll('event');
         if (!events.length) throw new PortalError('Select at least one event.', 400);
         const url = String(data.get('url'));
-        if (!url.startsWith('https://')) throw new PortalError('Enter an HTTPS endpoint.', 400);
+        const allowHttpDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!url.startsWith('https://') && !(allowHttpDev && (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')))) {
+          throw new PortalError('Enter an HTTPS endpoint.', 400);
+        }
         const result = await portalRequest<{ signing_secret: string }>(path, {
           token: accessToken, method: 'POST', body: { url, events },
         });
@@ -237,23 +288,23 @@ export function MerchantPage({ section }: { section: Section }) {
           <Button variant="outline" disabled={pending} data-testid="merchant-webhook-delete-btn"
             onClick={() => setRemove({ id: hook.webhook_id, label: hook.url })}>Remove</Button>
         </div>) : <p>No webhooks yet.</p>}
-        {remove && <section className="m6-confirmation" aria-label="Confirm credential removal">
-          <h3>{section === 'api-keys' ? 'Revoke API key' : 'Remove webhook'}</h3>
-          <p><strong>{remove.label}</strong> {section === 'api-keys' ? 'will no longer be able to authenticate requests.' : 'will stop receiving SwiftDrop events.'}</p>
-          <PortalErrorMessage message={actionError} />
-          <div className="m6-actions">
-          <Button variant="destructive" disabled={pending} data-testid="merchant-credential-confirm-btn"
-            onClick={() => void mutate(async () => {
-              await portalRequest(`${path}/${encodeURIComponent(remove.id)}`, { token: accessToken, method: 'DELETE' });
-              setRemove(undefined);
-              setNotice(section === 'api-keys' ? 'API key revoked.' : 'Webhook removed.');
-            })}>{section === 'api-keys' ? (pending ? 'Revoking key…' : 'Revoke key') : (pending ? 'Removing webhook…' : 'Remove webhook')}</Button>
-          <Button variant="outline" disabled={pending} onClick={() => { setRemove(undefined); setActionError(''); }}>Cancel</Button>
-          </div>
-        </section>}
       </section>
     </>}
     {secret && <OneTimeSecret secret={secret} close={() => setSecret('')} />}
+    {remove && (
+      <ConfirmRemovalDialog
+        remove={remove}
+        section={section}
+        pending={pending}
+        actionError={actionError}
+        onConfirm={() => void mutate(async () => {
+          await portalRequest(`${path}/${encodeURIComponent(remove.id)}`, { token: accessToken, method: 'DELETE' });
+          setRemove(undefined);
+          setNotice(section === 'api-keys' ? 'API key revoked.' : 'Webhook removed.');
+        })}
+        onClose={() => { setRemove(undefined); setActionError(''); }}
+      />
+    )}
   </PortalLayout>;
 }
 

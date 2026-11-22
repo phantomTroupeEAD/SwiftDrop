@@ -7,7 +7,7 @@ const MOCK_USERS: Record<string, { role: string; name: string; tenant_id: string
   'admin@swiftdrop.local': { role: 'ADMIN', name: 'System Administrator', tenant_id: null },
   'dispatcher@swiftdrop.local': { role: 'DISPATCHER', name: 'Central Dispatcher', tenant_id: null },
   'courier@swiftdrop.local': { role: 'COURIER', name: 'Kamal Perera (Courier)', tenant_id: null },
-  'merchant@vendor.com': { role: 'MERCHANT', name: 'Colombo Tech Stores', tenant_id: 'mrc_01HMERCHANTTENANT00001' },
+  'merchant@vendor.com': { role: 'MERCHANT', name: 'Colombo Tech Stores', tenant_id: '018f4a7c-1004-7000-9000-000000000004' },
   'customer@swiftdrop.local': { role: 'CUSTOMER', name: 'Nimal Fernando', tenant_id: null },
 };
 
@@ -219,6 +219,12 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      // Never inline font files as data: URLs. The production CSP (default-src 'self', no
+      // font-src) blocks data: fonts, so small subsets would fail to load. Other assets keep
+      // Vite's default 4 KB inline rule (returning undefined).
+      assetsInlineLimit: (filePath: string) => (/\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined),
+    },
     server: {
       port: 3000,
       proxy: {
@@ -235,6 +241,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/api': {
+          target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
+        '/swagger': {
           target: env.SWIFTDROP_CORE_API_URL || 'http://127.0.0.1:8080',
           changeOrigin: true,
         },

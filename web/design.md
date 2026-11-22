@@ -1,287 +1,219 @@
 # SwiftDrop UI Design System Specification (`design.md`)
 
-> **Status:** Canonical Living Specification | **Visual Origin (Frozen):** `web/public/scratch-apple.html`  
-> **Authority:** Layer 2 Architecture & Domain Contract. Binding on all human developers and AI coding agents.  
-> **Modification Governance:** Modified **strictly by explicit human instruction**. Never self-extended or altered by agents. If this document and `scratch-apple.html` ever conflict, stop and request clarification.
+> **Status:** Canonical Living Specification | **Visual origin:** the "SwiftDrop UI Redesign" design canvas (Foundations, Foundations: dark mode and UI states boards), agreed by the team on 2026-11-20. It replaces `web/public/scratch-apple.html`, which is kept only as history.
+> **Authority:** Layer 2 Architecture & Domain Contract. Binding on all human developers and AI coding agents.
+> **Modification Governance:** Modified **strictly by explicit human instruction**. Never self-extended or altered by agents. Record every change in the decision log at the end.
+
+The look is called **Waybill**: paper and ink with one signal colour, borrowed from shipping labels. Tracking numbers, money and times are always set in mono.
 
 ---
 
 ## 1. Architectural Invariants & Core Philosophy
 
-1. **Primitive Substrate:** Built exclusively on `@/shared/components/ui/` using shadcn/ui primitives rethemed to Apple Human Interface Guidelines (HIG). Feature code **must never** import `@radix-ui/*` directly or write ad-hoc interactive primitives.
-2. **Color Budget $\le$ 3%:** Color is strictly reserved for actionable primary controls, data status indicators, and active selection state. Page canvases and card surfaces remain pure neutrals.
-3. **Zero-Elevation Invariant:** No component or overlay possesses rest blur shadows (no `shadow-sm`, `shadow-md`, `shadow-lg`, or blur radius $> 0\text{px}$). Depth is achieved exclusively via 1px hairline borders (`var(--border)`) and tone steps (`var(--surface-subtle)`). All shadcn/ui default drop-shadows are strictly stripped.
-4. **Canonical Archetype:** **Apple Cupertino Precision** (`[data-style="apple"]`). All other archetypes in `scratch-apple.html` (`linear`, `framed`, `swiftsig`) and demo palette swatches (`Emerald Green`, `Crimson Rose` outside errors) are demo-only and **strictly forbidden** in product code.
-5. **Reconciled Effective Radii:** The product ships with verified Apple HIG radii per the design owner's §6.0 disposition:
-   - Controls / Badges / Tags / Inputs / Textarea / Buttons (default & sm) / Select / Tabs Bar: `8px` (`--radius-sm`)
-   - Cards / Data Tables / Popovers / Dropdowns: `12px` (`--radius-md`)
-   - Modals / Sheets / Dialogs: `16px` (`--radius-lg`)
-   - Inner Tabs Trigger & Tooltips: `4px` (scratch L449, L1016)
-   - Pills / Status Dots / Avatars: `9999px` (`--radius-full`)
-6. **Missing-Component Protocol:** If a required component, variant, or state is missing from `@/shared/components/ui/`, **stop and flag it in the pull request description**. Never improvise, never inline-style a substitute, and never execute `shadcn add` without explicit permission.
+1. **Primitive Substrate:** Built on `@/shared/components/ui/` (shadcn/ui primitives rethemed to Waybill). Feature code **must never** import `@radix-ui/*` directly or write ad-hoc interactive primitives.
+2. **Colour budget:** Signal orange is reserved for the main action in an area, the focus ring and the current step or selection. Pages and cards stay paper and white. Ink (`chrome`) is used for the ops sidebar, dark bands on public pages and label-card header strips.
+3. **Zero-Elevation Invariant:** No blurred shadows anywhere (`shadow-sm` … `shadow-2xl` are banned). Depth comes from 1px borders and tone steps. 0-blur rings (focus ring, selected-row inset bar) are allowed.
+4. **No glass or decoration effects:** no `backdrop-blur`, gradient washes, glow orbs or blurred background photos.
+5. **Radii:** controls, badges, inputs, buttons, toasts `8px` (`--radius-sm`); cards, tables, popovers, dropdowns `12px` (`--radius-md`); dialogs and sheets `16px` (`--radius-lg`); dots, avatars, switch tracks full. Tooltips and inner tab triggers `4px`.
+6. **Missing-Component Protocol:** If a required component, variant or state is missing from `@/shared/components/ui/`, **stop and flag it in the pull request description**. Never improvise, inline-style a substitute, or run `shadcn add` without explicit permission.
 
 ---
 
 ## 2. Design Tokens Reference
 
-### 2.1 Base Neutrals & Surfaces (Apple Archetype)
+Tokens live in `web/src/index.css` (`:root` and `[data-theme="dark"]`) and are exposed to Tailwind in `web/tailwind.config.js`. Feature code uses the Tailwind token classes only; never hex values or bracket classes (`lint:ui` enforces this).
 
-| CSS Variable | Tailwind Utility | Light Value | Dark Value (`[data-theme="dark"]`) | Usage |
-| :--- | :--- | :--- | :--- | :--- |
-| `--canvas` | `bg-canvas` | `#f5f5f7` | `#000000` | Application background behind cards and sidebars |
-| `--surface` | `bg-surface` | `#ffffff` | `#1c1c1e` | Card panels, dialog surfaces, inputs, topbars |
-| `--surface-subtle` | `bg-surface-subtle` | `#fbfbfd` | `#2c2c2e` | Secondary button fills, table headers, hover states |
-| `--surface-active` | `bg-surface-active` | `#e2e8f0` | `#27272e` | Pressed items, selected table rows |
-| `--border` | `border-border` | `rgba(0, 0, 0, 0.08)` | `rgba(255, 255, 255, 0.10)` | Hairline dividers, card outlines, table separators |
-| `--border-subtle` | `border-border-subtle` | `#edf2f7` | `#1e1e24` | Inner nested cell dividers |
-| `--text` | `text-foreground` | `#0f172a` | `#f8fafc` | Primary typography, headers, table figures |
-| `--text-muted` | `text-muted-foreground` | `#64748b` | `#94a3b8` | Form labels, helper captions, timestamp units |
-| `--text-subtle` | `text-subtle` | `#94a3b8` | `#64748b` | Disabled placeholders, inactive icons |
-| `--ring` | `ring-ring` | Scoped by role | Scoped by role | Keyboard focus ring (`0 0 0 2px var(--surface), 0 0 0 4px var(--ring)`) |
+### 2.1 Surfaces, ink and lines
 
-### 2.2 Reconciled Apple Radii
+| CSS variable | Tailwind class | Light | Dark | Usage |
+| :-- | :-- | :-- | :-- | :-- |
+| `--canvas` | `bg-canvas` | `#f5f3ee` | `#121316` | Page background ("paper") |
+| `--surface` | `bg-surface` | `#ffffff` | `#1c1e23` | Cards, inputs, header bars |
+| `--surface-subtle` | `bg-surface-subtle` | `#faf9f6` | `#24272e` | Table headers, hover |
+| `--surface-active` | `bg-surface-active` | `#ece9e2` | `#2a2d34` | Notes, neutral badges, pressed rows |
+| `--border` | `border-border` | `#e2ded5` | `#33363e` | Card outlines, dividers |
+| `--border-subtle` | `border-border-subtle` | `#efece6` | `#2a2d34` | Row dividers inside tables |
+| `--border-strong` | `border-border-strong` | `#8f897c` | `#6b6f78` | Input, select, checkbox and outline-button borders (3:1 against surface) |
+| `--text` | `text-text`, `text-foreground` | `#15171c` | `#f2efe8` | Primary text, ink |
+| `--text-muted` | `text-text-muted` | `#4a4e57` | `#a9a49a` | Body copy, labels, captions |
+| `--text-subtle` | `text-text-subtle` | `#5b5f68` | `#8c887f` | Placeholders, tertiary text |
 
-| CSS Variable | Tailwind Utility | Exact Value | Usage |
-| :--- | :--- | :--- | :--- |
-| `--radius-sm` | `rounded-sm` | `8px` | Badges, small buttons (`btn-sm`), affixes, tooltips |
-| `--radius-md` | `rounded-md` | `12px` | Inputs, default buttons, cards, table wrappers |
-| `--radius-lg` | `rounded-lg` | `16px` | Dialog modals, drawer sheets, alert containers |
-| `--radius-full` | `rounded-full` | `9999px` | Status dot indicators, toggle thumbs, circular avatars |
+### 2.2 Chrome (ink areas)
 
-### 2.3 Motion & Transition Tokens
+| CSS variable | Tailwind class | Light | Dark | Usage |
+| :-- | :-- | :-- | :-- | :-- |
+| `--chrome` | `bg-chrome` | `#15171c` | `#0b0c0e` | Ops sidebar, dark bands, label-card strips |
+| `--chrome-foreground` | `text-chrome-foreground` | `#f5f3ee` | `#f2efe8` | Text on chrome |
+| `--chrome-muted` | `text-chrome-muted` | `#c9c4b8` | `#a9a49a` | Secondary text on chrome |
+| `--chrome-line` | `border-chrome-line` | `#3a3d45` | `#2a2d34` | Dividers on chrome |
+| `--chrome-hover` | `bg-chrome-hover` | `#24272e` | `#1c1e23` | Hover on chrome nav items |
+| `--chrome-accent` | `text-chrome-accent` | `#f08c5a` | `#f08c5a` | Eyebrows and role tags on chrome |
 
-| CSS Variable | Exact Value | Usage |
-| :--- | :--- | :--- |
-| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Micro-interactions, button active press, dropdown openings |
-| `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | Shimmer sweeps, accordion collapsibles |
-| `--duration-fast` | `150ms` | Hover states, tab switches, toggle flips, tooltip fades |
-| `--duration-normal`| `220ms` | Modal zoom-ins, toast slide-ins, accordion expansions |
-| `--duration-slow`  | `350ms` | Sheet drawer entrances, full-page transitions |
+### 2.3 Signal
 
-> **Motion Guardrail:** Springs, bounces, and physics-based overshooting are strictly forbidden. When `prefers-reduced-motion: reduce` is active, all durations collapse to `0.01ms`.
+| CSS variable | Tailwind class | Light | Dark | Usage |
+| :-- | :-- | :-- | :-- | :-- |
+| `--primary` | `bg-primary`, `text-primary` | `#c2410c` | `#f08c5a` | Main action, focus ring, current step |
+| `--primary-hover` | `bg-primary-hover`, `text-primary-hover` | `#9a3412` | `#f5a97f` | Hover; orange text on paper (eyebrows, links) |
+| `--primary-foreground` | `text-primary-foreground` | `#ffffff` | `#15171c` | Text on a primary fill |
+| `--primary-tint` | `bg-primary-tint` | `rgba(194,65,12,.10)` | `rgba(240,140,90,.14)` | Text selection, light emphasis |
+| `--ring` | `ring-ring` | `#c2410c` | `#f08c5a` | Focus ring |
+
+### 2.4 Radii and motion
+
+| Variable | Value | Usage |
+| :-- | :-- | :-- |
+| `--radius-sm` | `8px` | Controls, badges, toasts, callouts |
+| `--radius-md` | `12px` | Cards, tables, popovers |
+| `--radius-lg` | `16px` | Dialogs, sheets |
+| `--radius-full` | `9999px` | Dots, avatars, switch |
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Presses, menus |
+| `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | Shimmer, accordions |
+| `--duration-fast` / `-normal` / `-slow` | `150ms` / `220ms` / `350ms` | Hover / dialogs, toasts / sheets |
+
+> **Motion guardrail:** no springs or bounces. Under `prefers-reduced-motion: reduce` every animation and transition collapses to `0.01ms`; status text must stay readable without the animation.
+
+### 2.5 Dark mode
+
+Dark mode is switched on with `data-theme="dark"` on `<html>`. It is a separate set of steps, not an inverted light theme: warm charcoal instead of pure black, a lighter signal (`#f08c5a`) with ink text on it, and darker status tints. Every token above has a dark value; never write a light-only colour in feature code.
 
 ---
 
-## 3. Canonical Role Palette Presets (`[data-role]`)
+## 3. Role Scopes
 
-Role palettes are scoped via the `[data-role="..."]` attribute on layout shells (`AppLayout` or page roots). Primary actions, focus rings, and active states automatically inherit these tokens.
+Every layout root still carries `data-role="PUBLIC" | "CUSTOMER" | "MERCHANT" | "DISPATCHER" | "COURIER" | "ADMIN"` (AGENTS.md Rule 6), and dialogs rendered in a portal receive it on `<body>`.
 
-| Role Identifier | Role Scope Selector | Primary Hex (`--primary`) | Hover Hex (`--primary-hover`) | Tint RGBA (`--primary-tint`) | Primary Foreground | Usage / Context |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Public / Visitor**| `[data-role="PUBLIC"]` | `#0071e3` | `#0077ed` | `rgba(0, 113, 227, 0.08)` | `#ffffff` | Public tracking, login, shared landing |
-| **Customer** | `[data-role="CUSTOMER"]` | `#0071e3` | `#0077ed` | `rgba(0, 113, 227, 0.08)` | `#ffffff` | Consumer booking, quote confirmation |
-| **Merchant** | `[data-role="MERCHANT"]` | `#0b5955` | `#08433f` | `rgba(11, 89, 85, 0.08)` | `#ffffff` | Bulk shipping, API keys, webhook center |
-| **Dispatcher** | `[data-role="DISPATCHER"]` | `#1e40af` | `#1e3a8a` | `rgba(30, 64, 175, 0.08)` | `#ffffff` | Routing console, manual courier assignment |
-| **Courier** | `[data-role="COURIER"]` | `#b45309` | `#92400e` | `rgba(180, 83, 9, 0.08)` | `#ffffff` | Mobile delivery runs, barcode scanner, POD |
-| **Admin** | `[data-role="ADMIN"]` | `#18181b` (dark: `#e4e4e7`) | `#27272a` (dark: `#d4d4d8`) | `rgba(24, 24, 27, 0.08)` (dark: `rgba(228, 228, 231, 0.12)`) | `#ffffff` (dark: `#18181b`) | Tariff management, user roles, system config |
+**All roles use the same signal colour.** The role is shown as a label (the ops sidebar role tag and the `ops-role-badge`), not by recolouring the interface. To bring per-role colours back, override `--primary`, `--primary-hover`, `--primary-tint` and `--ring` per `[data-role]` in `index.css`; no component changes are needed.
 
 ---
 
 ## 4. Status Badges & Lifecycle Indicators
 
-Colors in status indicators are decoupled from role themes and represent authoritative domain aggregate states. Every badge requires a 6px circular indicator dot.
+Status colours are independent of the brand colour. Every badge shows a 6px dot and an **uppercase text label** (colour is never the only signal). Use `<Badge variant="…">`.
 
-| Semantic State | Foreground Ink | Background Fill | Border Rule | Domain Lifecycle Statuses Represented |
-| :--- | :--- | :--- | :--- | :--- |
-| **Neutral** | `#64748b` (`var(--text-muted)`) | `#f1f5f9` (`var(--surface-subtle)`)| `1px solid var(--border)` | `CREATED`, `PENDING_QUOTE`, `DRAFT` |
-| **Active / Progress** | Role `--primary` | Role `--primary-tint` | `1px solid transparent` | `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY` |
-| **Success** | `#047857` (`--status-success-ink`) | `#ecfdf5` (`--status-success-bg`) | `1px solid #a7f3d0` | `DELIVERED`, `VERIFIED`, `ACTIVE`, `PAYMENT_CLEARED` |
-| **Warning** | `#b45309` (`--status-warning-ink`) | `#fffbeb` (`--status-warning-bg`) | `1px solid #fde68a` | `ATTEMPT_FAILED`, `DELAYED`, `EXPIRING_SOON` |
-| **Error / Danger** | `#b91c1c` (`--status-error-ink`) | `#fef2f2` (`--status-error-bg`) | `1px solid #fecaca` | `RETURNED`, `CANCELLED`, `LOST`, `SUSPENDED` |
+| Variant | Ink / background / border tokens | Light ink on bg | Statuses |
+| :-- | :-- | :-- | :-- |
+| `neutral` | `text-muted` / `surface-active` / `border` | `#4a4e57` on `#ece9e2` | `CREATED`, `PENDING_QUOTE`, `DRAFT`, `PENDING` |
+| `active` | `status-info-*` | `#1e40af` on `#e8eefc` | `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY` |
+| `success` | `status-success-*` | `#17663f` on `#e3f1e8` | `DELIVERED`, `VERIFIED`, `ACTIVE`, `APPROVED` |
+| `warning` | `status-warning-*` | `#8a4b00` on `#fbefd8` | `ATTEMPT_FAILED`, `DELAYED`, `EXPIRING_SOON` |
+| `error` | `status-error-*` | `#a61b12` on `#fbe7e4` | `RETURNED`, `CANCELLED`, `LOST`, `SUSPENDED`, `REJECTED` |
 
-Dark mode automatically swaps ink and background variables per `scratch-apple.html` lines 91–99.
+Dark values: info `#8ab4ff` on `#1b2a4a`, success `#6fcf97` on `#173326`, warning `#f2c14e` on `#3a2c0e`, error `#ff8a80` on `#3f1a17`.
 
 ---
 
 ## 5. Typography, Spacing & Tap Targets
 
-### 5.1 Typography Scale
-- **Display / Headers:** `-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Segoe UI", sans-serif`
-  - Page Titles: `32px` (`text-3xl`), font-weight `700`, letter-spacing `-0.03em`, line-height `1.2`
-  - Section Headlines: `19px` (`text-lg`), font-weight `600`, letter-spacing `-0.02em`
-  - Card Titles: `15px` (`text-base`), font-weight `600`, letter-spacing `-0.01em`
-- **Body & Controls:** `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Segoe UI", sans-serif`
-  - Body Text: `14px` (`text-sm`), font-weight `400` / `500`, line-height `1.5`
-  - Controls / Inputs: `13.5px`, font-weight `500`
-  - Table Headers / Captions: `12px` (`text-xs`), font-weight `500`
-- **Tabular Numerals (Strict Requirement):**
-  - Tracking numbers, weights, currencies, timestamps, and coordinates **must** use `font-mono` (`SF Mono`, monospace) with `font-variant-numeric: tabular-nums`.
+### 5.1 Fonts
 
-### 5.2 Spacing & Layout Rhythm
-- **Page Container:** Max-width `1200px`, padding `32px 40px 100px` (desktop), `20px 16px 80px` (mobile).
-- **Component Gaps:** Grid gap `20px` (`grid-2`), form row margin `16px`, label-to-input gap `6px`.
-- **Minimum Tap Target:** Primary interactive controls on mobile viewports (`max-width: 900px`) and all courier interfaces **must** have a touch target height of at least **`44px`** (or `min-h-[44px]`).
+Self-hosted through `@fontsource-variable/*` (imported in `src/main.tsx`), so the Content Security Policy needs no font hosts.
 
----
+| Role | Family | Tailwind | Used for |
+| :-- | :-- | :-- | :-- |
+| Display | Space Grotesk | `font-display` (default for `h1`–`h3`) | Page titles, section and card headings |
+| Text | Inter | `font-sans` (body default) | Body copy, labels, controls |
+| Data | JetBrains Mono | `font-mono` | Tracking numbers, money, weights, times, ids, table headers, eyebrows |
 
-## 6. Rethemed shadcn/ui Component Specifications
+### 5.2 Scale
 
-All components reside in `@/shared/components/ui/`. Feature code imports from this directory only.
+- Landing display: 48 → 72px / 700, tight tracking. Page titles: 32px / 700, `-0.03em`. Section headings: 19–20px / 600. Card titles: 15px / 600.
+- Body: 14px (ops) to 16px (public pages), line-height 1.5. Controls: 13.5px / 600 on buttons. Captions and table headers: 12px.
+- Table headers and eyebrows: mono, uppercase, `0.06em` tracking.
+- **Tabular numerals are required** for tracking numbers, weights, money, timestamps and coordinates (`font-mono`, `tabular-nums`). Money is formatted with `formatLKR(cents)`.
 
-### 6.0 Effective Radii Allocation Matrix (Apple Archetype Overrides)
-Per the canonical Apple Cupertino archetype (`[data-style="apple"]`, L110–L112) and the Design Owner Dispositions (2026-11-12), components must never use generic radii shorthands. All mappings below are verified from scratch or approved by kin derivation:
+### 5.3 Spacing and layout
 
-| Token | Exact Value | Scratch Source & Kin Derivation | Applied Primitive Categories (100% Canonical) |
-| :--- | :--- | :--- | :--- |
-| `--radius-sm` | `8px` | • `.status-badge`: L602<br>• `.input-field`: L636<br>• `.btn` / `.btn-sm`: L531, L589 (scratch 8px retained)<br>• `.callout`: L845 (scratch 8px retained)<br>• `.toast-card`: L986<br>• `.skeleton-box`: L870<br>• `.segmented-bar` (tabs list): L440<br>• Signature / camera proof: L1656, L1670<br>• `.input-affix-box`: L649 (frames L636 8px)<br>• `select` triggers & `textarea`: kin to `.input-field` (L636) | • `badge`<br>• `button` (all variants & sizes: default and sm)<br>• `input`, `textarea`, `select` triggers, `affix` containers<br>• `skeleton`<br>• `toast`<br>• `callout` containers<br>• `tabs` list container (`.segmented-bar`)<br>• signature & camera proof boxes |
-| `--radius-md` | `12px` | • `.card-panel`: L502<br>• `.card-panel-flat`: L510<br>• `.data-table-wrap`: L700<br>• `.kpi-block`: L734<br>• `popover` + `dropdown-menu`: kin to `.card-panel` (L502) | • `card` panels & KPI summary blocks<br>• `table` wrappers (`.data-table-wrap`)<br>• `popover` cards<br>• `dropdown-menu` surface |
-| `--radius-lg` | `16px` | • `.dialog-card`: L946 (canonical Apple override L112)<br>• `sheet drawers`: kin to `.dialog-card` (L946)<br>• `destructive dialogs`: canonical dialog tier | • `dialog` modal cards<br>• `sheet` drawers & slide-overs<br>• destructive confirmation dialog cards |
-| `--radius-full` | `9999px` | • `.nav-pill`: L318<br>• Circular 50% elements: `.status-dot` (L610), `.swatch-dot` (L413), `.step-dot` (L782), `.milestone-pin` (L828)<br>• `.toggle-track`: L682 (pill track)<br>• `avatar`: circular kin | • `status-dot` indicators<br>• `switch` track & thumb<br>• stepper dots, milestone pins, navigation pills<br>• `avatar` |
-| *Explicit Sub-Tokens* | `4px` | • `.tooltip-bubble`: L1016 (scratch 4px retained)<br>• `.segmented-btn`: L449 (scratch 4px retained) | • `tooltip` bubble<br>• `tabs` inner trigger buttons (`.segmented-btn`) |
-
-### 6.1 Button (`@/shared/components/ui/button.tsx`)
-- **Base shadcn:** Radix Slot wrapper with class-variance-authority.
-- **Exact Overrides from Scratch:**
-  - Active press compression: `active:scale-[0.98] transition-transform duration-100 ease-out`
-  - Default & Small radius: `rounded-[8px]` (`var(--radius-sm)` per L531; 12px proposal rejected)
-  - Min heights: Default `38px` (desktop) / `44px` (touch targets), Small `30px`.
-  - Zero shadows: replace `shadow` / `shadow-sm` with `border border-transparent`.
-- **Variants:**
-  - `primary`: `bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]`
-  - `secondary` (`tone`): `bg-[var(--surface-subtle)] text-[var(--text)] hover:bg-[var(--surface-active)]`
-  - `outline`: `bg-transparent text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface-subtle)]`
-  - `ghost`: `bg-transparent text-[var(--text)] hover:bg-[var(--surface-subtle)]`
-  - `destructive`: `bg-[var(--status-error-bg)] text-[var(--status-error-ink)] border-[var(--status-error-border)]`
-  - `link`: `text-[var(--primary)] underline-offset-4 hover:underline p-0 h-auto`
-- **Loading State:** Must accept `isLoading?: boolean`. When true, disables button, renders `<Loader2 className="w-4 h-4 animate-spin mr-2" />`, and displays `"Processing..."` or action label.
-
-### 6.2 Card & Panels (`@/shared/components/ui/card.tsx`)
-- **Base shadcn:** Div wrapper with header, title, description, content, footer.
-- **Exact Overrides from Scratch:**
-  - Remove `shadow-sm` / `shadow-md`.
-  - Border: `1px solid var(--border)` (`border-[var(--border)]`).
-  - Radius: `rounded-[12px]`.
-  - Padding: `p-[22px]` (compact: `p-4`).
-  - Background: `bg-[var(--surface)]`. Alternate flat panel: `bg-[var(--surface-subtle)] border-none`.
-
-### 6.3 Input & Select (`@/shared/components/ui/input.tsx`, `select.tsx`)
-- **Exact Overrides from Scratch:**
-  - Height: `38px` (`h-[38px]`, courier touch: `h-[44px]`).
-  - Border: `1px solid var(--border)`.
-  - Focus ring: `outline-none focus:border-[var(--ring)] focus:ring-2 focus:ring-[var(--surface)] focus:ring-offset-2 focus:ring-offset-[var(--ring)]`.
-  - Radius: `rounded-[8px]`.
-  - Font size: `13.5px`.
-  - Affix support: Inputs with left/right icons must set `pl-[38px]` / `pr-[38px]` with absolute centered icons.
-
-### 6.4 Status Badge (`@/shared/components/ui/badge.tsx`)
-- **Exact Overrides from Scratch:**
-  - Padding: `py-[2px] px-[8px]`.
-  - Radius: `rounded-[8px]`.
-  - Font: `text-[12px] font-medium leading-[1.35] whitespace-nowrap`.
-  - Structure: Flex container with child `<span className="w-1.5 h-1.5 rounded-full bg-current" />` dot followed by uppercase status string.
-
-### 6.5 Data Table (`@/shared/components/ui/table.tsx`)
-- **Exact Overrides from Scratch:**
-  - Wrapper: `border border-[var(--border)] rounded-[12px] overflow-x-auto`.
-  - Header: `bg-[var(--surface-subtle)] text-[var(--text-muted)] text-[12px] font-medium py-[10px] px-[16px] border-b border-[var(--border)]`.
-  - Cells: `py-[12px] px-[16px] border-b border-[var(--border-subtle)] text-[13px] text-[var(--text)]`.
-  - Row Hover: `hover:bg-[var(--surface-subtle)] transition-colors duration-150`.
-  - Numeric columns (weights, fees, tracking IDs): Right-aligned with `tabular-nums font-mono`.
-
-### 6.6 Dialog / Modal (`@/shared/components/ui/dialog.tsx`)
-- **Exact Overrides from Scratch:**
-  - Backdrop: `fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4 transition-opacity duration-220`.
-  - Dialog Card: `bg-[var(--surface)] border border-[var(--border)] rounded-[16px] max-w-[500px] w-full transform scale-95 data-[state=open]:scale-100 transition-transform duration-220 ease-[cubic-bezier(0.16,1,0.3,1)]`.
-  - Shadows: **Zero blur shadows** (strip `shadow-lg` / `shadow-2xl`).
-  - Structure: Header (`p-[20px_22px_14px] border-b border-[var(--border)]`), Body (`p-[20px_22px]`), Footer (`p-[14px_22px] bg-[var(--surface-subtle)] border-t border-[var(--border)] flex justify-end gap-[10px]`).
-
-### 6.7 Toast Notifications (`@/shared/components/ui/toast.tsx` / Sonner)
-- **Exact Overrides from Scratch:**
-  - Position: Bottom-right (`bottom-6 right-6`).
-  - Card: `bg-[var(--surface)] border border-[var(--border)] rounded-[8px] p-[12px_18px] flex items-center gap-3`.
-  - Shadows: **Strip all blur shadows**.
-  - Slide-in transition: `translate-y-4 data-[state=open]:translate-y-0 opacity-0 data-[state=open]:opacity-100 transition-all duration-220 ease-[cubic-bezier(0.16,1,0.3,1)]`.
-
-### 6.8 Logistics Specialized Primitives
-- **Milestone Rail (`@/shared/components/ui/milestone-rail.tsx`):**
-  - Vertical rail line: `1px solid var(--border)` positioned at `left: 6px`.
-  - Milestone pin: `14px` circle, `1px solid var(--text-muted)` at rest; active: `bg-[var(--surface)] border-[var(--primary)] ring-4 ring-[var(--primary-tint)]`; done: `bg-[var(--primary)] border-[var(--primary)]`.
-- **4-Step Wizard Stepper (`@/shared/components/ui/stepper.tsx`):**
-  - Horizontal track line: `1px solid var(--border)` at `top: 13px`.
-  - Node dot: `26px` circle; completed: `bg-[var(--primary)] text-white`; active: `bg-[var(--surface)] border-[var(--primary)] text-[var(--primary)] ring-4 ring-[var(--primary-tint)]`.
+- Content container max `1600px`, side padding `16px` on phones, `32px` on tablets, `40–56px` on desktop.
+- Grid gap `20–24px`; form rows `16px`; label to input `6px`.
+- Ops screens: ink sidebar (`w-60`) from `lg` up, with a menu button below `lg`. Public pages: single column on phones, no page-level horizontal scroll at 375px.
+- **Tap targets:** primary controls are at least **44px** high on touch devices (`touch:` variant) and always on courier screens.
 
 ---
 
-## 7. Universal UI State Machine & Patterns
+## 6. Component Specifications
 
-Every feature screen and interactive component must explicitly handle the standard 6 states:
+All components live in `@/shared/components/ui/`.
 
-| UI State | Mandatory Representation Pattern |
-| :--- | :--- |
-| **Hover** | Background transition to `--surface-subtle` or `--primary-hover` over `150ms ease`. Scale up `1.15` on color swatches only. |
-| **Active / Press** | Micro-compression `scale(0.98)` on buttons. Active indicators display `box-shadow: 0 0 0 3px var(--primary-tint)` (0 blur). |
-| **Focus** | Dual accessibility ring: `box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring)`. Never hide focus rings. |
-| **Disabled** | `opacity-45 cursor-not-allowed pointer-events-none`. Retain button dimensions. |
-| **Loading (Button)** | Button disabled, text changes to active verb (`"Saving..."`, `"Booking..."`), accompanied by animated spinner. |
-| **Loading (Page / Table)**| **Shimmer Skeleton:** Animated linear gradient sweep over `--surface-subtle`: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%)` with `1.6s infinite ease-in-out`. Never show jarring full-page blank screens. |
-| **Error (Inline)** | Red border (`--status-error-border`), light pink tint background (`--status-error-bg`), accompanied by `AlertCircle` icon and actionable remedy text. |
-| **Empty State** | Centered layout inside `card-panel`, muted `Package` or `Search` icon (24px, stroke 1.5), bold 15px title (`"No orders found"`), descriptive explanation, and a single primary action button (`"Create Booking"` or `"Reset Filters"`). |
+| Component | Waybill rules |
+| :-- | :-- |
+| **Button** | 8px radius, 600 weight, 38px (44px touch) default height, `active:scale-[0.98]`. Variants: `default` (signal fill), `outline` (white fill, `border-strong`), `secondary` (`surface-active`), `ghost`, `destructive` (error tint), `link`. One signal button per decision area; use `outline` or an ink treatment for strong secondary actions. |
+| **Badge** | 8px radius, 11.5px / 600, uppercase, `0.04em` tracking, 6px dot for status variants. |
+| **Input / Textarea / Select / Native select** | 8px radius, `bg-surface`, `border-border-strong`, 38px (44px touch) high, dual focus ring. Validation: error border plus a message beside the field that says how to fix it. |
+| **Checkbox / Switch** | `border-border-strong` outline so the control is visible at 3:1. |
+| **Card** | 12px radius, 1px `border`, `bg-surface`, padding 22px, no shadow. |
+| **Table** | Wrapper 12px radius with border. Header row `surface-subtle`, mono uppercase 12px. Numeric columns mono and right-aligned. Row hover `surface-subtle`. Wide tables scroll inside their own box. |
+| **Dialog** | 16px radius, 1px border, no shadow, max 500px; header and footer separated by borders; destructive dialogs name the target and the consequence and offer a clear cancel ("Keep pending"). |
+| **Toast** | Bottom-right, 8px radius, 1px border, no shadow. |
+| **Stepper** | Connected circles: done = ink fill with a tick, current = 2px signal ring, ahead = outlined; dashed connector ahead, solid behind. |
+| **Milestone rail (`m6-timeline`)** | 2px ink rail, ink dots, mono timestamps. Public tracking shows status, time and city only (SEC-016). |
+| **Label card** | The Waybill signature: 12px card with a 1px ink border, a `bg-chrome` header strip in mono caps, dashed (`border-dashed border-border-strong`) tear lines between sections, optional `waybill-barcode` and `waybill-route` decorations (always `aria-hidden`). Used for the tracking lookup, quotes and the courier's current stop. |
+
+Global utility classes in `index.css`: `.focus-ring`, `.waybill-barcode`, `.waybill-route` with `.waybill-stop`, `.waybill-stop--next`, `.waybill-leg`, `.waybill-leg--ahead`.
+
+---
+
+## 7. Universal UI States
+
+Every data screen handles these states (see the "UI states" board on the canvas):
+
+| State | Pattern |
+| :-- | :-- |
+| **Hover** | `surface-subtle` (or `primary-hover` on signal buttons) over 150ms. |
+| **Press** | `scale(0.98)` on buttons. |
+| **Focus** | Dual ring `0 0 0 2px var(--surface), 0 0 0 4px var(--ring)`. Never hidden. |
+| **Disabled** | `opacity: 0.45`, `cursor: not-allowed`, keeps its size and colour. |
+| **Loading (button)** | Disabled, spinner, active verb ("Saving…", "Booking…"); blocks a second submit. |
+| **Loading (page/table)** | Shimmer skeleton that keeps the layout, plus a polite `role="status"` announcement. |
+| **Empty** | Centred in a card: 24px Lucide icon, bold 15px title, one sentence, one action. Filtered empty says "No … match your filters" with **Reset filters**. |
+| **Error** | Inline alert with `AlertCircle`, a remedy, **Retry** for transient failures and the server's reference id (`correlation_id`) in mono. Conflicts (`409 CONCURRENT_MODIFICATION`) use the warning tint and say to reload. |
+| **Success** | Confirm the actual result next to the action ("Zone ZONE_GALLE_01 created."); a toast may reinforce it. |
+| **Live updates degraded** | Say that live updates are paused and how the page is updating instead. |
 
 ---
 
 ## 8. Icon System Rules (Lucide)
 
-1. **Approved Library:** `lucide-react` is the sole authorized icon library.
-2. **Standard Sizing:**
-   - Nav items & Actions: `15px x 15px` (`w-[15px] h-[15px]`)
-   - Card headers & Logistics catalog: `22px x 22px` (`w-[22px] h-[22px]`)
-   - Touch controls / Empty states: `24px x 24px`
-3. **Stroke Width:** Strictly `2px` (or `strokeWidth={2}`). Thin 1px or bold 3px strokes are forbidden.
-4. **Color Inheritance:** Icons must always use `currentColor` or `var(--primary)` to naturally inherit state transitions.
+1. `lucide-react` is the only icon library.
+2. Sizes: 15px in nav and actions, 22px in card headers, 24px in empty states and touch controls.
+3. Stroke width 2. Icons inherit `currentColor`.
+4. Decorative icons are `aria-hidden`; icon-only buttons have an `aria-label`.
 
 ---
 
-## 9. Negative Constraints & Prohibited Anti-Patterns
+## 9. Prohibited Patterns
 
-Any pull request containing the following patterns is subject to immediate rejection:
-
-- ❌ **NO Custom Button Classes:** Never write `<button className="bg-blue-600 ...">`. Use `<Button variant="...">`.
-- ❌ **NO Arbitrary Tailwind Shadows:** Classes `shadow-sm`, `shadow-md`, `shadow-lg`, `shadow-xl`, `shadow-2xl` are completely blacklisted.
-- ❌ **NO Saturated Surface Fills:** Never use saturated background fills (e.g. `bg-purple-600`, `bg-blue-500`) on page layouts or cards.
-- ❌ **NO Raw Hex / Arbitrary CSS Values:** Classes like `bg-[#0071e3]` or `text-[#123456]` are prohibited in feature code. Use token classes (`bg-[var(--primary)]` or `bg-surface`).
-- ❌ **NO Unchecked Mobile Tap Targets:** Primary action controls with heights $< 44\text{px}$ on mobile viewports are prohibited.
-- ❌ **NO Ad-Hoc Empty State Art:** Cartoon SVG vectors, emojis, or external illustrations are strictly forbidden. Use standard Lucide icons with muted typography.
+- ❌ Custom button classes or raw `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>`, `<dialog>` in feature code. Use the primitives.
+- ❌ Blurred shadows, `backdrop-blur`, glass panels, gradient washes, glow orbs.
+- ❌ Raw hex values, Tailwind palette classes (`bg-blue-600`) or bracket colour/size classes (`bg-[…]`, `text-[…]`) in feature code. Add a token instead.
+- ❌ Colour-only status. Every status has a text label.
+- ❌ Fabricated data on real pages. Sample data in a design or demo is labelled "Example" or "Sample".
+- ❌ Primary controls under 44px on touch devices.
+- ❌ Emoji, cartoon art or external illustrations in empty states.
 
 ---
 
 ## Appendix: Decision Log
 
-### 2026-11-12 — §6.0 Effective Radii Dispositions (Design Owner)
-- **APPROVED (Integrated with canonical kin citations):**
-  - `select triggers` → `8px` (kin: `.input-field` L636)
-  - `affix containers` → `8px` (`.input-affix-box` L649 verified no explicit radius; frames `.input-field` L636 8px)
-  - `popover` + `dropdown-menu` → `12px` (kin: `.card-panel` L502)
-  - `sheet drawers` → `16px` (kin: `.dialog-card` L946)
-  - `destructive dialogs` → `16px` (canonical dialog tier: `.dialog-card` L946)
-  - `avatar` → `9999px` (circular kin: `.swatch-dot` L413, `.status-dot` L610)
-- **REJECTED (Scratch values retained):**
-  - `tooltip bubble` → stays `4px` (scratch `.tooltip-bubble` L1016 retained; proposed 8px rejected)
-  - `default button` → stays `8px` (scratch `.btn` L531 retained; proposed 12px rejected)
-  - `textarea` → `8px` (kin: `.input-field` L636 control kin; proposed 12px rejected)
-  - `callout containers` → stay `8px` (scratch `.callout` L845 retained; proposed 16px rejected)
-- **CONDITIONAL (Verified from scratch):**
-  - `tabs list` container (`.segmented-bar` L440) → explicit scratch radius `8px` verified (`var(--radius-sm)`). Inner trigger button (`.segmented-btn` L449) → explicit scratch radius `4px` verified.
+### 2026-11-20 — Waybill redesign (team agreement; recorded by Member 9)
+- **Adopted:** the Waybill look from the "SwiftDrop UI Redesign" canvas. It replaces the Apple Cupertino archetype and `scratch-apple.html` as the visual origin.
+- **Tokens:** paper/ink neutrals, signal orange `#c2410c` (dark `#f08c5a`), new `chrome` family for ink areas, `border-strong` for control borders (3:1), new `status-info` family for in-progress statuses (badge `active` no longer uses the role colour).
+- **Fonts:** Space Grotesk / Inter / JetBrains Mono, self-hosted with `@fontsource-variable` (no CSP change).
+- **Role colours:** replaced by one signal colour for every role; roles are shown as labels. **Pending Design Owner confirmation**, because it supersedes the 2026-11-12 role palette decision below. Reverting is a token-only change (§3).
+- **Kept from the previous spec:** zero blur shadows, 8/12/16 radii, 44px touch targets, dual focus ring, `opacity-45` disabled, uppercase status badges, mono tabular numerals, 1600px fluid container, reduced-motion rule.
+- **Removed:** glassmorphism headers, blurred hero photos and glow orbs on the login page, invented marketing figures on the landing page.
 
-### 2026-11-12 — Role Palettes & Architecture Decisions (Design Owner)
-- **APPROVED Role Assignments:**
-  - `MERCHANT` → Swift Teal (`#0b5955` light / `#85d4b5` dark)
-  - `DISPATCHER` → Oxford Navy (`#1e40af` light / `#60a5fa` dark)
-  - `COURIER` → Logistics Amber (`#b45309` light / `#fbbf24` dark). *Conscious Collision Approved:* Amber `#b45309` matches warning status ink (L47 in scratch); intentionally accepted per scratch archetype.
-  - `ADMIN` → Zinc Monochrome (`#18181b` light / `#f4f4f5` dark). *Dark-mode low contrast consciously accepted.*
-  - `PUBLIC` / `CUSTOMER` → Apple Blue (`#0071e3` light / `#2997ff` dark).
-- **APPROVED 44px Touch Targets:**
-  - Enforced via `@media (pointer: coarse)` utility `touch:min-h-[44px]` and `touch:h-[44px]` across interactive controls.
-- **APPROVED Focus Ring Architecture:**
-  - Dual accessibility focus ring (`0 0 0 2px var(--surface), 0 0 0 4px var(--ring)`) implemented as `:focus-visible` global standard in `index.css` and `.focus-ring` utility.
-- **APPROVED Opacity Slash Replacement:**
-  - All `/NN` opacity color classes across `ui/*.tsx` replaced with exact hover and surface tokens (`var(--primary-hover)`, `var(--surface-active)`, `var(--status-error-bg)`).
-- **APPROVED Motion Standards:**
-  - `@media (prefers-reduced-motion: reduce)` block added to `index.css` forcing animation and transition durations to 0.01ms.
+### 2026-11-12 — §6.0 Effective Radii Dispositions (Design Owner) — *still in force*
+- Select triggers, affix containers, textarea, callouts and default buttons `8px`; popover and dropdown `12px`; sheets and destructive dialogs `16px`; avatar full; tooltip and inner tab trigger `4px`.
+
+### 2026-11-12 — Role Palettes & Architecture Decisions (Design Owner) — *role palettes superseded on 2026-11-20, pending confirmation*
+- ~~Role palettes: MERCHANT teal `#0b5955`, DISPATCHER navy `#1e40af`, COURIER amber `#b45309`, ADMIN zinc `#18181b`, PUBLIC/CUSTOMER Apple blue `#0071e3`.~~
+- 44px touch targets via the `touch:` variant — still in force.
+- Dual focus ring as the global `:focus-visible` standard and `.focus-ring` utility — still in force.
+- Opacity-slash colour classes replaced by explicit tokens in `ui/*.tsx` — still in force.
+- Reduced-motion block in `index.css` — still in force.
 
 ### 2026-11-12 — Studio Visual Parity & Contrast Refinements (Design Owner)
-- **Input Text High Contrast:** Added explicit `text-text` class to `Input` and `Textarea` primitives, and `DialogContent` container to guarantee full contrast across light and dark modes regardless of user-agent input styling defaults.
-- **Admin Soft Off-White Dark Inversion:** Scoped `--primary: #e4e4e7` (Zinc-200 soft off-white) with `--primary-foreground: #18181b` for Admin in dark mode. This eliminates harsh glare against pure black surfaces while preserving a crisp 12.8:1 AAA contrast ratio.
-- **Fluid Layout Expansion:** Extended max container width to `1600px` (`max-w-[1600px]`) with responsive horizontal padding (`px-4 sm:px-8 lg:px-12`) to eliminate excessive gutter margins on desktop viewports.
-
-
-
+- Explicit `text-text` on Input, Textarea and DialogContent — still in force.
+- ~~Admin dark-mode zinc inversion~~ — superseded (single signal colour).
+- Fluid container up to `1600px` — still in force.

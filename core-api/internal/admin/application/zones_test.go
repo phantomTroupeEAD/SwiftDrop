@@ -82,7 +82,7 @@ func (s *memStore) ListSettings(context.Context) ([]Setting, error) {
 	}
 	return out, s.settingsErr
 }
-func (s *memStore) ListAudit(context.Context, int, int) ([]AuditRow, int, error) {
+func (s *memStore) ListAudit(context.Context, AuditFilter, int, int) ([]AuditRow, int, error) {
 	return nil, 0, nil
 }
 

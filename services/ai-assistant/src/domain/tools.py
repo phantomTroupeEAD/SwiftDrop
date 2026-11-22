@@ -33,20 +33,20 @@ class TrackParcelInput(BaseModel):
     """Input argument model for track_parcel_status tool."""
 
     tracking_number: str = Field(
-        description="Authoritative tracking number in SD-YYYYMMDD-XXXXX format",
+        description="Authoritative tracking number in SD-YYYYMMDD-XXXXXX format (e.g. SD-20261120-JR47QE)",
     )
 
     @field_validator("tracking_number")
     @classmethod
     def validate_tracking_number(cls, v: str) -> str:
-        """Validate tracking number against canonical format (SD-YYYYMMDD-XXXXX)."""
+        """Validate tracking number against canonical Crockford Base32 format (SD-YYYYMMDD-XXXXXX)."""
         cleaned = v.strip().upper()
-        # Non-backtracking canonical tracking regex
-        pattern = r"^SD-\d{8}-\d{5}$"
+        # Non-backtracking canonical tracking regex: 6-char Crockford Base32 or 5-digit legacy
+        pattern = r"^SD-\d{8}-([0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})$"
         if not re.match(pattern, cleaned):
             raise ValueError(
-                f"Invalid tracking number format '{v}'. Expected format: SD-YYYYMMDD-XXXXX "
-                "(e.g. SD-20261021-04921)"
+                f"Invalid tracking number format '{v}'. Expected format: SD-YYYYMMDD-XXXXXX "
+                "(e.g. SD-20261120-JR47QE)"
             )
         return cleaned
 
@@ -86,19 +86,19 @@ class EstimateFeeInput(BaseModel):
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package length in centimeters",
+        description="Package length in centimeters. Required by Core API pricing engine (never guess or default).",
     )
     width_cm: Optional[float] = Field(
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package width in centimeters",
+        description="Package width in centimeters. Required by Core API pricing engine (never guess or default).",
     )
     height_cm: Optional[float] = Field(
         default=None,
         gt=0.0,
         le=300.0,
-        description="Optional package height in centimeters",
+        description="Package height in centimeters. Required by Core API pricing engine (never guess or default).",
     )
 
     @model_validator(mode="after")

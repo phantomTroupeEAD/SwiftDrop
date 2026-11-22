@@ -46,7 +46,7 @@ class MockLLMAdapter(BaseLLMClient):
             for turn in reversed(history):
                 content = turn.content
                 if not hist_tracking:
-                    m = re.search(r"SD-\d{8}-\d{5}", content, re.IGNORECASE)
+                    m = re.search(r"SD-\d{8}-(?:[0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})", content, re.IGNORECASE)
                     if m:
                         hist_tracking = m.group(0).upper()
                 if not hist_pickup or not hist_delivery:
@@ -64,7 +64,7 @@ class MockLLMAdapter(BaseLLMClient):
         # -------------------------------------------------------------
         # Intent 1: Tracking Inquiry with Specific or Contextual Tracking Code
         # -------------------------------------------------------------
-        tracking_match = re.search(r"SD-\d{8}-\d{5}", prompt, re.IGNORECASE)
+        tracking_match = re.search(r"SD-\d{8}-(?:[0-9A-HJ-KM-NP-TV-Z]{6}|\d{5})", prompt, re.IGNORECASE)
         resolved_tracking = tracking_match.group(0).upper() if tracking_match else None
 
         # If no explicit tracking code in current prompt, check if user is referring to previously tracked parcel
@@ -92,6 +92,11 @@ class MockLLMAdapter(BaseLLMClient):
 
             if record.status == "SUCCESS" and record.result.get("found"):
                 res = record.result
+                if "action" in res and isinstance(res["action"], dict):
+                    try:
+                        actions.append(GenerativeAction(**res["action"]))
+                    except Exception:
+                        pass
                 dest_city = res.get("destination_city", "Destination Hub")
                 status_val = res.get("status", "UNKNOWN")
                 status_desc = res.get("status_description", "")
@@ -141,8 +146,8 @@ class MockLLMAdapter(BaseLLMClient):
         # -------------------------------------------------------------
         elif "track" in prompt_lower or "where is" in prompt_lower:
             reply = (
-                "Please provide your 15-character tracking number in the format `SD-YYYYMMDD-XXXXX` "
-                "(e.g. `SD-20261021-04921`) so I can look up your shipment status."
+                "Please provide your tracking number in the format `SD-YYYYMMDD-XXXXXX` "
+                "(e.g. `SD-20261120-JR47QE`) so I can look up your shipment status."
             )
 
         # -------------------------------------------------------------
@@ -397,7 +402,7 @@ class MockLLMAdapter(BaseLLMClient):
             reply = (
                 "Hello! I am **SwiftDrop AI**, the official SwiftDrop AI Delivery Assistant.\n\n"
                 "I can assist you with:\n"
-                "- 📦 **Tracking a shipment:** Inquire with your tracking code (e.g. `SD-20261021-04921`)\n"
+                "- 📦 **Tracking a shipment:** Inquire with your tracking code (e.g. `SD-20261120-JR47QE`)\n"
                 "- 💰 **Fee quotes:** Ask for a tariff estimate (e.g. *'How much to send 2.5kg from 00100 to 20000?'*)\n"
                 "- 📋 **Active shipments:** Check your active deliveries (*'Where are my packages?'*)\n"
                 "- ℹ️ **Operating policies:** Inquire about packaging limits, transit SLAs, or prohibited goods."
@@ -409,7 +414,7 @@ class MockLLMAdapter(BaseLLMClient):
         else:
             reply = (
                 "I am here to assist with all your SwiftDrop courier and logistics needs. "
-                "You can ask me to track a parcel (`SD-YYYYMMDD-XXXXX`), estimate delivery tariffs, "
+                "You can ask me to track a parcel (`SD-YYYYMMDD-XXXXXX`), estimate delivery tariffs, "
                 "check your active deliveries, or explain shipping regulations."
             )
 

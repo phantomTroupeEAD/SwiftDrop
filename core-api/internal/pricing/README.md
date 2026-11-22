@@ -89,6 +89,7 @@ internal/pricing/
 | 2026-11-10 | Task 7C: Added production `UUIDv7QuoteIDGenerator` implementing `application.QuoteIDGenerator` via shared `events.GenerateUUIDv7` and `events.IsValidUUID` | Member 2 |
 | 2026-11-11 | Implemented Pricing HTTP Transport (`POST /api/v1/pricing/quotes` in `transport/`), `SystemClock`, `MerchantReader` port + `MerchantRepoAdapter`, `httpx` envelopes, `swag` annotations, `httptest` suite, and updated `API.md`/`README.md` | Member 2 |
 | 2026-11-13 | Phase 3 API Startup Wiring & Swagger Integration: Implemented `cmd/api/wiring_member02.go` (`registerPricingModule`), wired pricing routes into `cmd/api/wiring.go` under `if dbConn != nil` guard, added tests in `cmd/api/wiring_member02_test.go`, regenerated OpenAPI specs via `swag init`, and synchronized `docs/swagger.json`, `docs/swagger.yaml`, and `internal/events/swagger/swagger.json`. | Member 2 |
+| 2026-11-18 | Migration 20261118000001: Seeded canonical Sri Lankan delivery zones, postal code prefixes, and active baseline pricing rules across all enabled zones for local, staging, and E2E environments. | Member 2 & CQA |
 
 ---
 

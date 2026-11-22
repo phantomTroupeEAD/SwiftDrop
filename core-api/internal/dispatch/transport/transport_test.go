@@ -65,6 +65,17 @@ func (m *mockCourierRepo) List(ctx context.Context, zoneID string, status *domai
 	return res, nil
 }
 
+func (m *mockCourierRepo) ListCandidates(ctx context.Context) ([]application.CourierCandidateDTO, error) {
+	return []application.CourierCandidateDTO{
+		{
+			UserID:      "018f4a7c-1003-7000-8000-000000000003",
+			DisplayName: "Kamal Perera",
+			Email:       "courier@swiftdrop.local",
+			Phone:       "+94770000003",
+		},
+	}, nil
+}
+
 type mockAssignmentRepo struct {
 	assignments map[uuid.UUID]*domain.CourierAssignment
 }
@@ -124,6 +135,10 @@ func (m *mockParcelUpdater) GetStatusWithLock(ctx context.Context, tx *sql.Tx, p
 	return s, m.attempts[parcelID], nil
 }
 
+func (m *mockParcelUpdater) GetMerchantID(ctx context.Context, tx *sql.Tx, parcelID uuid.UUID) (*string, error) {
+	return nil, nil
+}
+
 type mockOutboxWriter struct{}
 
 func (m *mockOutboxWriter) Write(ctx context.Context, tx *sql.Tx, aggregateType string, aggregateID uuid.UUID, aggregateVersion int, eventType string, payload any, correlationID string) error {
@@ -141,6 +156,12 @@ func (m *mockDispatchBoardReader) GetUnassignedParcels(ctx context.Context, zone
 func (m *mockDispatchBoardReader) GetCourierLoads(ctx context.Context, zoneID string) ([]application.CourierLoadDTO, error) {
 	return []application.CourierLoadDTO{
 		{CourierID: uuid.New().String(), Name: "Driver 1", ActiveAssignments: 3, MaxCapacity: 25, Status: domain.ShiftStatusOnShift, VehicleType: domain.VehicleTypeMotorcycle},
+	}, nil
+}
+
+func (m *mockDispatchBoardReader) GetAssignedParcels(ctx context.Context, zoneID string) ([]application.AssignedParcelDTO, error) {
+	return []application.AssignedParcelDTO{
+		{ID: uuid.New().String(), TrackingNumber: "SD-20261102-0002", WeightKg: 3.5, RecipientCity: "Colombo", Status: "ASSIGNED", CourierID: uuid.New().String()},
 	}, nil
 }
 
@@ -246,6 +267,7 @@ func TestDispatchHandler_GetDispatchBoard(t *testing.T) {
 	dh.GetDispatchBoard(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "unassigned_parcels")
+	assert.Contains(t, rec.Body.String(), "assigned_parcels")
 	assert.Contains(t, rec.Body.String(), "courier_loads")
 }
 
@@ -473,5 +495,32 @@ func TestDispatchHandler_RegisterCourier_Validation(t *testing.T) {
 		customDH.RegisterCourier(rec, req)
 		assert.Equal(t, http.StatusCreated, rec.Code)
 		assert.Contains(t, rec.Body.String(), "CR-1015")
+	})
+
+	t.Run("GetCourierCandidates returns eligible candidates list", func(t *testing.T) {
+		mockRepo := &mockCourierRepo{couriers: make(map[uuid.UUID]*domain.Courier)}
+		candidatesQ := application.NewGetCourierCandidatesQueryHandler(mockRepo)
+		customDH := transport.NewDispatchHandler(nil, nil, nil, nil, nil, nil).WithCandidatesQuery(candidatesQ)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/dispatch/couriers/candidates", nil)
+		rec := httptest.NewRecorder()
+
+		customDH.GetCourierCandidates(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Kamal Perera")
+		assert.Contains(t, rec.Body.String(), "courier@swiftdrop.local")
+	})
+
+	t.Run("ListCouriers returns formatted courier loads by zone", func(t *testing.T) {
+		dh, _, _, _ := setupTestDispatchHandler()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/dispatch/couriers?zone_id=ZONE_COLOMBO_01", nil)
+		rec := httptest.NewRecorder()
+
+		dh.ListCouriers(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Driver 1")
+		assert.Contains(t, rec.Body.String(), "user_id")
+		assert.Contains(t, rec.Body.String(), "active_count")
 	})
 }

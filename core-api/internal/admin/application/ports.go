@@ -42,8 +42,9 @@ type Store interface {
 	// ZoneForPostalCode returns the enabled zone with the longest matching prefix.
 	ZoneForPostalCode(ctx context.Context, postalCode string) (PublicZone, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
-	// ListAudit returns one page (offset, limit), newest first, and the total row count.
-	ListAudit(ctx context.Context, offset, limit int) ([]AuditRow, int, error)
+	// ListAudit returns one page (offset, limit) of the rows that match f, newest first, and
+	// the number of rows that match f (not the size of the whole table).
+	ListAudit(ctx context.Context, f AuditFilter, offset, limit int) ([]AuditRow, int, error)
 }
 
 type Setting struct {

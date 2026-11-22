@@ -13,11 +13,15 @@ from src.domain.tools import (
 
 
 def test_track_parcel_input_valid():
-    """Verify canonical tracking numbers are accepted and normalized to uppercase."""
+    """Verify canonical Crockford Base32 and legacy tracking numbers are accepted and normalized to uppercase."""
     valid_numbers = [
         "SD-20261021-04921",
         "sd-20261021-04921",  # Lowercase should be uppercased
         " SD-20261021-99999 ",  # Whitespace trimmed
+        "SD-20261117-EPV1M4",  # Crockford Base32 6-character alphanumeric suffix
+        "SD-20261120-JR47QE",  # Crockford Base32 6-character alphanumeric suffix
+        "sd-20261120-jr47qe",  # Crockford Base32 lowercase gets normalized
+        "SD-20261106-A3X9K7",  # Crockford Base32 alphanumeric
     ]
     for num in valid_numbers:
         inp = TrackParcelInput(tracking_number=num)
@@ -30,10 +34,14 @@ def test_track_parcel_input_invalid():
         "INVALID-TRACKING",
         "SD-12345",
         "SD-20261021-1234",  # Only 4 trailing digits
-        "SD-20261021-123456",  # 6 trailing digits
+        "SD-20261021-1234567",  # 7 trailing characters
         "SD-2026102-12345",  # 7 date digits
         "20261021-04921",
         "SD_20261021_04921",  # Underscores instead of dashes
+        "SD-20261120-JR47QI",  # 'I' is excluded from Crockford Base32
+        "SD-20261120-JR47QL",  # 'L' is excluded from Crockford Base32
+        "SD-20261120-JR47QO",  # 'O' is excluded from Crockford Base32
+        "SD-20261120-JR47QU",  # 'U' is excluded from Crockford Base32
     ]
     for bad in invalid_numbers:
         with pytest.raises(ValidationError) as exc_info:

@@ -93,6 +93,9 @@ func (uc *StartDeliveryRunUseCase) ExecuteSingle(ctx context.Context, cmd StartR
 			"depot_hub_code": cmd.DepotHubCode,
 			"started_at":     time.Now().UTC().Format(time.RFC3339),
 		}
+		if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, parcelUUID); mID != nil {
+			eventPayload["merchant_id"] = *mID
+		}
 		return uc.outboxWriter.Write(
 			ctx,
 			tx,
@@ -169,6 +172,9 @@ func (uc *StartDeliveryRunUseCase) ExecuteBatch(ctx context.Context, cmd StartBa
 				"courier_id":     courierUUID.String(),
 				"depot_hub_code": cmd.DepotHubCode,
 				"started_at":     now.Format(time.RFC3339),
+			}
+			if mID, _ := uc.parcelUpdater.GetMerchantID(ctx, tx, pID); mID != nil {
+				eventPayload["merchant_id"] = *mID
 			}
 			err = uc.outboxWriter.Write(
 				ctx,

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,11 @@ func (m mockVerifier) Verify(_ string) (Claims, error) {
 }
 
 func setupTestMux(claims Claims) (*http.ServeMux, *application.Service) {
+	mux, svc, _ := setupTestMuxWithBooking(claims, mockBooking{})
+	return mux, svc
+}
+
+func setupTestMuxWithBooking(claims Claims, booking application.ParcelBooking) (*http.ServeMux, *application.Service, *mockMerchantRepo) {
 	mRepo := newMockMerchantRepo()
 	cRepo := &mockCredRepo{}
 	hRepo := &mockWebhookRepo{}
@@ -40,7 +46,7 @@ func setupTestMux(claims Claims) (*http.ServeMux, *application.Service) {
 		Hasher:    mockHasher{},
 		Cipher:    mockCipher{},
 		Resolver:  mockResolver{},
-		Booking:   mockBooking{},
+		Booking:   booking,
 		Observer:  mockObserver{},
 		Now:       time.Now,
 	}, application.Config{
@@ -58,7 +64,7 @@ func setupTestMux(claims Claims) (*http.ServeMux, *application.Service) {
 
 	mux := http.NewServeMux()
 	h.Register(mux)
-	return mux, svc
+	return mux, svc, mRepo
 }
 
 // In-memory doubles for transport tests
@@ -162,6 +168,10 @@ func (mockRoleAssigner) GrantMerchantRole(_ context.Context, _ application.Queri
 	return nil
 }
 
+func (mockRoleAssigner) RevokeMerchantRole(_ context.Context, _ application.Querier, _ string) error {
+	return nil
+}
+
 type mockKeyGen struct{}
 
 func (mockKeyGen) NewAPIKey(env string) (domain.PlainAPIKey, error) {
@@ -195,6 +205,25 @@ func (mockBooking) CreateForMerchant(_ context.Context, _, _, _ string, _ applic
 	return application.OrderResult{}, false, nil
 }
 func (mockBooking) ListForMerchant(_ context.Context, _ string) ([]application.OrderResult, error) {
+	return nil, nil
+}
+
+type configurableMockBooking struct {
+	createFn func(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error)
+	listFn   func(ctx context.Context, merchantID string) ([]application.OrderResult, error)
+}
+
+func (m configurableMockBooking) CreateForMerchant(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, merchantID, idemKey, hash, req)
+	}
+	return application.OrderResult{}, false, nil
+}
+
+func (m configurableMockBooking) ListForMerchant(ctx context.Context, merchantID string) ([]application.OrderResult, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, merchantID)
+	}
 	return nil, nil
 }
 
@@ -263,5 +292,324 @@ func TestRegisterWebhook_RejectsSecretInBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 Bad Request when secret is provided, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateOrder_Success(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mockBook := configurableMockBooking{
+		createFn: func(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error) {
+			if merchantID != tenantID {
+				t.Fatalf("expected merchantID %s, got %s", tenantID, merchantID)
+			}
+			res := application.OrderResult{
+				ParcelID:          "0192e2b3-7c8a-7890-a123-000000000101",
+				TrackingNumber:    "SD-20261119-00001",
+				MerchantReference: req.MerchantReference,
+				Status:            "CREATED",
+				CreatedAt:         "2026-11-19T12:00:00Z",
+			}
+			res.Fee.Currency = "LKR"
+			res.Fee.AmountMinor = 65000
+			return res, false, nil
+		},
+	}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBook)
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	orderPayload := map[string]any{
+		"merchant_reference": "ORD-TEST-001",
+		"service_level":      "STANDARD",
+		"pickup": map[string]any{
+			"contact_name":  "Warehouse",
+			"contact_phone": "+94771234567",
+			"street_line_1": "10 Galle Rd",
+			"city":          "Colombo",
+			"postal_code":   "00300",
+			"zone_id":       "ZONE_WESTERN_01",
+		},
+		"dropoff": map[string]any{
+			"contact_name":  "Recipient",
+			"contact_phone": "+94779876543",
+			"street_line_1": "12 Temple Rd",
+			"city":          "Kandy",
+			"postal_code":   "20000",
+			"zone_id":       "ZONE_CENTRAL_01",
+		},
+		"parcel": map[string]any{
+			"weight_kg": 2.5,
+			"length_cm": 30.0,
+			"width_cm":  20.0,
+			"height_cm": 15.0,
+		},
+	}
+	body, _ := json.Marshal(orderPayload)
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Idempotency-Key", "0192e2b3-7c8a-7890-a123-000000000099")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Idempotent-Replay") != "" {
+		t.Errorf("expected no Idempotent-Replay header, got %s", w.Header().Get("Idempotent-Replay"))
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	data, ok := resp["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data envelope, got %v", resp)
+	}
+	if data["parcel_id"] != "0192e2b3-7c8a-7890-a123-000000000101" {
+		t.Errorf("expected parcel_id 0192e2b3-7c8a-7890-a123-000000000101, got %v", data["parcel_id"])
+	}
+}
+
+func TestCreateOrder_IdempotentReplay(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mockBook := configurableMockBooking{
+		createFn: func(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error) {
+			res := application.OrderResult{
+				ParcelID:       "0192e2b3-7c8a-7890-a123-000000000101",
+				TrackingNumber: "SD-20261119-00001",
+				Status:         "CREATED",
+				CreatedAt:      "2026-11-19T12:00:00Z",
+			}
+			return res, true, nil // Replayed = true
+		},
+	}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBook)
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	orderPayload := map[string]any{
+		"merchant_reference": "ORD-REPLAY",
+		"pickup":             map[string]any{"city": "Colombo"},
+		"dropoff":            map[string]any{"city": "Kandy"},
+		"parcel":             map[string]any{"weight_kg": 2.0},
+	}
+	body, _ := json.Marshal(orderPayload)
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Idempotency-Key", "0192e2b3-7c8a-7890-a123-000000000099")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created on replay, got %d: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Idempotent-Replay") != "true" {
+		t.Errorf("expected Idempotent-Replay: true header, got: %q", w.Header().Get("Idempotent-Replay"))
+	}
+}
+
+func TestCreateOrder_MissingIdempotencyKey(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBooking{})
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBufferString("{}"))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "IDEMPOTENCY_KEY_REQUIRED") {
+		t.Errorf("expected IDEMPOTENCY_KEY_REQUIRED code, got %s", w.Body.String())
+	}
+}
+
+func TestCreateOrder_InvalidIdempotencyKey(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBooking{})
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBufferString("{}"))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Idempotency-Key", "not-a-uuid")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "IDEMPOTENCY_KEY_INVALID") {
+		t.Errorf("expected IDEMPOTENCY_KEY_INVALID code, got %s", w.Body.String())
+	}
+}
+
+func TestCreateOrder_IdempotencyPayloadMismatch(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mockBook := configurableMockBooking{
+		createFn: func(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error) {
+			return application.OrderResult{}, false, application.ErrIdempotencyReused
+		},
+	}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBook)
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBufferString(`{"parcel":{"weight_kg":1.0}}`))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Idempotency-Key", "0192e2b3-7c8a-7890-a123-000000000099")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "IDEMPOTENCY_KEY_PAYLOAD_MISMATCH") {
+		t.Errorf("expected IDEMPOTENCY_KEY_PAYLOAD_MISMATCH code, got %s", w.Body.String())
+	}
+}
+
+func TestCreateOrder_ValidationError(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mockBook := configurableMockBooking{
+		createFn: func(ctx context.Context, merchantID, idemKey, hash string, req application.OrderRequest) (application.OrderResult, bool, error) {
+			return application.OrderResult{}, false, application.ValidationError{
+				Field: "parcel.dimensions",
+				Issue: "length, width, and height in cm must be greater than 0",
+			}
+		},
+	}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBook)
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBufferString(`{"parcel":{"weight_kg":1.0}}`))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Idempotency-Key", "0192e2b3-7c8a-7890-a123-000000000099")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "VALIDATION_FAILED") || !strings.Contains(w.Body.String(), "parcel.dimensions") {
+		t.Errorf("expected VALIDATION_FAILED with parcel.dimensions, got %s", w.Body.String())
+	}
+}
+
+func TestCreateOrder_Unauthenticated(t *testing.T) {
+	mux, _ := setupTestMux(Claims{})
+
+	req := httptest.NewRequest("POST", "/api/v1/merchant/orders", bytes.NewBufferString("{}"))
+	req.Header.Set("Idempotency-Key", "0192e2b3-7c8a-7890-a123-000000000099")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", w.Code)
+	}
+}
+
+func TestListOrders_Success(t *testing.T) {
+	tenantID := "0192e2b3-7c8a-7890-a123-000000000001"
+	claims := Claims{Sub: "user_m1", Role: "MERCHANT", TenantID: tenantID}
+
+	mockBook := configurableMockBooking{
+		listFn: func(ctx context.Context, merchantID string) ([]application.OrderResult, error) {
+			if merchantID != tenantID {
+				t.Fatalf("expected merchantID %s, got %s", tenantID, merchantID)
+			}
+			res := []application.OrderResult{
+				{
+					ParcelID:       "0192e2b3-7c8a-7890-a123-000000000102",
+					TrackingNumber: "SD-20261119-00002",
+					Status:         "IN_TRANSIT",
+					CreatedAt:      "2026-11-19T11:00:00Z",
+				},
+				{
+					ParcelID:       "0192e2b3-7c8a-7890-a123-000000000101",
+					TrackingNumber: "SD-20261119-00001",
+					Status:         "CREATED",
+					CreatedAt:      "2026-11-19T10:00:00Z",
+				},
+			}
+			return res, nil
+		},
+	}
+
+	mux, _, mRepo := setupTestMuxWithBooking(claims, mockBook)
+	_ = mRepo.Insert(context.Background(), nil, application.MerchantView{
+		ID:     tenantID,
+		Status: domain.StatusApproved,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/merchant/orders", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	data, ok := resp["data"].([]any)
+	if !ok || len(data) != 2 {
+		t.Fatalf("expected 2 orders in data array, got %v", resp)
+	}
+	meta, ok := resp["meta"].(map[string]any)
+	if !ok || meta["total_items"] != float64(2) {
+		t.Errorf("expected total_items 2 in meta, got %v", meta)
 	}
 }

@@ -39,7 +39,7 @@ async def track_parcel(tracking_number: str) -> Dict[str, Any]:
     """Track real-time shipment status, sanitized milestones, and destination city for a SwiftDrop parcel.
 
     Args:
-        tracking_number: Authoritative parcel tracking code in canonical format SD-YYYYMMDD-XXXXX (e.g. SD-20261021-04921).
+        tracking_number: Authoritative parcel tracking code in canonical format SD-YYYYMMDD-XXXXXX (e.g. SD-20261120-JR47QE).
     """
     record = await execute_tool("track_parcel_status", {"tracking_number": tracking_number})
     if record.status == "SUCCESS" and isinstance(record.result, dict):

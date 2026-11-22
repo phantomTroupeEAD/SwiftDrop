@@ -643,3 +643,42 @@ func (r *PostgresTrackingRepository) GetUnreadNotificationCount(ctx context.Cont
 	}
 	return count, nil
 }
+
+// ResolveParcelStatusEvent enriches an asynchronous status event when only parcel_id is present.
+func (r *PostgresTrackingRepository) ResolveParcelStatusEvent(ctx context.Context, parcelID string) (trackingNumber string, status string, statusHistoryID string, occurredAt time.Time, err error) {
+	if r.db == nil {
+		return "", "", "", time.Time{}, domain.ErrDatabaseUnavailable
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, r.queryTimeout)
+	defer cancel()
+
+	const parcelQuery = `
+		SELECT tracking_number, status
+		FROM parcels
+		WHERE id = $1
+		LIMIT 1;
+	`
+	if err := r.db.QueryRowContext(timeoutCtx, parcelQuery, parcelID).Scan(&trackingNumber, &status); err != nil {
+		return "", "", "", time.Time{}, err
+	}
+
+	const historyQuery = `
+		SELECT id, to_status, occurred_at
+		FROM parcel_status_history
+		WHERE parcel_id = $1
+		ORDER BY occurred_at DESC, id DESC
+		LIMIT 1;
+	`
+	var histStatus string
+	if err := r.db.QueryRowContext(timeoutCtx, historyQuery, parcelID).Scan(&statusHistoryID, &histStatus, &occurredAt); err == nil {
+		if histStatus != "" {
+			status = histStatus
+		}
+	} else {
+		statusHistoryID = parcelID
+		occurredAt = time.Now().UTC()
+	}
+
+	return trackingNumber, status, statusHistoryID, occurredAt, nil
+}

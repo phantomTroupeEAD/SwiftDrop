@@ -37,8 +37,9 @@ export const NotificationBell: React.FC = () => {
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-muted-foreground hover:text-foreground"
+          className="relative text-text-muted hover:text-text"
           aria-label={`Notifications (${unreadCount} unread)`}
+          data-testid="notification-bell-btn"
         >
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
@@ -46,6 +47,7 @@ export const NotificationBell: React.FC = () => {
               variant="error"
               showDot={false}
               className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full text-xs leading-none flex items-center justify-center font-bold"
+              data-testid="notification-bell-count"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
@@ -54,13 +56,14 @@ export const NotificationBell: React.FC = () => {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-0 bg-surface border-border">
         <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-surface-subtle">
-          <span className="text-xs font-semibold text-foreground">Notifications</span>
+          <span className="text-xs font-semibold text-text">Notifications</span>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => markAllAsRead()}
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-6 px-2 text-xs text-text-muted hover:text-text"
+              data-testid="notification-mark-all-read"
             >
               Mark all read
             </Button>
@@ -68,7 +71,7 @@ export const NotificationBell: React.FC = () => {
         </div>
         <div className="max-h-80 overflow-y-auto divide-y divide-border">
           {notifications.length === 0 ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">
+            <div className="py-8 text-center text-xs text-text-muted">
               No notifications yet
             </div>
           ) : (
@@ -82,14 +85,14 @@ export const NotificationBell: React.FC = () => {
                 )}
               >
                 <div className="flex items-center justify-between w-full gap-2">
-                  <span className="text-xs font-semibold text-foreground truncate">
+                  <span className="text-xs font-semibold text-text truncate">
                     {n.title}
                   </span>
-                  <span className="text-xs text-muted-foreground shrink-0 font-mono">
+                  <span className="text-xs text-text-muted shrink-0 font-mono">
                     {formatRelativeTime(n.created_at)}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground line-clamp-2 text-left">
+                <p className="text-xs text-text-muted line-clamp-2 text-left">
                   {n.body}
                 </p>
               </DropdownMenuItem>
@@ -97,7 +100,7 @@ export const NotificationBell: React.FC = () => {
           )}
         </div>
         <div className="p-2 border-t border-border bg-surface-subtle text-center">
-          <Button asChild variant="ghost" size="sm" className="w-full h-8 text-xs font-medium text-text hover:text-text hover:bg-surface-active">
+          <Button asChild variant="ghost" size="sm" className="w-full h-8 text-xs font-medium text-text hover:text-text hover:bg-surface-active" data-testid="notification-view-all-btn">
             <Link to="/notifications">View all notifications</Link>
           </Button>
         </div>

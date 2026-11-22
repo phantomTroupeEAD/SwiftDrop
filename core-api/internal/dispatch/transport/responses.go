@@ -18,6 +18,21 @@ type CourierProfileResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// CourierListItemResponse represents an active courier with workload metrics in a zone list.
+type CourierListItemResponse struct {
+	UserID            string `json:"user_id"`
+	CourierID         string `json:"courier_id"`
+	CourierName       string `json:"courier_name"`
+	Name              string `json:"name"`
+	EmployeeCode      string `json:"employee_code"`
+	CurrentZoneID     string `json:"current_zone_id"`
+	ActiveCount       int    `json:"active_count"`
+	ActiveAssignments int    `json:"active_assignments"`
+	MaxCapacity       int    `json:"max_capacity"`
+	Status            string `json:"status"`
+	VehicleType       string `json:"vehicle_type"`
+}
+
 // AssignmentResponse represents the created or updated courier assignment.
 type AssignmentResponse struct {
 	AssignmentID string    `json:"assignment_id"`
@@ -37,10 +52,11 @@ type CancelAssignmentResponse struct {
 	Reason       string    `json:"reason"`
 }
 
-// DispatchBoardResponse wraps unassigned parcels and courier workloads.
+// DispatchBoardResponse wraps unassigned parcels, active assignments, and courier workloads.
 type DispatchBoardResponse struct {
 	ZoneID            string                            `json:"zone_id"`
 	UnassignedParcels []application.UnassignedParcelDTO `json:"unassigned_parcels"`
+	AssignedParcels   []application.AssignedParcelDTO   `json:"assigned_parcels"`
 	CourierLoads      []application.CourierLoadDTO      `json:"courier_loads"`
 }
 

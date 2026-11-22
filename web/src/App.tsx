@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
 import { NotificationProvider } from '@/app/providers/NotificationContext';
 import { Toaster } from '@/shared/components/ui/sonner';
@@ -14,21 +14,30 @@ import { RoleHome } from '@/features/dashboards/RoleHome';
 import type { Role } from '@/shared/types/auth';
 import { BookingPage } from '@/features/customer-merchant/portal/BookingPage';
 import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/portal/MerchantPage';
+import { MerchantDocs } from '@/features/customer-merchant/portal/MerchantDocs';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
 import { NotificationsPage } from '@/features/notifications/NotificationsPage';
+// TEMP-M7-OPS-ROUTES (import): ops workspace for ADMIN and DISPATCHER. Remove with the line below.
+import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 
 function CustomerBookingAlias() {
   const { search } = useLocation();
   return <Navigate to={{ pathname: '/portal/book', search }} replace />;
 }
 
+function PublicTrackingRedirect() {
+  const { trackingNumber } = useParams<{ trackingNumber?: string }>();
+  return <Navigate to={trackingNumber ? `/track/${encodeURIComponent(trackingNumber)}` : '/track'} replace />;
+}
+
 // Protected Route Guard
 function SignedInHome() {
   const { user } = useAuth();
   switch (user?.role) {
-    case 'ADMIN': return <Navigate to="/admin/dashboard" replace />;
-    case 'DISPATCHER': return <Navigate to="/dispatcher/dashboard" replace />;
+    // TEMP-M7-OPS-ROUTES: ADMIN and DISPATCHER start in the ops workspace (was /admin/dashboard and /dispatcher/dashboard).
+    case 'ADMIN': return <Navigate to="/ops" replace />;
+    case 'DISPATCHER': return <Navigate to="/ops" replace />;
     case 'COURIER': return <Navigate to="/courier/dashboard" replace />;
     default: return <RoleHome />;
   }
@@ -58,7 +67,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: Role }> = ({ 
     return <Navigate to="/auth/login" replace />;
   }
   if (role === 'MERCHANT') return <MerchantSessionGate>{children}</MerchantSessionGate>;
-  if (role && user?.role !== role) return <Navigate to="/dashboard" replace />;
+  if (role && user?.role !== role && !(role === 'CUSTOMER' && user?.role === 'MERCHANT')) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -73,6 +82,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="/track" element={<TrackingPage />} />
       <Route path="/track/:trackingNumber" element={<TrackingPage />} />
+      <Route path="/tracking" element={<Navigate to="/track" replace />} />
+      <Route path="/tracking/:trackingNumber" element={<PublicTrackingRedirect />} />
       <Route path="/portal/tracking/:trackingNumber?" element={<ProtectedRoute><TrackingPage key="private" privateView /></ProtectedRoute>} />
       <Route path="/portal/book" element={<ProtectedRoute role="CUSTOMER"><BookingPage /></ProtectedRoute>} />
       <Route path="/customer/book" element={<CustomerBookingAlias />} />
@@ -80,6 +91,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/portal/merchants/orders" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="orders" section="orders" /></ProtectedRoute>} />
       <Route path="/portal/merchants/api-keys" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="api-keys" section="api-keys" /></ProtectedRoute>} />
       <Route path="/portal/merchants/webhooks" element={<ProtectedRoute role="MERCHANT"><MerchantPage key="webhooks" section="webhooks" /></ProtectedRoute>} />
+      <Route path="/portal/merchants/docs" element={<ProtectedRoute role="MERCHANT"><MerchantDocs /></ProtectedRoute>} />
 
       {/* Dev-Only Design System Parity Studio (Gated out of production) */}
       {import.meta.env.DEV && (
@@ -127,6 +139,9 @@ export const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* TEMP-M7-OPS-ROUTES: /ops/* workspace (role-filtered side menu). Delete this line and the import to roll back. */}
+      {opsRoutes}
 
       {/* Aliases mapping to role consoles */}
       <Route

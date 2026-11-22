@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/swiftdrop/core-api/internal/parcels/application"
+	pricingdomain "github.com/swiftdrop/core-api/internal/pricing/domain"
 )
 
 func TestPostgresQuoteConsumer_ConsumeQuote_OwnershipModes(t *testing.T) {
@@ -260,4 +261,115 @@ func TestPostgresQuoteConsumer_ConsumeQuote_ConcurrentConsumption(t *testing.T) 
 	if alreadyUsedCount != 1 {
 		t.Errorf("expected exactly 1 ErrQuoteAlreadyUsed under concurrent booking, got %d", alreadyUsedCount)
 	}
+}
+
+func TestPostgresQuoteConsumer_SaveConsumedQuote(t *testing.T) {
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	merchID := "0192e2b3-7c8a-7890-a123-000000000001"
+
+	validQuote := pricingdomain.Quote{
+		ID:                 "0192e2b3-7c8a-7890-a123-000000000099",
+		TariffID:           "0192e2b3-7c8a-7890-a123-000000000010",
+		TariffVersion:      1,
+		RequesterID:        nil,
+		MerchantID:         &merchID,
+		ChargeableWeightKg: 2.5,
+		ServiceLevel:       pricingdomain.ServiceLevelStandard,
+		Fee: pricingdomain.Money{
+			Amount:   65000,
+			Currency: "LKR",
+		},
+		CreatedAt: now,
+		ExpiresAt: now.Add(15 * time.Minute),
+		UsedAt:    &now,
+	}
+
+	t.Run("successful save of valid consumed merchant quote", func(t *testing.T) {
+		var (
+			executedQuery string
+			capturedArgs  []driver.NamedValue
+		)
+
+		database := registerMockDB("save_quote_success", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			executedQuery = query
+			capturedArgs = args
+			return nil, testResult{rowsAffected: 1}, nil
+		})
+		defer database.Close()
+
+		consumer := NewPostgresQuoteConsumer(database)
+		err := consumer.SaveConsumedQuote(context.Background(), nil, validQuote)
+		if err != nil {
+			t.Fatalf("unexpected error saving consumed quote: %v", err)
+		}
+
+		if !strings.Contains(executedQuery, "INSERT INTO pricing_quotes") {
+			t.Errorf("expected INSERT query, got: %s", executedQuery)
+		}
+		if len(capturedArgs) != 12 {
+			t.Fatalf("expected 12 arguments, got %d", len(capturedArgs))
+		}
+		if capturedArgs[0].Value != validQuote.ID {
+			t.Errorf("expected quote ID arg, got %v", capturedArgs[0].Value)
+		}
+		if capturedArgs[3].Value != nil { // requester_id is NULL
+			t.Errorf("expected nil/NULL requester_id, got %v", capturedArgs[3].Value)
+		}
+		if capturedArgs[4].Value != merchID { // merchant_id
+			t.Errorf("expected merchant_id %s, got %v", merchID, capturedArgs[4].Value)
+		}
+		if capturedArgs[11].Value != now { // used_at
+			t.Errorf("expected used_at %v, got %v", now, capturedArgs[11].Value)
+		}
+	})
+
+	t.Run("fails validation for invalid quote before query execution", func(t *testing.T) {
+		called := false
+		database := registerMockDB("save_quote_invalid", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			called = true
+			return nil, testResult{rowsAffected: 1}, nil
+		})
+		defer database.Close()
+
+		consumer := NewPostgresQuoteConsumer(database)
+
+		invalidQuote := validQuote
+		invalidQuote.ID = "" // invalid empty ID
+
+		err := consumer.SaveConsumedQuote(context.Background(), nil, invalidQuote)
+		if err == nil {
+			t.Fatal("expected error validating quote with empty ID, got nil")
+		}
+		if called {
+			t.Error("expected database not to be called when quote validation fails")
+		}
+	})
+
+	t.Run("nil querier returns error", func(t *testing.T) {
+		consumer := &PostgresQuoteConsumer{} // defaultQuerier is nil
+		err := consumer.SaveConsumedQuote(context.Background(), nil, validQuote)
+		if err == nil {
+			t.Fatal("expected error with nil querier, got nil")
+		}
+		if !strings.Contains(err.Error(), "nil db querier") {
+			t.Errorf("expected 'nil db querier' in error message, got %v", err)
+		}
+	})
+
+	t.Run("database error propagation", func(t *testing.T) {
+		dbErr := errors.New("connection reset by peer")
+		database := registerMockDB("save_quote_dberr", func(query string, args []driver.NamedValue) (driver.Rows, driver.Result, error) {
+			return nil, nil, dbErr
+		})
+		defer database.Close()
+
+		consumer := NewPostgresQuoteConsumer(database)
+		err := consumer.SaveConsumedQuote(context.Background(), nil, validQuote)
+		if err == nil {
+			t.Fatal("expected database error, got nil")
+		}
+		if !errors.Is(err, dbErr) && !strings.Contains(err.Error(), "connection reset by peer") {
+			t.Errorf("expected wrapped db error, got %v", err)
+		}
+	})
 }

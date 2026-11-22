@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/swiftdrop/core-api/internal/events"
@@ -25,10 +26,11 @@ const maxParcelBodyBytes int64 = 64 * 1024
 
 // Handler exposes HTTP REST handlers for the parcels module.
 type Handler struct {
-	bookUseCase       *application.BookParcelUseCase
-	getParcelUseCase  *application.GetParcelUseCase
-	getHistoryUseCase *application.GetParcelHistoryUseCase
-	merchantReader    application.MerchantReader
+	bookUseCase        *application.BookParcelUseCase
+	getParcelUseCase   *application.GetParcelUseCase
+	getHistoryUseCase  *application.GetParcelHistoryUseCase
+	listParcelsUseCase *application.ListParcelsUseCase
+	merchantReader     application.MerchantReader
 }
 
 // NewHandler constructs a parcels HTTP Handler with required use cases and merchant reader ports.
@@ -36,6 +38,7 @@ func NewHandler(
 	bookUseCase *application.BookParcelUseCase,
 	getParcelUseCase *application.GetParcelUseCase,
 	getHistoryUseCase *application.GetParcelHistoryUseCase,
+	listParcelsUseCase *application.ListParcelsUseCase,
 	merchantReader application.MerchantReader,
 ) (*Handler, error) {
 	if bookUseCase == nil {
@@ -47,15 +50,19 @@ func NewHandler(
 	if getHistoryUseCase == nil {
 		return nil, errors.New("parcels transport: nil get parcel history use case")
 	}
+	if listParcelsUseCase == nil {
+		return nil, errors.New("parcels transport: nil list parcels use case")
+	}
 	if merchantReader == nil {
 		return nil, errors.New("parcels transport: nil merchant reader")
 	}
 
 	return &Handler{
-		bookUseCase:       bookUseCase,
-		getParcelUseCase:  getParcelUseCase,
-		getHistoryUseCase: getHistoryUseCase,
-		merchantReader:    merchantReader,
+		bookUseCase:        bookUseCase,
+		getParcelUseCase:   getParcelUseCase,
+		getHistoryUseCase:  getHistoryUseCase,
+		listParcelsUseCase: listParcelsUseCase,
+		merchantReader:     merchantReader,
 	}, nil
 }
 
@@ -163,7 +170,7 @@ func (h *Handler) BookParcel(w http.ResponseWriter, r *http.Request) {
 
 // GetParcel godoc
 // @Summary      Retrieve authorized parcel details
-// @Description  Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, or admin. Disallows couriers, dispatchers, and non-approved merchants.
+// @Description  Returns the Parcel aggregate root for the owning customer, approved owning merchant tenant, admin, or dispatcher. Disallows couriers and non-approved merchants.
 // @Tags         parcels
 // @Produce      json
 // @Security     BearerAuth
@@ -217,7 +224,7 @@ func (h *Handler) GetParcelReceipt(w http.ResponseWriter, r *http.Request) {
 
 // GetParcelHistory godoc
 // @Summary      Retrieve authorized chronological parcel status history
-// @Description  Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, or admin.
+// @Description  Returns parcel metadata and ordered lifecycle status history entries for the owning customer, approved owning merchant tenant, admin, or dispatcher.
 // @Tags         parcels
 // @Produce      json
 // @Security     BearerAuth
@@ -246,6 +253,88 @@ func (h *Handler) GetParcelHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = httpx.WriteData(w, http.StatusOK, NewParcelHistoryResponse(history.Parcel, history.Entries))
+}
+
+// ListParcels godoc
+// @Summary      List parcels visible to caller
+// @Description  Returns a paginated list of parcels for the authenticated customer (scoped by sender_id), approved merchant (scoped by merchant_id), or admin/dispatcher (all parcels, with optional status and zone filters).
+// @Tags         parcels
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page query int false "Page number (default 1)"
+// @Param        page_size query int false "Items per page (default 20, max 100)"
+// @Param        per_page query int false "Alternative query parameter for page_size"
+// @Param        status query string false "Filter by parcel lifecycle status (e.g. CREATED, ASSIGNED, IN_TRANSIT, DELIVERED)"
+// @Param        zone_id query string false "Filter by origin or destination zone UUID"
+// @Success      200 {object} httpx.DataEnvelope "Paginated parcels list wrapped in standard data envelope"
+// @Failure      401 {object} httpx.ErrorEnvelope "Missing or invalid Bearer token"
+// @Failure      403 {object} httpx.ErrorEnvelope "Forbidden role"
+// @Failure      500 {object} httpx.ErrorEnvelope "Internal list lookup failure"
+// @Router       /api/v1/parcels [get]
+func (h *Handler) ListParcels(w http.ResponseWriter, r *http.Request) {
+	principal, errSpec := requireAuthenticatedPrincipal(r.Context())
+	if errSpec != nil {
+		writeErrorSpec(w, r, *errSpec)
+		return
+	}
+
+	page := 1
+	if pStr := r.URL.Query().Get("page"); pStr != "" {
+		if pVal, err := strconv.Atoi(pStr); err == nil && pVal > 0 {
+			page = pVal
+		}
+	}
+
+	pageSize := 20
+	pSizeStr := r.URL.Query().Get("page_size")
+	if pSizeStr == "" {
+		pSizeStr = r.URL.Query().Get("per_page")
+	}
+	if pSizeStr != "" {
+		if psVal, err := strconv.Atoi(pSizeStr); err == nil && psVal > 0 && psVal <= 100 {
+			pageSize = psVal
+		}
+	}
+
+	status := r.URL.Query().Get("status")
+	zoneID := r.URL.Query().Get("zone_id")
+
+	result, err := h.listParcelsUseCase.Execute(r.Context(), application.ListParcelsQuery{
+		Caller:   callerContextFromPrincipal(principal),
+		Page:     page,
+		PageSize: pageSize,
+		Status:   status,
+		ZoneID:   zoneID,
+	})
+	if err != nil {
+		writeParcelError(w, r, err)
+		return
+	}
+
+	items := make([]ParcelResponse, 0, len(result.Items))
+	for _, p := range result.Items {
+		items = append(items, NewParcelResponse(p))
+	}
+
+	totalPages := 0
+	if result.Total > 0 {
+		totalPages = (result.Total + result.PageSize - 1) / result.PageSize
+	}
+
+	_ = httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"items":     items,
+			"page":      result.Page,
+			"page_size": result.PageSize,
+			"total":     result.Total,
+		},
+		"meta": map[string]any{
+			"page":        result.Page,
+			"per_page":    result.PageSize,
+			"total_items": result.Total,
+			"total_pages": totalPages,
+		},
+	})
 }
 
 func requireAuthenticatedPrincipal(ctx context.Context) (*identityapp.Principal, *httpErrorSpec) {

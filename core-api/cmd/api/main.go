@@ -59,7 +59,7 @@ func main() {
 	fmt.Println(" 1. ADMIN:      admin@swiftdrop.local      / AdminPassword123!")
 	fmt.Println(" 2. DISPATCHER: dispatcher@swiftdrop.local / Dispatcher123!")
 	fmt.Println(" 3. COURIER:    courier@swiftdrop.local    / CourierPassword123!")
-	fmt.Println(" 4. MERCHANT:   merchant@vendor.com        / Merchant123! (Tenant: mrc_01HMERCHANTTENANT00001)")
+	fmt.Println(" 4. MERCHANT:   merchant@vendor.com        / Merchant123! (Tenant: 018f4a7c-1004-7000-9000-000000000004)")
 	fmt.Println(" 5. CUSTOMER:   customer@swiftdrop.local   / CustomerPassword123!")
 	fmt.Println(" -----------------------------------------------------------------")
 	fmt.Println(" Auth REST API Endpoints:")
