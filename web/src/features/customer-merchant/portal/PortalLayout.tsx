@@ -1,12 +1,25 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { LogIn, LogOut, Package } from 'lucide-react';
+import { LogIn, LogOut, Menu, Package } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu';
 import { NotificationBell } from '@/shared/components/NotificationBell';
 import { portalRequest, PortalError, statusLabel } from './api';
 
 type PortalProfile = 'public' | 'customer' | 'merchant' | 'dispatcher' | 'courier';
+
+interface NavItem {
+  to: string;
+  label: string;
+  end?: boolean;
+}
 
 export function PortalHeader({ profile, applicationStatus }: { profile: PortalProfile; applicationStatus?: string | null }) {
   const { user, logout, accessToken } = useAuth();
@@ -34,36 +47,127 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
     };
   }, [profile, accessToken, applicationStatus]);
   const status = applicationStatus === undefined && lookup?.token === accessToken ? lookup?.status : applicationStatus;
+
+  const navLinks: NavItem[] = [];
+  if (profile === 'customer' || profile === 'merchant') {
+    navLinks.push({ to: '/dashboard', label: 'Home', end: true });
+  }
+  if (profile === 'customer') {
+    navLinks.push({ to: '/portal/book', label: 'Book a parcel' });
+    navLinks.push({
+      to: status === 'APPROVED' ? '/merchant/dashboard' : '/portal/merchants/apply',
+      label: status === 'APPROVED' ? 'Open merchant dashboard' : status === null ? 'Apply for a merchant account' : 'View application',
+    });
+    navLinks.push({ to: '/portal/tracking', label: 'My parcel tracking' });
+  }
+  if (profile === 'merchant') {
+    navLinks.push({ to: '/portal/merchants/orders', label: 'Orders' });
+    navLinks.push({ to: '/portal/merchants/api-keys', label: 'API keys' });
+    navLinks.push({ to: '/portal/merchants/webhooks', label: 'Webhooks' });
+    navLinks.push({ to: '/portal/merchants/docs', label: 'API docs' });
+  }
+  if (profile === 'public') {
+    navLinks.push({ to: '/track', label: 'Track a parcel' });
+    if (user) {
+      navLinks.push({ to: '/dashboard', label: 'My dashboard' });
+    }
+  }
+  if (profile === 'courier') {
+    navLinks.push({ to: '/courier/dashboard', label: 'Delivery tasks', end: true });
+  }
+  if (profile === 'dispatcher') {
+    navLinks.push({ to: '/dispatcher/dashboard', label: 'Dispatch board', end: true });
+  }
+
   return (
       <header className="m6-header">
         <Link className="m6-brand" to={profile === 'public' ? '/' : '/dashboard'}>
           <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
           SwiftDrop
         </Link>
-        <div className="flex items-center gap-2">
-          {user && <NotificationBell />}
-          {user
-            ? <Button type="button" variant="outline" className="m6-session-action" onClick={() => { logout(); navigate('/auth/login'); }}><LogOut aria-hidden="true" /> Sign out</Button>
-            : <Button asChild variant="outline" className="m6-session-action"><Link to="/auth/login"><LogIn aria-hidden="true" /> Sign in</Link></Button>}
-        </div>
-        <nav aria-label="Portal navigation">
-          {(profile === 'customer' || profile === 'merchant') && <NavLink to="/dashboard" end>Home</NavLink>}
-          {profile === 'customer' && <NavLink to="/portal/book">Book a parcel</NavLink>}
-          {profile === 'customer' && <NavLink to={status === 'APPROVED' ? '/merchant/dashboard' : '/portal/merchants/apply'}>
-            {status === 'APPROVED' ? 'Open merchant dashboard' : status === null ? 'Apply for a merchant account' : 'View application'}
-          </NavLink>}
-          {profile === 'merchant' && <>
-            <NavLink to="/portal/merchants/orders">Orders</NavLink>
-            <NavLink to="/portal/merchants/api-keys">API keys</NavLink>
-            <NavLink to="/portal/merchants/webhooks">Webhooks</NavLink>
-            <NavLink to="/portal/merchants/docs">API docs</NavLink>
-          </>}
-          {profile === 'customer' && <NavLink to="/portal/tracking">My parcel tracking</NavLink>}
-          {profile === 'public' && <NavLink to="/track">Track a parcel</NavLink>}
-          {profile === 'courier' && <NavLink to="/courier/dashboard" end>Delivery tasks</NavLink>}
-          {profile === 'dispatcher' && <NavLink to="/dispatcher/dashboard" end>Dispatch board</NavLink>}
-          {profile === 'public' && user && <Link to="/dashboard">My dashboard</Link>}
+
+        {/* Desktop Navigation Links */}
+        <nav aria-label="Portal navigation" className="max-md:!hidden md:flex">
+          {navLinks.map((link) => (
+            <NavLink key={link.to} to={link.to} end={link.end}>
+              {link.label}
+            </NavLink>
+          ))}
         </nav>
+
+        {/* Right-aligned Header Actions */}
+        <div className="flex items-center gap-2 ml-auto order-2">
+          {user && <NotificationBell />}
+          {user ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="m6-session-action"
+              onClick={() => {
+                logout();
+                navigate('/auth/login');
+              }}
+              data-testid="portal-signout-btn"
+            >
+              <LogOut aria-hidden="true" className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="m6-session-action">
+              <Link to="/auth/login">
+                <LogIn aria-hidden="true" className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Sign in</span>
+              </Link>
+            </Button>
+          )}
+
+          {/* Mobile Hamburger Menu */}
+          {navLinks.length > 0 && (
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Open navigation menu"
+                    data-testid="portal-mobile-menu-btn"
+                  >
+                    <Menu className="w-4 h-4" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-surface border-border">
+                  {navLinks.map((link) => (
+                    <DropdownMenuItem key={link.to} asChild>
+                      <NavLink
+                        to={link.to}
+                        end={link.end}
+                        className="w-full cursor-pointer flex items-center px-2 py-1.5 text-sm"
+                      >
+                        {link.label}
+                      </NavLink>
+                    </DropdownMenuItem>
+                  ))}
+                  {user && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          logout();
+                          navigate('/auth/login');
+                        }}
+                        className="w-full cursor-pointer flex items-center px-2 py-1.5 text-sm text-status-error-ink"
+                      >
+                        <LogOut className="w-4 h-4 mr-2" aria-hidden="true" />
+                        Sign out
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
       </header>
   );
 }
