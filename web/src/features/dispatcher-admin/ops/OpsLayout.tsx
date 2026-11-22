@@ -4,6 +4,7 @@ import { LogOut, Menu, Package } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
+import { NotificationBell } from '@/shared/components/NotificationBell';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu';
 import { cn } from '@/shared/lib/utils';
 import { UNAUTHORIZED_EVENT } from '../api';
@@ -144,6 +145,7 @@ export const OpsLayout: React.FC = () => {
               </Badge>
             </div>
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <div className="text-right leading-tight">
                 <div className="font-medium">{user.display_name || user.email}</div>
                 {user.display_name && <div className="text-xs text-text-muted">{user.email}</div>}

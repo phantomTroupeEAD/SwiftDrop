@@ -11,8 +11,8 @@ import (
 
 func TestWorkQueuesDefinitions(t *testing.T) {
 	queues := WorkQueues()
-	if len(queues) != 3 {
-		t.Fatalf("expected 3 work queues, got %d", len(queues))
+	if len(queues) != 4 {
+		t.Fatalf("expected 4 work queues, got %d", len(queues))
 	}
 
 	queueMap := make(map[string][]string)
@@ -42,6 +42,14 @@ func TestWorkQueuesDefinitions(t *testing.T) {
 		t.Errorf("missing %s", QueueTrackingUpdates)
 	} else if len(trackingKeys) != 2 {
 		t.Errorf("expected 2 routing keys for tracking queue, got %v", trackingKeys)
+	}
+
+	// Verify q.inapp.notifications
+	inAppKeys, ok := queueMap[QueueInAppNotifications]
+	if !ok {
+		t.Errorf("missing %s", QueueInAppNotifications)
+	} else if len(inAppKeys) != 1 || inAppKeys[0] != "parcel.#" {
+		t.Errorf("expected parcel.# for in-app notifications queue, got %v", inAppKeys)
 	}
 }
 

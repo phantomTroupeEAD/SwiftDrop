@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/app/providers/AuthContext';
+import { NotificationProvider } from '@/app/providers/NotificationContext';
+import { Toaster } from '@/shared/components/ui/sonner';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
@@ -15,6 +17,7 @@ import { MerchantApplication, MerchantPage } from '@/features/customer-merchant/
 import { MerchantDocs } from '@/features/customer-merchant/portal/MerchantDocs';
 import { TrackingPage } from '@/features/customer-merchant/portal/TrackingPage';
 import { DesignSystemPage } from '@/features/design-system/DesignSystemPage';
+import { NotificationsPage } from '@/features/notifications/NotificationsPage';
 // TEMP-M7-OPS-ROUTES (import): ops workspace for ADMIN and DISPATCHER. Remove with the line below.
 import { opsRoutes } from '@/features/dispatcher-admin/ops/opsRoutes';
 
@@ -142,6 +145,14 @@ export const AppRoutes: React.FC = () => {
 
       {/* Aliases mapping to role consoles */}
       <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
@@ -176,9 +187,12 @@ export const AppRoutes: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <NotificationProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <Toaster />
+        </BrowserRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 };

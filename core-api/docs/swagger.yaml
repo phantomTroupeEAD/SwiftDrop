@@ -351,6 +351,21 @@ definitions:
       meta:
         $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.PageMeta'
     type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_MarkAllReadResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_notifications_transport.MarkAllReadResponse'
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_NotificationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_notifications_transport.NotificationResponse'
+    type: object
+  github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_UnreadCountResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_notifications_transport.UnreadCountResponse'
+    type: object
   internal_identity_transport.ErrorDetail:
     properties:
       field:
@@ -620,6 +635,42 @@ definitions:
       url:
         example: https://httpbin.org/post
         type: string
+    type: object
+  internal_notifications_transport.MarkAllReadResponse:
+    properties:
+      updated_count:
+        type: integer
+    type: object
+  internal_notifications_transport.NotificationResponse:
+    properties:
+      aggregate_id:
+        type: string
+      body:
+        type: string
+      created_at:
+        type: string
+      event_type:
+        type: string
+      id:
+        type: string
+      is_read:
+        type: boolean
+      metadata:
+        additionalProperties: {}
+        type: object
+      read_at:
+        type: string
+      tenant_id:
+        type: string
+      title:
+        type: string
+      user_id:
+        type: string
+    type: object
+  internal_notifications_transport.UnreadCountResponse:
+    properties:
+      unread_count:
+        type: integer
     type: object
   internal_parcels_transport.AddressRequest:
     properties:
@@ -2311,6 +2362,130 @@ paths:
       summary: List supported webhook event types
       tags:
       - merchants
+  /api/v1/notifications:
+    get:
+      description: Queries notifications for the authenticated user (and role:DISPATCHER
+        broadcasts if caller is a dispatcher) with keyset cursor pagination.
+      parameters:
+      - description: Pagination cursor from previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Number of items to return (1-100, default 20)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.CursorPaginatedEnvelope'
+        "400":
+          description: Invalid pagination parameters
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List user notifications
+      tags:
+      - notifications
+  /api/v1/notifications/{id}/read:
+    patch:
+      description: Marks a specific notification as read by ID if owned by the caller.
+      parameters:
+      - description: Notification ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_NotificationResponse'
+        "400":
+          description: Invalid notification ID
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "403":
+          description: Forbidden - Notification not owned by caller
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "404":
+          description: Notification not found
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Mark notification as read
+      tags:
+      - notifications
+  /api/v1/notifications/read-all:
+    patch:
+      description: Marks all unread notifications as read for the authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_MarkAllReadResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Mark all notifications as read
+      tags:
+      - notifications
+  /api/v1/notifications/unread-count:
+    get:
+      description: Returns total unread notification count for the authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.SingleDataEnvelope-internal_notifications_transport_UnreadCountResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_swiftdrop_core-api_internal_platform_httpx.ErrorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get unread notification count
+      tags:
+      - notifications
   /api/v1/parcels:
     get:
       description: Returns a paginated list of parcels for the authenticated customer

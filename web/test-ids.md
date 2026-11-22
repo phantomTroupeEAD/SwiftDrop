@@ -271,3 +271,13 @@ Routes `/ops/*` for ADMIN and DISPATCHER, built in `src/features/dispatcher-admi
 | Booking selector | Purpose |
 | --- | --- |
 | `booking-special-instructions-input` | Optional handling or delivery instructions sent as `special_instructions` |
+
+## In-App Notifications (NotificationBell & Inbox)
+
+| IDs | Purpose |
+| --- | --- |
+| `notification-bell-btn` | Notification bell dropdown toggle |
+| `notification-bell-count` | Unread notification count badge on bell |
+| `notification-mark-all-read` | Mark all notifications as read action |
+| `notification-view-all-btn` | Link to full notifications inbox page |
+

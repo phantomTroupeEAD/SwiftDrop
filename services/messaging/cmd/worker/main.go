@@ -151,6 +151,33 @@ func main() {
 		_ = webhookRunner.Start(ctx, webhookDeliveries)
 	}()
 
+	inappCh, err := brokerMgr.OpenConsumerChannel(cfg.WorkerConcurrency)
+	if err != nil {
+		logger.Error("failed to open in-app notification consumer channel", "error", err.Error())
+		os.Exit(1)
+	}
+	defer inappCh.Close()
+
+	inappDeliveries, err := inappCh.Consume(
+		broker.QueueInAppNotifications,
+		"inapp-notifications-worker",
+		false, // manual ack
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		logger.Error("failed to start consuming in-app notifications queue", "error", err.Error())
+		os.Exit(1)
+	}
+
+	inappHandler := consumer.NewInAppNotificationHandler(deliveryRepo, idempStore, logger)
+	inappRunner := consumer.NewRunner("inapp_notifications", inappHandler, logger)
+	go func() {
+		_ = inappRunner.Start(ctx, inappDeliveries)
+	}()
+
 	// 7. Start Outbound Delivery Pollers (SMTP & Webhooks)
 	smtpSender := notification.NewSMTPSender(cfg)
 	notifPoller := notification.NewPoller(deliveryRepo, smtpSender, backoffCalc, cfg, logger)
@@ -189,6 +216,9 @@ func main() {
 	}
 	if err := webhookCh.Close(); err != nil {
 		logger.Debug("webhook channel close note", "error", err.Error())
+	}
+	if err := inappCh.Close(); err != nil {
+		logger.Debug("inapp channel close note", "error", err.Error())
 	}
 
 	_ = brokerMgr.Close()
