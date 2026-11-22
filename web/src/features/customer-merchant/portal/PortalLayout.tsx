@@ -97,14 +97,14 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
   }
 
   return (
-      <header ref={headerRef} className="m6-header">
+      <header ref={headerRef} className="m6-header lg:flex-nowrap">
         <Link className="m6-brand" to={profile === 'public' ? '/' : '/dashboard'}>
           <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
           SwiftDrop
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav aria-label="Portal navigation" className="max-md:!hidden md:flex">
+        <nav aria-label="Portal navigation" className="max-lg:!hidden lg:flex">
           {navLinks.map((link) => (
             <NavLink key={link.to} to={link.to} end={link.end}>
               {link.label}
@@ -113,13 +113,13 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
         </nav>
 
         {/* Right-aligned Header Actions */}
-        <div className="flex items-center gap-2 ml-auto order-1 md:order-2">
+        <div className="flex items-center gap-2 ml-auto order-1 lg:order-2">
           {user && <NotificationBell />}
           {user ? (
             <Button
               type="button"
               variant="outline"
-              className="m6-session-action hidden md:inline-flex"
+              className="m6-session-action hidden lg:inline-flex"
               onClick={() => {
                 logout();
                 navigate('/auth/login');
@@ -130,7 +130,7 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
               <span>Sign out</span>
             </Button>
           ) : (
-            <Button asChild variant="outline" className="m6-session-action hidden md:inline-flex">
+            <Button asChild variant="outline" className="m6-session-action hidden lg:inline-flex">
               <Link to="/auth/login">
                 <LogIn aria-hidden="true" className="w-4 h-4 mr-1" />
                 <span>Sign in</span>
@@ -138,9 +138,9 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
             </Button>
           )}
 
-          {/* Mobile Menu Toggle Button */}
+          {/* Mobile / Tablet Menu Toggle Button */}
           {navLinks.length > 0 && (
-            <div className="md:hidden">
+            <div className="lg:hidden">
               <Button
                 type="button"
                 variant="outline"
@@ -160,12 +160,12 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
           )}
         </div>
 
-        {/* Mobile Dropdown Menu (Inline dropdown beneath header, not a popup) */}
+        {/* Mobile / Tablet Dropdown Menu (Inline dropdown beneath header, not a popup) */}
         {mobileMenuOpen && (
           <div
             role="navigation"
             aria-label="Mobile navigation"
-            className="w-full basis-full order-3 md:hidden flex flex-col gap-1 pt-3 pb-2 border-t border-border mt-2 animate-in fade-in-0 slide-in-from-top-2 duration-150"
+            className="w-full basis-full order-3 lg:hidden flex flex-col gap-1 pt-3 pb-2 border-t border-border mt-2 animate-in fade-in-0 slide-in-from-top-2 duration-150"
             data-testid="portal-mobile-dropdown"
           >
             {navLinks.map((link) => (
