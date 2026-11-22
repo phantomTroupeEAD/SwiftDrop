@@ -21,7 +21,7 @@ The merchant home and orders page display the business profile, tenant ID, and a
 
 Customers can open SwiftDrop Assistant using the floating chat icon at the bottom right of their dashboard. The chat uses the current session and keeps its transcript in memory while the dashboard is mounted. For local development, Vite proxies the assistant API to port 8000 by default. Set `SWIFTDROP_AI_API_URL` to use another service origin.
 
-The customer and merchant dashboards share the navigation header (`PortalHeader`) with their portal pages. On desktop screens, navigation links sit between the brand and the right-aligned action group (NotificationBell, Sign out). On mobile viewports (<768px), horizontal overflow is eliminated by tucking navigation links into a clean hamburger dropdown menu (`DropdownMenu`), while the notification bell, sign-out button, and hamburger menu remain accessible in the top-right corner. Empty shipment lists link to the next action, and merchant profile errors have an independent retry.
+The customer and merchant dashboards share the navigation header (`PortalHeader`) with their portal pages. On desktop screens, navigation links sit between the brand and the right-aligned action group (NotificationBell, Sign out). On mobile viewports (<768px), the top bar remains clean with the brand on the left and the notification bell and hamburger menu toggle on the right; the Sign Out action is moved exclusively inside an inline full-width dropdown menu that expands smoothly beneath the header rather than rendering as a floating popup. Empty shipment lists link to the next action, and merchant profile errors have an independent retry.
 
 ## Member 6 frontend
 

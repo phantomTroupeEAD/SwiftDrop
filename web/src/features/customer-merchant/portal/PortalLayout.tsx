@@ -1,16 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { LogIn, LogOut, Menu, Package } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { LogIn, LogOut, Menu, Package, X } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthContext';
 import { Button } from '@/shared/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu';
+import { Separator } from '@/shared/components/ui/separator';
 import { NotificationBell } from '@/shared/components/NotificationBell';
+import { cn } from '@/shared/lib/utils';
 import { portalRequest, PortalError, statusLabel } from './api';
 
 type PortalProfile = 'public' | 'customer' | 'merchant' | 'dispatcher' | 'courier';
@@ -24,7 +19,29 @@ interface NavItem {
 export function PortalHeader({ profile, applicationStatus }: { profile: PortalProfile; applicationStatus?: string | null }) {
   const { user, logout, accessToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
   const [lookup, setLookup] = useState<{ token: string; status: string | null }>();
+
+  // Close mobile dropdown on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close mobile dropdown when clicking outside header
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    }
+    if (mobileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [mobileMenuOpen]);
+
   useEffect(() => {
     if (profile !== 'customer' || !accessToken || applicationStatus !== undefined) return;
     const token = accessToken;
@@ -80,7 +97,7 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
   }
 
   return (
-      <header className="m6-header">
+      <header ref={headerRef} className="m6-header">
         <Link className="m6-brand" to={profile === 'public' ? '/' : '/dashboard'}>
           <span className="m6-brand-mark"><Package size={19} aria-hidden="true" /></span>
           SwiftDrop
@@ -96,78 +113,111 @@ export function PortalHeader({ profile, applicationStatus }: { profile: PortalPr
         </nav>
 
         {/* Right-aligned Header Actions */}
-        <div className="flex items-center gap-2 ml-auto order-2">
+        <div className="flex items-center gap-2 ml-auto order-1 md:order-2">
           {user && <NotificationBell />}
           {user ? (
             <Button
               type="button"
               variant="outline"
-              className="m6-session-action"
+              className="m6-session-action hidden md:inline-flex"
               onClick={() => {
                 logout();
                 navigate('/auth/login');
               }}
               data-testid="portal-signout-btn"
             >
-              <LogOut aria-hidden="true" className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">Sign out</span>
+              <LogOut aria-hidden="true" className="w-4 h-4 mr-1" />
+              <span>Sign out</span>
             </Button>
           ) : (
-            <Button asChild variant="outline" className="m6-session-action">
+            <Button asChild variant="outline" className="m6-session-action hidden md:inline-flex">
               <Link to="/auth/login">
-                <LogIn aria-hidden="true" className="w-4 h-4 sm:mr-1" />
-                <span className="hidden sm:inline">Sign in</span>
+                <LogIn aria-hidden="true" className="w-4 h-4 mr-1" />
+                <span>Sign in</span>
               </Link>
             </Button>
           )}
 
-          {/* Mobile Hamburger Menu */}
+          {/* Mobile Menu Toggle Button */}
           {navLinks.length > 0 && (
             <div className="md:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label="Open navigation menu"
-                    data-testid="portal-mobile-menu-btn"
-                  >
-                    <Menu className="w-4 h-4" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-surface border-border">
-                  {navLinks.map((link) => (
-                    <DropdownMenuItem key={link.to} asChild>
-                      <NavLink
-                        to={link.to}
-                        end={link.end}
-                        className="w-full cursor-pointer flex items-center px-2 py-1.5 text-sm"
-                      >
-                        {link.label}
-                      </NavLink>
-                    </DropdownMenuItem>
-                  ))}
-                  {user && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => {
-                          logout();
-                          navigate('/auth/login');
-                        }}
-                        className="w-full cursor-pointer flex items-center px-2 py-1.5 text-sm text-status-error-ink"
-                      >
-                        <LogOut className="w-4 h-4 mr-2" aria-hidden="true" />
-                        Sign out
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={mobileMenuOpen}
+                data-testid="portal-mobile-menu-btn"
+              >
+                {mobileMenuOpen ? (
+                  <X className="w-4 h-4" aria-hidden="true" />
+                ) : (
+                  <Menu className="w-4 h-4" aria-hidden="true" />
+                )}
+              </Button>
             </div>
           )}
         </div>
+
+        {/* Mobile Dropdown Menu (Inline dropdown beneath header, not a popup) */}
+        {mobileMenuOpen && (
+          <div
+            role="navigation"
+            aria-label="Mobile navigation"
+            className="w-full basis-full order-3 md:hidden flex flex-col gap-1 pt-3 pb-2 border-t border-border mt-2 animate-in fade-in-0 slide-in-from-top-2 duration-150"
+            data-testid="portal-mobile-dropdown"
+          >
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.end}
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center px-3 py-2.5 rounded-sm text-sm font-medium transition-colors min-h-[44px]",
+                    isActive
+                      ? "bg-surface-subtle text-text font-semibold border-l-2 border-primary pl-2.5"
+                      : "text-text-muted hover:text-text hover:bg-surface-subtle"
+                  )
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+
+            <Separator className="my-2" />
+
+            {user ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full justify-start px-3 py-2.5 h-auto min-h-[44px] text-sm font-medium text-status-error-ink hover:text-status-error-ink hover:bg-surface-subtle rounded-sm"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                  navigate('/auth/login');
+                }}
+                data-testid="portal-mobile-signout-btn"
+              >
+                <LogOut className="w-4 h-4 mr-2" aria-hidden="true" />
+                Sign out
+              </Button>
+            ) : (
+              <Button
+                asChild
+                variant="ghost"
+                className="w-full justify-start px-3 py-2.5 h-auto min-h-[44px] text-sm font-medium text-text hover:bg-surface-subtle rounded-sm"
+              >
+                <Link to="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+                  <LogIn className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Sign in
+                </Link>
+              </Button>
+            )}
+          </div>
+        )}
       </header>
   );
 }
