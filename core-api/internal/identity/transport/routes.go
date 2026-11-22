@@ -11,7 +11,9 @@ func RegisterRoutes(mux *http.ServeMux, authHandler *AuthHandler, security *Secu
 	// ── Public Registration Endpoints (Verify-First OTP) ─────────────────────
 	// Step 1: Check availability & send 6-digit OTP
 	mux.HandleFunc("POST /api/v1/auth/register/send-otp", authHandler.SendRegistrationOTP)
-	// Step 2: Verify OTP + complete registration
+	// Step 2: Check the OTP before the customer enters their details (code is kept)
+	mux.HandleFunc("POST /api/v1/auth/register/verify-otp", authHandler.VerifyRegistrationOTP)
+	// Step 3: Verify & consume the OTP + complete registration
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 
 	// ── Public Auth & Session Endpoints ──────────────────────────────────────

@@ -22,6 +22,7 @@ const SELECTORS = {
     REGISTER_EMAIL: 'register-email-input',
     REGISTER_SEND_OTP_BTN: 'register-send-otp-btn',
     REGISTER_OTP: 'register-otp-input',
+    REGISTER_VERIFY_OTP_BTN: 'register-verify-otp-btn',
     REGISTER_FIRST_NAME: 'register-first-name-input',
     REGISTER_LAST_NAME: 'register-last-name-input',
     REGISTER_PHONE: 'register-phone-input',
@@ -59,6 +60,7 @@ test.describe('Flow 10: Exhaustive Merchant Portal API Key Lifecycle & Security 
     const otpCode = await getRegistrationOTPFromMailpit(merchantEmail);
     expect(otpCode).toMatch(/^\d{6}$/);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(otpCode);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill('Sunil');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill('Fernando');
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill(phone);

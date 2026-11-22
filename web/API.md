@@ -59,29 +59,24 @@ All frontend network requests are routed via the Traefik API Gateway (`http://ga
 
 ### 2.1 Identity & Authentication (Owned by Member 1)
 
-#### `POST /api/v1/auth/register`
-- **Description:** Customer self-registration.
-- **Auth:** Public / Anonymous.
-- **Request Body:**
+#### Customer self-registration (3 steps, `/auth/register`)
+The page (`RegisterPage.tsx`) shows the details form only after the server confirms the emailed code. Full contracts: `core-api/internal/identity/API.md` sections 1, 1b and 2.
+
+1. `POST /api/v1/auth/register/send-otp` with `{ "email" }` sends a 6-digit code (expires in 10 minutes, resend cooldown 60 s). `409` = email already registered.
+2. `POST /api/v1/auth/register/verify-otp` with `{ "email", "otp" }` checks the code **without using it up**; `200` returns `{ "data": { "verified": true } }`. Wrong codes count towards the same 3 attempts (`AUTH_OTP_INVALID`, then `AUTH_OTP_MAX_ATTEMPTS`); `AUTH_OTP_EXPIRED` and `AUTH_OTP_MAX_ATTEMPTS` mean the customer must resend.
+3. `POST /api/v1/auth/register` with the same code and the details:
 ```json
 {
-  "full_name": "Sajini Perera",
   "email": "sajini@example.com",
+  "otp": "481920",
+  "first_name": "Sajini",
+  "last_name": "Perera",
+  "phone": "+94771234567",
   "password": "Password123!",
-  "phone": "+94771234567"
+  "terms_accepted": true
 }
 ```
-- **Success Response (`201 Created`):**
-```json
-{
-  "data": {
-    "id": "0192e4a8-6b2a-7c91-9e12-3456789abcde",
-    "email": "sajini@example.com",
-    "full_name": "Sajini Perera",
-    "role": "CUSTOMER"
-  }
-}
-```
+`201 Created` returns `{ "data": { "user": { … "role": "CUSTOMER" }, "is_new_user": true } }`. If the code expired while the details were typed (`AUTH_OTP_*`), the page returns to step 2 and keeps the details.
 
 #### `POST /api/v1/auth/login`
 - **Description:** User login. Sets HttpOnly refresh cookie and returns short-lived JWT.

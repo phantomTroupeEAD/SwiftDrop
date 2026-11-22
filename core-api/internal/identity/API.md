@@ -37,8 +37,44 @@ Checks email availability, generates a cryptographically secure 6-digit code, an
 
 ---
 
-## 2. Registration — Step 2: Complete Registration
-Verifies the OTP code, enforces terms acceptance and password complexity, and creates the customer account.
+## 1b. Registration — Step 2: Check the Code
+Checks the 6-digit code from Step 1 so the customer can confirm their email **before** entering their details. The code is **not** used up: it must still be sent with Step 3 (section 2), which consumes it. A wrong code uses one of the same 3 attempts that Step 3 counts, so this step gives no extra guesses. The code still expires 10 minutes after it was sent.
+
+- **Method / Path:** `POST /api/v1/auth/register/verify-otp`
+- **Auth Required:** None (Public)
+- **Headers:** `Content-Type: application/json`
+
+### Request Body
+```json
+{
+  "email": "alice@example.com",
+  "otp": "481920"
+}
+```
+
+### Success Response (`200 OK`)
+```json
+{
+  "data": {
+    "message": "Email verified. Complete your details to create the account.",
+    "email": "alice@example.com",
+    "verified": true
+  }
+}
+```
+
+### Error Responses
+- `400 Bad Request`: `VALIDATION_FAILED` — `email` or `otp` missing, or `otp` is not 6 digits. Does **not** use an attempt.
+- `400 Bad Request`: `INVALID_EMAIL` — Email format is invalid.
+- `400 Bad Request`: `AUTH_OTP_INVALID` — Code is incorrect (or none is pending for this email).
+- `400 Bad Request`: `AUTH_OTP_EXPIRED` — Code expired; request a new one with Step 1.
+- `400 Bad Request`: `AUTH_OTP_MAX_ATTEMPTS` — Third wrong attempt; the code is deleted, request a new one with Step 1.
+- `409 Conflict`: `AUTH_EMAIL_ALREADY_EXISTS` — Email is already registered.
+
+---
+
+## 2. Registration — Step 3: Complete Registration
+Verifies and consumes the OTP code, enforces terms acceptance and password complexity, and creates the customer account. Send the same code that Step 2 (section 1b) accepted; calling this step without Step 2 also works.
 
 - **Method / Path:** `POST /api/v1/auth/register`
 - **Auth Required:** None (Public)

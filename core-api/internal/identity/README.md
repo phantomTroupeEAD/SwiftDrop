@@ -12,6 +12,7 @@ The `identity` module serves as the authoritative security boundary for SwiftDro
 
 ### Key Responsibilities:
 - User login authentication via email and secure password verification.
+- Customer self-registration in three steps: send a 6-digit email code (`POST /api/v1/auth/register/send-otp`), check it (`POST /api/v1/auth/register/verify-otp`; the code is kept and wrong codes use the same 3 attempts), then create the account with the same code (`POST /api/v1/auth/register`, which consumes it). See `API.md` sections 1, 1b and 2.
 - Interactive Web Developer Login Portal UI (`GET /login` and `GET /`) with 1-click role autofill and live RBAC tester.
 - Stateless JWT issuance with standard claims (`sub`, `email`, `role`, `tenant_id`, `exp`).
 - HttpOnly refresh token session cookie handling (`swiftdrop_refresh_token`).

@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/swiftdrop/core-api/internal/identity/application"
 	"github.com/swiftdrop/core-api/internal/identity/domain"
 )
+
+// sixDigitCode matches the format of the registration codes sent by email.
+var sixDigitCode = regexp.MustCompile(`^[0-9]{6}$`)
 
 // AuthHandler handles HTTP requests for the authentication and registration lifecycle.
 type AuthHandler struct {
@@ -75,6 +79,68 @@ func (h *AuthHandler) SendRegistrationOTP(w http.ResponseWriter, r *http.Request
 			Email:           result.Email,
 			ExpiresIn:       result.ExpiresIn,
 			CooldownSeconds: result.CooldownSeconds,
+		},
+	})
+}
+
+// VerifyRegistrationOTP godoc
+// @Summary      Check a registration verification code
+// @Description  Checks the 6-digit code from send-otp without using it up, so the customer can confirm their email before entering their details. A wrong code uses one of the same 3 attempts as registration. The code must still be sent with POST /api/v1/auth/register, which consumes it.
+// @Tags         identity
+// @Accept       json
+// @Produce      json
+// @Param        request body VerifyOTPRequest true "Registration email and code"
+// @Success      200 {object} VerifyOTPResponse
+// @Failure      400 {object} ErrorEnvelope "Missing fields, invalid email, or a wrong, expired or locked code"
+// @Failure      409 {object} ErrorEnvelope "Email already registered"
+// @Router       /api/v1/auth/register/verify-otp [post]
+func (h *AuthHandler) VerifyRegistrationOTP(w http.ResponseWriter, r *http.Request) {
+	var req VerifyOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_REQUEST_PAYLOAD", "Malformed JSON body")
+		return
+	}
+
+	code := strings.TrimSpace(req.OTP)
+	if strings.TrimSpace(req.Email) == "" || code == "" {
+		writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", "email and otp are required")
+		return
+	}
+	// Reject typos (wrong length, letters) before they use up one of the 3 attempts.
+	if !sixDigitCode.MatchString(code) {
+		writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", "otp must be the 6-digit code from the email")
+		return
+	}
+
+	result, err := h.authService.VerifyRegistrationOTP(r.Context(), application.VerifyRegistrationOTPCommand{
+		Email: req.Email,
+		OTP:   code,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidEmail):
+			writeJSONError(w, http.StatusBadRequest, "INVALID_EMAIL", "Email format is invalid")
+		case errors.Is(err, domain.ErrEmailAlreadyExists):
+			writeJSONError(w, http.StatusConflict, "AUTH_EMAIL_ALREADY_EXISTS", "An account with this email already exists")
+		case errors.Is(err, domain.ErrOTPInvalid):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_INVALID", "Verification code is incorrect")
+		case errors.Is(err, domain.ErrOTPExpired):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_EXPIRED", "Verification code has expired, please request a new one")
+		case errors.Is(err, domain.ErrOTPMaxAttempts):
+			writeJSONError(w, http.StatusBadRequest, "AUTH_OTP_MAX_ATTEMPTS", "Too many invalid attempts, please request a new code")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check the verification code")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SingleDataEnvelope{
+		Data: VerifyOTPDataDTO{
+			Message:  "Email verified. Complete your details to create the account.",
+			Email:    result.Email,
+			Verified: true,
 		},
 	})
 }

@@ -62,6 +62,7 @@ test.describe('Flow 6: Customer Registration & Real Email OTP (Mailpit)', () => 
     // 5. Fill Verification Code & Customer Registration Form
     // -------------------------------------------------------------------------
     await page.locator(testId(SELECTORS.AUTH.REGISTER_OTP)).fill(otpCode);
+    await page.locator(testId(SELECTORS.AUTH.REGISTER_VERIFY_OTP_BTN)).click();
     await page.locator(testId(SELECTORS.AUTH.REGISTER_FIRST_NAME)).fill(firstName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_LAST_NAME)).fill(lastName);
     await page.locator(testId(SELECTORS.AUTH.REGISTER_PHONE)).fill(phone);
